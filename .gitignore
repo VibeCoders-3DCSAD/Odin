@@ -1,0 +1,52 @@
+# Agent and assistant tooling
+AGENTS.md
+CLAUDE.md
+.codex
+.claude/
+
+# Dependencies
+node_modules/
+
+# Package manager
+pnpm-debug.log*
+
+# Build and cache output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Expo and React Native
+.expo/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+.kotlin/
+/apps/app/.expo/
+/apps/app/web-build/
+/apps/app/expo-env.d.ts
+/apps/app/android
+/apps/app/ios
+
+# Secrets and local env files
+.env
+.env.*
+!.env.example
+!.env*.example
+
+# Platform and editor noise
+.DS_Store
+Thumbs.db
+*.orig.*
+*.pem
+
+# Mobile signing artifacts
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
