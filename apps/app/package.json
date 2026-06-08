@@ -18,7 +18,8 @@
     "react-native": "0.83.0",
     "react-native-paper": "^5.15.1",
     "react-native-web": "0.21.0",
-    "tailwindcss": "^4.2.4"
+    "tailwindcss": "^4.2.4",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@testing-library/react-native": "^13.3.3",

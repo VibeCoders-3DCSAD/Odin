@@ -71,10 +71,13 @@ importers:
       tailwindcss:
         specifier: ^4.2.4
         version: 4.2.4
+      zustand:
+        specifier: ^5.0.12
+        version: 5.0.12(@types/react@19.1.17)(react@19.2.0)(use-sync-external-store@1.6.0(react@19.2.0))
     devDependencies:
       '@testing-library/react-native':
         specifier: ^13.3.3
-        version: 13.3.3(jest@30.3.0)(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
+        version: 13.3.3(jest@30.3.0(@types/node@25.6.0))(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
@@ -4438,6 +4441,24 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zustand@5.0.12:
+    resolution: {integrity: sha512-i77ae3aZq4dhMlRhJVCYgMLKuSiZAaUPAct2AksxQ+gOtimhGMdXljRT21P5BNpeT4kXlLIckvkPM029OljD7g==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
+
 snapshots:
 
   '@babel/code-frame@7.10.4':
@@ -5220,7 +5241,7 @@ snapshots:
       ws: 8.20.0
       zod: 3.25.76
     optionalDependencies:
-      expo-router: 6.0.23(bfb72b795a0c4c4ca39d24f8cf3c7ca6)
+      expo-router: 6.0.23(652fabc0c57d0ec58afe64db64bd1b87)
       react-native: 0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0)
     transitivePeerDependencies:
       - '@expo/dom-webview'
@@ -5532,7 +5553,7 @@ snapshots:
       react: 19.2.0
     optionalDependencies:
       '@expo/metro-runtime': 6.1.2(expo@55.0.0)(react-dom@19.1.0(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
-      expo-router: 6.0.23(bfb72b795a0c4c4ca39d24f8cf3c7ca6)
+      expo-router: 6.0.23(652fabc0c57d0ec58afe64db64bd1b87)
       react-dom: 19.1.0(react@19.2.0)
     transitivePeerDependencies:
       - supports-color
@@ -6363,7 +6384,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@testing-library/react-native@13.3.3(jest@30.3.0)(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)':
+  '@testing-library/react-native@13.3.3(jest@30.3.0(@types/node@25.6.0))(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)':
     dependencies:
       jest-matcher-utils: 30.3.0
       picocolors: 1.1.1
@@ -7300,7 +7321,7 @@ snapshots:
       react: 19.2.0
       react-native: 0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0)
 
-  expo-router@6.0.23(bfb72b795a0c4c4ca39d24f8cf3c7ca6):
+  expo-router@6.0.23(652fabc0c57d0ec58afe64db64bd1b87):
     dependencies:
       '@expo/metro-runtime': 6.1.2(expo@55.0.0)(react-dom@19.1.0(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
       '@expo/schema-utils': 0.1.8
@@ -7333,7 +7354,7 @@ snapshots:
       use-latest-callback: 0.2.6(react@19.2.0)
       vaul: 1.1.2(@types/react@19.1.17)(react-dom@19.1.0(react@19.2.0))(react@19.2.0)
     optionalDependencies:
-      '@testing-library/react-native': 13.3.3(jest@30.3.0)(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
+      '@testing-library/react-native': 13.3.3(jest@30.3.0(@types/node@25.6.0))(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
       react-dom: 19.1.0(react@19.2.0)
       react-native-gesture-handler: 2.28.0(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
       react-native-reanimated: 4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.0)(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
@@ -9822,3 +9843,9 @@ snapshots:
   yocto-queue@0.1.0: {}
 
   zod@3.25.76: {}
+
+  zustand@5.0.12(@types/react@19.1.17)(react@19.2.0)(use-sync-external-store@1.6.0(react@19.2.0)):
+    optionalDependencies:
+      '@types/react': 19.1.17
+      react: 19.2.0
+      use-sync-external-store: 1.6.0(react@19.2.0)

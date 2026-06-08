@@ -29,6 +29,12 @@ Install these before working in this repository:
 - Corepack enabled
 - pnpm `10.26.1`
 
+Version pins in this repo:
+
+- `.nvmrc`
+- `.node-version`
+- `package.json` via `packageManager`
+
 Optional but typically needed for mobile work:
 
 - Expo Go on your phone
