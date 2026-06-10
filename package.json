@@ -1,11 +1,14 @@
-  {
-    "name": "odin",
-    "private": true,
-    "packageManager": "pnpm@10.26.1",
-    "scripts": {
-      "dev:app": "pnpm --filter app start",
-      "dev:web": "pnpm --filter app web",
-      "dev:api": "pnpm --filter api dev",
-      "test": "pnpm -r test"
-    }
+{
+  "name": "odin",
+  "private": true,
+  "packageManager": "pnpm@10.26.1",
+  "scripts": {
+    "dev:app": "pnpm --filter app start",
+    "dev:web": "pnpm --filter app web",
+    "dev:api": "pnpm --filter api dev",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "supabase": "^2.105.0"
   }
+}
