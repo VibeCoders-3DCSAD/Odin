@@ -474,7 +474,7 @@ CREATE TYPE odin_report_status AS ENUM (
   'expired'
 );
 
-CREATE TYPE odin_data_request_status AS ENUM (
+CREATE TYPE odin_request_status AS ENUM (
   'requested',
   'processing',
   'available',
@@ -560,7 +560,7 @@ CREATE INDEX user_consents_user_kind_idx
 CREATE TABLE data_export_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-  status odin_data_request_status NOT NULL DEFAULT 'requested',
+  status odin_request_status NOT NULL DEFAULT 'requested',
   requested_at timestamptz NOT NULL DEFAULT now(),
   processed_at timestamptz,
   expires_at timestamptz,
@@ -578,7 +578,7 @@ CREATE INDEX data_export_requests_user_status_idx
 CREATE TABLE account_deletion_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-  status odin_data_request_status NOT NULL DEFAULT 'requested',
+  status odin_request_status NOT NULL DEFAULT 'requested',
   requested_at timestamptz NOT NULL DEFAULT now(),
   confirmed_at timestamptz,
   scheduled_delete_at timestamptz,
