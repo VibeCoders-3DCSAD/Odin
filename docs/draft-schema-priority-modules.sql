@@ -4,8 +4,8 @@
 -- Verification status: UNVERIFIED. This draft has not yet been executed as a
 -- Supabase/PostgreSQL migration or parsed by psql.
 -- Amounts are stored as integer centavos, per the specification.
--- Supabase Auth owns authentication and authorization. This schema does not
--- create auth tables, roles, RLS policies, or custom permission tables.
+-- Supabase Auth owns authentication. This schema defines app-table RLS policies
+-- for authenticated user access but does not create auth tables or custom roles.
 -- Application ownership is linked through profiles.user_id -> auth.users.id.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -648,6 +648,9 @@ CREATE TABLE onboarding_sessions (
 CREATE INDEX onboarding_sessions_user_status_idx
   ON onboarding_sessions (user_id, status, started_at DESC);
 
+CREATE UNIQUE INDEX onboarding_sessions_id_user_unique_idx
+  ON onboarding_sessions (id, user_id);
+
 CREATE TABLE onboarding_responses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   onboarding_session_id uuid NOT NULL REFERENCES onboarding_sessions(id) ON DELETE CASCADE,
@@ -691,6 +694,9 @@ CREATE TABLE financial_profile_assessments (
 CREATE INDEX financial_profile_assessments_user_idx
   ON financial_profile_assessments (user_id, requested_at DESC);
 
+CREATE UNIQUE INDEX financial_profile_assessments_id_user_unique_idx
+  ON financial_profile_assessments (id, user_id);
+
 CREATE TABLE financial_profile_explanation_drivers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   assessment_id uuid NOT NULL REFERENCES financial_profile_assessments(id) ON DELETE CASCADE,
@@ -733,6 +739,9 @@ CREATE UNIQUE INDEX financial_profile_assignments_active_unique_idx
 
 CREATE INDEX financial_profile_assignments_user_history_idx
   ON financial_profile_assignments (user_id, effective_from DESC);
+
+CREATE UNIQUE INDEX financial_profile_assignments_id_user_unique_idx
+  ON financial_profile_assignments (id, user_id);
 
 CREATE TABLE financial_profile_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -917,6 +926,9 @@ CREATE TABLE financial_accounts (
 CREATE INDEX financial_accounts_user_status_idx
   ON financial_accounts (user_id, status, sort_order);
 
+CREATE UNIQUE INDEX financial_accounts_id_user_unique_idx
+  ON financial_accounts (id, user_id);
+
 CREATE TABLE recurring_transaction_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
@@ -925,8 +937,8 @@ CREATE TABLE recurring_transaction_templates (
   name text NOT NULL,
   amount_centavos bigint NOT NULL,
   category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
-  source_account_id uuid REFERENCES financial_accounts(id) ON DELETE SET NULL,
-  destination_account_id uuid REFERENCES financial_accounts(id) ON DELETE SET NULL,
+  source_account_id uuid REFERENCES financial_accounts(id) ON DELETE CASCADE,
+  destination_account_id uuid REFERENCES financial_accounts(id) ON DELETE CASCADE,
   frequency odin_recurring_frequency NOT NULL,
   interval_count integer NOT NULL DEFAULT 1,
   day_of_month integer,
@@ -987,6 +999,9 @@ CREATE TABLE recurring_transaction_templates (
 CREATE INDEX recurring_transaction_templates_user_status_idx
   ON recurring_transaction_templates (user_id, status, next_occurrence_date);
 
+CREATE UNIQUE INDEX recurring_transaction_templates_id_user_unique_idx
+  ON recurring_transaction_templates (id, user_id);
+
 CREATE TABLE financial_obligations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
@@ -1028,8 +1043,8 @@ CREATE TABLE transactions (
   posted_at timestamptz DEFAULT now(),
   amount_centavos bigint NOT NULL,
   category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
-  source_account_id uuid REFERENCES financial_accounts(id) ON DELETE SET NULL,
-  destination_account_id uuid REFERENCES financial_accounts(id) ON DELETE SET NULL,
+  source_account_id uuid REFERENCES financial_accounts(id) ON DELETE CASCADE,
+  destination_account_id uuid REFERENCES financial_accounts(id) ON DELETE CASCADE,
   recurring_template_id uuid REFERENCES recurring_transaction_templates(id) ON DELETE SET NULL,
   merchant_name text,
   counterparty_name text,
@@ -1084,6 +1099,9 @@ CREATE INDEX transactions_category_date_idx
   ON transactions (category_id, transaction_date DESC)
   WHERE category_id IS NOT NULL;
 
+CREATE UNIQUE INDEX transactions_id_user_unique_idx
+  ON transactions (id, user_id);
+
 CREATE TABLE transaction_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   transaction_id uuid NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
@@ -1123,7 +1141,7 @@ CREATE TABLE recurring_transaction_occurrences (
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
   scheduled_date date NOT NULL,
   status odin_recurring_occurrence_status NOT NULL DEFAULT 'scheduled',
-  generated_transaction_id uuid REFERENCES transactions(id) ON DELETE SET NULL,
+  generated_transaction_id uuid REFERENCES transactions(id) ON DELETE CASCADE,
   reminder_sent_at timestamptz,
   posted_at timestamptz,
   skipped_at timestamptz,
@@ -1195,7 +1213,7 @@ CREATE TABLE budgets (
   CONSTRAINT budgets_period_chk
     CHECK (period_start < period_end),
   CONSTRAINT budgets_period_days_chk
-    CHECK (budget_period_days > 0),
+    CHECK (budget_period_days > 0 AND budget_period_days = period_end - period_start),
   CONSTRAINT budgets_money_chk
     CHECK (total_amount_centavos > 0),
   CONSTRAINT budgets_active_chk
@@ -1209,6 +1227,9 @@ CREATE INDEX budgets_user_period_idx
 
 CREATE INDEX budgets_user_status_idx
   ON budgets (user_id, status, period_start DESC);
+
+CREATE UNIQUE INDEX budgets_id_user_unique_idx
+  ON budgets (id, user_id);
 
 CREATE TABLE budget_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1298,6 +1319,9 @@ CREATE TABLE savings_goals (
 CREATE INDEX savings_goals_user_status_idx
   ON savings_goals (user_id, status, priority_rank);
 
+CREATE UNIQUE INDEX savings_goals_id_user_unique_idx
+  ON savings_goals (id, user_id);
+
 CREATE TABLE savings_goal_contributions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   savings_goal_id uuid NOT NULL REFERENCES savings_goals(id) ON DELETE CASCADE,
@@ -1371,6 +1395,9 @@ CREATE TABLE debt_accounts (
 
 CREATE INDEX debt_accounts_user_status_idx
   ON debt_accounts (user_id, status);
+
+CREATE UNIQUE INDEX debt_accounts_id_user_unique_idx
+  ON debt_accounts (id, user_id);
 
 CREATE TABLE debt_payments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1509,7 +1536,7 @@ CREATE TABLE forecast_runs (
   CONSTRAINT forecast_runs_history_days_chk
     CHECK (history_days >= 0),
   CONSTRAINT forecast_runs_horizon_days_chk
-    CHECK (horizon_days IN (7, 14, 30, 90, 180) OR horizon_days > 0),
+    CHECK (horizon_days > 0),
   CONSTRAINT forecast_runs_period_chk
     CHECK (forecast_start < forecast_end),
   CONSTRAINT forecast_runs_input_window_chk
@@ -1525,6 +1552,9 @@ CREATE INDEX forecast_runs_user_generated_idx
 
 CREATE INDEX forecast_runs_user_status_idx
   ON forecast_runs (user_id, status);
+
+CREATE UNIQUE INDEX forecast_runs_id_user_unique_idx
+  ON forecast_runs (id, user_id);
 
 -- A series is one line or target inside a forecast run.
 -- For the forecast dashboard, the four expense_group series are the
@@ -1674,7 +1704,10 @@ CREATE TABLE budget_recommendations (
   CONSTRAINT budget_recommendations_period_chk
     CHECK (period_start < period_end),
   CONSTRAINT budget_recommendations_budget_period_days_chk
-    CHECK (budget_period_days IN (7, 14, 30, 90)),
+    CHECK (
+      budget_period_days IN (7, 14, 30, 90)
+      AND budget_period_days = period_end - period_start
+    ),
   CONSTRAINT budget_recommendations_money_chk
     CHECK (
       forecast_income_centavos >= 0
@@ -1695,6 +1728,9 @@ CREATE INDEX budget_recommendations_user_status_idx
 
 CREATE INDEX budget_recommendations_forecast_run_idx
   ON budget_recommendations (forecast_run_id);
+
+CREATE UNIQUE INDEX budget_recommendations_id_user_unique_idx
+  ON budget_recommendations (id, user_id);
 
 -- Allocation rows hold the money recommended for each broad group or
 -- detailed category. Category rows should include category_id.
@@ -1873,6 +1909,9 @@ CREATE INDEX anomaly_evaluations_pending_review_idx
 CREATE INDEX anomaly_evaluations_anomalies_idx
   ON anomaly_evaluations (user_id, is_anomaly, should_alert_user, evaluated_at DESC);
 
+CREATE UNIQUE INDEX anomaly_evaluations_id_user_unique_idx
+  ON anomaly_evaluations (id, user_id);
+
 -- Feature rows make the anomaly explanation auditable. The JSON snapshot on
 -- anomaly_evaluations is convenient for replay; these rows are convenient for
 -- reporting and selecting the largest standardized deviation.
@@ -1919,7 +1958,7 @@ CREATE TABLE alerts (
   savings_goal_id uuid REFERENCES savings_goals(id) ON DELETE SET NULL,
   forecast_run_id uuid REFERENCES forecast_runs(id) ON DELETE SET NULL,
   budget_recommendation_id uuid REFERENCES budget_recommendations(id) ON DELETE SET NULL,
-  anomaly_evaluation_id uuid REFERENCES anomaly_evaluations(id) ON DELETE SET NULL,
+  anomaly_evaluation_id uuid REFERENCES anomaly_evaluations(id) ON DELETE CASCADE,
 
   duplicate_key text,
   bundle_key text,
@@ -1977,6 +2016,9 @@ CREATE INDEX alerts_bundle_key_idx
 CREATE INDEX alerts_anomaly_evaluation_idx
   ON alerts (anomaly_evaluation_id)
   WHERE anomaly_evaluation_id IS NOT NULL;
+
+CREATE UNIQUE INDEX alerts_id_user_unique_idx
+  ON alerts (id, user_id);
 
 -- A single inbox alert can point at several transactions or categories,
 -- especially when anomalies are bundled within the two-hour bundling window.
@@ -2137,15 +2179,15 @@ CREATE INDEX alert_suppression_rules_user_active_idx
 
 ALTER TABLE budgets
   ADD CONSTRAINT budgets_source_recommendation_fk
-  FOREIGN KEY (source_recommendation_id)
-  REFERENCES budget_recommendations(id)
-  ON DELETE SET NULL;
+  FOREIGN KEY (source_recommendation_id, user_id)
+  REFERENCES budget_recommendations(id, user_id)
+  ON DELETE SET NULL (source_recommendation_id);
 
 ALTER TABLE budgets
   ADD CONSTRAINT budgets_forecast_run_fk
-  FOREIGN KEY (forecast_run_id)
-  REFERENCES forecast_runs(id)
-  ON DELETE SET NULL;
+  FOREIGN KEY (forecast_run_id, user_id)
+  REFERENCES forecast_runs(id, user_id)
+  ON DELETE SET NULL (forecast_run_id);
 
 CREATE TABLE report_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2346,3 +2388,1102 @@ CREATE TABLE model_evaluation_artifacts (
   CONSTRAINT model_evaluation_artifacts_content_chk
     CHECK (storage_path IS NOT NULL OR content IS NOT NULL)
 );
+
+-- Ownership-preserving foreign keys. These constraints prevent a user-owned row
+-- from pointing at another user's account, transaction, forecast, alert, or
+-- other owned record while keeping the single-column FKs useful for simple joins.
+ALTER TABLE financial_profile_assessments
+  ADD CONSTRAINT financial_profile_assessments_onboarding_owner_fk
+  FOREIGN KEY (onboarding_session_id, user_id)
+  REFERENCES onboarding_sessions(id, user_id)
+  ON DELETE SET NULL (onboarding_session_id);
+
+ALTER TABLE financial_profile_assignments
+  ADD CONSTRAINT financial_profile_assignments_assessment_owner_fk
+  FOREIGN KEY (assessment_id, user_id)
+  REFERENCES financial_profile_assessments(id, user_id)
+  ON DELETE SET NULL (assessment_id);
+
+ALTER TABLE financial_profile_events
+  ADD CONSTRAINT financial_profile_events_assessment_owner_fk
+  FOREIGN KEY (assessment_id, user_id)
+  REFERENCES financial_profile_assessments(id, user_id)
+  ON DELETE SET NULL (assessment_id);
+
+ALTER TABLE financial_profile_events
+  ADD CONSTRAINT financial_profile_events_assignment_owner_fk
+  FOREIGN KEY (assignment_id, user_id)
+  REFERENCES financial_profile_assignments(id, user_id)
+  ON DELETE SET NULL (assignment_id);
+
+ALTER TABLE recurring_transaction_templates
+  ADD CONSTRAINT recurring_transaction_templates_source_account_owner_fk
+  FOREIGN KEY (source_account_id, user_id)
+  REFERENCES financial_accounts(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE recurring_transaction_templates
+  ADD CONSTRAINT recurring_transaction_templates_destination_account_owner_fk
+  FOREIGN KEY (destination_account_id, user_id)
+  REFERENCES financial_accounts(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE financial_obligations
+  ADD CONSTRAINT financial_obligations_template_owner_fk
+  FOREIGN KEY (recurring_template_id, user_id)
+  REFERENCES recurring_transaction_templates(id, user_id)
+  ON DELETE SET NULL (recurring_template_id);
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_source_account_owner_fk
+  FOREIGN KEY (source_account_id, user_id)
+  REFERENCES financial_accounts(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_destination_account_owner_fk
+  FOREIGN KEY (destination_account_id, user_id)
+  REFERENCES financial_accounts(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_recurring_template_owner_fk
+  FOREIGN KEY (recurring_template_id, user_id)
+  REFERENCES recurring_transaction_templates(id, user_id)
+  ON DELETE SET NULL (recurring_template_id);
+
+ALTER TABLE transaction_events
+  ADD CONSTRAINT transaction_events_transaction_owner_fk
+  FOREIGN KEY (transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE transaction_drafts
+  ADD CONSTRAINT transaction_drafts_synced_transaction_owner_fk
+  FOREIGN KEY (synced_transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE SET NULL (synced_transaction_id);
+
+ALTER TABLE recurring_transaction_occurrences
+  ADD CONSTRAINT recurring_transaction_occurrences_template_owner_fk
+  FOREIGN KEY (recurring_template_id, user_id)
+  REFERENCES recurring_transaction_templates(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE recurring_transaction_occurrences
+  ADD CONSTRAINT recurring_transaction_occurrences_generated_tx_owner_fk
+  FOREIGN KEY (generated_transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE savings_goals
+  ADD CONSTRAINT savings_goals_linked_account_owner_fk
+  FOREIGN KEY (linked_account_id, user_id)
+  REFERENCES financial_accounts(id, user_id)
+  ON DELETE SET NULL (linked_account_id);
+
+ALTER TABLE savings_goal_contributions
+  ADD CONSTRAINT savings_goal_contributions_goal_owner_fk
+  FOREIGN KEY (savings_goal_id, user_id)
+  REFERENCES savings_goals(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE savings_goal_contributions
+  ADD CONSTRAINT savings_goal_contributions_transaction_owner_fk
+  FOREIGN KEY (transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE SET NULL (transaction_id);
+
+ALTER TABLE debt_accounts
+  ADD CONSTRAINT debt_accounts_linked_account_owner_fk
+  FOREIGN KEY (linked_account_id, user_id)
+  REFERENCES financial_accounts(id, user_id)
+  ON DELETE SET NULL (linked_account_id);
+
+ALTER TABLE debt_payments
+  ADD CONSTRAINT debt_payments_account_owner_fk
+  FOREIGN KEY (debt_account_id, user_id)
+  REFERENCES debt_accounts(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE debt_payments
+  ADD CONSTRAINT debt_payments_transaction_owner_fk
+  FOREIGN KEY (transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE SET NULL (transaction_id);
+
+ALTER TABLE budget_recommendations
+  ADD CONSTRAINT budget_recommendations_forecast_run_owner_fk
+  FOREIGN KEY (forecast_run_id, user_id)
+  REFERENCES forecast_runs(id, user_id)
+  ON DELETE SET NULL (forecast_run_id);
+
+ALTER TABLE anomaly_evaluations
+  ADD CONSTRAINT anomaly_evaluations_transaction_owner_fk
+  FOREIGN KEY (transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_transaction_owner_fk
+  FOREIGN KEY (transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE SET NULL (transaction_id);
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_budget_owner_fk
+  FOREIGN KEY (budget_id, user_id)
+  REFERENCES budgets(id, user_id)
+  ON DELETE SET NULL (budget_id);
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_debt_account_owner_fk
+  FOREIGN KEY (debt_account_id, user_id)
+  REFERENCES debt_accounts(id, user_id)
+  ON DELETE SET NULL (debt_account_id);
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_savings_goal_owner_fk
+  FOREIGN KEY (savings_goal_id, user_id)
+  REFERENCES savings_goals(id, user_id)
+  ON DELETE SET NULL (savings_goal_id);
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_forecast_run_owner_fk
+  FOREIGN KEY (forecast_run_id, user_id)
+  REFERENCES forecast_runs(id, user_id)
+  ON DELETE SET NULL (forecast_run_id);
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_budget_recommendation_owner_fk
+  FOREIGN KEY (budget_recommendation_id, user_id)
+  REFERENCES budget_recommendations(id, user_id)
+  ON DELETE SET NULL (budget_recommendation_id);
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_anomaly_evaluation_owner_fk
+  FOREIGN KEY (anomaly_evaluation_id, user_id)
+  REFERENCES anomaly_evaluations(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_parent_owner_fk
+  FOREIGN KEY (parent_alert_id, user_id)
+  REFERENCES alerts(id, user_id)
+  ON DELETE SET NULL (parent_alert_id);
+
+ALTER TABLE anomaly_whitelist_rules
+  ADD CONSTRAINT anomaly_whitelist_rules_alert_owner_fk
+  FOREIGN KEY (created_from_alert_id, user_id)
+  REFERENCES alerts(id, user_id)
+  ON DELETE SET NULL (created_from_alert_id);
+
+ALTER TABLE anomaly_whitelist_rules
+  ADD CONSTRAINT anomaly_whitelist_rules_evaluation_owner_fk
+  FOREIGN KEY (created_from_anomaly_evaluation_id, user_id)
+  REFERENCES anomaly_evaluations(id, user_id)
+  ON DELETE SET NULL (created_from_anomaly_evaluation_id);
+
+ALTER TABLE alert_suppression_rules
+  ADD CONSTRAINT alert_suppression_rules_alert_owner_fk
+  FOREIGN KEY (created_from_alert_id, user_id)
+  REFERENCES alerts(id, user_id)
+  ON DELETE SET NULL (created_from_alert_id);
+
+-- Row-level security. Authenticated clients can only access rows owned by
+-- auth.uid(). System lookup tables are readable, but writes are left to service
+-- role migrations/admin jobs.
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY profiles_owner_access
+  ON profiles
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE user_privacy_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY user_privacy_settings_owner_access
+  ON user_privacy_settings
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE user_consents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY user_consents_owner_access
+  ON user_consents
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE data_export_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY data_export_requests_owner_access
+  ON data_export_requests
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE account_deletion_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY account_deletion_requests_owner_access
+  ON account_deletion_requests
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE onboarding_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY onboarding_sessions_owner_access
+  ON onboarding_sessions
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE onboarding_responses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY onboarding_responses_owner_access
+  ON onboarding_responses
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM onboarding_sessions
+      WHERE onboarding_sessions.id = onboarding_responses.onboarding_session_id
+        AND onboarding_sessions.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM onboarding_sessions
+      WHERE onboarding_sessions.id = onboarding_responses.onboarding_session_id
+        AND onboarding_sessions.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE financial_profile_assessments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY financial_profile_assessments_owner_access
+  ON financial_profile_assessments
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE financial_profile_explanation_drivers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY financial_profile_explanation_drivers_owner_access
+  ON financial_profile_explanation_drivers
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM financial_profile_assessments
+      WHERE financial_profile_assessments.id = financial_profile_explanation_drivers.assessment_id
+        AND financial_profile_assessments.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM financial_profile_assessments
+      WHERE financial_profile_assessments.id = financial_profile_explanation_drivers.assessment_id
+        AND financial_profile_assessments.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE financial_profile_assignments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY financial_profile_assignments_owner_access
+  ON financial_profile_assignments
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE financial_profile_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY financial_profile_events_owner_access
+  ON financial_profile_events
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY categories_read_authenticated
+  ON categories
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+ALTER TABLE category_aliases ENABLE ROW LEVEL SECURITY;
+CREATE POLICY category_aliases_read_authenticated
+  ON category_aliases
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+ALTER TABLE user_category_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY user_category_settings_owner_access
+  ON user_category_settings
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE income_sources ENABLE ROW LEVEL SECURITY;
+CREATE POLICY income_sources_owner_access
+  ON income_sources
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE financial_accounts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY financial_accounts_owner_access
+  ON financial_accounts
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE recurring_transaction_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY recurring_transaction_templates_owner_access
+  ON recurring_transaction_templates
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE financial_obligations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY financial_obligations_owner_access
+  ON financial_obligations
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY transactions_owner_access
+  ON transactions
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE transaction_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY transaction_events_owner_access
+  ON transaction_events
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE transaction_drafts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY transaction_drafts_owner_access
+  ON transaction_drafts
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE recurring_transaction_occurrences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY recurring_transaction_occurrences_owner_access
+  ON recurring_transaction_occurrences
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE expected_spending_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY expected_spending_events_owner_access
+  ON expected_spending_events
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budgets_owner_access
+  ON budgets
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE budget_allocations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budget_allocations_owner_access
+  ON budget_allocations
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM budgets
+      WHERE budgets.id = budget_allocations.budget_id
+        AND budgets.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM budgets
+      WHERE budgets.id = budget_allocations.budget_id
+        AND budgets.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE budget_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budget_events_owner_access
+  ON budget_events
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM budgets
+      WHERE budgets.id = budget_events.budget_id
+        AND budgets.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM budgets
+      WHERE budgets.id = budget_events.budget_id
+        AND budgets.user_id = auth.uid()
+    )
+    AND (actor_user_id IS NULL OR actor_user_id = auth.uid())
+  );
+
+ALTER TABLE savings_goals ENABLE ROW LEVEL SECURITY;
+CREATE POLICY savings_goals_owner_access
+  ON savings_goals
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE savings_goal_contributions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY savings_goal_contributions_owner_access
+  ON savings_goal_contributions
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE savings_goal_progress_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY savings_goal_progress_snapshots_owner_access
+  ON savings_goal_progress_snapshots
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM savings_goals
+      WHERE savings_goals.id = savings_goal_progress_snapshots.savings_goal_id
+        AND savings_goals.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM savings_goals
+      WHERE savings_goals.id = savings_goal_progress_snapshots.savings_goal_id
+        AND savings_goals.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE debt_accounts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY debt_accounts_owner_access
+  ON debt_accounts
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE debt_payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY debt_payments_owner_access
+  ON debt_payments
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE debt_strategy_preferences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY debt_strategy_preferences_owner_access
+  ON debt_strategy_preferences
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE debt_repayment_projection_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY debt_repayment_projection_runs_owner_access
+  ON debt_repayment_projection_runs
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE debt_repayment_projection_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY debt_repayment_projection_items_owner_access
+  ON debt_repayment_projection_items
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM debt_repayment_projection_runs
+      WHERE debt_repayment_projection_runs.id = debt_repayment_projection_items.projection_run_id
+        AND debt_repayment_projection_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM debt_repayment_projection_runs
+      WHERE debt_repayment_projection_runs.id = debt_repayment_projection_items.projection_run_id
+        AND debt_repayment_projection_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE debt_repayment_projection_points ENABLE ROW LEVEL SECURITY;
+CREATE POLICY debt_repayment_projection_points_owner_access
+  ON debt_repayment_projection_points
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM debt_repayment_projection_items
+      JOIN debt_repayment_projection_runs
+        ON debt_repayment_projection_runs.id = debt_repayment_projection_items.projection_run_id
+      WHERE debt_repayment_projection_items.id = debt_repayment_projection_points.projection_item_id
+        AND debt_repayment_projection_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM debt_repayment_projection_items
+      JOIN debt_repayment_projection_runs
+        ON debt_repayment_projection_runs.id = debt_repayment_projection_items.projection_run_id
+      WHERE debt_repayment_projection_items.id = debt_repayment_projection_points.projection_item_id
+        AND debt_repayment_projection_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE forecast_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY forecast_runs_owner_access
+  ON forecast_runs
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE forecast_series ENABLE ROW LEVEL SECURITY;
+CREATE POLICY forecast_series_owner_access
+  ON forecast_series
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM forecast_runs
+      WHERE forecast_runs.id = forecast_series.forecast_run_id
+        AND forecast_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM forecast_runs
+      WHERE forecast_runs.id = forecast_series.forecast_run_id
+        AND forecast_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE forecast_points ENABLE ROW LEVEL SECURITY;
+CREATE POLICY forecast_points_owner_access
+  ON forecast_points
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM forecast_series
+      JOIN forecast_runs
+        ON forecast_runs.id = forecast_series.forecast_run_id
+      WHERE forecast_series.id = forecast_points.forecast_series_id
+        AND forecast_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM forecast_series
+      JOIN forecast_runs
+        ON forecast_runs.id = forecast_series.forecast_run_id
+      WHERE forecast_series.id = forecast_points.forecast_series_id
+        AND forecast_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE forecast_explanation_drivers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY forecast_explanation_drivers_owner_access
+  ON forecast_explanation_drivers
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM forecast_series
+      JOIN forecast_runs
+        ON forecast_runs.id = forecast_series.forecast_run_id
+      WHERE forecast_series.id = forecast_explanation_drivers.forecast_series_id
+        AND forecast_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM forecast_series
+      JOIN forecast_runs
+        ON forecast_runs.id = forecast_series.forecast_run_id
+      WHERE forecast_series.id = forecast_explanation_drivers.forecast_series_id
+        AND forecast_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE budget_recommendations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budget_recommendations_owner_access
+  ON budget_recommendations
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE budget_recommendation_allocations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budget_recommendation_allocations_owner_access
+  ON budget_recommendation_allocations
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM budget_recommendations
+      WHERE budget_recommendations.id = budget_recommendation_allocations.recommendation_id
+        AND budget_recommendations.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM budget_recommendations
+      WHERE budget_recommendations.id = budget_recommendation_allocations.recommendation_id
+        AND budget_recommendations.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE budget_recommendation_constraints ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budget_recommendation_constraints_owner_access
+  ON budget_recommendation_constraints
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM budget_recommendations
+      WHERE budget_recommendations.id = budget_recommendation_constraints.recommendation_id
+        AND budget_recommendations.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM budget_recommendations
+      WHERE budget_recommendations.id = budget_recommendation_constraints.recommendation_id
+        AND budget_recommendations.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE budget_recommendation_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budget_recommendation_events_owner_access
+  ON budget_recommendation_events
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM budget_recommendations
+      WHERE budget_recommendations.id = budget_recommendation_events.recommendation_id
+        AND budget_recommendations.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM budget_recommendations
+      WHERE budget_recommendations.id = budget_recommendation_events.recommendation_id
+        AND budget_recommendations.user_id = auth.uid()
+    )
+    AND actor_user_id = auth.uid()
+  );
+
+ALTER TABLE anomaly_evaluations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY anomaly_evaluations_owner_access
+  ON anomaly_evaluations
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE anomaly_evaluation_features ENABLE ROW LEVEL SECURITY;
+CREATE POLICY anomaly_evaluation_features_owner_access
+  ON anomaly_evaluation_features
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM anomaly_evaluations
+      WHERE anomaly_evaluations.id = anomaly_evaluation_features.anomaly_evaluation_id
+        AND anomaly_evaluations.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM anomaly_evaluations
+      WHERE anomaly_evaluations.id = anomaly_evaluation_features.anomaly_evaluation_id
+        AND anomaly_evaluations.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY alerts_owner_access
+  ON alerts
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE alert_related_entities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY alert_related_entities_owner_access
+  ON alert_related_entities
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM alerts
+      WHERE alerts.id = alert_related_entities.alert_id
+        AND alerts.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM alerts
+      WHERE alerts.id = alert_related_entities.alert_id
+        AND alerts.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE alert_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY alert_events_owner_access
+  ON alert_events
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM alerts
+      WHERE alerts.id = alert_events.alert_id
+        AND alerts.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM alerts
+      WHERE alerts.id = alert_events.alert_id
+        AND alerts.user_id = auth.uid()
+    )
+    AND (actor_user_id IS NULL OR actor_user_id = auth.uid())
+  );
+
+ALTER TABLE alert_notification_preferences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY alert_notification_preferences_owner_access
+  ON alert_notification_preferences
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE anomaly_whitelist_rules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY anomaly_whitelist_rules_owner_access
+  ON anomaly_whitelist_rules
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE alert_suppression_rules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY alert_suppression_rules_owner_access
+  ON alert_suppression_rules
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE report_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY report_runs_owner_access
+  ON report_runs
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE report_metrics ENABLE ROW LEVEL SECURITY;
+CREATE POLICY report_metrics_owner_access
+  ON report_metrics
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_metrics.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_metrics.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE report_category_breakdowns ENABLE ROW LEVEL SECURITY;
+CREATE POLICY report_category_breakdowns_owner_access
+  ON report_category_breakdowns
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_category_breakdowns.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_category_breakdowns.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE report_budget_comparisons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY report_budget_comparisons_owner_access
+  ON report_budget_comparisons
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_budget_comparisons.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_budget_comparisons.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+    AND (
+      budget_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM budgets
+        WHERE budgets.id = report_budget_comparisons.budget_id
+          AND budgets.user_id = auth.uid()
+      )
+    )
+    AND (
+      budget_allocation_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM budget_allocations
+        JOIN budgets
+          ON budgets.id = budget_allocations.budget_id
+        WHERE budget_allocations.id = report_budget_comparisons.budget_allocation_id
+          AND budgets.user_id = auth.uid()
+      )
+    )
+  );
+
+ALTER TABLE report_forecast_comparisons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY report_forecast_comparisons_owner_access
+  ON report_forecast_comparisons
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_forecast_comparisons.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_forecast_comparisons.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+    AND (
+      forecast_run_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM forecast_runs
+        WHERE forecast_runs.id = report_forecast_comparisons.forecast_run_id
+          AND forecast_runs.user_id = auth.uid()
+      )
+    )
+    AND (
+      forecast_series_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM forecast_series
+        JOIN forecast_runs
+          ON forecast_runs.id = forecast_series.forecast_run_id
+        WHERE forecast_series.id = report_forecast_comparisons.forecast_series_id
+          AND forecast_runs.user_id = auth.uid()
+      )
+    )
+  );
+
+ALTER TABLE report_savings_goal_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY report_savings_goal_snapshots_owner_access
+  ON report_savings_goal_snapshots
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_savings_goal_snapshots.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_savings_goal_snapshots.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+    AND (
+      savings_goal_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM savings_goals
+        WHERE savings_goals.id = report_savings_goal_snapshots.savings_goal_id
+          AND savings_goals.user_id = auth.uid()
+      )
+    )
+  );
+
+ALTER TABLE report_debt_account_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY report_debt_account_snapshots_owner_access
+  ON report_debt_account_snapshots
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_debt_account_snapshots.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM report_runs
+      WHERE report_runs.id = report_debt_account_snapshots.report_run_id
+        AND report_runs.user_id = auth.uid()
+    )
+    AND (
+      debt_account_id IS NULL
+      OR EXISTS (
+        SELECT 1
+        FROM debt_accounts
+        WHERE debt_accounts.id = report_debt_account_snapshots.debt_account_id
+          AND debt_accounts.user_id = auth.uid()
+      )
+    )
+  );
+
+ALTER TABLE model_evaluation_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY model_evaluation_runs_owner_access
+  ON model_evaluation_runs
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE model_evaluation_metrics ENABLE ROW LEVEL SECURITY;
+CREATE POLICY model_evaluation_metrics_owner_access
+  ON model_evaluation_metrics
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM model_evaluation_runs
+      WHERE model_evaluation_runs.id = model_evaluation_metrics.evaluation_run_id
+        AND model_evaluation_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM model_evaluation_runs
+      WHERE model_evaluation_runs.id = model_evaluation_metrics.evaluation_run_id
+        AND model_evaluation_runs.user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE model_evaluation_artifacts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY model_evaluation_artifacts_owner_access
+  ON model_evaluation_artifacts
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM model_evaluation_runs
+      WHERE model_evaluation_runs.id = model_evaluation_artifacts.evaluation_run_id
+        AND model_evaluation_runs.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM model_evaluation_runs
+      WHERE model_evaluation_runs.id = model_evaluation_artifacts.evaluation_run_id
+        AND model_evaluation_runs.user_id = auth.uid()
+    )
+  );
