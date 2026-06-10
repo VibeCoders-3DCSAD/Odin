@@ -312,33 +312,68 @@ Use these files as the source of truth for local runtime selection.
 Use this format for commit messages:
 
 ```text
-<type>: <Short summary>
+<type>(<scope>): <brief message>
 ```
 
-Extended format:
+Required subject format:
 
 ```text
-<type>([optional scope]): <description>
+<type>(<scope>): <brief message>
 
 [optional body]
 
 [optional footer]
 ```
 
+- Use lowercase `type` and `scope` tokens.
+- Always include a scope. Do not use unscoped subjects such as `fix: ...`.
+- Keep the brief message specific, imperative, and focused on the change.
+
 ### Commit Types
 
+- `build`: build system, packaging, or compile pipeline changes
 - `chore`: maintenance tasks that do not change functionality
+- `ci`: continuous integration, checks, or release automation
 - `docs`: documentation-only changes
 - `feat`: new features or capabilities
 - `fix`: bug fixes or behavior corrections
+- `perf`: performance improvements
 - `refactor`: structural improvements without changing behavior
+- `revert`: reverts of prior commits
+- `style`: formatting-only changes with no behavior impact
 - `test`: test-only changes
+
+### Commit Scopes
+
+- `api`: API routing, transport, request handling, or API contracts
+- `app`: Expo app shell, navigation, or app-level wiring
+- `backend`: backend service logic outside narrow API routing
+- `ci`: CI configuration, checks, or workflow files
+- `config`: repo configuration, tooling config, or runtime pins
+- `database`: schema, migrations, RLS, queries, or persistence behavior
+- `deps`: dependency additions, removals, upgrades, or lockfile changes
+- `docs`: documentation and prose-only updates
+- `frontend`: screens, components, hooks, styles, or client-side behavior
+- `infra`: deployment, hosting, environment, or operational setup
+- `ml`: model service, training, evaluation, forecasting, or ML contracts
+- `standards`: shared engineering standards and agent guidance
+- `tests`: test fixtures, test helpers, and test coverage
+
+Examples:
+
+```text
+feat(frontend): add budget summary screen
+fix(database): scope transactions by user id
+chore(deps): update supabase cli
+docs(standards): document commit message format
+```
 
 ### Subject Rules
 
 - Keep the subject between 50 and 72 characters when possible.
 - Use imperative mood.
-- Capitalize the first letter of the summary.
+- Start the brief message lowercase unless it begins with a proper noun,
+  acronym, or code identifier.
 - Do not end the subject with a period.
 
 ### Body Rules
