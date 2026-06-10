@@ -11,7 +11,7 @@ Detailed repository standards live in [REPOSITORY-STANDARDS.md](docs/standards/R
 - Before making code or documentation changes in a consuming repository, verify that `AGENTS.md` and `docs/standards/REPOSITORY-STANDARDS.md` exist in that repository.
 - If the shared standards are missing, clone the standards repository as a sibling of `odin` and `odin-ml`:
   ```bash
-  git clone https://github.com/CharlesTogle/odin-standards.git ../odin-standards
+  git clone https://github.com/VibeCoders-3DCSAD/odin-standards.git ../odin-standards
   ```
 - After cloning, run the sync script from the consuming repository root:
   ```bash
