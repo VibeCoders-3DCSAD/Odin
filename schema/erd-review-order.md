@@ -13,122 +13,122 @@ For each table, check these in order:
 
 ## 0. External References And Enums
 
-- [ ] `auth.users`
+- [x] `auth.users`
   - External Supabase/Auth table referenced by `profiles.user_id`.
 - [ ] enum types
   - Check the `odin_*` enum definitions before reviewing table constraints.
 
 ## 1. User Identity And Account Governance
 
-- [ ] `profiles`
+- [x] `profiles`
   - Root app-owned user table.
   - Depends on: `auth.users`.
-- [ ] `user_privacy_settings`
+- [x] `user_privacy_settings`
   - One privacy-settings row per user.
   - Depends on: `profiles`.
-- [ ] `user_consents`
+- [x] `user_consents`
   - Consent history for terms, privacy, model training, research, etc.
   - Depends on: `profiles`.
-- [ ] `data_export_requests`
+- [x] `data_export_requests`
   - User data export request lifecycle.
   - Depends on: `profiles`.
-- [ ] `account_deletion_requests`
+- [x] `account_deletion_requests`
   - User account deletion request lifecycle.
   - Depends on: `profiles`.
 
 ## 2. Onboarding And Financial Profile
 
-- [ ] `onboarding_sessions`
+- [x] `onboarding_sessions`
   - One onboarding attempt for a user.
   - Depends on: `profiles`.
-- [ ] `onboarding_responses`
+- [x] `onboarding_responses`
   - Per-question answers within an onboarding session.
   - Depends on: `onboarding_sessions`.
-- [ ] `financial_profile_assessments`
+- [x] `financial_profile_assessments`
   - Model assessment output for a user or onboarding session.
   - Depends on: `profiles`, `onboarding_sessions`.
-- [ ] `financial_profile_explanation_drivers`
+- [x] `financial_profile_explanation_drivers`
   - Explanation rows for a financial profile assessment.
   - Depends on: `financial_profile_assessments`.
-- [ ] `financial_profile_assignments`
+- [x] `financial_profile_assignments`
   - Actual profile label assigned to the user.
   - Depends on: `profiles`, `financial_profile_assessments`.
-- [ ] `financial_profile_events`
+- [x] `financial_profile_events`
   - Audit/event log for profile assessment and assignment actions.
   - Depends on: `profiles`, `financial_profile_assessments`, `financial_profile_assignments`.
 
 ## 3. Category Taxonomy
 
-- [ ] `categories`
+- [x] `categories`
   - Broad budget buckets such as Essentials, Obligatory, Discretionary, and Financial Allocation.
   - Depends on: nothing inside the app schema.
-- [ ] `subcategories`
-  - Specific subcategories used by transactions, budgets, forecasts, reports, and alerts.
-  - Contains both seeded system subcategories and user-created subcategories.
-  - Depends on: `categories`, `profiles` for user-created rows.
+- [x] `subcategories`
+  - Specific categories used by transactions, budgets, forecasts, reports, and alerts.
+  - Contains both seeded system categories and user-created categories.
+  - Depends on: `category_groups`, `profiles` for user-created rows.
 
 ## 4. Income Sources And Accounts
 
-- [ ] `income_sources`
+- [x] `income_sources`
   - Expected income sources and pay schedules.
   - Depends on: `profiles`.
-- [ ] `financial_accounts`
+- [x] `financial_accounts`
   - User-owned cash, bank, wallet, credit, or other financial accounts.
   - Depends on: `profiles`.
 
 ## 5. Transactions, Recurring Rules, And Obligations
 
-- [ ] `recurring_transaction_templates`
+- [x] `recurring_transaction_templates`
   - Rule/template for generating repeated income, expense, or transfer records.
-  - Depends on: `profiles`, `subcategories`, `financial_accounts`.
-- [ ] `financial_obligations`
+  - Depends on: `profiles`, `categories`, `financial_accounts`.
+- [x] `financial_obligations`
   - Recurring required obligations such as bills, debt payments, or support.
-  - Depends on: `profiles`, `subcategories`, `recurring_transaction_templates`.
-- [ ] `transactions`
+  - Depends on: `profiles`, `categories`, `recurring_transaction_templates`.
+- [x] `transactions`
   - Posted or tracked money movements.
-  - Depends on: `profiles`, `subcategories`, `financial_accounts`, `recurring_transaction_templates`.
-- [ ] `transaction_events`
+  - Depends on: `profiles`, `categories`, `financial_accounts`, `recurring_transaction_templates`.
+- [x] `transaction_events`
   - Audit/event log for transaction changes.
   - Depends on: `transactions`, `profiles`.
-- [ ] `transaction_drafts`
+- [x] `transaction_drafts`
   - Offline or pending transaction payloads before sync/posting.
   - Depends on: `profiles`, `transactions`.
-- [ ] `recurring_transaction_occurrences`
+- [x] `recurring_transaction_occurrences`
   - Scheduled/generated occurrences from recurring templates.
   - Depends on: `recurring_transaction_templates`, `profiles`, `transactions`.
-- [ ] `expected_spending_events`
+- [x] `expected_spending_events`
   - Calendar-like expected events that affect forecasts or anomaly suppression.
-  - Depends on: `profiles`, `categories`, `subcategories`.
+  - Depends on: `profiles`, `category_groups`, `categories`.
 
 ## 6. Budgets
 
-- [ ] `budgets`
+- [x] `budgets`
   - Budget header for a period.
   - Depends on: `profiles`.
-- [ ] `budget_allocations`
-  - Category or specific-subcategory allocation lines within a budget.
-  - Depends on: `budgets`, `categories`, `subcategories`.
-- [ ] `budget_events`
+- [x] `budget_allocations`
+  - Category-group or specific-category allocation lines within a budget.
+  - Depends on: `budgets`, `category_groups`, `categories`.
+- [x] `budget_events`
   - Audit/event log for budget actions.
   - Depends on: `budgets`, `profiles`.
 
 ## 7. Savings Goals
 
-- [ ] `savings_goals`
+- [x] `savings_goals`
   - User savings targets and current progress state.
-  - Depends on: `profiles`, `financial_accounts`, `subcategories`.
+  - Depends on: `profiles`, `financial_accounts`.
 - [ ] `savings_goal_allocation_preferences`
   - User preference for Snowball or Avalanche savings allocation.
   - Depends on: `profiles`.
-- [ ] `savings_goal_contributions`
+- [x] `savings_goal_contributions`
   - Contributions toward a savings goal.
   - Depends on: `savings_goals`, `profiles`, `transactions`.
-- [ ] `savings_goal_progress_snapshots`
-  - Dated snapshots of savings-goal progress.
-  - Depends on: `savings_goals`.
 - [ ] `savings_goal_budget_allocations`
   - Accepted budget Financial Allocation distribution across active savings goals.
   - Depends on: `budget_allocations`, `savings_goals`.
+- [x] `savings_goal_progress_snapshots` **Deprecated, not needed**
+  - Dated snapshots of savings-goal progress.
+  - Depends on: `savings_goals`.
 
 ## 8. Debt Management
 
@@ -158,7 +158,7 @@ For each table, check these in order:
   - Depends on: `profiles`.
 - [ ] `forecast_series`
   - One forecasted series within a run.
-  - Depends on: `forecast_runs`, `categories`, `subcategories`.
+  - Depends on: `forecast_runs`, `category_groups`, `categories`.
 - [ ] `forecast_points`
   - Period-by-period forecast values.
   - Depends on: `forecast_series`.
@@ -173,13 +173,13 @@ For each table, check these in order:
   - Depends on: `profiles`, `forecast_runs`, `budgets`.
 - [ ] `budget_recommendation_allocations`
   - Recommended allocation lines.
-  - Depends on: `budget_recommendations`, `categories`, `subcategories`.
+  - Depends on: `budget_recommendations`, `category_groups`, `categories`.
 - [ ] `savings_goal_recommendation_allocations`
   - Recommended Financial Allocation distribution across active savings goals.
   - Depends on: `budget_recommendations`, `budget_recommendation_allocations`, `savings_goals`.
 - [ ] `budget_recommendation_constraints`
   - Constraints used by the recommendation solver.
-  - Depends on: `budget_recommendations`, `categories`, `subcategories`.
+  - Depends on: `budget_recommendations`, `category_groups`, `categories`.
 - [ ] `budget_recommendation_events`
   - Audit/event log for recommendation actions.
   - Depends on: `budget_recommendations`, `profiles`.
@@ -188,7 +188,7 @@ For each table, check these in order:
 
 - [ ] `anomaly_evaluations`
   - Model output for transaction anomaly detection.
-  - Depends on: `profiles`, `transactions`, `categories`, `subcategories`.
+  - Depends on: `profiles`, `transactions`, `category_groups`, `categories`.
 - [ ] `anomaly_evaluation_features`
   - Feature-level anomaly details.
   - Depends on: `anomaly_evaluations`.
@@ -197,7 +197,7 @@ For each table, check these in order:
 
 - [ ] `alerts`
   - User-facing alerts with optional links into many domain tables.
-  - Depends on: `profiles`, `transactions`, `subcategories`, `budgets`, `debt_accounts`, `savings_goals`, `forecast_runs`, `budget_recommendations`, `anomaly_evaluations`, itself through `parent_alert_id`.
+  - Depends on: `profiles`, `transactions`, `categories`, `budgets`, `debt_accounts`, `savings_goals`, `forecast_runs`, `budget_recommendations`, `anomaly_evaluations`, itself through `parent_alert_id`.
 - [ ] `alert_related_entities`
   - Generic related-entity list for an alert.
   - Depends on: `alerts`.
@@ -209,10 +209,10 @@ For each table, check these in order:
   - Depends on: `profiles`.
 - [ ] `anomaly_whitelist_rules`
   - User-created rules for expected anomaly patterns.
-  - Depends on: `profiles`, `alerts`, `anomaly_evaluations`, `subcategories`.
+  - Depends on: `profiles`, `alerts`, `anomaly_evaluations`, `categories`.
 - [ ] `alert_suppression_rules`
   - General alert suppression rules.
-  - Depends on: `profiles`, `alerts`, `categories`, `subcategories`.
+  - Depends on: `profiles`, `alerts`, `category_groups`, `categories`.
 
 ## 13. Reports
 
@@ -223,14 +223,14 @@ For each table, check these in order:
   - Summary metrics within a report.
   - Depends on: `report_runs`.
 - [ ] `report_category_breakdowns`
-  - Category or specific-subcategory report breakdowns.
-  - Depends on: `report_runs`, `categories`, `subcategories`.
+  - Category-group or specific-category report breakdowns.
+  - Depends on: `report_runs`, `category_groups`, `categories`.
 - [ ] `report_budget_comparisons`
   - Budget-vs-actual report rows.
-  - Depends on: `report_runs`, `budgets`, `budget_allocations`, `categories`, `subcategories`.
+  - Depends on: `report_runs`, `budgets`, `budget_allocations`, `category_groups`, `categories`.
 - [ ] `report_forecast_comparisons`
   - Forecast-vs-actual report rows.
-  - Depends on: `report_runs`, `forecast_runs`, `forecast_series`, `categories`, `subcategories`.
+  - Depends on: `report_runs`, `forecast_runs`, `forecast_series`, `category_groups`, `categories`.
 - [ ] `report_savings_goal_snapshots`
   - Report-time savings-goal snapshots.
   - Depends on: `report_runs`, `savings_goals`.
