@@ -836,29 +836,82 @@ INSERT INTO categories (
   is_protected_default,
   sort_order
 ) VALUES
+-- -------------------
+-- Income: Cash inflow
+-- -------------------
+
   (NULL, NULL, 'income_salary', 'income', 'Salary', 'Salary', 'Regular employment income.', true, false, false, 10),
+
   (NULL, NULL, 'income_freelance', 'income', 'Freelance or Variable Income', 'Freelance', 'Freelance, commission, business, or irregular income.', true, false, false, 20),
+
+-- -------------------------------------------
+-- Essentials: Necessary but flexible expenses
+-- -------------------------------------------
+
   ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_food_groceries', 'expense', 'Food and Groceries', 'Groceries', 'Food, groceries, and basic household supplies.', true, false, true, 100),
-  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_housing_rent', 'expense', 'Housing or Rent', 'Housing', 'Rent, housing dues, and core shelter costs.', true, false, true, 110),
+
   ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_utilities', 'expense', 'Utilities', 'Utilities', 'Electricity, water, internet, and mobile load for basic needs.', true, false, true, 120),
+
   ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_transportation', 'expense', 'Transportation', 'Transport', 'Commute, fuel, fares, and work-related transportation.', true, false, true, 130),
+
   ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_healthcare', 'expense', 'Healthcare and Medicine', 'Healthcare', 'Medical care, medicine, and health-related essentials.', true, false, true, 140),
+
+-- -----------------------------------------------------------------------------------------------------------
+-- Obligatories: Inflexible necessary expenses that have a hard minimum and cannot be reduced without penalty, consequence, or significant change in lifestyle.
+-- -----------------------------------------------------------------------------------------------------------
+
   ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_family_support', 'expense', 'Family Support', 'Family', 'Support for parents, siblings, dependents, or household members.', true, true, true, 200),
+
   ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_remittances', 'expense', 'Remittances', 'Remittance', 'Money sent to family or dependents.', true, true, true, 210),
+
   ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_paluwagan', 'expense', 'Paluwagan', 'Paluwagan', 'Scheduled contributions to a rotating savings group.', true, true, true, 220),
-  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_religious_donations', 'expense', 'Church or Religious Donations', 'Donations', 'Church, religious, or faith community contributions.', true, true, false, 230),
-  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_community_collections', 'expense', 'Barangay or Community Collections', 'Community', 'Barangay, neighborhood, group, or community contributions.', true, true, false, 240),
+
   ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_government_contributions', 'expense', 'Government Contributions', 'Government', 'SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.', true, true, true, 250),
+
   ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_debt_payments', 'expense', 'Debt and Loan Payments', 'Debt', 'Minimum debt, loan, credit card, or installment payments.', true, false, true, 260),
+
   ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_insurance', 'expense', 'Insurance', 'Insurance', 'Insurance premiums and protection-related payments.', true, false, true, 270),
+
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_housing_rent', 'expense', 'Housing or Rent', 'Housing', 'Rent, housing dues, and core shelter costs.', true, false, true, 110),
+
+-- ------------------------------------------------------------------
+-- Discretionary: Non-essential expenses for lifestyle and enjoyment.
+-- ------------------------------------------------------------------
+
   ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_dining_out', 'expense', 'Dining Out', 'Dining', 'Restaurant, cafe, and takeout spending.', true, false, false, 300),
+
   ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_shopping', 'expense', 'Shopping', 'Shopping', 'Clothing, gadgets, home items, and non-essential purchases.', true, false, false, 310),
+
   ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_entertainment', 'expense', 'Entertainment', 'Fun', 'Movies, games, subscriptions, events, and leisure.', true, false, false, 320),
+
   ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_travel', 'expense', 'Travel and Leisure', 'Travel', 'Trips, outings, and leisure travel spending.', true, false, false, 330),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_alcohol_tobacco', 'expense', 'Alcoholic Beverages & Tobacco', 'Alcohol/Tobacco', 'Alcoholic drinks, cigarettes, vape, and related products.', true, false, true, 340),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_clothing_footwear', 'expense', 'Clothing and Footwear', 'Clothing', 'Clothes, shoes, accessories, and tailoring services.', true, false, true, 345),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_furnishings', 'expense', 'Furnishings & Equipment', 'Furnishings', 'Furniture, appliances, tools, and household textiles.', true, false, true, 350),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_recreation_culture', 'expense', 'Recreation & Culture', 'Recreation', 'Movies, concerts, hobbies, sports, books, games, and cultural events.', true, false, true, 355),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_personal_care', 'expense', 'Personal Care', 'Personal Care', 'Haircuts, cosmetics, toiletries, salon services, and miscellaneous personal goods.', true, false, true, 360),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_accommodation', 'expense', 'Accommodation', 'Hotel/Hostel', 'Hotels, resorts, and short-term lodging.', true, false, false, 365),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_religious_donations', 'expense', 'Church or Religious Donations', 'Donations', 'Church, religious, or faith community contributions.', true, true, false, 230),
+
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_community_collections', 'expense', 'Barangay or Community Collections', 'Community', 'Barangay, neighborhood, group, or community contributions.', true, true, false, 240),
+
+-- --------------------------------------------------------------------------------------
+-- Financial Allocations: Non-essential expenses for financial goals and future planning.
+-- --------------------------------------------------------------------------------------
+
   ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_emergency_fund', 'expense', 'Emergency Fund', 'Emergency Fund', 'Emergency fund contributions.', true, false, true, 400),
+
   ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_savings', 'expense', 'Savings', 'Savings', 'General savings contributions.', true, false, true, 410),
+
   ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_investments', 'expense', 'Investments', 'Investments', 'Investment contributions without portfolio tracking.', true, false, false, 420)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (slug) WHERE user_id IS NULL DO NOTHING;
 
 CREATE TABLE income_sources (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
