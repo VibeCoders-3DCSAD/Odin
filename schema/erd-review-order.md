@@ -59,15 +59,13 @@ For each table, check these in order:
 
 ## 3. Category Taxonomy
 
+- [ ] `category_groups`
+  - Broad budget buckets such as Essentials, Obligatory, Discretionary, and Financial Allocation.
+  - Depends on: nothing inside the app schema.
 - [ ] `categories`
-  - Root category taxonomy, including parent-child category relationships.
-  - Depends on: itself through `parent_category_id`.
-- [ ] `category_aliases`
-  - Alternate labels for categories.
-  - Depends on: `categories`.
-- [ ] `user_category_settings`
-  - User-specific category labels, visibility, and protection state.
-  - Depends on: `profiles`, `categories`.
+  - Specific categories used by transactions, budgets, forecasts, reports, and alerts.
+  - Contains both seeded system categories and user-created categories.
+  - Depends on: `category_groups`, `profiles` for user-created rows.
 
 ## 4. Income Sources And Accounts
 
@@ -100,7 +98,7 @@ For each table, check these in order:
   - Depends on: `recurring_transaction_templates`, `profiles`, `transactions`.
 - [ ] `expected_spending_events`
   - Calendar-like expected events that affect forecasts or anomaly suppression.
-  - Depends on: `profiles`, `categories`.
+  - Depends on: `profiles`, `category_groups`, `categories`.
 
 ## 6. Budgets
 
@@ -108,8 +106,8 @@ For each table, check these in order:
   - Budget header for a period.
   - Depends on: `profiles`.
 - [ ] `budget_allocations`
-  - Category or broad-group allocation lines within a budget.
-  - Depends on: `budgets`, `categories`.
+  - Category-group or specific-category allocation lines within a budget.
+  - Depends on: `budgets`, `category_groups`, `categories`.
 - [ ] `budget_events`
   - Audit/event log for budget actions.
   - Depends on: `budgets`, `profiles`.
@@ -154,7 +152,7 @@ For each table, check these in order:
   - Depends on: `profiles`.
 - [ ] `forecast_series`
   - One forecasted series within a run.
-  - Depends on: `forecast_runs`, `categories`.
+  - Depends on: `forecast_runs`, `category_groups`, `categories`.
 - [ ] `forecast_points`
   - Period-by-period forecast values.
   - Depends on: `forecast_series`.
@@ -169,10 +167,10 @@ For each table, check these in order:
   - Depends on: `profiles`, `forecast_runs`, `budgets`.
 - [ ] `budget_recommendation_allocations`
   - Recommended allocation lines.
-  - Depends on: `budget_recommendations`, `categories`.
+  - Depends on: `budget_recommendations`, `category_groups`, `categories`.
 - [ ] `budget_recommendation_constraints`
   - Constraints used by the recommendation solver.
-  - Depends on: `budget_recommendations`, `categories`.
+  - Depends on: `budget_recommendations`, `category_groups`, `categories`.
 - [ ] `budget_recommendation_events`
   - Audit/event log for recommendation actions.
   - Depends on: `budget_recommendations`, `profiles`.
@@ -181,7 +179,7 @@ For each table, check these in order:
 
 - [ ] `anomaly_evaluations`
   - Model output for transaction anomaly detection.
-  - Depends on: `profiles`, `transactions`, `categories`.
+  - Depends on: `profiles`, `transactions`, `category_groups`, `categories`.
 - [ ] `anomaly_evaluation_features`
   - Feature-level anomaly details.
   - Depends on: `anomaly_evaluations`.
@@ -205,7 +203,7 @@ For each table, check these in order:
   - Depends on: `profiles`, `alerts`, `anomaly_evaluations`, `categories`.
 - [ ] `alert_suppression_rules`
   - General alert suppression rules.
-  - Depends on: `profiles`, `alerts`, `categories`.
+  - Depends on: `profiles`, `alerts`, `category_groups`, `categories`.
 
 ## 13. Reports
 
@@ -216,14 +214,14 @@ For each table, check these in order:
   - Summary metrics within a report.
   - Depends on: `report_runs`.
 - [ ] `report_category_breakdowns`
-  - Category or broad-group report breakdowns.
-  - Depends on: `report_runs`, `categories`.
+  - Category-group or specific-category report breakdowns.
+  - Depends on: `report_runs`, `category_groups`, `categories`.
 - [ ] `report_budget_comparisons`
   - Budget-vs-actual report rows.
-  - Depends on: `report_runs`, `budgets`, `budget_allocations`, `categories`.
+  - Depends on: `report_runs`, `budgets`, `budget_allocations`, `category_groups`, `categories`.
 - [ ] `report_forecast_comparisons`
   - Forecast-vs-actual report rows.
-  - Depends on: `report_runs`, `forecast_runs`, `forecast_series`, `categories`.
+  - Depends on: `report_runs`, `forecast_runs`, `forecast_series`, `category_groups`, `categories`.
 - [ ] `report_savings_goal_snapshots`
   - Report-time savings-goal snapshots.
   - Depends on: `report_runs`, `savings_goals`.
