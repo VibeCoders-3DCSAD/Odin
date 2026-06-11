@@ -10,13 +10,6 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TYPE odin_broad_group AS ENUM (
-  'essentials',
-  'obligatory',
-  'discretionary',
-  'financial_allocation'
-);
-
 CREATE TYPE odin_forecast_model_kind AS ENUM (
   'lstm',
   'population_fallback',
@@ -87,7 +80,7 @@ CREATE TYPE odin_budget_constraint_type AS ENUM (
 );
 
 CREATE TYPE odin_allocation_scope AS ENUM (
-  'broad_group',
+  'category_group',
   'category'
 );
 
@@ -260,12 +253,6 @@ CREATE TYPE odin_category_kind AS ENUM (
   'income',
   'expense',
   'transfer_adjustment'
-);
-
-CREATE TYPE odin_category_protection_source AS ENUM (
-  'system_default',
-  'user_selected',
-  'user_removed'
 );
 
 CREATE TYPE odin_account_kind AS ENUM (
@@ -606,7 +593,6 @@ CREATE TABLE onboarding_sessions (
   abandoned_at timestamptz,
   superseded_at timestamptz,
   current_step_key text,
-
   income_type odin_income_type,
   income_frequency odin_income_frequency,
   declared_monthly_income_centavos bigint,
@@ -757,104 +743,122 @@ CREATE TABLE financial_profile_events (
 CREATE INDEX financial_profile_events_user_created_idx
   ON financial_profile_events (user_id, created_at DESC);
 
+CREATE TABLE category_groups (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug text NOT NULL UNIQUE,
+  label text NOT NULL,
+  short_label text,
+  description text NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  is_active boolean NOT NULL DEFAULT true,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX category_groups_active_sort_idx
+  ON category_groups (is_active, sort_order);
+
+INSERT INTO category_groups (
+  slug,
+  label,
+  short_label,
+  description,
+  sort_order
+) VALUES
+  ('essentials', 'Essentials', 'Essentials', 'Basic needs and necessary day-to-day spending.', 100),
+  ('obligatory', 'Obligatory', 'Obligatory', 'Required, recurring, or culturally expected responsibilities.', 200),
+  ('discretionary', 'Discretionary', 'Discretionary', 'Flexible wants and lifestyle spending.', 300),
+  ('financial_allocation', 'Financial Allocation', 'Financial', 'Savings, investments, and future-focused allocations.', 400)
+ON CONFLICT (slug) DO NOTHING;
+
 CREATE TABLE categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  parent_category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
-  slug text NOT NULL UNIQUE,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
+  user_id uuid REFERENCES profiles(user_id) ON DELETE CASCADE,
+  slug text NOT NULL,
   kind odin_category_kind NOT NULL DEFAULT 'expense',
-  broad_group odin_broad_group,
-  default_label text NOT NULL,
+  label text NOT NULL,
   short_label text,
   description text NOT NULL,
   is_system boolean NOT NULL DEFAULT true,
   is_filipino_context boolean NOT NULL DEFAULT false,
   is_protected_default boolean NOT NULL DEFAULT false,
-  allows_custom_label boolean NOT NULL DEFAULT true,
+  is_protected boolean NOT NULL DEFAULT false,
   sort_order integer NOT NULL DEFAULT 0,
   is_active boolean NOT NULL DEFAULT true,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 
+  CONSTRAINT categories_owner_chk
+    CHECK (
+      (is_system = true AND user_id IS NULL)
+      OR (is_system = false AND user_id IS NOT NULL)
+    ),
   CONSTRAINT categories_expense_group_chk
     CHECK (
-      (kind = 'expense' AND broad_group IS NOT NULL)
-      OR (kind <> 'expense' AND broad_group IS NULL)
-    )
+      (kind = 'expense' AND category_group_id IS NOT NULL)
+      OR (kind <> 'expense' AND category_group_id IS NULL)
+    ),
+  CONSTRAINT categories_user_default_protection_chk
+    CHECK (is_system = true OR is_protected_default = false)
 );
 
-CREATE INDEX categories_kind_group_idx
-  ON categories (kind, broad_group, sort_order);
+CREATE UNIQUE INDEX categories_system_slug_unique_idx
+  ON categories (slug)
+  WHERE user_id IS NULL;
 
-CREATE INDEX categories_parent_idx
-  ON categories (parent_category_id);
+CREATE UNIQUE INDEX categories_user_slug_unique_idx
+  ON categories (user_id, slug)
+  WHERE user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX categories_system_label_unique_idx
+  ON categories (lower(label))
+  WHERE user_id IS NULL;
+
+CREATE UNIQUE INDEX categories_user_label_unique_idx
+  ON categories (user_id, lower(label))
+  WHERE user_id IS NOT NULL;
+
+CREATE INDEX categories_group_kind_idx
+  ON categories (category_group_id, kind, sort_order);
+
+CREATE INDEX categories_user_active_idx
+  ON categories (user_id, is_active, sort_order);
 
 INSERT INTO categories (
+  category_group_id,
+  user_id,
   slug,
   kind,
-  broad_group,
-  default_label,
+  label,
   short_label,
   description,
+  is_system,
   is_filipino_context,
   is_protected_default,
   sort_order
 ) VALUES
-  ('income_salary', 'income', NULL, 'Salary', 'Salary', 'Regular employment income.', false, false, 10),
-  ('income_freelance', 'income', NULL, 'Freelance or Variable Income', 'Freelance', 'Freelance, commission, business, or irregular income.', false, false, 20),
-  ('essentials_food_groceries', 'expense', 'essentials', 'Food and Groceries', 'Groceries', 'Food, groceries, and basic household supplies.', false, true, 100),
-  ('essentials_housing_rent', 'expense', 'essentials', 'Housing or Rent', 'Housing', 'Rent, housing dues, and core shelter costs.', false, true, 110),
-  ('essentials_utilities', 'expense', 'essentials', 'Utilities', 'Utilities', 'Electricity, water, internet, and mobile load for basic needs.', false, true, 120),
-  ('essentials_transportation', 'expense', 'essentials', 'Transportation', 'Transport', 'Commute, fuel, fares, and work-related transportation.', false, true, 130),
-  ('essentials_healthcare', 'expense', 'essentials', 'Healthcare and Medicine', 'Healthcare', 'Medical care, medicine, and health-related essentials.', false, true, 140),
-  ('obligatory_family_support', 'expense', 'obligatory', 'Family Support', 'Family', 'Support for parents, siblings, dependents, or household members.', true, true, 200),
-  ('obligatory_remittances', 'expense', 'obligatory', 'Remittances', 'Remittance', 'Money sent to family or dependents.', true, true, 210),
-  ('obligatory_paluwagan', 'expense', 'obligatory', 'Paluwagan', 'Paluwagan', 'Scheduled contributions to a rotating savings group.', true, true, 220),
-  ('obligatory_religious_donations', 'expense', 'obligatory', 'Church or Religious Donations', 'Donations', 'Church, religious, or faith community contributions.', true, false, 230),
-  ('obligatory_community_collections', 'expense', 'obligatory', 'Barangay or Community Collections', 'Community', 'Barangay, neighborhood, group, or community contributions.', true, false, 240),
-  ('obligatory_government_contributions', 'expense', 'obligatory', 'Government Contributions', 'Government', 'SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.', true, true, 250),
-  ('obligatory_debt_payments', 'expense', 'obligatory', 'Debt and Loan Payments', 'Debt', 'Minimum debt, loan, credit card, or installment payments.', false, true, 260),
-  ('obligatory_insurance', 'expense', 'obligatory', 'Insurance', 'Insurance', 'Insurance premiums and protection-related payments.', false, true, 270),
-  ('discretionary_dining_out', 'expense', 'discretionary', 'Dining Out', 'Dining', 'Restaurant, cafe, and takeout spending.', false, false, 300),
-  ('discretionary_shopping', 'expense', 'discretionary', 'Shopping', 'Shopping', 'Clothing, gadgets, home items, and non-essential purchases.', false, false, 310),
-  ('discretionary_entertainment', 'expense', 'discretionary', 'Entertainment', 'Fun', 'Movies, games, subscriptions, events, and leisure.', false, false, 320),
-  ('discretionary_travel', 'expense', 'discretionary', 'Travel and Leisure', 'Travel', 'Trips, outings, and leisure travel spending.', false, false, 330),
-  ('financial_emergency_fund', 'expense', 'financial_allocation', 'Emergency Fund', 'Emergency Fund', 'Emergency fund contributions.', false, true, 400),
-  ('financial_savings', 'expense', 'financial_allocation', 'Savings', 'Savings', 'General savings contributions.', false, true, 410),
-  ('financial_investments', 'expense', 'financial_allocation', 'Investments', 'Investments', 'Investment contributions without portfolio tracking.', false, false, 420)
-ON CONFLICT (slug) DO NOTHING;
-
-CREATE TABLE category_aliases (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  category_id uuid NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-  alias text NOT NULL,
-  locale text NOT NULL DEFAULT 'en-PH',
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX category_aliases_unique_idx
-  ON category_aliases (category_id, lower(alias), locale);
-
-CREATE TABLE user_category_settings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-  category_id uuid NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-  custom_label text,
-  is_protected boolean NOT NULL DEFAULT false,
-  protection_source odin_category_protection_source NOT NULL DEFAULT 'user_selected',
-  is_hidden boolean NOT NULL DEFAULT false,
-  sort_order integer,
-  notes text,
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-
-  UNIQUE (user_id, category_id)
-);
-
-CREATE UNIQUE INDEX user_category_settings_user_label_unique_idx
-  ON user_category_settings (user_id, lower(custom_label))
-  WHERE custom_label IS NOT NULL;
-
-CREATE INDEX user_category_settings_user_protected_idx
-  ON user_category_settings (user_id, is_protected);
+  (NULL, NULL, 'income_salary', 'income', 'Salary', 'Salary', 'Regular employment income.', true, false, false, 10),
+  (NULL, NULL, 'income_freelance', 'income', 'Freelance or Variable Income', 'Freelance', 'Freelance, commission, business, or irregular income.', true, false, false, 20),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_food_groceries', 'expense', 'Food and Groceries', 'Groceries', 'Food, groceries, and basic household supplies.', true, false, true, 100),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_housing_rent', 'expense', 'Housing or Rent', 'Housing', 'Rent, housing dues, and core shelter costs.', true, false, true, 110),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_utilities', 'expense', 'Utilities', 'Utilities', 'Electricity, water, internet, and mobile load for basic needs.', true, false, true, 120),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_transportation', 'expense', 'Transportation', 'Transport', 'Commute, fuel, fares, and work-related transportation.', true, false, true, 130),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_healthcare', 'expense', 'Healthcare and Medicine', 'Healthcare', 'Medical care, medicine, and health-related essentials.', true, false, true, 140),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_family_support', 'expense', 'Family Support', 'Family', 'Support for parents, siblings, dependents, or household members.', true, true, true, 200),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_remittances', 'expense', 'Remittances', 'Remittance', 'Money sent to family or dependents.', true, true, true, 210),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_paluwagan', 'expense', 'Paluwagan', 'Paluwagan', 'Scheduled contributions to a rotating savings group.', true, true, true, 220),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_religious_donations', 'expense', 'Church or Religious Donations', 'Donations', 'Church, religious, or faith community contributions.', true, true, false, 230),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_community_collections', 'expense', 'Barangay or Community Collections', 'Community', 'Barangay, neighborhood, group, or community contributions.', true, true, false, 240),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_government_contributions', 'expense', 'Government Contributions', 'Government', 'SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.', true, true, true, 250),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_debt_payments', 'expense', 'Debt and Loan Payments', 'Debt', 'Minimum debt, loan, credit card, or installment payments.', true, false, true, 260),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_insurance', 'expense', 'Insurance', 'Insurance', 'Insurance premiums and protection-related payments.', true, false, true, 270),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_dining_out', 'expense', 'Dining Out', 'Dining', 'Restaurant, cafe, and takeout spending.', true, false, false, 300),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_shopping', 'expense', 'Shopping', 'Shopping', 'Clothing, gadgets, home items, and non-essential purchases.', true, false, false, 310),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_entertainment', 'expense', 'Entertainment', 'Fun', 'Movies, games, subscriptions, events, and leisure.', true, false, false, 320),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_travel', 'expense', 'Travel and Leisure', 'Travel', 'Trips, outings, and leisure travel spending.', true, false, false, 330),
+  ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_emergency_fund', 'expense', 'Emergency Fund', 'Emergency Fund', 'Emergency fund contributions.', true, false, true, 400),
+  ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_savings', 'expense', 'Savings', 'Savings', 'General savings contributions.', true, false, true, 410),
+  ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_investments', 'expense', 'Investments', 'Investments', 'Investment contributions without portfolio tracking.', true, false, false, 420)
+ON CONFLICT DO NOTHING;
 
 CREATE TABLE income_sources (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1160,7 +1164,7 @@ CREATE TABLE expected_spending_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
   category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
-  broad_group odin_broad_group,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
   event_kind odin_expected_event_kind NOT NULL,
   status odin_expected_event_status NOT NULL DEFAULT 'active',
   title text NOT NULL,
@@ -1235,7 +1239,7 @@ CREATE TABLE budget_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   budget_id uuid NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
   allocation_scope odin_allocation_scope NOT NULL,
-  broad_group odin_broad_group NOT NULL,
+  category_group_id uuid NOT NULL REFERENCES category_groups(id) ON DELETE RESTRICT,
   category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
   allocated_amount_centavos bigint NOT NULL,
   rollover_amount_centavos bigint NOT NULL DEFAULT 0,
@@ -1248,7 +1252,7 @@ CREATE TABLE budget_allocations (
 
   CONSTRAINT budget_allocations_scope_chk
     CHECK (
-      (allocation_scope = 'broad_group' AND category_id IS NULL)
+      (allocation_scope = 'category_group' AND category_id IS NULL)
       OR (allocation_scope = 'category' AND category_id IS NOT NULL)
     ),
   CONSTRAINT budget_allocations_money_chk
@@ -1263,8 +1267,8 @@ CREATE TABLE budget_allocations (
 );
 
 CREATE UNIQUE INDEX budget_allocations_group_unique_idx
-  ON budget_allocations (budget_id, broad_group)
-  WHERE allocation_scope = 'broad_group';
+  ON budget_allocations (budget_id, category_group_id)
+  WHERE allocation_scope = 'category_group';
 
 CREATE UNIQUE INDEX budget_allocations_category_unique_idx
   ON budget_allocations (budget_id, category_id)
@@ -1564,7 +1568,7 @@ CREATE TABLE forecast_series (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   forecast_run_id uuid NOT NULL REFERENCES forecast_runs(id) ON DELETE CASCADE,
   target odin_forecast_target NOT NULL,
-  broad_group odin_broad_group,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
   category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
 
   -- Optional pointer used when target is savings_balance or debt_balance.
@@ -1580,19 +1584,19 @@ CREATE TABLE forecast_series (
     CHECK (
       (
         target = 'expense_group'
-        AND broad_group IS NOT NULL
+        AND category_group_id IS NOT NULL
         AND category_id IS NULL
         AND related_entity_id IS NULL
       )
       OR (
         target = 'category_spending'
-        AND broad_group IS NOT NULL
+        AND category_group_id IS NOT NULL
         AND category_id IS NOT NULL
         AND related_entity_id IS NULL
       )
       OR (
         target NOT IN ('expense_group', 'category_spending')
-        AND broad_group IS NULL
+        AND category_group_id IS NULL
         AND category_id IS NULL
       )
     )
@@ -1602,7 +1606,7 @@ CREATE INDEX forecast_series_run_target_idx
   ON forecast_series (forecast_run_id, target);
 
 CREATE UNIQUE INDEX forecast_series_run_group_unique_idx
-  ON forecast_series (forecast_run_id, broad_group)
+  ON forecast_series (forecast_run_id, category_group_id)
   WHERE target = 'expense_group';
 
 CREATE UNIQUE INDEX forecast_series_run_category_unique_idx
@@ -1732,14 +1736,14 @@ CREATE INDEX budget_recommendations_forecast_run_idx
 CREATE UNIQUE INDEX budget_recommendations_id_user_unique_idx
   ON budget_recommendations (id, user_id);
 
--- Allocation rows hold the money recommended for each broad group or
+-- Allocation rows hold the money recommended for each category group or
 -- detailed category. Category rows should include category_id.
 CREATE TABLE budget_recommendation_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   recommendation_id uuid NOT NULL REFERENCES budget_recommendations(id) ON DELETE CASCADE,
 
   allocation_scope odin_allocation_scope NOT NULL,
-  broad_group odin_broad_group NOT NULL,
+  category_group_id uuid NOT NULL REFERENCES category_groups(id) ON DELETE RESTRICT,
   category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
 
   recommended_amount_centavos bigint NOT NULL,
@@ -1758,7 +1762,7 @@ CREATE TABLE budget_recommendation_allocations (
 
   CONSTRAINT budget_recommendation_allocations_scope_chk
     CHECK (
-      (allocation_scope = 'broad_group' AND category_id IS NULL)
+      (allocation_scope = 'category_group' AND category_id IS NULL)
       OR (allocation_scope = 'category' AND category_id IS NOT NULL)
     ),
   CONSTRAINT budget_recommendation_allocations_money_chk
@@ -1780,8 +1784,8 @@ CREATE TABLE budget_recommendation_allocations (
 );
 
 CREATE UNIQUE INDEX budget_recommendation_allocations_group_unique_idx
-  ON budget_recommendation_allocations (recommendation_id, broad_group)
-  WHERE allocation_scope = 'broad_group';
+  ON budget_recommendation_allocations (recommendation_id, category_group_id)
+  WHERE allocation_scope = 'category_group';
 
 CREATE UNIQUE INDEX budget_recommendation_allocations_category_unique_idx
   ON budget_recommendation_allocations (recommendation_id, category_id)
@@ -1798,7 +1802,7 @@ CREATE TABLE budget_recommendation_constraints (
   recommendation_id uuid NOT NULL REFERENCES budget_recommendations(id) ON DELETE CASCADE,
   constraint_type odin_budget_constraint_type NOT NULL,
 
-  broad_group odin_broad_group,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
   category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
 
   min_amount_centavos bigint,
@@ -1859,7 +1863,7 @@ CREATE TABLE anomaly_evaluations (
   transaction_date date NOT NULL,
   merchant_name text,
   category_id uuid NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
-  broad_group odin_broad_group NOT NULL,
+  category_group_id uuid NOT NULL REFERENCES category_groups(id) ON DELETE RESTRICT,
   amount_centavos bigint NOT NULL,
 
   raw_anomaly_score numeric(12, 8),
@@ -2147,7 +2151,7 @@ CREATE TABLE alert_suppression_rules (
   created_from_alert_id uuid REFERENCES alerts(id) ON DELETE SET NULL,
   merchant_name text,
   category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
-  broad_group odin_broad_group,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
   amount_center_centavos bigint,
   amount_tolerance_bps integer,
 
@@ -2231,7 +2235,7 @@ CREATE TABLE report_category_breakdowns (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   report_run_id uuid NOT NULL REFERENCES report_runs(id) ON DELETE CASCADE,
   category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
-  broad_group odin_broad_group,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
   actual_amount_centavos bigint NOT NULL DEFAULT 0,
   budgeted_amount_centavos bigint,
   forecasted_amount_centavos bigint,
@@ -2248,7 +2252,7 @@ CREATE TABLE report_category_breakdowns (
 );
 
 CREATE INDEX report_category_breakdowns_report_idx
-  ON report_category_breakdowns (report_run_id, broad_group, category_id);
+  ON report_category_breakdowns (report_run_id, category_group_id, category_id);
 
 CREATE TABLE report_budget_comparisons (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2256,7 +2260,7 @@ CREATE TABLE report_budget_comparisons (
   budget_id uuid REFERENCES budgets(id) ON DELETE SET NULL,
   budget_allocation_id uuid REFERENCES budget_allocations(id) ON DELETE SET NULL,
   category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
-  broad_group odin_broad_group,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
   allocated_amount_centavos bigint NOT NULL DEFAULT 0,
   actual_amount_centavos bigint NOT NULL DEFAULT 0,
   variance_amount_centavos bigint NOT NULL DEFAULT 0,
@@ -2275,7 +2279,7 @@ CREATE TABLE report_forecast_comparisons (
   forecast_run_id uuid REFERENCES forecast_runs(id) ON DELETE SET NULL,
   forecast_series_id uuid REFERENCES forecast_series(id) ON DELETE SET NULL,
   category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
-  broad_group odin_broad_group,
+  category_group_id uuid REFERENCES category_groups(id) ON DELETE RESTRICT,
   predicted_amount_centavos bigint NOT NULL DEFAULT 0,
   actual_amount_centavos bigint NOT NULL DEFAULT 0,
   absolute_error_centavos bigint NOT NULL DEFAULT 0,
@@ -2709,27 +2713,38 @@ CREATE POLICY financial_profile_events_owner_access
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+ALTER TABLE category_groups ENABLE ROW LEVEL SECURITY;
+CREATE POLICY category_groups_read_authenticated
+  ON category_groups
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
-CREATE POLICY categories_read_authenticated
+CREATE POLICY categories_read_available
   ON categories
   FOR SELECT
   TO authenticated
-  USING (true);
+  USING (is_system = true OR user_id = auth.uid());
 
-ALTER TABLE category_aliases ENABLE ROW LEVEL SECURITY;
-CREATE POLICY category_aliases_read_authenticated
-  ON category_aliases
-  FOR SELECT
+CREATE POLICY categories_user_insert
+  ON categories
+  FOR INSERT
   TO authenticated
-  USING (true);
+  WITH CHECK (is_system = false AND user_id = auth.uid());
 
-ALTER TABLE user_category_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY user_category_settings_owner_access
-  ON user_category_settings
-  FOR ALL
+CREATE POLICY categories_user_update
+  ON categories
+  FOR UPDATE
   TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
+  USING (is_system = false AND user_id = auth.uid())
+  WITH CHECK (is_system = false AND user_id = auth.uid());
+
+CREATE POLICY categories_user_delete
+  ON categories
+  FOR DELETE
+  TO authenticated
+  USING (is_system = false AND user_id = auth.uid());
 
 ALTER TABLE income_sources ENABLE ROW LEVEL SECURITY;
 CREATE POLICY income_sources_owner_access
