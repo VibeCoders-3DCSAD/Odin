@@ -59,13 +59,13 @@ For each table, check these in order:
 
 ## 3. Category Taxonomy
 
-- [ ] `category_groups`
+- [ ] `categories`
   - Broad budget buckets such as Essentials, Obligatory, Discretionary, and Financial Allocation.
   - Depends on: nothing inside the app schema.
-- [ ] `categories`
-  - Specific categories used by transactions, budgets, forecasts, reports, and alerts.
-  - Contains both seeded system categories and user-created categories.
-  - Depends on: `category_groups`, `profiles` for user-created rows.
+- [ ] `subcategories`
+  - Specific subcategories used by transactions, budgets, forecasts, reports, and alerts.
+  - Contains both seeded system subcategories and user-created subcategories.
+  - Depends on: `categories`, `profiles` for user-created rows.
 
 ## 4. Income Sources And Accounts
 
@@ -80,13 +80,13 @@ For each table, check these in order:
 
 - [ ] `recurring_transaction_templates`
   - Rule/template for generating repeated income, expense, or transfer records.
-  - Depends on: `profiles`, `categories`, `financial_accounts`.
+  - Depends on: `profiles`, `subcategories`, `financial_accounts`.
 - [ ] `financial_obligations`
   - Recurring required obligations such as bills, debt payments, or support.
-  - Depends on: `profiles`, `categories`, `recurring_transaction_templates`.
+  - Depends on: `profiles`, `subcategories`, `recurring_transaction_templates`.
 - [ ] `transactions`
   - Posted or tracked money movements.
-  - Depends on: `profiles`, `categories`, `financial_accounts`, `recurring_transaction_templates`.
+  - Depends on: `profiles`, `subcategories`, `financial_accounts`, `recurring_transaction_templates`.
 - [ ] `transaction_events`
   - Audit/event log for transaction changes.
   - Depends on: `transactions`, `profiles`.
@@ -98,7 +98,7 @@ For each table, check these in order:
   - Depends on: `recurring_transaction_templates`, `profiles`, `transactions`.
 - [ ] `expected_spending_events`
   - Calendar-like expected events that affect forecasts or anomaly suppression.
-  - Depends on: `profiles`, `category_groups`, `categories`.
+  - Depends on: `profiles`, `categories`, `subcategories`.
 
 ## 6. Budgets
 
@@ -106,8 +106,8 @@ For each table, check these in order:
   - Budget header for a period.
   - Depends on: `profiles`.
 - [ ] `budget_allocations`
-  - Category-group or specific-category allocation lines within a budget.
-  - Depends on: `budgets`, `category_groups`, `categories`.
+  - Category or specific-subcategory allocation lines within a budget.
+  - Depends on: `budgets`, `categories`, `subcategories`.
 - [ ] `budget_events`
   - Audit/event log for budget actions.
   - Depends on: `budgets`, `profiles`.
@@ -116,13 +116,19 @@ For each table, check these in order:
 
 - [ ] `savings_goals`
   - User savings targets and current progress state.
-  - Depends on: `profiles`, `financial_accounts`.
+  - Depends on: `profiles`, `financial_accounts`, `subcategories`.
+- [ ] `savings_goal_allocation_preferences`
+  - User preference for Snowball or Avalanche savings allocation.
+  - Depends on: `profiles`.
 - [ ] `savings_goal_contributions`
   - Contributions toward a savings goal.
   - Depends on: `savings_goals`, `profiles`, `transactions`.
 - [ ] `savings_goal_progress_snapshots`
   - Dated snapshots of savings-goal progress.
   - Depends on: `savings_goals`.
+- [ ] `savings_goal_budget_allocations`
+  - Accepted budget Financial Allocation distribution across active savings goals.
+  - Depends on: `budget_allocations`, `savings_goals`.
 
 ## 8. Debt Management
 
@@ -152,7 +158,7 @@ For each table, check these in order:
   - Depends on: `profiles`.
 - [ ] `forecast_series`
   - One forecasted series within a run.
-  - Depends on: `forecast_runs`, `category_groups`, `categories`.
+  - Depends on: `forecast_runs`, `categories`, `subcategories`.
 - [ ] `forecast_points`
   - Period-by-period forecast values.
   - Depends on: `forecast_series`.
@@ -167,10 +173,13 @@ For each table, check these in order:
   - Depends on: `profiles`, `forecast_runs`, `budgets`.
 - [ ] `budget_recommendation_allocations`
   - Recommended allocation lines.
-  - Depends on: `budget_recommendations`, `category_groups`, `categories`.
+  - Depends on: `budget_recommendations`, `categories`, `subcategories`.
+- [ ] `savings_goal_recommendation_allocations`
+  - Recommended Financial Allocation distribution across active savings goals.
+  - Depends on: `budget_recommendations`, `budget_recommendation_allocations`, `savings_goals`.
 - [ ] `budget_recommendation_constraints`
   - Constraints used by the recommendation solver.
-  - Depends on: `budget_recommendations`, `category_groups`, `categories`.
+  - Depends on: `budget_recommendations`, `categories`, `subcategories`.
 - [ ] `budget_recommendation_events`
   - Audit/event log for recommendation actions.
   - Depends on: `budget_recommendations`, `profiles`.
@@ -179,7 +188,7 @@ For each table, check these in order:
 
 - [ ] `anomaly_evaluations`
   - Model output for transaction anomaly detection.
-  - Depends on: `profiles`, `transactions`, `category_groups`, `categories`.
+  - Depends on: `profiles`, `transactions`, `categories`, `subcategories`.
 - [ ] `anomaly_evaluation_features`
   - Feature-level anomaly details.
   - Depends on: `anomaly_evaluations`.
@@ -188,7 +197,7 @@ For each table, check these in order:
 
 - [ ] `alerts`
   - User-facing alerts with optional links into many domain tables.
-  - Depends on: `profiles`, `transactions`, `categories`, `budgets`, `debt_accounts`, `savings_goals`, `forecast_runs`, `budget_recommendations`, `anomaly_evaluations`, itself through `parent_alert_id`.
+  - Depends on: `profiles`, `transactions`, `subcategories`, `budgets`, `debt_accounts`, `savings_goals`, `forecast_runs`, `budget_recommendations`, `anomaly_evaluations`, itself through `parent_alert_id`.
 - [ ] `alert_related_entities`
   - Generic related-entity list for an alert.
   - Depends on: `alerts`.
@@ -200,10 +209,10 @@ For each table, check these in order:
   - Depends on: `profiles`.
 - [ ] `anomaly_whitelist_rules`
   - User-created rules for expected anomaly patterns.
-  - Depends on: `profiles`, `alerts`, `anomaly_evaluations`, `categories`.
+  - Depends on: `profiles`, `alerts`, `anomaly_evaluations`, `subcategories`.
 - [ ] `alert_suppression_rules`
   - General alert suppression rules.
-  - Depends on: `profiles`, `alerts`, `category_groups`, `categories`.
+  - Depends on: `profiles`, `alerts`, `categories`, `subcategories`.
 
 ## 13. Reports
 
@@ -214,14 +223,14 @@ For each table, check these in order:
   - Summary metrics within a report.
   - Depends on: `report_runs`.
 - [ ] `report_category_breakdowns`
-  - Category-group or specific-category report breakdowns.
-  - Depends on: `report_runs`, `category_groups`, `categories`.
+  - Category or specific-subcategory report breakdowns.
+  - Depends on: `report_runs`, `categories`, `subcategories`.
 - [ ] `report_budget_comparisons`
   - Budget-vs-actual report rows.
-  - Depends on: `report_runs`, `budgets`, `budget_allocations`, `category_groups`, `categories`.
+  - Depends on: `report_runs`, `budgets`, `budget_allocations`, `categories`, `subcategories`.
 - [ ] `report_forecast_comparisons`
   - Forecast-vs-actual report rows.
-  - Depends on: `report_runs`, `forecast_runs`, `forecast_series`, `category_groups`, `categories`.
+  - Depends on: `report_runs`, `forecast_runs`, `forecast_series`, `categories`, `subcategories`.
 - [ ] `report_savings_goal_snapshots`
   - Report-time savings-goal snapshots.
   - Depends on: `report_runs`, `savings_goals`.

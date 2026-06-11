@@ -254,7 +254,7 @@ CREATE TABLE financial_profile_events (
   CONSTRAINT fk_financial_profile_events_assignment_id FOREIGN KEY (assignment_id) REFERENCES financial_profile_assignments (id) ON DELETE SET NULL
 );
 
-CREATE TABLE category_groups (
+CREATE TABLE categories (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   slug text NOT NULL UNIQUE,
   label text NOT NULL,
@@ -264,15 +264,15 @@ CREATE TABLE category_groups (
   is_active boolean NOT NULL DEFAULT true,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 
-  CONSTRAINT pk_category_groups PRIMARY KEY (id)
+  CONSTRAINT pk_categories PRIMARY KEY (id)
 );
 
-CREATE TABLE categories (
+CREATE TABLE subcategories (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  category_group_id uuid,
+  category_id uuid,
   user_id uuid,
   slug text NOT NULL,
-  kind odin_category_kind NOT NULL DEFAULT 'expense',
+  kind odin_subcategory_kind NOT NULL DEFAULT 'expense',
   label text NOT NULL,
   short_label text,
   description text NOT NULL,
@@ -284,22 +284,22 @@ CREATE TABLE categories (
   is_active boolean NOT NULL DEFAULT true,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 
-  CONSTRAINT categories_owner_chk
+  CONSTRAINT subcategories_owner_chk
     CHECK (
       (is_system = true AND user_id IS NULL)
       OR (is_system = false AND user_id IS NOT NULL)
     ),
-  CONSTRAINT categories_expense_group_chk
+  CONSTRAINT subcategories_expense_category_chk
     CHECK (
-      (kind = 'expense' AND category_group_id IS NOT NULL)
-      OR (kind <> 'expense' AND category_group_id IS NULL)
+      (kind = 'expense' AND category_id IS NOT NULL)
+      OR (kind <> 'expense' AND category_id IS NULL)
     ),
-  CONSTRAINT categories_user_default_protection_chk
+  CONSTRAINT subcategories_user_default_protection_chk
     CHECK (is_system = true OR is_protected_default = false),
 
-  CONSTRAINT pk_categories PRIMARY KEY (id),
-  CONSTRAINT fk_categories_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_categories_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE
+  CONSTRAINT pk_subcategories PRIMARY KEY (id),
+  CONSTRAINT fk_subcategories_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_subcategories_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE income_sources (
@@ -379,7 +379,7 @@ CREATE TABLE recurring_transaction_templates (
   status odin_recurring_template_status NOT NULL DEFAULT 'active',
   name text NOT NULL,
   amount_centavos bigint NOT NULL,
-  category_id uuid,
+  subcategory_id uuid,
   source_account_id uuid,
   destination_account_id uuid,
   frequency odin_recurring_frequency NOT NULL,
@@ -421,26 +421,26 @@ CREATE TABLE recurring_transaction_templates (
         transaction_type = 'income'
         AND destination_account_id IS NOT NULL
         AND source_account_id IS NULL
-        AND category_id IS NOT NULL
+        AND subcategory_id IS NOT NULL
       )
       OR (
         transaction_type = 'expense'
         AND source_account_id IS NOT NULL
         AND destination_account_id IS NULL
-        AND category_id IS NOT NULL
+        AND subcategory_id IS NOT NULL
       )
       OR (
         transaction_type = 'transfer'
         AND source_account_id IS NOT NULL
         AND destination_account_id IS NOT NULL
         AND source_account_id <> destination_account_id
-        AND category_id IS NULL
+        AND subcategory_id IS NULL
       )
     ),
 
   CONSTRAINT pk_recurring_transaction_templates PRIMARY KEY (id),
   CONSTRAINT fk_recurring_transaction_templates_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
-  CONSTRAINT fk_recurring_transaction_templates_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_recurring_transaction_templates_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT,
   CONSTRAINT fk_recurring_transaction_templates_source_account_id FOREIGN KEY (source_account_id) REFERENCES financial_accounts (id) ON DELETE CASCADE,
   CONSTRAINT fk_recurring_transaction_templates_destination_account_id FOREIGN KEY (destination_account_id) REFERENCES financial_accounts (id) ON DELETE CASCADE
 );
@@ -448,7 +448,7 @@ CREATE TABLE recurring_transaction_templates (
 CREATE TABLE financial_obligations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
-  category_id uuid NOT NULL,
+  subcategory_id uuid NOT NULL,
   recurring_template_id uuid,
   name text NOT NULL,
   status odin_obligation_status NOT NULL DEFAULT 'active',
@@ -474,7 +474,7 @@ CREATE TABLE financial_obligations (
 
   CONSTRAINT pk_financial_obligations PRIMARY KEY (id),
   CONSTRAINT fk_financial_obligations_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
-  CONSTRAINT fk_financial_obligations_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_financial_obligations_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT,
   CONSTRAINT fk_financial_obligations_recurring_template_id FOREIGN KEY (recurring_template_id) REFERENCES recurring_transaction_templates (id) ON DELETE SET NULL
 );
 
@@ -487,7 +487,7 @@ CREATE TABLE transactions (
   transaction_date date NOT NULL,
   posted_at timestamptz DEFAULT now(),
   amount_centavos bigint NOT NULL,
-  category_id uuid,
+  subcategory_id uuid,
   source_account_id uuid,
   destination_account_id uuid,
   recurring_template_id uuid,
@@ -512,26 +512,26 @@ CREATE TABLE transactions (
         transaction_type = 'income'
         AND destination_account_id IS NOT NULL
         AND source_account_id IS NULL
-        AND category_id IS NOT NULL
+        AND subcategory_id IS NOT NULL
       )
       OR (
         transaction_type = 'expense'
         AND source_account_id IS NOT NULL
         AND destination_account_id IS NULL
-        AND category_id IS NOT NULL
+        AND subcategory_id IS NOT NULL
       )
       OR (
         transaction_type = 'transfer'
         AND source_account_id IS NOT NULL
         AND destination_account_id IS NOT NULL
         AND source_account_id <> destination_account_id
-        AND category_id IS NULL
+        AND subcategory_id IS NULL
       )
     ),
 
   CONSTRAINT pk_transactions PRIMARY KEY (id),
   CONSTRAINT fk_transactions_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
-  CONSTRAINT fk_transactions_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_transactions_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT,
   CONSTRAINT fk_transactions_source_account_id FOREIGN KEY (source_account_id) REFERENCES financial_accounts (id) ON DELETE CASCADE,
   CONSTRAINT fk_transactions_destination_account_id FOREIGN KEY (destination_account_id) REFERENCES financial_accounts (id) ON DELETE CASCADE,
   CONSTRAINT fk_transactions_recurring_template_id FOREIGN KEY (recurring_template_id) REFERENCES recurring_transaction_templates (id) ON DELETE SET NULL
@@ -598,8 +598,8 @@ CREATE TABLE recurring_transaction_occurrences (
 CREATE TABLE expected_spending_events (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
+  subcategory_id uuid,
   category_id uuid,
-  category_group_id uuid,
   event_kind odin_expected_event_kind NOT NULL,
   status odin_expected_event_status NOT NULL DEFAULT 'active',
   title text NOT NULL,
@@ -621,8 +621,8 @@ CREATE TABLE expected_spending_events (
 
   CONSTRAINT pk_expected_spending_events PRIMARY KEY (id),
   CONSTRAINT fk_expected_spending_events_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
-  CONSTRAINT fk_expected_spending_events_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_expected_spending_events_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT
+  CONSTRAINT fk_expected_spending_events_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_expected_spending_events_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE budgets (
@@ -670,8 +670,8 @@ CREATE TABLE budget_allocations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   budget_id uuid NOT NULL,
   allocation_scope odin_allocation_scope NOT NULL,
-  category_group_id uuid NOT NULL,
-  category_id uuid,
+  category_id uuid NOT NULL,
+  subcategory_id uuid,
   allocated_amount_centavos bigint NOT NULL,
   rollover_amount_centavos bigint NOT NULL DEFAULT 0,
   spent_amount_snapshot_centavos bigint,
@@ -683,8 +683,8 @@ CREATE TABLE budget_allocations (
 
   CONSTRAINT budget_allocations_scope_chk
     CHECK (
-      (allocation_scope = 'category_group' AND category_id IS NULL)
-      OR (allocation_scope = 'category' AND category_id IS NOT NULL)
+      (allocation_scope = 'category' AND subcategory_id IS NULL)
+      OR (allocation_scope = 'subcategory' AND subcategory_id IS NOT NULL)
     ),
   CONSTRAINT budget_allocations_money_chk
     CHECK (
@@ -698,8 +698,8 @@ CREATE TABLE budget_allocations (
 
   CONSTRAINT pk_budget_allocations PRIMARY KEY (id),
   CONSTRAINT fk_budget_allocations_budget_id FOREIGN KEY (budget_id) REFERENCES budgets (id) ON DELETE CASCADE,
-  CONSTRAINT fk_budget_allocations_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_budget_allocations_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
+  CONSTRAINT fk_budget_allocations_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_budget_allocations_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE budget_events (
@@ -720,6 +720,7 @@ CREATE TABLE savings_goals (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   linked_account_id uuid,
+  linked_subcategory_id uuid NOT NULL,
   name text NOT NULL,
   status odin_savings_goal_status NOT NULL DEFAULT 'active',
   progress_state odin_goal_progress_state NOT NULL DEFAULT 'projection_unavailable',
@@ -741,13 +742,46 @@ CREATE TABLE savings_goals (
   CONSTRAINT savings_goals_priority_chk
     CHECK (priority_rank > 0),
   CONSTRAINT savings_goals_achieved_chk
-    CHECK (status <> 'achieved' OR achieved_at IS NOT NULL),
+    CHECK (
+      status <> 'achieved'
+      OR (
+        achieved_at IS NOT NULL
+        AND progress_state = 'achieved'
+        AND current_amount_centavos >= target_amount_centavos
+      )
+    ),
+  CONSTRAINT savings_goals_progress_state_chk
+    CHECK (
+      progress_state <> 'achieved'
+      OR (
+        status IN ('achieved', 'archived')
+        AND achieved_at IS NOT NULL
+        AND current_amount_centavos >= target_amount_centavos
+      )
+    ),
+  CONSTRAINT savings_goals_archived_status_chk
+    CHECK (status <> 'archived' OR archived_at IS NOT NULL),
   CONSTRAINT savings_goals_deleted_status_chk
     CHECK (status <> 'deleted' OR deleted_at IS NOT NULL),
 
   CONSTRAINT pk_savings_goals PRIMARY KEY (id),
   CONSTRAINT fk_savings_goals_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
-  CONSTRAINT fk_savings_goals_linked_account_id FOREIGN KEY (linked_account_id) REFERENCES financial_accounts (id) ON DELETE SET NULL
+  CONSTRAINT fk_savings_goals_linked_account_id FOREIGN KEY (linked_account_id) REFERENCES financial_accounts (id) ON DELETE SET NULL,
+  CONSTRAINT fk_savings_goals_linked_subcategory_id FOREIGN KEY (linked_subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT
+);
+
+CREATE TABLE savings_goal_allocation_preferences (
+  user_id uuid NOT NULL,
+  strategy odin_savings_allocation_strategy NOT NULL DEFAULT 'avalanche',
+  planned_contribution_centavos bigint NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT savings_goal_allocation_preferences_planned_chk
+    CHECK (planned_contribution_centavos >= 0),
+
+  CONSTRAINT pk_savings_goal_allocation_preferences PRIMARY KEY (user_id),
+  CONSTRAINT fk_savings_goal_allocation_preferences_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE savings_goal_contributions (
@@ -787,6 +821,31 @@ CREATE TABLE savings_goal_progress_snapshots (
 
   CONSTRAINT pk_savings_goal_progress_snapshots PRIMARY KEY (id),
   CONSTRAINT fk_savings_goal_progress_snapshots_savings_goal_id FOREIGN KEY (savings_goal_id) REFERENCES savings_goals (id) ON DELETE CASCADE
+);
+
+CREATE TABLE savings_goal_budget_allocations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  budget_allocation_id uuid NOT NULL,
+  savings_goal_id uuid NOT NULL,
+  allocation_strategy odin_savings_allocation_strategy NOT NULL,
+  allocated_amount_centavos bigint NOT NULL,
+  remaining_amount_snapshot_centavos bigint NOT NULL,
+  allocation_order integer NOT NULL,
+  explanation text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT savings_goal_budget_allocations_money_chk
+    CHECK (
+      allocated_amount_centavos >= 0
+      AND remaining_amount_snapshot_centavos >= 0
+    ),
+  CONSTRAINT savings_goal_budget_allocations_order_chk
+    CHECK (allocation_order > 0),
+  UNIQUE (budget_allocation_id, savings_goal_id),
+
+  CONSTRAINT pk_savings_goal_budget_allocations PRIMARY KEY (id),
+  CONSTRAINT fk_savings_goal_budget_allocations_budget_allocation_id FOREIGN KEY (budget_allocation_id) REFERENCES budget_allocations (id) ON DELETE CASCADE,
+  CONSTRAINT fk_savings_goal_budget_allocations_savings_goal_id FOREIGN KEY (savings_goal_id) REFERENCES savings_goals (id) ON DELETE CASCADE
 );
 
 CREATE TABLE debt_accounts (
@@ -991,8 +1050,8 @@ CREATE TABLE forecast_series (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   forecast_run_id uuid NOT NULL,
   target odin_forecast_target NOT NULL,
-  category_group_id uuid,
   category_id uuid,
+  subcategory_id uuid,
 
   -- Optional pointer used when target is savings_balance or debt_balance.
   related_entity_id uuid,
@@ -1003,31 +1062,31 @@ CREATE TABLE forecast_series (
   confidence_label text,
   sort_order integer NOT NULL DEFAULT 0,
 
-  CONSTRAINT forecast_series_group_target_chk
+  CONSTRAINT forecast_series_category_target_chk
     CHECK (
       (
-        target = 'expense_group'
-        AND category_group_id IS NOT NULL
-        AND category_id IS NULL
-        AND related_entity_id IS NULL
-      )
-      OR (
         target = 'category_spending'
-        AND category_group_id IS NOT NULL
         AND category_id IS NOT NULL
+        AND subcategory_id IS NULL
         AND related_entity_id IS NULL
       )
       OR (
-        target NOT IN ('expense_group', 'category_spending')
-        AND category_group_id IS NULL
+        target = 'subcategory_spending'
+        AND category_id IS NOT NULL
+        AND subcategory_id IS NOT NULL
+        AND related_entity_id IS NULL
+      )
+      OR (
+        target NOT IN ('category_spending', 'subcategory_spending')
         AND category_id IS NULL
+        AND subcategory_id IS NULL
       )
     ),
 
   CONSTRAINT pk_forecast_series PRIMARY KEY (id),
   CONSTRAINT fk_forecast_series_forecast_run_id FOREIGN KEY (forecast_run_id) REFERENCES forecast_runs (id) ON DELETE CASCADE,
-  CONSTRAINT fk_forecast_series_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_forecast_series_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
+  CONSTRAINT fk_forecast_series_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_forecast_series_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE forecast_points (
@@ -1142,8 +1201,8 @@ CREATE TABLE budget_recommendation_allocations (
   recommendation_id uuid NOT NULL,
 
   allocation_scope odin_allocation_scope NOT NULL,
-  category_group_id uuid NOT NULL,
-  category_id uuid,
+  category_id uuid NOT NULL,
+  subcategory_id uuid,
 
   recommended_amount_centavos bigint NOT NULL,
   adjusted_amount_centavos bigint,
@@ -1161,8 +1220,8 @@ CREATE TABLE budget_recommendation_allocations (
 
   CONSTRAINT budget_recommendation_allocations_scope_chk
     CHECK (
-      (allocation_scope = 'category_group' AND category_id IS NULL)
-      OR (allocation_scope = 'category' AND category_id IS NOT NULL)
+      (allocation_scope = 'category' AND subcategory_id IS NULL)
+      OR (allocation_scope = 'subcategory' AND subcategory_id IS NOT NULL)
     ),
   CONSTRAINT budget_recommendation_allocations_money_chk
     CHECK (
@@ -1183,8 +1242,39 @@ CREATE TABLE budget_recommendation_allocations (
 
   CONSTRAINT pk_budget_recommendation_allocations PRIMARY KEY (id),
   CONSTRAINT fk_budget_recommendation_allocations_recommendation_id FOREIGN KEY (recommendation_id) REFERENCES budget_recommendations (id) ON DELETE CASCADE,
-  CONSTRAINT fk_budget_recommendation_allocations_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_budget_recommendation_allocations_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
+  CONSTRAINT fk_budget_recommendation_allocations_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_budget_recommendation_allocations_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT
+);
+
+CREATE TABLE savings_goal_recommendation_allocations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  recommendation_id uuid NOT NULL,
+  recommendation_allocation_id uuid,
+  savings_goal_id uuid NOT NULL,
+  allocation_strategy odin_savings_allocation_strategy NOT NULL,
+  recommended_amount_centavos bigint NOT NULL,
+  adjusted_amount_centavos bigint,
+  accepted_amount_centavos bigint,
+  remaining_amount_snapshot_centavos bigint NOT NULL,
+  allocation_order integer NOT NULL,
+  explanation text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT savings_goal_recommendation_allocations_money_chk
+    CHECK (
+      recommended_amount_centavos >= 0
+      AND (adjusted_amount_centavos IS NULL OR adjusted_amount_centavos >= 0)
+      AND (accepted_amount_centavos IS NULL OR accepted_amount_centavos >= 0)
+      AND remaining_amount_snapshot_centavos >= 0
+    ),
+  CONSTRAINT savings_goal_recommendation_allocations_order_chk
+    CHECK (allocation_order > 0),
+  UNIQUE (recommendation_id, savings_goal_id),
+
+  CONSTRAINT pk_savings_goal_recommendation_allocations PRIMARY KEY (id),
+  CONSTRAINT fk_savings_goal_recommendation_allocations_recommendation_id FOREIGN KEY (recommendation_id) REFERENCES budget_recommendations (id) ON DELETE CASCADE,
+  CONSTRAINT fk_savings_goal_recommendation_allocations_recommendation_allocation_id FOREIGN KEY (recommendation_allocation_id) REFERENCES budget_recommendation_allocations (id) ON DELETE SET NULL,
+  CONSTRAINT fk_savings_goal_recommendation_allocations_savings_goal_id FOREIGN KEY (savings_goal_id) REFERENCES savings_goals (id) ON DELETE CASCADE
 );
 
 CREATE TABLE budget_recommendation_constraints (
@@ -1192,8 +1282,8 @@ CREATE TABLE budget_recommendation_constraints (
   recommendation_id uuid NOT NULL,
   constraint_type odin_budget_constraint_type NOT NULL,
 
-  category_group_id uuid,
   category_id uuid,
+  subcategory_id uuid,
 
   min_amount_centavos bigint,
   max_amount_centavos bigint,
@@ -1221,8 +1311,8 @@ CREATE TABLE budget_recommendation_constraints (
 
   CONSTRAINT pk_budget_recommendation_constraints PRIMARY KEY (id),
   CONSTRAINT fk_budget_recommendation_constraints_recommendation_id FOREIGN KEY (recommendation_id) REFERENCES budget_recommendations (id) ON DELETE CASCADE,
-  CONSTRAINT fk_budget_recommendation_constraints_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_budget_recommendation_constraints_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
+  CONSTRAINT fk_budget_recommendation_constraints_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_budget_recommendation_constraints_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE budget_recommendation_events (
@@ -1251,8 +1341,8 @@ CREATE TABLE anomaly_evaluations (
 
   transaction_date date NOT NULL,
   merchant_name text,
+  subcategory_id uuid NOT NULL,
   category_id uuid NOT NULL,
-  category_group_id uuid NOT NULL,
   amount_centavos bigint NOT NULL,
 
   raw_anomaly_score numeric(12, 8),
@@ -1291,8 +1381,8 @@ CREATE TABLE anomaly_evaluations (
   CONSTRAINT pk_anomaly_evaluations PRIMARY KEY (id),
   CONSTRAINT fk_anomaly_evaluations_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
   CONSTRAINT fk_anomaly_evaluations_transaction_id FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE CASCADE,
-  CONSTRAINT fk_anomaly_evaluations_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_anomaly_evaluations_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT
+  CONSTRAINT fk_anomaly_evaluations_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_anomaly_evaluations_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE anomaly_evaluation_features (
@@ -1330,7 +1420,7 @@ CREATE TABLE alerts (
 
   -- Optional source pointers into app-owned domain tables.
   transaction_id uuid,
-  category_id uuid,
+  subcategory_id uuid,
   budget_id uuid,
   debt_account_id uuid,
   savings_goal_id uuid,
@@ -1379,7 +1469,7 @@ CREATE TABLE alerts (
   CONSTRAINT pk_alerts PRIMARY KEY (id),
   CONSTRAINT fk_alerts_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
   CONSTRAINT fk_alerts_transaction_id FOREIGN KEY (transaction_id) REFERENCES transactions (id) ON DELETE SET NULL,
-  CONSTRAINT fk_alerts_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL,
+  CONSTRAINT fk_alerts_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE SET NULL,
   CONSTRAINT fk_alerts_budget_id FOREIGN KEY (budget_id) REFERENCES budgets (id) ON DELETE SET NULL,
   CONSTRAINT fk_alerts_debt_account_id FOREIGN KEY (debt_account_id) REFERENCES debt_accounts (id) ON DELETE SET NULL,
   CONSTRAINT fk_alerts_savings_goal_id FOREIGN KEY (savings_goal_id) REFERENCES savings_goals (id) ON DELETE SET NULL,
@@ -1395,7 +1485,7 @@ CREATE TABLE alert_related_entities (
   entity_type text NOT NULL CHECK (
     entity_type IN (
       'transaction',
-      'category',
+      'subcategory',
       'budget',
       'forecast_run',
       'budget_recommendation',
@@ -1462,7 +1552,7 @@ CREATE TABLE anomaly_whitelist_rules (
   created_from_anomaly_evaluation_id uuid,
 
   merchant_name text NOT NULL,
-  category_id uuid NOT NULL,
+  subcategory_id uuid NOT NULL,
   base_amount_centavos bigint,
   tolerance_bps integer,
   allow_any_amount boolean NOT NULL DEFAULT false,
@@ -1490,7 +1580,7 @@ CREATE TABLE anomaly_whitelist_rules (
   CONSTRAINT fk_anomaly_whitelist_rules_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
   CONSTRAINT fk_anomaly_whitelist_rules_created_from_alert_id FOREIGN KEY (created_from_alert_id) REFERENCES alerts (id) ON DELETE SET NULL,
   CONSTRAINT fk_anomaly_whitelist_rules_created_from_anomaly_evaluation_id FOREIGN KEY (created_from_anomaly_evaluation_id) REFERENCES anomaly_evaluations (id) ON DELETE SET NULL,
-  CONSTRAINT fk_anomaly_whitelist_rules_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
+  CONSTRAINT fk_anomaly_whitelist_rules_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE alert_suppression_rules (
@@ -1502,8 +1592,8 @@ CREATE TABLE alert_suppression_rules (
 
   created_from_alert_id uuid,
   merchant_name text,
+  subcategory_id uuid,
   category_id uuid,
-  category_group_id uuid,
   amount_center_centavos bigint,
   amount_tolerance_bps integer,
 
@@ -1532,8 +1622,8 @@ CREATE TABLE alert_suppression_rules (
   CONSTRAINT pk_alert_suppression_rules PRIMARY KEY (id),
   CONSTRAINT fk_alert_suppression_rules_user_id FOREIGN KEY (user_id) REFERENCES profiles (user_id) ON DELETE CASCADE,
   CONSTRAINT fk_alert_suppression_rules_created_from_alert_id FOREIGN KEY (created_from_alert_id) REFERENCES alerts (id) ON DELETE SET NULL,
-  CONSTRAINT fk_alert_suppression_rules_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL,
-  CONSTRAINT fk_alert_suppression_rules_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT
+  CONSTRAINT fk_alert_suppression_rules_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE SET NULL,
+  CONSTRAINT fk_alert_suppression_rules_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE report_runs (
@@ -1580,8 +1670,8 @@ CREATE TABLE report_metrics (
 CREATE TABLE report_category_breakdowns (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   report_run_id uuid NOT NULL,
+  subcategory_id uuid,
   category_id uuid,
-  category_group_id uuid,
   actual_amount_centavos bigint NOT NULL DEFAULT 0,
   budgeted_amount_centavos bigint,
   forecasted_amount_centavos bigint,
@@ -1598,8 +1688,8 @@ CREATE TABLE report_category_breakdowns (
 
   CONSTRAINT pk_report_category_breakdowns PRIMARY KEY (id),
   CONSTRAINT fk_report_category_breakdowns_report_run_id FOREIGN KEY (report_run_id) REFERENCES report_runs (id) ON DELETE CASCADE,
-  CONSTRAINT fk_report_category_breakdowns_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL,
-  CONSTRAINT fk_report_category_breakdowns_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT
+  CONSTRAINT fk_report_category_breakdowns_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE SET NULL,
+  CONSTRAINT fk_report_category_breakdowns_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE report_budget_comparisons (
@@ -1607,8 +1697,8 @@ CREATE TABLE report_budget_comparisons (
   report_run_id uuid NOT NULL,
   budget_id uuid,
   budget_allocation_id uuid,
+  subcategory_id uuid,
   category_id uuid,
-  category_group_id uuid,
   allocated_amount_centavos bigint NOT NULL DEFAULT 0,
   actual_amount_centavos bigint NOT NULL DEFAULT 0,
   variance_amount_centavos bigint NOT NULL DEFAULT 0,
@@ -1621,8 +1711,8 @@ CREATE TABLE report_budget_comparisons (
   CONSTRAINT fk_report_budget_comparisons_report_run_id FOREIGN KEY (report_run_id) REFERENCES report_runs (id) ON DELETE CASCADE,
   CONSTRAINT fk_report_budget_comparisons_budget_id FOREIGN KEY (budget_id) REFERENCES budgets (id) ON DELETE SET NULL,
   CONSTRAINT fk_report_budget_comparisons_budget_allocation_id FOREIGN KEY (budget_allocation_id) REFERENCES budget_allocations (id) ON DELETE SET NULL,
-  CONSTRAINT fk_report_budget_comparisons_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL,
-  CONSTRAINT fk_report_budget_comparisons_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT
+  CONSTRAINT fk_report_budget_comparisons_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE SET NULL,
+  CONSTRAINT fk_report_budget_comparisons_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE report_forecast_comparisons (
@@ -1630,8 +1720,8 @@ CREATE TABLE report_forecast_comparisons (
   report_run_id uuid NOT NULL,
   forecast_run_id uuid,
   forecast_series_id uuid,
+  subcategory_id uuid,
   category_id uuid,
-  category_group_id uuid,
   predicted_amount_centavos bigint NOT NULL DEFAULT 0,
   actual_amount_centavos bigint NOT NULL DEFAULT 0,
   absolute_error_centavos bigint NOT NULL DEFAULT 0,
@@ -1648,8 +1738,8 @@ CREATE TABLE report_forecast_comparisons (
   CONSTRAINT fk_report_forecast_comparisons_report_run_id FOREIGN KEY (report_run_id) REFERENCES report_runs (id) ON DELETE CASCADE,
   CONSTRAINT fk_report_forecast_comparisons_forecast_run_id FOREIGN KEY (forecast_run_id) REFERENCES forecast_runs (id) ON DELETE SET NULL,
   CONSTRAINT fk_report_forecast_comparisons_forecast_series_id FOREIGN KEY (forecast_series_id) REFERENCES forecast_series (id) ON DELETE SET NULL,
-  CONSTRAINT fk_report_forecast_comparisons_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL,
-  CONSTRAINT fk_report_forecast_comparisons_category_group_id FOREIGN KEY (category_group_id) REFERENCES category_groups (id) ON DELETE RESTRICT
+  CONSTRAINT fk_report_forecast_comparisons_subcategory_id FOREIGN KEY (subcategory_id) REFERENCES subcategories (id) ON DELETE SET NULL,
+  CONSTRAINT fk_report_forecast_comparisons_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT
 );
 
 CREATE TABLE report_savings_goal_snapshots (
