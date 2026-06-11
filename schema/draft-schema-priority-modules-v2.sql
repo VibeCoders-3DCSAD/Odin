@@ -1437,21 +1437,6 @@ CREATE UNIQUE INDEX savings_goal_contributions_transaction_unique_idx
   ON savings_goal_contributions (transaction_id)
   WHERE transaction_id IS NOT NULL;
 
-CREATE TABLE savings_goal_progress_snapshots (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  savings_goal_id uuid NOT NULL REFERENCES savings_goals(id) ON DELETE CASCADE,
-  snapshot_date date NOT NULL,
-  current_amount_centavos bigint NOT NULL,
-  progress_state odin_goal_progress_state NOT NULL,
-  projected_completion_date date,
-  explanation text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-
-  CONSTRAINT savings_goal_progress_snapshots_amount_chk
-    CHECK (current_amount_centavos >= 0),
-  UNIQUE (savings_goal_id, snapshot_date)
-);
-
 CREATE TABLE savings_goal_budget_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   budget_allocation_id uuid NOT NULL REFERENCES budget_allocations(id) ON DELETE CASCADE,
@@ -3042,28 +3027,6 @@ CREATE POLICY savings_goal_contributions_owner_access
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
-ALTER TABLE savings_goal_progress_snapshots ENABLE ROW LEVEL SECURITY;
-CREATE POLICY savings_goal_progress_snapshots_owner_access
-  ON savings_goal_progress_snapshots
-  FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM savings_goals
-      WHERE savings_goals.id = savings_goal_progress_snapshots.savings_goal_id
-        AND savings_goals.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1
-      FROM savings_goals
-      WHERE savings_goals.id = savings_goal_progress_snapshots.savings_goal_id
-        AND savings_goals.user_id = auth.uid()
-    )
-  );
 
 ALTER TABLE savings_goal_budget_allocations ENABLE ROW LEVEL SECURITY;
 CREATE POLICY savings_goal_budget_allocations_owner_access
