@@ -117,13 +117,13 @@ For each table, check these in order:
 - [x] `savings_goals`
   - User savings targets and current progress state.
   - Depends on: `profiles`, `financial_accounts`.
-- [ ] `savings_goal_allocation_preferences`
+- [x] `savings_goal_allocation_preferences`
   - User preference for Snowball or Avalanche savings allocation.
   - Depends on: `profiles`.
 - [x] `savings_goal_contributions`
   - Contributions toward a savings goal.
   - Depends on: `savings_goals`, `profiles`, `transactions`.
-- [ ] `savings_goal_budget_allocations`
+- [x] `savings_goal_budget_allocations`
   - Accepted budget Financial Allocation distribution across active savings goals.
   - Depends on: `budget_allocations`, `savings_goals`.
 - [x] `savings_goal_progress_snapshots` **Deprecated, not needed**
@@ -132,121 +132,121 @@ For each table, check these in order:
 
 ## 8. Debt Management
 
-- [ ] `debt_accounts`
+- [x] `debt_accounts`
   - Debt balances and payment terms.
   - Depends on: `profiles`, `financial_accounts`.
-- [ ] `debt_payments`
+- [x] `debt_payments`
   - Payments against debt accounts.
   - Depends on: `debt_accounts`, `profiles`, `transactions`.
-- [ ] `debt_strategy_preferences`
+- [x] `debt_strategy_preferences`
   - User preference for debt payoff strategy.
   - Depends on: `profiles`.
-- [ ] `debt_repayment_projection_runs`
+- [x] `debt_repayment_projection_runs`
   - Header for generated debt payoff projections.
   - Depends on: `profiles`.
-- [ ] `debt_repayment_projection_items`
+- [x] `debt_repayment_projection_items`
   - Per-debt-account results inside a projection run.
   - Depends on: `debt_repayment_projection_runs`, `debt_accounts`.
-- [ ] `debt_repayment_projection_points`
+- [x] `debt_repayment_projection_points`
   - Period-by-period balance/payment points for a projection item.
   - Depends on: `debt_repayment_projection_items`.
 
 ## 9. Forecasting
 
-- [ ] `forecast_runs`
+- [x] `forecast_runs`
   - Header for generated spending, savings, or debt forecasts.
   - Depends on: `profiles`.
-- [ ] `forecast_series`
+- [x] `forecast_series`
   - One forecasted series within a run.
   - Depends on: `forecast_runs`, `category_groups`, `categories`.
-- [ ] `forecast_points`
+- [x] `forecast_points`
   - Period-by-period forecast values.
   - Depends on: `forecast_series`.
-- [ ] `forecast_explanation_drivers`
+- [x] `forecast_explanation_drivers`
   - Explanation rows for forecast series.
   - Depends on: `forecast_series`.
 
 ## 10. Budget Recommendations
 
-- [ ] `budget_recommendations`
+- [x] `budget_recommendations`
   - Generated recommended budget for a user and period.
   - Depends on: `profiles`, `forecast_runs`, `budgets`.
-- [ ] `budget_recommendation_allocations`
+- [x] `budget_recommendation_allocations`
   - Recommended allocation lines.
   - Depends on: `budget_recommendations`, `category_groups`, `categories`.
-- [ ] `savings_goal_recommendation_allocations`
+- [x] `savings_goal_recommendation_allocations`
   - Recommended Financial Allocation distribution across active savings goals.
   - Depends on: `budget_recommendations`, `budget_recommendation_allocations`, `savings_goals`.
-- [ ] `budget_recommendation_constraints`
+- [x] `budget_recommendation_constraints`
   - Constraints used by the recommendation solver.
   - Depends on: `budget_recommendations`, `category_groups`, `categories`.
-- [ ] `budget_recommendation_events`
+- [x] `budget_recommendation_events`
   - Audit/event log for recommendation actions.
   - Depends on: `budget_recommendations`, `profiles`.
 
 ## 11. Anomaly Detection
 
-- [ ] `anomaly_evaluations`
+- [x] `anomaly_evaluations`
   - Model output for transaction anomaly detection.
   - Depends on: `profiles`, `transactions`, `category_groups`, `categories`.
-- [ ] `anomaly_evaluation_features`
+- [x] `anomaly_evaluation_features`
   - Feature-level anomaly details.
   - Depends on: `anomaly_evaluations`.
 
 ## 12. Alerts And Suppression
 
-- [ ] `alerts`
+- [x] `alerts`
   - User-facing alerts with optional links into many domain tables.
   - Depends on: `profiles`, `transactions`, `categories`, `budgets`, `debt_accounts`, `savings_goals`, `forecast_runs`, `budget_recommendations`, `anomaly_evaluations`, itself through `parent_alert_id`.
-- [ ] `alert_related_entities`
+- [x] `alert_related_entities`
   - Generic related-entity list for an alert.
   - Depends on: `alerts`.
-- [ ] `alert_events`
+- [x] `alert_events`
   - Audit/event log for alert actions.
   - Depends on: `alerts`, `profiles`.
-- [ ] `alert_notification_preferences`
+- [x] `alert_notification_preferences`
   - User preference by alert category.
   - Depends on: `profiles`.
-- [ ] `anomaly_whitelist_rules`
+- [x] `anomaly_whitelist_rules`
   - User-created rules for expected anomaly patterns.
   - Depends on: `profiles`, `alerts`, `anomaly_evaluations`, `categories`.
-- [ ] `alert_suppression_rules`
+- [x] `alert_suppression_rules`
   - General alert suppression rules.
   - Depends on: `profiles`, `alerts`, `category_groups`, `categories`.
 
 ## 13. Reports
 
-- [ ] `report_runs`
+- [x] `report_runs`
   - Header for generated reports.
   - Depends on: `profiles`.
-- [ ] `report_metrics`
+- [x] `report_metrics`
   - Summary metrics within a report.
   - Depends on: `report_runs`.
-- [ ] `report_category_breakdowns`
+- [x] `report_category_breakdowns`
   - Category-group or specific-category report breakdowns.
   - Depends on: `report_runs`, `category_groups`, `categories`.
-- [ ] `report_budget_comparisons`
+- [x] `report_budget_comparisons`
   - Budget-vs-actual report rows.
   - Depends on: `report_runs`, `budgets`, `budget_allocations`, `category_groups`, `categories`.
-- [ ] `report_forecast_comparisons`
+- [x] `report_forecast_comparisons`
   - Forecast-vs-actual report rows.
   - Depends on: `report_runs`, `forecast_runs`, `forecast_series`, `category_groups`, `categories`.
-- [ ] `report_savings_goal_snapshots`
+- [x] `report_savings_goal_snapshots`
   - Report-time savings-goal snapshots.
   - Depends on: `report_runs`, `savings_goals`.
-- [ ] `report_debt_account_snapshots`
+- [x] `report_debt_account_snapshots`
   - Report-time debt-account snapshots.
   - Depends on: `report_runs`, `debt_accounts`.
 
 ## 14. Model Evaluation
 
-- [ ] `model_evaluation_runs`
+- [x] `model_evaluation_runs`
   - Header for model evaluation jobs.
   - Depends on: `profiles` optionally.
-- [ ] `model_evaluation_metrics`
+- [x] `model_evaluation_metrics`
   - Metrics for a model evaluation run.
   - Depends on: `model_evaluation_runs`.
-- [ ] `model_evaluation_artifacts`
+- [x] `model_evaluation_artifacts`
   - Stored outputs or content for a model evaluation run.
   - Depends on: `model_evaluation_runs`.
 
