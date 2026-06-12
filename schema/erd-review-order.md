@@ -15,7 +15,7 @@ For each table, check these in order:
 
 - [x] `auth.users`
   - External Supabase/Auth table referenced by `profiles.user_id`.
-- [ ] enum types
+- [x] enum types
   - Check the `odin_*` enum definitions before reviewing table constraints.
 
 ## 1. User Identity And Account Governance
