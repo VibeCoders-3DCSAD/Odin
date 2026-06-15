@@ -540,19 +540,6 @@ CREATE TYPE odin_request_status AS ENUM (
   'cancelled'
 );
 
-CREATE TYPE odin_model_evaluation_kind AS ENUM (
-  'forecasting',
-  'anomaly_detection',
-  'profile_classification',
-  'budget_recommendation'
-);
-
-CREATE TYPE odin_model_metric_direction AS ENUM (
-  'lower_is_better',
-  'higher_is_better',
-  'target_range'
-);
-
 CREATE TYPE odin_support_ticket_status AS ENUM (
   'open',
   'in_review',
@@ -599,20 +586,6 @@ CREATE TYPE odin_transaction_retention_action AS ENUM (
   'archived',
   'purged',
   'cancelled'
-);
-
-CREATE TYPE odin_user_evaluation_kind AS ENUM (
-  'sus',
-  'iso_25010',
-  'qualitative_feedback',
-  'pilot_usage'
-);
-
-CREATE TYPE odin_user_evaluation_status AS ENUM (
-  'scheduled',
-  'in_progress',
-  'completed',
-  'discarded'
 );
 
 -- App-owned user profile. Authentication remains in Supabase Auth.
@@ -3161,52 +3134,6 @@ CREATE TABLE support_ticket_attachments (
 CREATE INDEX support_ticket_attachments_ticket_idx
   ON support_ticket_attachments (ticket_id, created_at);
 
--- ============================================================================
--- User Evaluation (SUS / ISO 25010 / Qualitative)
--- ============================================================================
-
-CREATE TABLE user_evaluations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-  evaluation_kind odin_user_evaluation_kind NOT NULL,
-  status odin_user_evaluation_status NOT NULL DEFAULT 'scheduled',
-  scheduled_at timestamptz NOT NULL DEFAULT now(),
-  started_at timestamptz,
-  completed_at timestamptz,
-  days_after_onboarding integer,
-  notes text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-
-  CONSTRAINT user_evaluations_completed_chk
-    CHECK (status <> 'completed' OR completed_at IS NOT NULL),
-  CONSTRAINT user_evaluations_in_progress_chk
-    CHECK (status <> 'in_progress' OR started_at IS NOT NULL)
-);
-
-CREATE INDEX user_evaluations_user_status_idx
-  ON user_evaluations (user_id, status);
-
-CREATE UNIQUE INDEX user_evaluations_id_user_unique_idx
-  ON user_evaluations (id, user_id);
-
-CREATE TABLE user_evaluation_responses (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  evaluation_id uuid NOT NULL REFERENCES user_evaluations(id) ON DELETE CASCADE,
-  question_key text NOT NULL,
-  response_value numeric(18, 6),
-  response_text text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-
-  CONSTRAINT user_evaluation_responses_value_chk
-    CHECK (response_value IS NOT NULL OR response_text IS NOT NULL),
-  UNIQUE (evaluation_id, question_key)
-);
-
-CREATE INDEX user_evaluation_responses_evaluation_idx
-  ON user_evaluation_responses (evaluation_id);
-
 ALTER TABLE budgets
   ADD CONSTRAINT budgets_source_recommendation_fk
   FOREIGN KEY (source_recommendation_id, user_id)
@@ -3346,77 +3273,6 @@ CREATE TABLE report_debt_account_snapshots (
 
   CONSTRAINT report_debt_account_snapshots_money_chk
     CHECK (current_balance_centavos >= 0 AND minimum_payment_centavos >= 0)
-);
-
-CREATE TYPE odin_model_evaluation_status AS ENUM (
-  'queued',
-  'running',
-  'available',
-  'failed',
-  'expired'
-);
-
-CREATE TABLE model_evaluation_runs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  evaluation_kind odin_model_evaluation_kind NOT NULL,
-  status odin_model_evaluation_status NOT NULL DEFAULT 'queued',
-  user_id uuid REFERENCES profiles(user_id) ON DELETE SET NULL,
-  model_kind text NOT NULL,
-  model_version text,
-  dataset_name text NOT NULL,
-  dataset_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
-  period_start date,
-  period_end date,
-  evaluated_at timestamptz,
-  notes text,
-  failure_reason text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-
-  CONSTRAINT model_evaluation_runs_period_chk
-    CHECK (
-      period_start IS NULL
-      OR period_end IS NULL
-      OR period_start < period_end
-    ),
-  CONSTRAINT model_evaluation_runs_available_chk
-    CHECK (status <> 'available' OR evaluated_at IS NOT NULL)
-);
-
-CREATE INDEX model_evaluation_runs_kind_model_idx
-  ON model_evaluation_runs (evaluation_kind, model_kind, model_version, evaluated_at DESC);
-
-CREATE TABLE model_evaluation_metrics (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  evaluation_run_id uuid NOT NULL REFERENCES model_evaluation_runs(id) ON DELETE CASCADE,
-  metric_key text NOT NULL,
-  metric_label text NOT NULL,
-  metric_value numeric(18, 8) NOT NULL,
-  metric_unit text,
-  direction odin_model_metric_direction NOT NULL,
-  target_min numeric(18, 8),
-  target_max numeric(18, 8),
-  explanation text,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-
-  CONSTRAINT model_evaluation_metrics_target_chk
-    CHECK (
-      target_min IS NULL
-      OR target_max IS NULL
-      OR target_min <= target_max
-    ),
-  UNIQUE (evaluation_run_id, metric_key)
-);
-
-CREATE TABLE model_evaluation_artifacts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  evaluation_run_id uuid NOT NULL REFERENCES model_evaluation_runs(id) ON DELETE CASCADE,
-  artifact_kind text NOT NULL,
-  storage_path text,
-  content jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-
-  CONSTRAINT model_evaluation_artifacts_content_chk
-    CHECK (storage_path IS NOT NULL OR content IS NOT NULL)
 );
 
 -- Ownership-preserving foreign keys. These constraints prevent a user-owned row
@@ -4689,18 +4545,6 @@ CREATE POLICY report_debt_account_snapshots_owner_access
     )
   );
 
--- Model evaluation tables are service-role only. No authenticated-user policies.
--- Service role bypasses RLS to read/write evaluation data across all users.
-ALTER TABLE model_evaluation_runs ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE model_evaluation_metrics ENABLE ROW LEVEL SECURITY;
-
-ALTER TABLE model_evaluation_artifacts ENABLE ROW LEVEL SECURITY;
-
--- ============================================================================
--- Gap 1: user_eligibility_profiles - RLS
--- ============================================================================
-
 ALTER TABLE user_eligibility_profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY user_eligibility_profiles_owner_access
   ON user_eligibility_profiles
@@ -4708,10 +4552,6 @@ CREATE POLICY user_eligibility_profiles_owner_access
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
--- ============================================================================
--- Gap 3: user_subcategory_restrictions - RLS
--- ============================================================================
 
 ALTER TABLE user_subcategory_restrictions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY user_subcategory_restrictions_owner_access
@@ -4721,10 +4561,6 @@ CREATE POLICY user_subcategory_restrictions_owner_access
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
--- ============================================================================
--- Gap 4: transaction_templates - RLS
--- ============================================================================
-
 ALTER TABLE transaction_templates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY transaction_templates_owner_access
   ON transaction_templates
@@ -4733,10 +4569,6 @@ CREATE POLICY transaction_templates_owner_access
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
--- ============================================================================
--- Gap 2: transaction_line_items - RLS
--- ============================================================================
-
 ALTER TABLE transaction_line_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY transaction_line_items_owner_access
   ON transaction_line_items
@@ -4744,10 +4576,6 @@ CREATE POLICY transaction_line_items_owner_access
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
--- ============================================================================
--- Gap 5: budget_strategy_configs - RLS (system rows readable, user-owned writable)
--- ============================================================================
 
 ALTER TABLE budget_strategy_configs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY budget_strategy_configs_read
@@ -4775,10 +4603,6 @@ CREATE POLICY budget_strategy_configs_user_delete
   TO authenticated
   USING (is_system = false AND user_id = auth.uid());
 
--- ============================================================================
--- Gap 5: budget_strategy_rules - RLS (inherits from strategy config)
--- ============================================================================
-
 ALTER TABLE budget_strategy_rules ENABLE ROW LEVEL SECURITY;
 CREATE POLICY budget_strategy_rules_owner_access
   ON budget_strategy_rules
@@ -4801,10 +4625,6 @@ CREATE POLICY budget_strategy_rules_owner_access
         AND budget_strategy_configs.user_id = auth.uid()
     )
   );
-
--- ============================================================================
--- Gap 8: debt_hardship_plans - RLS
--- ============================================================================
 
 ALTER TABLE debt_hardship_plans ENABLE ROW LEVEL SECURITY;
 CREATE POLICY debt_hardship_plans_owner_access
@@ -4836,10 +4656,6 @@ CREATE POLICY debt_hardship_plan_events_owner_access
     )
   );
 
--- ============================================================================
--- Gap 7: push_device_tokens - RLS
--- ============================================================================
-
 ALTER TABLE push_device_tokens ENABLE ROW LEVEL SECURITY;
 CREATE POLICY push_device_tokens_owner_access
   ON push_device_tokens
@@ -4847,10 +4663,6 @@ CREATE POLICY push_device_tokens_owner_access
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
--- ============================================================================
--- Gap 6: support_tickets - RLS
--- ============================================================================
 
 ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY support_tickets_owner_access
@@ -4889,40 +4701,6 @@ CREATE POLICY support_ticket_attachments_owner_access
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
-
--- ============================================================================
--- Gap 9: user_evaluations - RLS
--- ============================================================================
-
-ALTER TABLE user_evaluations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY user_evaluations_owner_access
-  ON user_evaluations
-  FOR ALL
-  TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
-
-ALTER TABLE user_evaluation_responses ENABLE ROW LEVEL SECURITY;
-CREATE POLICY user_evaluation_responses_owner_access
-  ON user_evaluation_responses
-  FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM user_evaluations
-      WHERE user_evaluations.id = user_evaluation_responses.evaluation_id
-        AND user_evaluations.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1
-      FROM user_evaluations
-      WHERE user_evaluations.id = user_evaluation_responses.evaluation_id
-        AND user_evaluations.user_id = auth.uid()
-    )
-  );
 
 ALTER TABLE metro_manila_localities ENABLE ROW LEVEL SECURITY;
 CREATE POLICY metro_manila_localities_read_authenticated
