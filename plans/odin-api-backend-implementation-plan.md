@@ -212,7 +212,7 @@ App/odin/apps/api/
       report.validator.ts
       governance.validator.ts
       internal.validator.ts
-    utils/
+  utils/
       ownership.ts
       money.ts
       dates.ts
@@ -222,6 +222,81 @@ App/odin/apps/api/
       logger.ts
       result.ts
 ```
+
+## Branching Plan
+
+Use a linear branch sequence so each merge unlocks the next dependent slice. Keep each branch small enough that a reviewer can understand the route set, service logic, and schema touchpoints without cross-checking unrelated modules.
+
+### Branch Order
+
+1. `feat/api-foundation`
+   - Scope: `src/index.ts`, `src/app.ts`, config, auth middleware, validation middleware, error handling, request logging, and shared utilities.
+   - Reason: every later branch depends on a stable Express bootstrap, Supabase client setup, and ownership guard.
+   - Review size: infrastructure only, no domain logic.
+
+2. `feat/identity-governance`
+   - Scope: auth session exchange, password reset, logout, `me`, privacy settings, consents, export requests, and account deletion requests.
+   - Reason: onboarding and all user-owned data depend on identity and consent state.
+   - Review size: keep account governance separate from onboarding so reviewers do not mix lifecycle rules with profile logic.
+
+3. `feat/onboarding-profile`
+   - Scope: onboarding sessions, onboarding responses, submission, profile assessment, profile assignment confirmation/rejection, and reassessment.
+   - Reason: this branch depends on the identity/governance branch and unlocks profile-aware downstream modules.
+   - Review size: keep the onboarding flow and the profile classifier wiring in the same branch because they share the same source data.
+
+4. `feat/taxonomy`
+   - Scope: categories and subcategories.
+   - Reason: ledger, budgets, forecasts, alerts, savings, and debt all depend on stable taxonomy data.
+   - Review size: one small branch because taxonomy is mostly read path and seed-safe write path for user subcategories.
+
+5. `feat/accounts-obligations`
+   - Scope: financial accounts, income sources, financial obligations.
+   - Reason: transaction entry and budget planning need account containers and recurring obligation context.
+   - Review size: keep accounts and obligations together because they share the same ownership and validation rules.
+
+6. `feat/ledger-transactions`
+   - Scope: transactions, transaction drafts, recurring templates, recurring occurrences, and ledger audit events.
+   - Reason: this is the raw data backbone for forecasts, anomaly detection, budgets, reports, savings contributions, and debt payments.
+   - Review size: split only if needed between CRUD and recurring generation, but keep them adjacent in the sequence.
+
+7. `feat/budget-core`
+   - Scope: dashboard summary, budgets, budget allocations, budget validation, and budget recommendation generation/acceptance.
+   - Reason: the dashboard and budget solver need transaction history, taxonomy, and profile output already merged.
+   - Review size: keep dashboard summary and budget setup close together because they are the same user journey.
+
+8. `feat/forecast-alerts`
+   - Scope: forecasts, expected spending events, anomaly evaluations, alert inbox, notification preferences, whitelist rules, and suppression rules.
+   - Reason: forecast output feeds alerts, and alerts need the same transaction and category context.
+   - Review size: keep forecast generation next to alert generation so the explanation and suppression rules stay easy to review.
+
+9. `feat/savings-goals`
+   - Scope: savings goals, contributions, allocation preferences, and the savings goal priority table.
+   - Reason: savings depends on budget allocation and transaction history, but should remain separate from debt so reviewers can focus on one goal model at a time.
+   - Review size: keep goal CRUD next to contribution logging and allocation rules because they share the same source-of-truth record.
+
+10. `feat/debt-management`
+    - Scope: debt accounts, debt payments, debt strategy preferences, and debt projections.
+    - Reason: debt projections depend on ledger history and should be reviewed immediately after the savings goal branch because both consume future allocation logic.
+    - Review size: keep account CRUD next to projection generation so the stale-projection rules are visible in one pass.
+
+11. `feat/reports-governance`
+    - Scope: reports, metrics, breakdowns, comparisons, snapshots, data export completion, and account deletion workflow completion.
+    - Reason: reporting depends on nearly every prior branch and should be merged only after the core data flows are stable.
+    - Review size: keep report generation and governance completion together because both are read-heavy and audit-sensitive.
+
+12. `feat/internal-evaluation`
+    - Scope: internal model evaluation routes and artifacts.
+    - Reason: evaluation depends on stable forecast, anomaly, and profile outputs and should land last so it can reference the final data contracts.
+    - Review size: isolate from user-facing routes so thesis evaluation logic does not expand unrelated API surfaces.
+
+### Branching Rules
+
+- Prefer one phase-aligned branch at a time unless a branch is purely bootstrap or purely read-only.
+- Do not mix adjacent phases in the same branch unless the second phase is a direct prerequisite and the added scope remains small.
+- Keep route handlers, services, and actions for one branch adjacent in the tree so the review diff is localized.
+- When a branch spans multiple routes, group the routes by the same domain object first, then by action order.
+- If a branch grows beyond a few related endpoints, split it before merge rather than letting one review cover unrelated systems.
+- Merge sequence should follow the route catalog order so later branches never need to guess at missing shared contracts.
 
 ## Architectural decisions
 
@@ -336,7 +411,9 @@ Acceptance criteria:
 
 ## Route Catalog
 
-### Identity and Governance
+### Phase 1: Identity, Consent, and Onboarding
+
+#### Identity and Governance
 
 POST /odin/api/auth/session | Exchange a Supabase token for an app session
 
@@ -675,7 +752,7 @@ response:
 }
 ```
 
-### Onboarding and Profile
+#### Onboarding and Profile
 
 POST /odin/api/onboarding/sessions | Start an onboarding session
 
@@ -922,7 +999,9 @@ response:
 }
 ```
 
-### Taxonomy
+### Phase 2: Taxonomy, Accounts, and Ledger
+
+#### Taxonomy
 
 GET /odin/api/categories | List broad category buckets
 
@@ -1058,7 +1137,7 @@ response:
 }
 ```
 
-### Accounts, Income, and Obligations
+#### Accounts, Income, and Obligations
 
 GET /odin/api/accounts | List financial accounts
 
@@ -1384,7 +1463,7 @@ response:
 }
 ```
 
-### Transactions and Recurring Ledger
+#### Transactions and Recurring Ledger
 
 GET /odin/api/transactions | List transactions
 
@@ -1856,7 +1935,9 @@ response:
 }
 ```
 
-### Dashboard, Budgets, and Recommendations
+### Phase 3: Budgets, Dashboard, and Recommendations
+
+#### Dashboard, Budgets, and Recommendations
 
 GET /odin/api/dashboard/summary | Read the home screen summary
 
@@ -2417,7 +2498,9 @@ response:
 }
 ```
 
-### Forecasts, Expected Events, and Model Outputs
+### Phase 4: Forecasts, Expected Events, and Alerts
+
+#### Forecasts, Expected Events, and Model Outputs
 
 POST /odin/api/forecasts | Generate a forecast
 
@@ -2666,7 +2749,7 @@ response:
 }
 ```
 
-### Anomalies and Alerts
+#### Anomalies and Alerts
 
 POST /odin/api/anomaly-evaluations | Evaluate a transaction for anomaly detection
 
@@ -3194,7 +3277,9 @@ response:
 }
 ```
 
-### Savings Goals
+### Phase 5: Savings Goals and Debt Management
+
+#### Savings Goals
 
 GET /odin/api/savings-goals | List savings goals
 
@@ -3497,7 +3582,7 @@ response:
 }
 ```
 
-### Debt Management
+#### Debt Management
 
 GET /odin/api/debts | List debt accounts
 
@@ -3860,7 +3945,9 @@ response:
 }
 ```
 
-### Reports and Evaluation
+### Phase 6: Reports, Exports, and Evaluation
+
+#### Reports and Evaluation
 
 POST /odin/api/reports | Generate a report
 
