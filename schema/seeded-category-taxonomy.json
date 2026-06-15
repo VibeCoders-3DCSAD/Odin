@@ -1,0 +1,609 @@
+[
+  {
+    "slug": "essentials",
+    "label": "Essentials",
+    "short_label": "Essentials",
+    "description": "Basic needs and necessary day-to-day spending.",
+    "sort_order": 100,
+    "categories": [
+      {
+        "slug": "essentials_food_household",
+        "label": "Food and Household Needs",
+        "short_label": "Food/Household",
+        "description": "Core food, groceries, and household necessities.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 100,
+        "subcategories": [
+          {
+            "slug": "essentials_food_groceries",
+            "kind": "expense",
+            "label": "Food and Groceries",
+            "short_label": "Groceries",
+            "description": "Food, groceries, and basic household supplies.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 100
+          }
+        ]
+      },
+      {
+        "slug": "essentials_utilities",
+        "label": "Utilities",
+        "short_label": "Utilities",
+        "description": "Electricity, water, internet, and mobile load for basic needs.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 110,
+        "subcategories": [
+          {
+            "slug": "essentials_electricity",
+            "kind": "expense",
+            "label": "Electricity",
+            "short_label": "Electricity",
+            "description": "Electricity and power-related essentials.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 120
+          },
+          {
+            "slug": "essentials_water",
+            "kind": "expense",
+            "label": "Water",
+            "short_label": "Water",
+            "description": "Water utility payments.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 125
+          },
+          {
+            "slug": "essentials_connectivity",
+            "kind": "expense",
+            "label": "Internet and Mobile Load",
+            "short_label": "Connectivity",
+            "description": "Internet subscription and mobile load for basic communication.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 128
+          }
+        ]
+      },
+      {
+        "slug": "essentials_transportation",
+        "label": "Transportation",
+        "short_label": "Transport",
+        "description": "Commute, fuel, fares, and work-related transportation.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 120,
+        "subcategories": [
+          {
+            "slug": "essentials_transportation_commute",
+            "kind": "expense",
+            "label": "Commute and Fares",
+            "short_label": "Commute",
+            "description": "Public transport fares, jeepney, bus, train, and other commute costs.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 130
+          },
+          {
+            "slug": "essentials_transportation_fuel",
+            "kind": "expense",
+            "label": "Fuel and Parking",
+            "short_label": "Fuel",
+            "description": "Fuel, parking, and similar transportation costs.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 135
+          }
+        ]
+      },
+      {
+        "slug": "essentials_healthcare",
+        "label": "Healthcare and Medicine",
+        "short_label": "Healthcare",
+        "description": "Medical care, medicine, and health-related essentials.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 130,
+        "subcategories": [
+          {
+            "slug": "essentials_healthcare_medicine",
+            "kind": "expense",
+            "label": "Medicine",
+            "short_label": "Medicine",
+            "description": "Prescription and over-the-counter medicine.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 140
+          },
+          {
+            "slug": "essentials_healthcare_consultation",
+            "kind": "expense",
+            "label": "Medical Consultation",
+            "short_label": "Consultation",
+            "description": "Doctor visits, clinic fees, and related essential care.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 145
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "obligatory",
+    "label": "Obligatory",
+    "short_label": "Obligatory",
+    "description": "Required, recurring, or culturally expected responsibilities.",
+    "sort_order": 200,
+    "categories": [
+      {
+        "slug": "obligatory_family_support",
+        "label": "Family Support",
+        "short_label": "Family",
+        "description": "Support for parents, siblings, dependents, or household members.",
+        "is_system": true,
+        "is_filipino_context": true,
+        "sort_order": 200,
+        "subcategories": [
+          {
+            "slug": "obligatory_family_support",
+            "kind": "expense",
+            "label": "Family Support",
+            "short_label": "Family",
+            "description": "Support for parents, siblings, dependents, or household members.",
+            "is_system": true,
+            "is_filipino_context": true,
+            "is_protected_default": true,
+            "sort_order": 200
+          }
+        ]
+      },
+      {
+        "slug": "obligatory_remittances",
+        "label": "Remittances",
+        "short_label": "Remittance",
+        "description": "Money sent to family or dependents.",
+        "is_system": true,
+        "is_filipino_context": true,
+        "sort_order": 210,
+        "subcategories": [
+          {
+            "slug": "obligatory_remittances",
+            "kind": "expense",
+            "label": "Remittances",
+            "short_label": "Remittance",
+            "description": "Money sent to family or dependents.",
+            "is_system": true,
+            "is_filipino_context": true,
+            "is_protected_default": true,
+            "sort_order": 210
+          }
+        ]
+      },
+      {
+        "slug": "obligatory_paluwagan",
+        "label": "Paluwagan",
+        "short_label": "Paluwagan",
+        "description": "Scheduled contributions to a rotating savings group.",
+        "is_system": true,
+        "is_filipino_context": true,
+        "sort_order": 220,
+        "subcategories": [
+          {
+            "slug": "obligatory_paluwagan",
+            "kind": "expense",
+            "label": "Paluwagan",
+            "short_label": "Paluwagan",
+            "description": "Scheduled contributions to a rotating savings group.",
+            "is_system": true,
+            "is_filipino_context": true,
+            "is_protected_default": true,
+            "sort_order": 220
+          }
+        ]
+      },
+      {
+        "slug": "obligatory_government_contributions",
+        "label": "Government Contributions",
+        "short_label": "Government",
+        "description": "SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.",
+        "is_system": true,
+        "is_filipino_context": true,
+        "sort_order": 230,
+        "subcategories": [
+          {
+            "slug": "obligatory_government_contributions",
+            "kind": "expense",
+            "label": "Government Contributions",
+            "short_label": "Government",
+            "description": "SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.",
+            "is_system": true,
+            "is_filipino_context": true,
+            "is_protected_default": true,
+            "sort_order": 250
+          }
+        ]
+      },
+      {
+        "slug": "obligatory_debt_payments",
+        "label": "Debt and Loan Payments",
+        "short_label": "Debt",
+        "description": "Minimum debt, loan, credit card, or installment payments.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 240,
+        "subcategories": [
+          {
+            "slug": "obligatory_debt_payments",
+            "kind": "expense",
+            "label": "Debt and Loan Payments",
+            "short_label": "Debt",
+            "description": "Minimum debt, loan, credit card, or installment payments.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 260
+          }
+        ]
+      },
+      {
+        "slug": "obligatory_insurance",
+        "label": "Insurance",
+        "short_label": "Insurance",
+        "description": "Insurance premiums and protection-related payments.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 250,
+        "subcategories": [
+          {
+            "slug": "obligatory_insurance",
+            "kind": "expense",
+            "label": "Insurance",
+            "short_label": "Insurance",
+            "description": "Insurance premiums and protection-related payments.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 270
+          }
+        ]
+      },
+      {
+        "slug": "obligatory_housing_rent",
+        "label": "Housing or Rent",
+        "short_label": "Housing",
+        "description": "Rent, housing dues, and core shelter costs.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 260,
+        "subcategories": [
+          {
+            "slug": "obligatory_housing_rent",
+            "kind": "expense",
+            "label": "Housing or Rent",
+            "short_label": "Housing",
+            "description": "Rent, housing dues, and core shelter costs.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 110
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "discretionary",
+    "label": "Discretionary",
+    "short_label": "Discretionary",
+    "description": "Flexible wants and lifestyle spending.",
+    "sort_order": 300,
+    "categories": [
+      {
+        "slug": "discretionary_dining_leisure",
+        "label": "Dining and Leisure",
+        "short_label": "Dining/Leisure",
+        "description": "Restaurant, cafe, and lifestyle leisure spending.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 300,
+        "subcategories": [
+          {
+            "slug": "discretionary_dining_out",
+            "kind": "expense",
+            "label": "Dining Out",
+            "short_label": "Dining",
+            "description": "Restaurant, cafe, and takeout spending.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": false,
+            "sort_order": 300
+          }
+        ]
+      },
+      {
+        "slug": "discretionary_shopping",
+        "label": "Shopping",
+        "short_label": "Shopping",
+        "description": "Clothing, gadgets, home items, and non-essential purchases.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 310,
+        "subcategories": [
+          {
+            "slug": "discretionary_shopping",
+            "kind": "expense",
+            "label": "Shopping",
+            "short_label": "Shopping",
+            "description": "Clothing, gadgets, home items, and non-essential purchases.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": false,
+            "sort_order": 310
+          },
+          {
+            "slug": "discretionary_clothing_footwear",
+            "kind": "expense",
+            "label": "Clothing and Footwear",
+            "short_label": "Clothing",
+            "description": "Clothes, shoes, accessories, and tailoring services.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 345
+          },
+          {
+            "slug": "discretionary_furnishings",
+            "kind": "expense",
+            "label": "Furnishings & Equipment",
+            "short_label": "Furnishings",
+            "description": "Furniture, appliances, tools, and household textiles.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 350
+          }
+        ]
+      },
+      {
+        "slug": "discretionary_entertainment",
+        "label": "Entertainment",
+        "short_label": "Entertainment",
+        "description": "Movies, games, subscriptions, events, and hobbies.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 320,
+        "subcategories": [
+          {
+            "slug": "discretionary_entertainment",
+            "kind": "expense",
+            "label": "Entertainment",
+            "short_label": "Fun",
+            "description": "Movies, games, subscriptions, events, and leisure.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": false,
+            "sort_order": 320
+          },
+          {
+            "slug": "discretionary_recreation_culture",
+            "kind": "expense",
+            "label": "Recreation & Culture",
+            "short_label": "Recreation",
+            "description": "Movies, concerts, hobbies, sports, books, games, and cultural events.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 355
+          }
+        ]
+      },
+      {
+        "slug": "discretionary_travel",
+        "label": "Travel and Leisure",
+        "short_label": "Travel",
+        "description": "Trips, outings, and leisure travel spending.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 330,
+        "subcategories": [
+          {
+            "slug": "discretionary_travel",
+            "kind": "expense",
+            "label": "Travel and Leisure",
+            "short_label": "Travel",
+            "description": "Trips, outings, and leisure travel spending.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": false,
+            "sort_order": 330
+          },
+          {
+            "slug": "discretionary_accommodation",
+            "kind": "expense",
+            "label": "Accommodation",
+            "short_label": "Hotel/Hostel",
+            "description": "Hotels, resorts, and short-term lodging.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": false,
+            "sort_order": 365
+          }
+        ]
+      },
+      {
+        "slug": "discretionary_personal_misc",
+        "label": "Personal and Miscellaneous",
+        "short_label": "Personal",
+        "description": "Personal care, donations, community collections, and misc lifestyle spending.",
+        "is_system": true,
+        "is_filipino_context": true,
+        "sort_order": 340,
+        "subcategories": [
+          {
+            "slug": "discretionary_alcohol_tobacco",
+            "kind": "expense",
+            "label": "Alcoholic Beverages & Tobacco",
+            "short_label": "Alcohol/Tobacco",
+            "description": "Alcoholic drinks, cigarettes, vape, and related products.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 340
+          },
+          {
+            "slug": "discretionary_personal_care",
+            "kind": "expense",
+            "label": "Personal Care",
+            "short_label": "Personal Care",
+            "description": "Haircuts, cosmetics, toiletries, salon services, and miscellaneous personal goods.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 360
+          },
+          {
+            "slug": "discretionary_religious_donations",
+            "kind": "expense",
+            "label": "Church or Religious Donations",
+            "short_label": "Donations",
+            "description": "Church, religious, or faith community contributions.",
+            "is_system": true,
+            "is_filipino_context": true,
+            "is_protected_default": false,
+            "sort_order": 230
+          },
+          {
+            "slug": "discretionary_community_collections",
+            "kind": "expense",
+            "label": "Barangay or Community Collections",
+            "short_label": "Community",
+            "description": "Barangay, neighborhood, group, or community contributions.",
+            "is_system": true,
+            "is_filipino_context": true,
+            "is_protected_default": false,
+            "sort_order": 240
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "financial_allocation",
+    "label": "Financial Allocation",
+    "short_label": "Financial",
+    "description": "Savings, investments, and future-focused allocations.",
+    "sort_order": 400,
+    "categories": [
+      {
+        "slug": "financial_emergency_fund",
+        "label": "Emergency Fund",
+        "short_label": "Emergency Fund",
+        "description": "Emergency fund contributions.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 400,
+        "subcategories": [
+          {
+            "slug": "financial_emergency_fund",
+            "kind": "expense",
+            "label": "Emergency Fund Contribution",
+            "short_label": "Emergency Fund",
+            "description": "Emergency fund contributions.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 400
+          }
+        ]
+      },
+      {
+        "slug": "financial_savings",
+        "label": "Savings",
+        "short_label": "Savings",
+        "description": "General savings contributions.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 410,
+        "subcategories": [
+          {
+            "slug": "financial_savings",
+            "kind": "expense",
+            "label": "Savings Contribution",
+            "short_label": "Savings",
+            "description": "General savings contributions.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": true,
+            "sort_order": 410
+          }
+        ]
+      },
+      {
+        "slug": "financial_investments",
+        "label": "Investments",
+        "short_label": "Investments",
+        "description": "Investment contributions without portfolio tracking.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "sort_order": 420,
+        "subcategories": [
+          {
+            "slug": "financial_investments",
+            "kind": "expense",
+            "label": "Investment Contribution",
+            "short_label": "Investments",
+            "description": "Investment contributions without portfolio tracking.",
+            "is_system": true,
+            "is_filipino_context": false,
+            "is_protected_default": false,
+            "sort_order": 420
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "income",
+    "label": "Income",
+    "short_label": "Income",
+    "description": "System income subcategories seeded without a category group or category parent.",
+    "sort_order": 0,
+    "categories": [],
+    "subcategories": [
+      {
+        "slug": "income_salary",
+        "kind": "income",
+        "label": "Salary",
+        "short_label": "Salary",
+        "description": "Regular employment income.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "is_protected_default": false,
+        "sort_order": 10
+      },
+      {
+        "slug": "income_freelance",
+        "kind": "income",
+        "label": "Freelance or Variable Income",
+        "short_label": "Freelance",
+        "description": "Freelance, commission, business, or irregular income.",
+        "is_system": true,
+        "is_filipino_context": false,
+        "is_protected_default": false,
+        "sort_order": 20
+      }
+    ]
+  }
+]

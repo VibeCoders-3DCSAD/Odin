@@ -267,6 +267,22 @@ CREATE TYPE odin_profile_event_action AS ENUM (
   'deactivated'
 );
 
+CREATE TYPE odin_profile_assessment_method AS ENUM (
+  'manual',
+  'questionnaire',
+  'cold_start',
+  'standard'
+);
+
+CREATE TYPE odin_profile_reclassification_status AS ENUM (
+  'scheduled',
+  'due',
+  'running',
+  'completed',
+  'failed',
+  'paused'
+);
+
 CREATE TYPE odin_subcategory_kind AS ENUM (
   'income',
   'expense',
@@ -571,6 +587,20 @@ CREATE TYPE odin_push_device_platform AS ENUM (
   'web'
 );
 
+CREATE TYPE odin_budget_health_status AS ENUM (
+  'healthy',
+  'watch',
+  'critical'
+);
+
+CREATE TYPE odin_transaction_retention_action AS ENUM (
+  'scheduled',
+  'retained',
+  'archived',
+  'purged',
+  'cancelled'
+);
+
 CREATE TYPE odin_user_evaluation_kind AS ENUM (
   'sus',
   'iso_25010',
@@ -681,12 +711,39 @@ CREATE TABLE account_deletion_requests (
 CREATE INDEX account_deletion_requests_user_status_idx
   ON account_deletion_requests (user_id, status, requested_at DESC);
 
+CREATE TABLE metro_manila_localities (
+  code text PRIMARY KEY,
+  name text NOT NULL UNIQUE,
+  is_city boolean NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0
+);
+
+INSERT INTO metro_manila_localities (code, name, is_city, sort_order) VALUES
+  ('manila', 'Manila', true, 10),
+  ('quezon_city', 'Quezon City', true, 20),
+  ('caloocan', 'Caloocan', true, 30),
+  ('las_pinas', 'Las Pinas', true, 40),
+  ('makati', 'Makati', true, 50),
+  ('malabon', 'Malabon', true, 60),
+  ('mandaluyong', 'Mandaluyong', true, 70),
+  ('marikina', 'Marikina', true, 80),
+  ('muntinlupa', 'Muntinlupa', true, 90),
+  ('navotas', 'Navotas', true, 100),
+  ('paranaque', 'Paranaque', true, 110),
+  ('pasay', 'Pasay', true, 120),
+  ('pasig', 'Pasig', true, 130),
+  ('pateros', 'Pateros', false, 140),
+  ('san_juan', 'San Juan', true, 150),
+  ('taguig', 'Taguig', true, 160),
+  ('valenzuela', 'Valenzuela', true, 170)
+ON CONFLICT (code) DO NOTHING;
+
 CREATE TABLE user_eligibility_profiles (
   user_id uuid PRIMARY KEY REFERENCES profiles(user_id) ON DELETE CASCADE,
   date_of_birth date,
   is_filipino boolean,
   metro_manila_presence odin_metro_manila_presence,
-  metro_manila_city_or_municipality text,
+  metro_manila_locality_code text REFERENCES metro_manila_localities(code) ON DELETE RESTRICT,
   primary_employment_classification odin_employment_classification,
   primary_employment_other text,
   eligibility_confirmed_at timestamptz,
@@ -695,10 +752,29 @@ CREATE TABLE user_eligibility_profiles (
 
   CONSTRAINT user_eligibility_profiles_birth_date_chk
     CHECK (date_of_birth IS NULL OR date_of_birth <= CURRENT_DATE),
+  CONSTRAINT user_eligibility_profiles_age_range_chk
+    CHECK (
+      date_of_birth IS NULL
+      OR (
+        date_of_birth <= (CURRENT_DATE - INTERVAL '20 years')::date
+        AND date_of_birth >= (CURRENT_DATE - INTERVAL '40 years')::date
+      )
+    ),
   CONSTRAINT user_eligibility_profiles_other_employment_chk
     CHECK (
       primary_employment_classification <> 'other'
       OR primary_employment_other IS NOT NULL
+    ),
+  CONSTRAINT user_eligibility_profiles_confirmed_eligibility_chk
+    CHECK (
+      eligibility_confirmed_at IS NULL
+      OR (
+        date_of_birth IS NOT NULL
+        AND is_filipino = true
+        AND metro_manila_presence IS NOT NULL
+        AND metro_manila_locality_code IS NOT NULL
+        AND primary_employment_classification IS NOT NULL
+      )
     )
 );
 
@@ -741,6 +817,7 @@ CREATE TABLE financial_profile_assessments (
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
   onboarding_session_id uuid REFERENCES onboarding_sessions(id) ON DELETE SET NULL,
   status odin_profile_assessment_status NOT NULL DEFAULT 'queued',
+  assessment_method odin_profile_assessment_method NOT NULL DEFAULT 'questionnaire',
   requested_at timestamptz NOT NULL DEFAULT now(),
   assessed_at timestamptz,
   model_kind text NOT NULL DEFAULT 'random_forest',
@@ -832,7 +909,34 @@ CREATE TABLE financial_profile_events (
 CREATE INDEX financial_profile_events_user_created_idx
   ON financial_profile_events (user_id, created_at DESC);
 
-CREATE TABLE categories (
+CREATE TABLE financial_profile_reclassification_schedules (
+  user_id uuid PRIMARY KEY REFERENCES profiles(user_id) ON DELETE CASCADE,
+  status odin_profile_reclassification_status NOT NULL DEFAULT 'scheduled',
+  trigger_source odin_profile_assessment_method NOT NULL DEFAULT 'standard',
+  cadence_days integer NOT NULL DEFAULT 30,
+  last_checked_at timestamptz,
+  last_reclassified_at timestamptz,
+  next_due_at timestamptz,
+  last_assessment_id uuid REFERENCES financial_profile_assessments(id) ON DELETE SET NULL,
+  failure_reason text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT financial_profile_reclassification_schedules_cadence_chk
+    CHECK (cadence_days > 0),
+  CONSTRAINT financial_profile_reclassification_schedules_due_order_chk
+    CHECK (
+      next_due_at IS NULL
+      OR last_reclassified_at IS NULL
+      OR last_reclassified_at <= next_due_at
+    )
+);
+
+CREATE INDEX financial_profile_reclassification_schedules_status_idx
+  ON financial_profile_reclassification_schedules (status, next_due_at);
+
+CREATE TABLE category_groups (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slug text NOT NULL UNIQUE,
   label text NOT NULL,
@@ -843,10 +947,10 @@ CREATE TABLE categories (
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
-CREATE INDEX categories_active_sort_idx
-  ON categories (is_active, sort_order);
+CREATE INDEX category_groups_active_sort_idx
+  ON category_groups (is_active, sort_order);
 
-INSERT INTO categories (
+INSERT INTO category_groups (
   slug,
   label,
   short_label,
@@ -858,6 +962,78 @@ INSERT INTO categories (
   ('discretionary', 'Discretionary', 'Discretionary', 'Flexible wants and lifestyle spending.', 300),
   ('financial_allocation', 'Financial Allocation', 'Financial', 'Savings, investments, and future-focused allocations.', 400)
 ON CONFLICT (slug) DO NOTHING;
+
+CREATE TABLE categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_group_id uuid NOT NULL REFERENCES category_groups(id) ON DELETE RESTRICT,
+  user_id uuid REFERENCES profiles(user_id) ON DELETE CASCADE,
+  slug text NOT NULL,
+  label text NOT NULL,
+  short_label text,
+  description text NOT NULL,
+  is_system boolean NOT NULL DEFAULT true,
+  is_filipino_context boolean NOT NULL DEFAULT false,
+  sort_order integer NOT NULL DEFAULT 0,
+  is_active boolean NOT NULL DEFAULT true,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT categories_owner_chk
+    CHECK (
+      (is_system = true AND user_id IS NULL)
+      OR (is_system = false AND user_id IS NOT NULL)
+    )
+);
+
+CREATE UNIQUE INDEX categories_system_slug_unique_idx
+  ON categories (slug)
+  WHERE user_id IS NULL;
+
+CREATE UNIQUE INDEX categories_user_slug_unique_idx
+  ON categories (user_id, slug)
+  WHERE user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX categories_system_label_unique_idx
+  ON categories (lower(label), category_group_id)
+  WHERE user_id IS NULL;
+
+CREATE UNIQUE INDEX categories_user_label_unique_idx
+  ON categories (user_id, lower(label), category_group_id)
+  WHERE user_id IS NOT NULL;
+
+CREATE INDEX categories_group_active_sort_idx
+  ON categories (category_group_id, is_active, sort_order);
+
+INSERT INTO categories (
+  category_group_id,
+  user_id,
+  slug,
+  label,
+  short_label,
+  description,
+  is_system,
+  is_filipino_context,
+  sort_order
+) VALUES
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_food_household', 'Food and Household Needs', 'Food/Household', 'Core food, groceries, and household necessities.', true, false, 100),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_utilities', 'Utilities', 'Utilities', 'Electricity, water, internet, and mobile load for basic needs.', true, false, 110),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_transportation', 'Transportation', 'Transport', 'Commute, fuel, fares, and work-related transportation.', true, false, 120),
+  ((SELECT id FROM category_groups WHERE slug = 'essentials'), NULL, 'essentials_healthcare', 'Healthcare and Medicine', 'Healthcare', 'Medical care, medicine, and health-related essentials.', true, false, 130),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_family_support', 'Family Support', 'Family', 'Support for parents, siblings, dependents, or household members.', true, true, 200),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_remittances', 'Remittances', 'Remittance', 'Money sent to family or dependents.', true, true, 210),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_paluwagan', 'Paluwagan', 'Paluwagan', 'Scheduled contributions to a rotating savings group.', true, true, 220),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_government_contributions', 'Government Contributions', 'Government', 'SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.', true, true, 230),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_debt_payments', 'Debt and Loan Payments', 'Debt', 'Minimum debt, loan, credit card, or installment payments.', true, false, 240),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_insurance', 'Insurance', 'Insurance', 'Insurance premiums and protection-related payments.', true, false, 250),
+  ((SELECT id FROM category_groups WHERE slug = 'obligatory'), NULL, 'obligatory_housing_rent', 'Housing or Rent', 'Housing', 'Rent, housing dues, and core shelter costs.', true, false, 260),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_dining_leisure', 'Dining and Leisure', 'Dining/Leisure', 'Restaurant, cafe, and lifestyle leisure spending.', true, false, 300),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_shopping', 'Shopping', 'Shopping', 'Clothing, gadgets, home items, and non-essential purchases.', true, false, 310),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_entertainment', 'Entertainment', 'Entertainment', 'Movies, games, subscriptions, events, and hobbies.', true, false, 320),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_travel', 'Travel and Leisure', 'Travel', 'Trips, outings, and leisure travel spending.', true, false, 330),
+  ((SELECT id FROM category_groups WHERE slug = 'discretionary'), NULL, 'discretionary_personal_misc', 'Personal and Miscellaneous', 'Personal', 'Personal care, donations, community collections, and misc lifestyle spending.', true, true, 340),
+  ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_emergency_fund', 'Emergency Fund', 'Emergency Fund', 'Emergency fund contributions.', true, false, 400),
+  ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_savings', 'Savings', 'Savings', 'General savings contributions.', true, false, 410),
+  ((SELECT id FROM category_groups WHERE slug = 'financial_allocation'), NULL, 'financial_investments', 'Investments', 'Investments', 'Investment contributions without portfolio tracking.', true, false, 420)
+ON CONFLICT DO NOTHING;
 
 CREATE TABLE subcategories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -964,6 +1140,58 @@ CREATE UNIQUE INDEX user_subcategory_restrictions_active_unique_idx
 CREATE INDEX user_subcategory_restrictions_user_idx
   ON user_subcategory_restrictions (user_id, restriction_level);
 
+CREATE TABLE user_category_restrictions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+  category_id uuid NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+  restriction_level odin_restriction_level NOT NULL DEFAULT 'free',
+  floor_amount_centavos bigint,
+  ceiling_amount_centavos bigint,
+  effective_from date NOT NULL DEFAULT CURRENT_DATE,
+  effective_to date,
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT user_category_restrictions_money_chk
+    CHECK (
+      (floor_amount_centavos IS NULL OR floor_amount_centavos >= 0)
+      AND (ceiling_amount_centavos IS NULL OR ceiling_amount_centavos >= 0)
+      AND (
+        floor_amount_centavos IS NULL
+        OR ceiling_amount_centavos IS NULL
+        OR floor_amount_centavos <= ceiling_amount_centavos
+      )
+    ),
+  CONSTRAINT user_category_restrictions_period_chk
+    CHECK (effective_to IS NULL OR effective_from < effective_to),
+  CONSTRAINT user_category_restrictions_level_chk
+    CHECK (
+      (
+        restriction_level = 'free'
+        AND ceiling_amount_centavos IS NULL
+      )
+      OR (
+        restriction_level = 'protected'
+        AND floor_amount_centavos IS NOT NULL
+      )
+      OR (
+        restriction_level = 'locked'
+        AND floor_amount_centavos IS NOT NULL
+        AND ceiling_amount_centavos IS NOT NULL
+        AND floor_amount_centavos = ceiling_amount_centavos
+      )
+    )
+);
+
+CREATE UNIQUE INDEX user_category_restrictions_active_unique_idx
+  ON user_category_restrictions (user_id, category_id)
+  WHERE effective_to IS NULL;
+
+CREATE INDEX user_category_restrictions_user_idx
+  ON user_category_restrictions (user_id, restriction_level);
+
 INSERT INTO subcategories (
   category_id,
   user_id,
@@ -989,69 +1217,73 @@ INSERT INTO subcategories (
 -- Essentials: Necessary but flexible expenses
 -- -------------------------------------------
 
-  ((SELECT id FROM categories WHERE slug = 'essentials'), NULL, 'essentials_food_groceries', 'expense', 'Food and Groceries', 'Groceries', 'Food, groceries, and basic household supplies.', true, false, true, 100),
+  ((SELECT id FROM categories WHERE slug = 'essentials_food_household'), NULL, 'essentials_food_groceries', 'expense', 'Food and Groceries', 'Groceries', 'Food, groceries, and basic household supplies.', true, false, true, 100),
 
-  ((SELECT id FROM categories WHERE slug = 'essentials'), NULL, 'essentials_utilities', 'expense', 'Utilities', 'Utilities', 'Electricity, water, internet, and mobile load for basic needs.', true, false, true, 120),
+  ((SELECT id FROM categories WHERE slug = 'essentials_utilities'), NULL, 'essentials_electricity', 'expense', 'Electricity', 'Electricity', 'Electricity and power-related essentials.', true, false, true, 120),
 
-  ((SELECT id FROM categories WHERE slug = 'essentials'), NULL, 'essentials_transportation', 'expense', 'Transportation', 'Transport', 'Commute, fuel, fares, and work-related transportation.', true, false, true, 130),
+  ((SELECT id FROM categories WHERE slug = 'essentials_utilities'), NULL, 'essentials_water', 'expense', 'Water', 'Water', 'Water utility payments.', true, false, true, 125),
 
-  ((SELECT id FROM categories WHERE slug = 'essentials'), NULL, 'essentials_healthcare', 'expense', 'Healthcare and Medicine', 'Healthcare', 'Medical care, medicine, and health-related essentials.', true, false, true, 140),
+  ((SELECT id FROM categories WHERE slug = 'essentials_utilities'), NULL, 'essentials_connectivity', 'expense', 'Internet and Mobile Load', 'Connectivity', 'Internet subscription and mobile load for basic communication.', true, false, true, 128),
+  ((SELECT id FROM categories WHERE slug = 'essentials_transportation'), NULL, 'essentials_transportation_commute', 'expense', 'Commute and Fares', 'Commute', 'Public transport fares, jeepney, bus, train, and other commute costs.', true, false, true, 130),
+  ((SELECT id FROM categories WHERE slug = 'essentials_transportation'), NULL, 'essentials_transportation_fuel', 'expense', 'Fuel and Parking', 'Fuel', 'Fuel, parking, and similar transportation costs.', true, false, true, 135),
+  ((SELECT id FROM categories WHERE slug = 'essentials_healthcare'), NULL, 'essentials_healthcare_medicine', 'expense', 'Medicine', 'Medicine', 'Prescription and over-the-counter medicine.', true, false, true, 140),
+  ((SELECT id FROM categories WHERE slug = 'essentials_healthcare'), NULL, 'essentials_healthcare_consultation', 'expense', 'Medical Consultation', 'Consultation', 'Doctor visits, clinic fees, and related essential care.', true, false, true, 145),
 
 -- -----------------------------------------------------------------------------------------------------------
 -- Obligatories: Inflexible necessary expenses that have a hard minimum and cannot be reduced without penalty, consequence, or significant change in lifestyle.
 -- -----------------------------------------------------------------------------------------------------------
 
-  ((SELECT id FROM categories WHERE slug = 'obligatory'), NULL, 'obligatory_family_support', 'expense', 'Family Support', 'Family', 'Support for parents, siblings, dependents, or household members.', true, true, true, 200),
+  ((SELECT id FROM categories WHERE slug = 'obligatory_family_support'), NULL, 'obligatory_family_support', 'expense', 'Family Support', 'Family', 'Support for parents, siblings, dependents, or household members.', true, true, true, 200),
 
-  ((SELECT id FROM categories WHERE slug = 'obligatory'), NULL, 'obligatory_remittances', 'expense', 'Remittances', 'Remittance', 'Money sent to family or dependents.', true, true, true, 210),
+  ((SELECT id FROM categories WHERE slug = 'obligatory_remittances'), NULL, 'obligatory_remittances', 'expense', 'Remittances', 'Remittance', 'Money sent to family or dependents.', true, true, true, 210),
 
-  ((SELECT id FROM categories WHERE slug = 'obligatory'), NULL, 'obligatory_paluwagan', 'expense', 'Paluwagan', 'Paluwagan', 'Scheduled contributions to a rotating savings group.', true, true, true, 220),
+  ((SELECT id FROM categories WHERE slug = 'obligatory_paluwagan'), NULL, 'obligatory_paluwagan', 'expense', 'Paluwagan', 'Paluwagan', 'Scheduled contributions to a rotating savings group.', true, true, true, 220),
 
-  ((SELECT id FROM categories WHERE slug = 'obligatory'), NULL, 'obligatory_government_contributions', 'expense', 'Government Contributions', 'Government', 'SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.', true, true, true, 250),
+  ((SELECT id FROM categories WHERE slug = 'obligatory_government_contributions'), NULL, 'obligatory_government_contributions', 'expense', 'Government Contributions', 'Government', 'SSS, PhilHealth, Pag-IBIG, tax, and similar required contributions.', true, true, true, 250),
 
-  ((SELECT id FROM categories WHERE slug = 'obligatory'), NULL, 'obligatory_debt_payments', 'expense', 'Debt and Loan Payments', 'Debt', 'Minimum debt, loan, credit card, or installment payments.', true, false, true, 260),
+  ((SELECT id FROM categories WHERE slug = 'obligatory_debt_payments'), NULL, 'obligatory_debt_payments', 'expense', 'Debt and Loan Payments', 'Debt', 'Minimum debt, loan, credit card, or installment payments.', true, false, true, 260),
 
-  ((SELECT id FROM categories WHERE slug = 'obligatory'), NULL, 'obligatory_insurance', 'expense', 'Insurance', 'Insurance', 'Insurance premiums and protection-related payments.', true, false, true, 270),
+  ((SELECT id FROM categories WHERE slug = 'obligatory_insurance'), NULL, 'obligatory_insurance', 'expense', 'Insurance', 'Insurance', 'Insurance premiums and protection-related payments.', true, false, true, 270),
 
-  ((SELECT id FROM categories WHERE slug = 'obligatory'), NULL, 'obligatory_housing_rent', 'expense', 'Housing or Rent', 'Housing', 'Rent, housing dues, and core shelter costs.', true, false, true, 110),
+  ((SELECT id FROM categories WHERE slug = 'obligatory_housing_rent'), NULL, 'obligatory_housing_rent', 'expense', 'Housing or Rent', 'Housing', 'Rent, housing dues, and core shelter costs.', true, false, true, 110),
 
 -- ------------------------------------------------------------------
 -- Discretionary: Non-essential expenses for lifestyle and enjoyment.
 -- ------------------------------------------------------------------
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_dining_out', 'expense', 'Dining Out', 'Dining', 'Restaurant, cafe, and takeout spending.', true, false, false, 300),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_dining_leisure'), NULL, 'discretionary_dining_out', 'expense', 'Dining Out', 'Dining', 'Restaurant, cafe, and takeout spending.', true, false, false, 300),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_shopping', 'expense', 'Shopping', 'Shopping', 'Clothing, gadgets, home items, and non-essential purchases.', true, false, false, 310),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_shopping'), NULL, 'discretionary_shopping', 'expense', 'Shopping', 'Shopping', 'Clothing, gadgets, home items, and non-essential purchases.', true, false, false, 310),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_entertainment', 'expense', 'Entertainment', 'Fun', 'Movies, games, subscriptions, events, and leisure.', true, false, false, 320),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_entertainment'), NULL, 'discretionary_entertainment', 'expense', 'Entertainment', 'Fun', 'Movies, games, subscriptions, events, and leisure.', true, false, false, 320),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_travel', 'expense', 'Travel and Leisure', 'Travel', 'Trips, outings, and leisure travel spending.', true, false, false, 330),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_travel'), NULL, 'discretionary_travel', 'expense', 'Travel and Leisure', 'Travel', 'Trips, outings, and leisure travel spending.', true, false, false, 330),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_alcohol_tobacco', 'expense', 'Alcoholic Beverages & Tobacco', 'Alcohol/Tobacco', 'Alcoholic drinks, cigarettes, vape, and related products.', true, false, true, 340),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_personal_misc'), NULL, 'discretionary_alcohol_tobacco', 'expense', 'Alcoholic Beverages & Tobacco', 'Alcohol/Tobacco', 'Alcoholic drinks, cigarettes, vape, and related products.', true, false, true, 340),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_clothing_footwear', 'expense', 'Clothing and Footwear', 'Clothing', 'Clothes, shoes, accessories, and tailoring services.', true, false, true, 345),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_shopping'), NULL, 'discretionary_clothing_footwear', 'expense', 'Clothing and Footwear', 'Clothing', 'Clothes, shoes, accessories, and tailoring services.', true, false, true, 345),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_furnishings', 'expense', 'Furnishings & Equipment', 'Furnishings', 'Furniture, appliances, tools, and household textiles.', true, false, true, 350),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_shopping'), NULL, 'discretionary_furnishings', 'expense', 'Furnishings & Equipment', 'Furnishings', 'Furniture, appliances, tools, and household textiles.', true, false, true, 350),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_recreation_culture', 'expense', 'Recreation & Culture', 'Recreation', 'Movies, concerts, hobbies, sports, books, games, and cultural events.', true, false, true, 355),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_entertainment'), NULL, 'discretionary_recreation_culture', 'expense', 'Recreation & Culture', 'Recreation', 'Movies, concerts, hobbies, sports, books, games, and cultural events.', true, false, true, 355),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_personal_care', 'expense', 'Personal Care', 'Personal Care', 'Haircuts, cosmetics, toiletries, salon services, and miscellaneous personal goods.', true, false, true, 360),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_personal_misc'), NULL, 'discretionary_personal_care', 'expense', 'Personal Care', 'Personal Care', 'Haircuts, cosmetics, toiletries, salon services, and miscellaneous personal goods.', true, false, true, 360),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_accommodation', 'expense', 'Accommodation', 'Hotel/Hostel', 'Hotels, resorts, and short-term lodging.', true, false, false, 365),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_travel'), NULL, 'discretionary_accommodation', 'expense', 'Accommodation', 'Hotel/Hostel', 'Hotels, resorts, and short-term lodging.', true, false, false, 365),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_religious_donations', 'expense', 'Church or Religious Donations', 'Donations', 'Church, religious, or faith community contributions.', true, true, false, 230),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_personal_misc'), NULL, 'discretionary_religious_donations', 'expense', 'Church or Religious Donations', 'Donations', 'Church, religious, or faith community contributions.', true, true, false, 230),
 
-  ((SELECT id FROM categories WHERE slug = 'discretionary'), NULL, 'discretionary_community_collections', 'expense', 'Barangay or Community Collections', 'Community', 'Barangay, neighborhood, group, or community contributions.', true, true, false, 240),
+  ((SELECT id FROM categories WHERE slug = 'discretionary_personal_misc'), NULL, 'discretionary_community_collections', 'expense', 'Barangay or Community Collections', 'Community', 'Barangay, neighborhood, group, or community contributions.', true, true, false, 240),
 
 -- --------------------------------------------------------------------------------------
 -- Financial Allocations: Non-essential expenses for financial goals and future planning.
 -- --------------------------------------------------------------------------------------
 
-  ((SELECT id FROM categories WHERE slug = 'financial_allocation'), NULL, 'financial_emergency_fund', 'expense', 'Emergency Fund', 'Emergency Fund', 'Emergency fund contributions.', true, false, true, 400),
+  ((SELECT id FROM categories WHERE slug = 'financial_emergency_fund'), NULL, 'financial_emergency_fund', 'expense', 'Emergency Fund Contribution', 'Emergency Fund', 'Emergency fund contributions.', true, false, true, 400),
 
-  ((SELECT id FROM categories WHERE slug = 'financial_allocation'), NULL, 'financial_savings', 'expense', 'Savings', 'Savings', 'General savings contributions.', true, false, true, 410),
+  ((SELECT id FROM categories WHERE slug = 'financial_savings'), NULL, 'financial_savings', 'expense', 'Savings Contribution', 'Savings', 'General savings contributions.', true, false, true, 410),
 
-  ((SELECT id FROM categories WHERE slug = 'financial_allocation'), NULL, 'financial_investments', 'expense', 'Investments', 'Investments', 'Investment contributions without portfolio tracking.', true, false, false, 420)
+  ((SELECT id FROM categories WHERE slug = 'financial_investments'), NULL, 'financial_investments', 'expense', 'Investment Contribution', 'Investments', 'Investment contributions without portfolio tracking.', true, false, false, 420)
 ON CONFLICT (slug) WHERE user_id IS NULL DO NOTHING;
 
 CREATE TABLE income_sources (
@@ -1419,6 +1651,42 @@ CREATE TABLE transaction_drafts (
 CREATE INDEX transaction_drafts_user_status_idx
   ON transaction_drafts (user_id, status, created_at DESC);
 
+CREATE TABLE user_transaction_retention_settings (
+  user_id uuid PRIMARY KEY REFERENCES profiles(user_id) ON DELETE CASCADE,
+  retention_days integer NOT NULL DEFAULT 2555,
+  auto_archive_enabled boolean NOT NULL DEFAULT false,
+  archive_after_days integer,
+  purge_after_days integer,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT user_transaction_retention_settings_days_chk
+    CHECK (
+      retention_days > 0
+      AND (archive_after_days IS NULL OR archive_after_days > 0)
+      AND (purge_after_days IS NULL OR purge_after_days > 0)
+      AND (
+        archive_after_days IS NULL
+        OR purge_after_days IS NULL
+        OR archive_after_days <= purge_after_days
+      )
+    )
+);
+
+CREATE TABLE transaction_retention_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+  transaction_id uuid NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+  action odin_transaction_retention_action NOT NULL,
+  actioned_at timestamptz NOT NULL DEFAULT now(),
+  retain_until date,
+  notes text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX transaction_retention_events_user_actioned_idx
+  ON transaction_retention_events (user_id, actioned_at DESC);
+
 CREATE TABLE recurring_transaction_occurrences (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   recurring_template_id uuid NOT NULL REFERENCES recurring_transaction_templates(id) ON DELETE CASCADE,
@@ -1676,6 +1944,30 @@ CREATE TABLE budget_events (
 CREATE INDEX budget_events_budget_created_idx
   ON budget_events (budget_id, created_at);
 
+CREATE TABLE budget_health_snapshots (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  budget_id uuid NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+  measured_at timestamptz NOT NULL DEFAULT now(),
+  health_status odin_budget_health_status NOT NULL,
+  allocated_amount_centavos bigint NOT NULL DEFAULT 0,
+  actual_amount_centavos bigint NOT NULL DEFAULT 0,
+  variance_amount_centavos bigint NOT NULL DEFAULT 0,
+  adherence_bps integer,
+  explanation text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT budget_health_snapshots_money_chk
+    CHECK (
+      allocated_amount_centavos >= 0
+      AND actual_amount_centavos >= 0
+      AND (adherence_bps IS NULL OR adherence_bps BETWEEN 0 AND 10000)
+    )
+);
+
+CREATE INDEX budget_health_snapshots_budget_measured_idx
+  ON budget_health_snapshots (budget_id, measured_at DESC);
+
 CREATE TABLE savings_goals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
@@ -1768,6 +2060,28 @@ CREATE INDEX savings_goal_contributions_user_date_idx
 CREATE UNIQUE INDEX savings_goal_contributions_transaction_unique_idx
   ON savings_goal_contributions (transaction_id)
   WHERE transaction_id IS NOT NULL;
+
+CREATE TABLE savings_goal_progress_snapshots (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  savings_goal_id uuid NOT NULL REFERENCES savings_goals(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+  snapshot_date date NOT NULL,
+  current_amount_centavos bigint NOT NULL,
+  progress_percent_bps integer,
+  projected_completion_date date,
+  progress_state odin_goal_progress_state NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT savings_goal_progress_snapshots_amount_chk
+    CHECK (
+      current_amount_centavos >= 0
+      AND (progress_percent_bps IS NULL OR progress_percent_bps BETWEEN 0 AND 10000)
+    ),
+  UNIQUE (savings_goal_id, snapshot_date)
+);
+
+CREATE INDEX savings_goal_progress_snapshots_goal_date_idx
+  ON savings_goal_progress_snapshots (savings_goal_id, snapshot_date DESC);
 
 CREATE TABLE savings_goal_budget_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1871,6 +2185,24 @@ CREATE TABLE debt_strategy_preferences (
   CONSTRAINT debt_strategy_preferences_extra_payment_chk
     CHECK (extra_payment_centavos >= 0)
 );
+
+CREATE TABLE user_debt_priorities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+  debt_account_id uuid NOT NULL REFERENCES debt_accounts(id) ON DELETE CASCADE,
+  priority_rank integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT user_debt_priorities_rank_chk
+    CHECK (priority_rank > 0),
+  UNIQUE (user_id, debt_account_id),
+  UNIQUE (user_id, priority_rank)
+);
+
+CREATE INDEX user_debt_priorities_user_rank_idx
+  ON user_debt_priorities (user_id, priority_rank);
 
 CREATE TABLE debt_repayment_projection_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2396,6 +2728,38 @@ CREATE TABLE anomaly_evaluation_features (
 CREATE INDEX anomaly_evaluation_features_driver_idx
   ON anomaly_evaluation_features (anomaly_evaluation_id, is_top_driver);
 
+CREATE TABLE overspending_evaluations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+  budget_id uuid REFERENCES budgets(id) ON DELETE SET NULL,
+  budget_allocation_id uuid REFERENCES budget_allocations(id) ON DELETE SET NULL,
+  category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
+  subcategory_id uuid REFERENCES subcategories(id) ON DELETE SET NULL,
+  evaluated_at timestamptz NOT NULL DEFAULT now(),
+  actual_amount_centavos bigint NOT NULL,
+  budgeted_amount_centavos bigint NOT NULL,
+  overspent_amount_centavos bigint NOT NULL,
+  overspent_percent_bps integer,
+  threshold_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+  should_alert_user boolean NOT NULL DEFAULT true,
+  explanation text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT overspending_evaluations_amounts_chk
+    CHECK (
+      actual_amount_centavos >= 0
+      AND budgeted_amount_centavos >= 0
+      AND overspent_amount_centavos >= 0
+      AND (overspent_percent_bps IS NULL OR overspent_percent_bps >= 0)
+    )
+);
+
+CREATE INDEX overspending_evaluations_user_evaluated_idx
+  ON overspending_evaluations (user_id, evaluated_at DESC);
+
+CREATE UNIQUE INDEX overspending_evaluations_id_user_unique_idx
+  ON overspending_evaluations (id, user_id);
+
 -- Central alert inbox. Anomaly alerts, budget overspending warnings,
 -- forecast advisories, savings milestones, and debt alerts all land here.
 CREATE TABLE alerts (
@@ -2423,6 +2787,7 @@ CREATE TABLE alerts (
   forecast_run_id uuid REFERENCES forecast_runs(id) ON DELETE SET NULL,
   budget_recommendation_id uuid REFERENCES budget_recommendations(id) ON DELETE SET NULL,
   anomaly_evaluation_id uuid REFERENCES anomaly_evaluations(id) ON DELETE CASCADE,
+  overspending_evaluation_id uuid REFERENCES overspending_evaluations(id) ON DELETE CASCADE,
 
   duplicate_key text,
   bundle_key text,
@@ -2454,6 +2819,11 @@ CREATE TABLE alerts (
       category <> 'anomaly_detection'
       OR anomaly_evaluation_id IS NOT NULL
     ),
+  CONSTRAINT alerts_budget_overspending_source_chk
+    CHECK (
+      category <> 'budget_overspending'
+      OR overspending_evaluation_id IS NOT NULL
+    ),
   CONSTRAINT alerts_status_timestamps_chk
     CHECK (
       (status <> 'read' OR read_at IS NOT NULL)
@@ -2481,6 +2851,10 @@ CREATE INDEX alerts_anomaly_evaluation_idx
   ON alerts (anomaly_evaluation_id)
   WHERE anomaly_evaluation_id IS NOT NULL;
 
+CREATE INDEX alerts_overspending_evaluation_idx
+  ON alerts (overspending_evaluation_id)
+  WHERE overspending_evaluation_id IS NOT NULL;
+
 CREATE UNIQUE INDEX alerts_id_user_unique_idx
   ON alerts (id, user_id);
 
@@ -2498,7 +2872,8 @@ CREATE TABLE alert_related_entities (
       'budget_recommendation',
       'savings_goal',
       'debt_account',
-      'anomaly_evaluation'
+      'anomaly_evaluation',
+      'overspending_evaluation'
     )
   ),
   entity_id uuid NOT NULL,
@@ -2766,6 +3141,26 @@ CREATE TABLE support_ticket_events (
 CREATE INDEX support_ticket_events_ticket_idx
   ON support_ticket_events (ticket_id, created_at);
 
+CREATE TABLE support_ticket_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id uuid NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
+  storage_bucket text NOT NULL,
+  storage_path text NOT NULL,
+  original_filename text NOT NULL,
+  content_type text,
+  size_bytes bigint,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  CONSTRAINT support_ticket_attachments_size_chk
+    CHECK (size_bytes IS NULL OR size_bytes >= 0),
+  UNIQUE (storage_bucket, storage_path)
+);
+
+CREATE INDEX support_ticket_attachments_ticket_idx
+  ON support_ticket_attachments (ticket_id, created_at);
+
 -- ============================================================================
 -- User Evaluation (SUS / ISO 25010 / Qualitative)
 -- ============================================================================
@@ -2816,13 +3211,13 @@ ALTER TABLE budgets
   ADD CONSTRAINT budgets_source_recommendation_fk
   FOREIGN KEY (source_recommendation_id, user_id)
   REFERENCES budget_recommendations(id, user_id)
-  ON DELETE SET NULL (source_recommendation_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE budgets
   ADD CONSTRAINT budgets_forecast_run_fk
   FOREIGN KEY (forecast_run_id, user_id)
   REFERENCES forecast_runs(id, user_id)
-  ON DELETE SET NULL (forecast_run_id);
+  ON DELETE SET NULL;
 
 CREATE TABLE report_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3031,25 +3426,25 @@ ALTER TABLE financial_profile_assessments
   ADD CONSTRAINT financial_profile_assessments_onboarding_owner_fk
   FOREIGN KEY (onboarding_session_id, user_id)
   REFERENCES onboarding_sessions(id, user_id)
-  ON DELETE SET NULL (onboarding_session_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE financial_profile_assignments
   ADD CONSTRAINT financial_profile_assignments_assessment_owner_fk
   FOREIGN KEY (assessment_id, user_id)
   REFERENCES financial_profile_assessments(id, user_id)
-  ON DELETE SET NULL (assessment_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE financial_profile_events
   ADD CONSTRAINT financial_profile_events_assessment_owner_fk
   FOREIGN KEY (assessment_id, user_id)
   REFERENCES financial_profile_assessments(id, user_id)
-  ON DELETE SET NULL (assessment_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE financial_profile_events
   ADD CONSTRAINT financial_profile_events_assignment_owner_fk
   FOREIGN KEY (assignment_id, user_id)
   REFERENCES financial_profile_assignments(id, user_id)
-  ON DELETE SET NULL (assignment_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE recurring_transaction_templates
   ADD CONSTRAINT recurring_transaction_templates_source_account_owner_fk
@@ -3067,7 +3462,7 @@ ALTER TABLE financial_obligations
   ADD CONSTRAINT financial_obligations_template_owner_fk
   FOREIGN KEY (recurring_template_id, user_id)
   REFERENCES recurring_transaction_templates(id, user_id)
-  ON DELETE SET NULL (recurring_template_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE transactions
   ADD CONSTRAINT transactions_source_account_owner_fk
@@ -3085,7 +3480,7 @@ ALTER TABLE transactions
   ADD CONSTRAINT transactions_recurring_template_owner_fk
   FOREIGN KEY (recurring_template_id, user_id)
   REFERENCES recurring_transaction_templates(id, user_id)
-  ON DELETE SET NULL (recurring_template_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE transaction_events
   ADD CONSTRAINT transaction_events_transaction_owner_fk
@@ -3097,7 +3492,7 @@ ALTER TABLE transaction_drafts
   ADD CONSTRAINT transaction_drafts_synced_transaction_owner_fk
   FOREIGN KEY (synced_transaction_id, user_id)
   REFERENCES transactions(id, user_id)
-  ON DELETE SET NULL (synced_transaction_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE recurring_transaction_occurrences
   ADD CONSTRAINT recurring_transaction_occurrences_template_owner_fk
@@ -3115,7 +3510,7 @@ ALTER TABLE savings_goals
   ADD CONSTRAINT savings_goals_linked_account_owner_fk
   FOREIGN KEY (linked_account_id, user_id)
   REFERENCES financial_accounts(id, user_id)
-  ON DELETE SET NULL (linked_account_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE savings_goal_contributions
   ADD CONSTRAINT savings_goal_contributions_goal_owner_fk
@@ -3127,13 +3522,13 @@ ALTER TABLE savings_goal_contributions
   ADD CONSTRAINT savings_goal_contributions_transaction_owner_fk
   FOREIGN KEY (transaction_id, user_id)
   REFERENCES transactions(id, user_id)
-  ON DELETE SET NULL (transaction_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE debt_accounts
   ADD CONSTRAINT debt_accounts_linked_account_owner_fk
   FOREIGN KEY (linked_account_id, user_id)
   REFERENCES financial_accounts(id, user_id)
-  ON DELETE SET NULL (linked_account_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE debt_payments
   ADD CONSTRAINT debt_payments_account_owner_fk
@@ -3145,13 +3540,13 @@ ALTER TABLE debt_payments
   ADD CONSTRAINT debt_payments_transaction_owner_fk
   FOREIGN KEY (transaction_id, user_id)
   REFERENCES transactions(id, user_id)
-  ON DELETE SET NULL (transaction_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE budget_recommendations
   ADD CONSTRAINT budget_recommendations_forecast_run_owner_fk
   FOREIGN KEY (forecast_run_id, user_id)
   REFERENCES forecast_runs(id, user_id)
-  ON DELETE SET NULL (forecast_run_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE anomaly_evaluations
   ADD CONSTRAINT anomaly_evaluations_transaction_owner_fk
@@ -3163,37 +3558,37 @@ ALTER TABLE alerts
   ADD CONSTRAINT alerts_transaction_owner_fk
   FOREIGN KEY (transaction_id, user_id)
   REFERENCES transactions(id, user_id)
-  ON DELETE SET NULL (transaction_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE alerts
   ADD CONSTRAINT alerts_budget_owner_fk
   FOREIGN KEY (budget_id, user_id)
   REFERENCES budgets(id, user_id)
-  ON DELETE SET NULL (budget_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE alerts
   ADD CONSTRAINT alerts_debt_account_owner_fk
   FOREIGN KEY (debt_account_id, user_id)
   REFERENCES debt_accounts(id, user_id)
-  ON DELETE SET NULL (debt_account_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE alerts
   ADD CONSTRAINT alerts_savings_goal_owner_fk
   FOREIGN KEY (savings_goal_id, user_id)
   REFERENCES savings_goals(id, user_id)
-  ON DELETE SET NULL (savings_goal_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE alerts
   ADD CONSTRAINT alerts_forecast_run_owner_fk
   FOREIGN KEY (forecast_run_id, user_id)
   REFERENCES forecast_runs(id, user_id)
-  ON DELETE SET NULL (forecast_run_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE alerts
   ADD CONSTRAINT alerts_budget_recommendation_owner_fk
   FOREIGN KEY (budget_recommendation_id, user_id)
   REFERENCES budget_recommendations(id, user_id)
-  ON DELETE SET NULL (budget_recommendation_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE alerts
   ADD CONSTRAINT alerts_anomaly_evaluation_owner_fk
@@ -3205,25 +3600,25 @@ ALTER TABLE alerts
   ADD CONSTRAINT alerts_parent_owner_fk
   FOREIGN KEY (parent_alert_id, user_id)
   REFERENCES alerts(id, user_id)
-  ON DELETE SET NULL (parent_alert_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE anomaly_whitelist_rules
   ADD CONSTRAINT anomaly_whitelist_rules_alert_owner_fk
   FOREIGN KEY (created_from_alert_id, user_id)
   REFERENCES alerts(id, user_id)
-  ON DELETE SET NULL (created_from_alert_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE anomaly_whitelist_rules
   ADD CONSTRAINT anomaly_whitelist_rules_evaluation_owner_fk
   FOREIGN KEY (created_from_anomaly_evaluation_id, user_id)
   REFERENCES anomaly_evaluations(id, user_id)
-  ON DELETE SET NULL (created_from_anomaly_evaluation_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE alert_suppression_rules
   ADD CONSTRAINT alert_suppression_rules_alert_owner_fk
   FOREIGN KEY (created_from_alert_id, user_id)
   REFERENCES alerts(id, user_id)
-  ON DELETE SET NULL (created_from_alert_id);
+  ON DELETE SET NULL;
 
 ALTER TABLE debt_hardship_plans
   ADD CONSTRAINT debt_hardship_plans_account_owner_fk
@@ -3241,7 +3636,55 @@ ALTER TABLE savings_goal_contributions
   ADD CONSTRAINT savings_goal_contributions_budget_owner_fk
   FOREIGN KEY (source_budget_id, user_id)
   REFERENCES budgets(id, user_id)
-  ON DELETE SET NULL (source_budget_id);
+  ON DELETE SET NULL;
+
+ALTER TABLE financial_profile_reclassification_schedules
+  ADD CONSTRAINT financial_profile_reclassification_schedules_assessment_owner_fk
+  FOREIGN KEY (last_assessment_id, user_id)
+  REFERENCES financial_profile_assessments(id, user_id)
+  ON DELETE SET NULL;
+
+ALTER TABLE transaction_retention_events
+  ADD CONSTRAINT transaction_retention_events_transaction_owner_fk
+  FOREIGN KEY (transaction_id, user_id)
+  REFERENCES transactions(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE budget_health_snapshots
+  ADD CONSTRAINT budget_health_snapshots_budget_owner_fk
+  FOREIGN KEY (budget_id, user_id)
+  REFERENCES budgets(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE savings_goal_progress_snapshots
+  ADD CONSTRAINT savings_goal_progress_snapshots_goal_owner_fk
+  FOREIGN KEY (savings_goal_id, user_id)
+  REFERENCES savings_goals(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE user_debt_priorities
+  ADD CONSTRAINT user_debt_priorities_account_owner_fk
+  FOREIGN KEY (debt_account_id, user_id)
+  REFERENCES debt_accounts(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE overspending_evaluations
+  ADD CONSTRAINT overspending_evaluations_budget_owner_fk
+  FOREIGN KEY (budget_id, user_id)
+  REFERENCES budgets(id, user_id)
+  ON DELETE SET NULL;
+
+ALTER TABLE alerts
+  ADD CONSTRAINT alerts_overspending_evaluation_owner_fk
+  FOREIGN KEY (overspending_evaluation_id, user_id)
+  REFERENCES overspending_evaluations(id, user_id)
+  ON DELETE CASCADE;
+
+ALTER TABLE support_ticket_attachments
+  ADD CONSTRAINT support_ticket_attachments_ticket_owner_fk
+  FOREIGN KEY (ticket_id, user_id)
+  REFERENCES support_tickets(id, user_id)
+  ON DELETE CASCADE;
 
 -- Row-level security. Authenticated clients can only access rows owned by
 -- auth.uid(). System lookup tables are readable, but writes are left to service
@@ -3362,12 +3805,46 @@ CREATE POLICY financial_profile_events_owner_access
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
-ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
-CREATE POLICY categories_read_authenticated
-  ON categories
+ALTER TABLE financial_profile_reclassification_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY financial_profile_reclassification_schedules_owner_access
+  ON financial_profile_reclassification_schedules
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE category_groups ENABLE ROW LEVEL SECURITY;
+CREATE POLICY category_groups_read_authenticated
+  ON category_groups
   FOR SELECT
   TO authenticated
   USING (true);
+
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY categories_read_available
+  ON categories
+  FOR SELECT
+  TO authenticated
+  USING (is_system = true OR user_id = auth.uid());
+
+CREATE POLICY categories_user_insert
+  ON categories
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (is_system = false AND user_id = auth.uid());
+
+CREATE POLICY categories_user_update
+  ON categories
+  FOR UPDATE
+  TO authenticated
+  USING (is_system = false AND user_id = auth.uid())
+  WITH CHECK (is_system = false AND user_id = auth.uid());
+
+CREATE POLICY categories_user_delete
+  ON categories
+  FOR DELETE
+  TO authenticated
+  USING (is_system = false AND user_id = auth.uid());
 
 ALTER TABLE subcategories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY subcategories_read_available
@@ -3394,6 +3871,14 @@ CREATE POLICY subcategories_user_delete
   FOR DELETE
   TO authenticated
   USING (is_system = false AND user_id = auth.uid());
+
+ALTER TABLE user_category_restrictions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY user_category_restrictions_owner_access
+  ON user_category_restrictions
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
 
 ALTER TABLE income_sources ENABLE ROW LEVEL SECURITY;
 CREATE POLICY income_sources_owner_access
@@ -3446,6 +3931,22 @@ CREATE POLICY transaction_events_owner_access
 ALTER TABLE transaction_drafts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY transaction_drafts_owner_access
   ON transaction_drafts
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE user_transaction_retention_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY user_transaction_retention_settings_owner_access
+  ON user_transaction_retention_settings
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE transaction_retention_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY transaction_retention_events_owner_access
+  ON transaction_retention_events
   FOR ALL
   TO authenticated
   USING (user_id = auth.uid())
@@ -3520,6 +4021,14 @@ CREATE POLICY budget_events_owner_access
     AND (actor_user_id IS NULL OR actor_user_id = auth.uid())
   );
 
+ALTER TABLE budget_health_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY budget_health_snapshots_owner_access
+  ON budget_health_snapshots
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
 ALTER TABLE savings_goals ENABLE ROW LEVEL SECURITY;
 CREATE POLICY savings_goals_owner_access
   ON savings_goals
@@ -3539,6 +4048,14 @@ CREATE POLICY savings_goal_allocation_preferences_owner_access
 ALTER TABLE savings_goal_contributions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY savings_goal_contributions_owner_access
   ON savings_goal_contributions
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE savings_goal_progress_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY savings_goal_progress_snapshots_owner_access
+  ON savings_goal_progress_snapshots
   FOR ALL
   TO authenticated
   USING (user_id = auth.uid())
@@ -3599,6 +4116,14 @@ CREATE POLICY debt_payments_owner_access
 ALTER TABLE debt_strategy_preferences ENABLE ROW LEVEL SECURITY;
 CREATE POLICY debt_strategy_preferences_owner_access
   ON debt_strategy_preferences
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE user_debt_priorities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY user_debt_priorities_owner_access
+  ON user_debt_priorities
   FOR ALL
   TO authenticated
   USING (user_id = auth.uid())
@@ -3880,6 +4405,14 @@ CREATE POLICY anomaly_evaluation_features_owner_access
         AND anomaly_evaluations.user_id = auth.uid()
     )
   );
+
+ALTER TABLE overspending_evaluations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY overspending_evaluations_owner_access
+  ON overspending_evaluations
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
 
 ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY alerts_owner_access
@@ -4349,6 +4882,14 @@ CREATE POLICY support_ticket_events_owner_access
     )
   );
 
+ALTER TABLE support_ticket_attachments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY support_ticket_attachments_owner_access
+  ON support_ticket_attachments
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
 -- ============================================================================
 -- Gap 9: user_evaluations - RLS
 -- ============================================================================
@@ -4381,4 +4922,55 @@ CREATE POLICY user_evaluation_responses_owner_access
       WHERE user_evaluations.id = user_evaluation_responses.evaluation_id
         AND user_evaluations.user_id = auth.uid()
     )
+  );
+
+ALTER TABLE metro_manila_localities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY metro_manila_localities_read_authenticated
+  ON metro_manila_localities
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('support-ticket-attachments', 'support-ticket-attachments', false)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY support_ticket_attachments_storage_select
+  ON storage.objects
+  FOR SELECT
+  TO authenticated
+  USING (
+    bucket_id = 'support-ticket-attachments'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY support_ticket_attachments_storage_insert
+  ON storage.objects
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    bucket_id = 'support-ticket-attachments'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY support_ticket_attachments_storage_update
+  ON storage.objects
+  FOR UPDATE
+  TO authenticated
+  USING (
+    bucket_id = 'support-ticket-attachments'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'support-ticket-attachments'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY support_ticket_attachments_storage_delete
+  ON storage.objects
+  FOR DELETE
+  TO authenticated
+  USING (
+    bucket_id = 'support-ticket-attachments'
+    AND (storage.foldername(name))[1] = auth.uid()::text
   );
