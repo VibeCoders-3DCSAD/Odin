@@ -1,14 +1,19 @@
 import { jest } from "@jest/globals";
 import request from "supertest";
 
-jest.mock("../../lib/supabase.js", () => ({
-  supabase: {
+jest.mock("../../lib/supabase.js", () => {
+  const mockClient = {
     auth: {
       getUser: jest.fn(),
     },
     from: jest.fn(),
-  },
-}));
+  };
+
+  return {
+    supabase: mockClient,
+    createAuthenticatedSupabaseClient: () => mockClient,
+  };
+});
 
 import app from "../../app.js";
 import { supabase } from "../../lib/supabase.js";
@@ -69,7 +74,7 @@ describe("POST /odin/api/auth/session", () => {
     });
   });
 
-  it("returns 200 and bootstraps profile when it does not exist", async () => {
+  it("returns 200 and bootstraps profile idempotently", async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: validUserId } },
       error: null,
@@ -80,7 +85,6 @@ describe("POST /odin/api/auth/session", () => {
     const onboardingResult = { status: "in_progress" };
 
     mockFrom
-      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: newProfileResult, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: privacyResult, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: onboardingResult, error: null }));
@@ -93,10 +97,9 @@ describe("POST /odin/api/auth/session", () => {
     expect(response.status).toBe(200);
     expect(response.body.payload.profile.id).toBe(validProfileId);
     expect(mockFrom).toHaveBeenNthCalledWith(1, "profiles");
-    expect(mockFrom).toHaveBeenNthCalledWith(2, "profiles");
   });
 
-  it("returns 200 and bootstraps privacy settings when they do not exist", async () => {
+  it("returns 200 and bootstraps privacy settings idempotently", async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: validUserId } },
       error: null,
@@ -108,7 +111,6 @@ describe("POST /odin/api/auth/session", () => {
 
     mockFrom
       .mockReturnValueOnce(createMockQuery({ data: profileResult, error: null }))
-      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: newPrivacyResult, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: onboardingResult, error: null }));
 
@@ -148,7 +150,6 @@ describe("POST /odin/api/auth/session", () => {
     });
 
     mockFrom
-      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: null, error: { message: "Insert failed" } }));
 
     const response = await request(app)

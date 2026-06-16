@@ -611,6 +611,33 @@ CREATE TABLE user_privacy_settings (
     CHECK (data_retention_days IS NULL OR data_retention_days > 0)
 );
 
+CREATE OR REPLACE FUNCTION handle_new_auth_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (user_id, display_name)
+  VALUES (
+    NEW.id,
+    NULLIF(trim(COALESCE(NEW.raw_user_meta_data ->> 'display_name', '')), '')
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+
+  INSERT INTO public.user_privacy_settings (user_id)
+  VALUES (NEW.id)
+  ON CONFLICT (user_id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION handle_new_auth_user();
+
 CREATE TABLE user_consents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,

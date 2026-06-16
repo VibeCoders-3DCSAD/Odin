@@ -1,6 +1,5 @@
 import { Router } from "express";
 import type { Response } from "express";
-import { supabase } from "../lib/supabase.js";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { VALID_PLATFORMS } from "../lib/constants.js";
@@ -9,6 +8,7 @@ const router = Router();
 
 router.post("/push-device-tokens", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   const userId = request.userId!;
+  const authenticatedSupabase = request.supabase!;
   const { device_token, platform } = request.body?.payload ?? {};
 
   if (!device_token) {
@@ -35,7 +35,7 @@ router.post("/push-device-tokens", requireAuth, async (request: AuthenticatedReq
     return;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await authenticatedSupabase
     .from("push_device_tokens")
     .upsert(
       {

@@ -1,13 +1,18 @@
 import { jest } from "@jest/globals";
 import type { Response } from "express";
 
-jest.mock("../../lib/supabase.js", () => ({
-  supabase: {
+jest.mock("../../lib/supabase.js", () => {
+  const mockClient = {
     auth: {
       getUser: jest.fn(),
     },
-  },
-}));
+  };
+
+  return {
+    supabase: mockClient,
+    createAuthenticatedSupabaseClient: () => mockClient,
+  };
+});
 
 import { requireAuth } from "../../middleware/auth.js";
 import type { AuthenticatedRequest } from "../../middleware/auth.js";
@@ -124,6 +129,8 @@ describe("requireAuth middleware", () => {
     await requireAuth(req, res as unknown as Response, next);
 
     expect(req.userId).toBe(userId);
+    expect(req.accessToken).toBe("valid-token");
+    expect(req.supabase).toBe(supabase);
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
   });

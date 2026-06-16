@@ -1,6 +1,5 @@
 import { Router } from "express";
 import type { Response } from "express";
-import { supabase } from "../lib/supabase.js";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { getValidLocalities } from "../lib/locality-cache.js";
@@ -11,10 +10,28 @@ import {
 
 const router = Router();
 
+function formatDateOnly(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function getEligibleBirthDateBoundary(yearsAgo: number): string {
+  const now = new Date();
+  return formatDateOnly(
+    new Date(
+      Date.UTC(
+        now.getUTCFullYear() - yearsAgo,
+        now.getUTCMonth(),
+        now.getUTCDate(),
+      ),
+    ),
+  );
+}
+
 router.get("/eligibility-profile", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   const userId = request.userId!;
+  const authenticatedSupabase = request.supabase!;
 
-  const { data: profile, error } = await supabase
+  const { data: profile, error } = await authenticatedSupabase
     .from("user_eligibility_profiles")
     .select("*")
     .eq("user_id", userId)
@@ -35,6 +52,7 @@ router.get("/eligibility-profile", requireAuth, async (request: AuthenticatedReq
 
 router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   const userId = request.userId!;
+  const authenticatedSupabase = request.supabase!;
   const {
     date_of_birth,
     is_filipino,
@@ -46,9 +64,23 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
 
   if (date_of_birth !== undefined) {
     const birthDate = new Date(date_of_birth);
-    const now = new Date();
-    const age = now.getFullYear() - birthDate.getFullYear();
-    if (age < 20 || age > 40) {
+
+    if (Number.isNaN(birthDate.getTime())) {
+      response.status(400).json({
+        error: "Bad Request",
+        message: "Date of birth must be a valid date",
+      });
+      return;
+    }
+
+    const normalizedBirthDate = formatDateOnly(birthDate);
+    const youngestAllowedBirthDate = getEligibleBirthDateBoundary(20);
+    const oldestAllowedBirthDate = getEligibleBirthDateBoundary(40);
+
+    if (
+      normalizedBirthDate > youngestAllowedBirthDate
+      || normalizedBirthDate < oldestAllowedBirthDate
+    ) {
       response.status(400).json({
         error: "Bad Request",
         message: "Age must be between 20 and 40 years",
@@ -102,7 +134,7 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
     return;
   }
 
-  const { data: existing, error: fetchError } = await supabase
+  const { data: existing, error: fetchError } = await authenticatedSupabase
     .from("user_eligibility_profiles")
     .select("*")
     .eq("user_id", userId)
@@ -153,14 +185,17 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
   }
 
   if (allRequiredPresent) {
-    upsertData.eligibility_confirmed_at = new Date().toISOString();
+    upsertData.eligibility_confirmed_at =
+      existing?.eligibility_confirmed_at ?? new Date().toISOString();
+  } else {
+    upsertData.eligibility_confirmed_at = null;
   }
 
   upsertData.updated_at = new Date().toISOString();
 
-  const { data, error } = await supabase
+  const { data, error } = await authenticatedSupabase
     .from("user_eligibility_profiles")
-    .upsert(upsertData)
+    .upsert(upsertData, { onConflict: "user_id" })
     .select("id, updated_at")
     .single();
 

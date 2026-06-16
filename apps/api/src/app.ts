@@ -29,7 +29,9 @@ app.use("/odin/api", eligibilityProfileRoutes);
 app.use("/odin/api", pushDeviceTokenRoutes);
 
 app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {
-  if (error.type === "entity.parse.failed" || error instanceof SyntaxError) {
+  const parseError = error as Error & { type?: string };
+
+  if (parseError.type === "entity.parse.failed" || error instanceof SyntaxError) {
     response.status(400).json({
       error: "Bad Request",
       message: "Invalid JSON in request body",

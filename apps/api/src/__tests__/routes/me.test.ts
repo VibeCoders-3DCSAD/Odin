@@ -1,17 +1,23 @@
 import { jest } from "@jest/globals";
 import request from "supertest";
 
-jest.mock("../../lib/supabase.js", () => ({
-  supabase: {
+jest.mock("../../lib/supabase.js", () => {
+  const mockClient = {
     auth: {
       getUser: jest.fn(),
     },
     from: jest.fn(),
-  },
-}));
+  };
+
+  return {
+    supabase: mockClient,
+    createAuthenticatedSupabaseClient: () => mockClient,
+  };
+});
 
 import app from "../../app.js";
 import { supabase } from "../../lib/supabase.js";
+import { clearLocalitiesCache } from "../../lib/locality-cache.js";
 import { createMockQuery } from "../helpers/supabase.js";
 import type { MockQueryResult } from "../helpers/supabase.js";
 import {
@@ -24,6 +30,10 @@ const mockGetUser = supabase.auth.getUser as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
 
 describe("GET /odin/api/me", () => {
+  beforeEach(() => {
+    clearLocalitiesCache();
+  });
+
   function mockAuth() {
     mockGetUser.mockResolvedValue({
       data: { user: { id: validUserId } },
@@ -94,6 +104,58 @@ describe("GET /odin/api/me", () => {
     expect(response.body.payload.current_profile).toBeNull();
   });
 
+  it("respects include expansions", async () => {
+    mockAuth();
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery({
+        data: { display_name: "Juan Dela Cruz", metro_manila_city: "Quezon City" },
+        error: null,
+      }))
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue({
+                data: [{ consent_kind: "terms", status: "granted", version: "2026-06", recorded_at: "2026-06-12T12:00:00Z" }],
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      });
+
+    const response = await request(app)
+      .get("/odin/api/me?include=profile,consents")
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload).toEqual({
+      profile: {
+        display_name: "Juan Dela Cruz",
+        metro_manila_city: "Quezon City",
+      },
+      consents: [
+        {
+          consent_kind: "terms",
+          status: "granted",
+          version: "2026-06",
+          recorded_at: "2026-06-12T12:00:00Z",
+        },
+      ],
+    });
+  });
+
+  it("returns 400 when include contains unsupported expansions", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .get("/odin/api/me?include=profile,wat")
+      .set(authHeader());
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns 401 when no authorization header", async () => {
     const response = await request(app).get("/odin/api/me");
     expect(response.status).toBe(401);
@@ -144,6 +206,10 @@ describe("GET /odin/api/me", () => {
 });
 
 describe("PATCH /odin/api/me", () => {
+  beforeEach(() => {
+    clearLocalitiesCache();
+  });
+
   function mockAuth() {
     mockGetUser.mockResolvedValue({
       data: { user: { id: validUserId } },
@@ -153,6 +219,13 @@ describe("PATCH /odin/api/me", () => {
 
   it("returns 200 with updated profile", async () => {
     mockAuth();
+
+    mockFrom.mockReturnValueOnce({
+      select: jest.fn().mockResolvedValue({
+        data: [{ code: "makati", name: "Makati" }],
+        error: null,
+      }),
+    });
 
     const mockSingle = jest.fn().mockReturnValue({
       data: { display_name: "Juan Updated", metro_manila_city: "Makati" },
@@ -247,6 +320,24 @@ describe("PATCH /odin/api/me", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when metro_manila_city is not canonical", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce({
+      select: jest.fn().mockResolvedValue({
+        data: [{ code: "makati", name: "Makati" }],
+        error: null,
+      }),
+    });
+
+    const response = await request(app)
+      .patch("/odin/api/me")
+      .set(authHeader())
+      .send({ payload: { metro_manila_city: "QC" } });
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns 401 when no authorization header", async () => {
     const response = await request(app)
       .patch("/odin/api/me")
@@ -272,6 +363,13 @@ describe("PATCH /odin/api/me", () => {
   it("returns 404 when profile not found after update", async () => {
     mockAuth();
 
+    mockFrom.mockReturnValueOnce({
+      select: jest.fn().mockResolvedValue({
+        data: [{ code: "makati", name: "Makati" }],
+        error: null,
+      }),
+    });
+
     const mockSingle = jest.fn().mockReturnValue({ data: null, error: null });
     const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
     const mockEq = jest.fn().mockReturnValue({ select: mockSelect });
@@ -289,6 +387,13 @@ describe("PATCH /odin/api/me", () => {
   it("returns 500 when getUser succeeds but update throws", async () => {
     mockAuth();
 
+    mockFrom.mockReturnValueOnce({
+      select: jest.fn().mockResolvedValue({
+        data: [{ code: "makati", name: "Makati" }],
+        error: null,
+      }),
+    });
+
     const mockUpdate = jest.fn(() => { throw new Error("DB error"); });
     mockFrom.mockReturnValue({ update: mockUpdate });
 
@@ -296,6 +401,24 @@ describe("PATCH /odin/api/me", () => {
       .patch("/odin/api/me")
       .set(authHeader())
       .send(validUpdateMePayload());
+
+    expect(response.status).toBe(500);
+  });
+
+  it("returns 500 when metro manila locality validation fails", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce({
+      select: jest.fn().mockResolvedValue({
+        data: null,
+        error: { message: "DB error" },
+      }),
+    });
+
+    const response = await request(app)
+      .patch("/odin/api/me")
+      .set(authHeader())
+      .send({ payload: { metro_manila_city: "Makati" } });
 
     expect(response.status).toBe(500);
   });

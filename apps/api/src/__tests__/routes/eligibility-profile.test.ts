@@ -1,14 +1,19 @@
 import { jest } from "@jest/globals";
 import request from "supertest";
 
-jest.mock("../../lib/supabase.js", () => ({
-  supabase: {
+jest.mock("../../lib/supabase.js", () => {
+  const mockClient = {
     auth: {
       getUser: jest.fn(),
     },
     from: jest.fn(),
-  },
-}));
+  };
+
+  return {
+    supabase: mockClient,
+    createAuthenticatedSupabaseClient: () => mockClient,
+  };
+});
 
 import app from "../../app.js";
 import { supabase } from "../../lib/supabase.js";
@@ -202,7 +207,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
     expect(typeof upsertData!.eligibility_confirmed_at).toBe("string");
   });
 
-  it("does NOT include eligibility_confirmed_at when some required fields are missing", async () => {
+  it("clears eligibility_confirmed_at when some required fields are missing", async () => {
     mockAuth();
 
     let upsertData: Record<string, unknown> | undefined;
@@ -225,10 +230,10 @@ describe("PATCH /odin/api/eligibility-profile", () => {
       .send({ payload: { is_filipino: true } });
 
     expect(upsertData).toBeDefined();
-    expect(upsertData).not.toHaveProperty("eligibility_confirmed_at");
+    expect(upsertData).toHaveProperty("eligibility_confirmed_at", null);
   });
 
-  it("does NOT include eligibility_confirmed_at when is_filipino is false", async () => {
+  it("clears eligibility_confirmed_at when is_filipino is false", async () => {
     mockAuth();
 
     let upsertData: Record<string, unknown> | undefined;
@@ -258,7 +263,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
       });
 
     expect(upsertData).toBeDefined();
-    expect(upsertData).not.toHaveProperty("eligibility_confirmed_at");
+    expect(upsertData).toHaveProperty("eligibility_confirmed_at", null);
   });
 
   it("sets eligibility_confirmed_at when merging with existing data across requests", async () => {
@@ -380,6 +385,64 @@ describe("PATCH /odin/api/eligibility-profile", () => {
     expect(response.body).toMatchObject({
       message: expect.stringMatching(/age/i),
     });
+  });
+
+  it("returns 400 when date_of_birth is before the exact 20-year boundary", async () => {
+    mockAuth();
+
+    const today = new Date();
+    const boundaryDate = new Date(Date.UTC(
+      today.getUTCFullYear() - 20,
+      today.getUTCMonth(),
+      today.getUTCDate() + 1,
+    )).toISOString().slice(0, 10);
+
+    const response = await request(app)
+      .patch("/odin/api/eligibility-profile")
+      .set(authHeader())
+      .send({
+        payload: {
+          ...validEligibilityPayload().payload,
+          date_of_birth: boundaryDate,
+        },
+      });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("clears eligibility_confirmed_at when a patch makes the profile incomplete", async () => {
+    mockAuth();
+
+    let upsertData: Record<string, unknown> | undefined;
+    const mockSingle = jest.fn().mockReturnValue({
+      data: { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" },
+      error: null,
+    });
+    const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
+    const mockUpsert = jest.fn().mockImplementation((data: Record<string, unknown>) => {
+      upsertData = data;
+      return { select: mockSelect };
+    });
+
+    mockFrom
+      .mockReturnValueOnce(mockExistingProfile({
+        date_of_birth: "1996-06-15",
+        is_filipino: true,
+        metro_manila_presence: "lives_in_metro_manila",
+        metro_manila_locality_code: "quezon_city",
+        primary_employment_classification: "full_time_employee",
+        primary_employment_other: null,
+        eligibility_confirmed_at: "2026-06-10T00:00:00Z",
+      }))
+      .mockReturnValueOnce({ upsert: mockUpsert });
+
+    await request(app)
+      .patch("/odin/api/eligibility-profile")
+      .set(authHeader())
+      .send({ payload: { is_filipino: false } });
+
+    expect(upsertData).toBeDefined();
+    expect(upsertData).toHaveProperty("eligibility_confirmed_at", null);
   });
 
   it("returns 400 when metro_manila_locality_code is invalid", async () => {

@@ -1,8 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
-import { supabase } from "../lib/supabase.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  createAuthenticatedSupabaseClient,
+  supabase,
+} from "../lib/supabase.js";
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
+  accessToken?: string;
+  supabase?: SupabaseClient;
 }
 
 export async function requireAuth(
@@ -41,5 +47,7 @@ export async function requireAuth(
   }
 
   request.userId = data.user.id;
+  request.accessToken = token;
+  request.supabase = createAuthenticatedSupabaseClient(token);
   next();
 }

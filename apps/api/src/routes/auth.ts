@@ -1,6 +1,11 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { supabase } from "../lib/supabase.js";
+import {
+  createAuthenticatedSupabaseClient,
+  supabase,
+} from "../lib/supabase.js";
+import { requireAuth } from "../middleware/auth.js";
+import type { AuthenticatedRequest } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -68,48 +73,38 @@ router.post("/register", async (request: Request, response: Response) => {
   });
 });
 
-async function ensureProfile(userId: string): Promise<{ id: string }> {
-  const { data: profile, error: profileError } = await supabase
+async function ensureProfile(
+  userId: string,
+  authenticatedSupabase = supabase,
+): Promise<{ id: string }> {
+  const { data: profile, error: profileError } = await authenticatedSupabase
     .from("profiles")
-    .select("id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (profile) return profile;
-
-  const { data: newProfile, error: insertError } = await supabase
-    .from("profiles")
-    .insert({ user_id: userId })
+    .upsert({ user_id: userId }, { onConflict: "user_id" })
     .select("id")
     .single();
 
-  if (insertError || !newProfile) {
+  if (profileError || !profile) {
     throw new Error("Failed to create profile");
   }
 
-  return newProfile;
+  return profile;
 }
 
-async function ensurePrivacySettings(userId: string): Promise<{ personalization_enabled: boolean } | null> {
-  const { data: privacy, error: privacyError } = await supabase
+async function ensurePrivacySettings(
+  userId: string,
+  authenticatedSupabase = supabase,
+): Promise<{ personalization_enabled: boolean } | null> {
+  const { data: privacy, error: privacyError } = await authenticatedSupabase
     .from("user_privacy_settings")
-    .select("personalization_enabled")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (privacy) return privacy;
-
-  const { data: newPrivacy, error: insertError } = await supabase
-    .from("user_privacy_settings")
-    .insert({ user_id: userId })
+    .upsert({ user_id: userId }, { onConflict: "user_id" })
     .select("personalization_enabled")
     .single();
 
-  if (insertError || !newPrivacy) {
+  if (privacyError || !privacy) {
     return null;
   }
 
-  return newPrivacy;
+  return privacy;
 }
 
 router.post("/session", async (request: Request, response: Response) => {
@@ -145,10 +140,11 @@ router.post("/session", async (request: Request, response: Response) => {
   }
 
   const userId = userData.user.id;
+  const authenticatedSupabase = createAuthenticatedSupabaseClient(token);
 
   let profile: { id: string };
   try {
-    profile = await ensureProfile(userId);
+    profile = await ensureProfile(userId, authenticatedSupabase);
   } catch {
     response.status(500).json({
       error: "Internal Server Error",
@@ -157,9 +153,9 @@ router.post("/session", async (request: Request, response: Response) => {
     return;
   }
 
-  const privacy = await ensurePrivacySettings(userId);
+  const privacy = await ensurePrivacySettings(userId, authenticatedSupabase);
 
-  const { data: onboarding } = await supabase
+  const { data: onboarding } = await authenticatedSupabase
     .from("onboarding_sessions")
     .select("status")
     .eq("user_id", userId)
@@ -215,20 +211,24 @@ router.post("/password-reset", async (request: Request, response: Response) => {
   });
 });
 
-router.post("/logout", async (_request: Request, response: Response) => {
-  const { error } = await supabase.auth.signOut();
+router.post(
+  "/logout",
+  requireAuth,
+  async (request: AuthenticatedRequest, response: Response) => {
+    const { error } = await request.supabase!.auth.signOut();
 
-  if (error) {
-    response.status(500).json({
-      error: "Internal Server Error",
-      message: "Logout failed",
+    if (error) {
+      response.status(500).json({
+        error: "Internal Server Error",
+        message: "Logout failed",
+      });
+      return;
+    }
+
+    response.status(200).json({
+      payload: { logged_out: true },
     });
-    return;
-  }
-
-  response.status(200).json({
-    payload: { logged_out: true },
-  });
-});
+  },
+);
 
 export default router;
