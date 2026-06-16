@@ -92,7 +92,7 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
   if (metro_manila_locality_code !== undefined) {
     let validCodes: string[];
     try {
-      validCodes = await getValidLocalities();
+      validCodes = await getValidLocalities(authenticatedSupabase);
     } catch {
       response.status(500).json({
         error: "Internal Server Error",

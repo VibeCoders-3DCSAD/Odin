@@ -1,4 +1,4 @@
-import { supabase } from "./supabase.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -14,12 +14,14 @@ interface CacheEntry {
 
 let cache: CacheEntry | null = null;
 
-async function getCachedLocalities(): Promise<LocalityRecord[]> {
+async function getCachedLocalities(
+  authenticatedSupabase: SupabaseClient,
+): Promise<LocalityRecord[]> {
   if (cache && Date.now() - cache.timestamp < CACHE_TTL_MS) {
     return cache.localities;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await authenticatedSupabase
     .from("metro_manila_localities")
     .select("code, name");
 
@@ -35,13 +37,17 @@ async function getCachedLocalities(): Promise<LocalityRecord[]> {
   return cache.localities;
 }
 
-export async function getValidLocalities(): Promise<string[]> {
-  const localities = await getCachedLocalities();
+export async function getValidLocalities(
+  authenticatedSupabase: SupabaseClient,
+): Promise<string[]> {
+  const localities = await getCachedLocalities(authenticatedSupabase);
   return localities.map((row) => row.code);
 }
 
-export async function getValidLocalityNames(): Promise<string[]> {
-  const localities = await getCachedLocalities();
+export async function getValidLocalityNames(
+  authenticatedSupabase: SupabaseClient,
+): Promise<string[]> {
+  const localities = await getCachedLocalities(authenticatedSupabase);
   return localities.map((row) => row.name);
 }
 

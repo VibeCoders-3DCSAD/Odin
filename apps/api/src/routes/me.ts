@@ -154,7 +154,7 @@ router.patch("/", requireAuth, async (request: AuthenticatedRequest, response: R
     } else {
       let validLocalityNames: string[];
       try {
-        validLocalityNames = await getValidLocalityNames();
+        validLocalityNames = await getValidLocalityNames(authenticatedSupabase);
       } catch {
         response.status(500).json({
           error: "Internal Server Error",
