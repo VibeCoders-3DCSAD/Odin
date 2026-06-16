@@ -281,6 +281,7 @@ Use a linear branch sequence so each merge unlocks the next dependent slice. Kee
 
 2. `feat/identity-governance`
    - Scope: auth registration, auth session exchange, password reset, logout, `me`, eligibility profile, privacy settings, consents, export requests, account deletion requests, and push device tokens.
+   - Scope: auth registration, auth session exchange, password reset, logout, `me`, eligibility profile, privacy settings, consents, export requests, account deletion requests, and push device tokens.
    - Reason: onboarding and all user-owned data depend on identity and consent state.
    - Review size: keep account governance separate from onboarding so reviewers do not mix lifecycle rules with profile logic.
 
