@@ -6,32 +6,35 @@ Implement the backend slice for `VIB-95 - Phase 1a: Identity & Auth`.
 
 Scope only:
 
+- auth registration
 - auth session bootstrap
 - user profile read and update
 - eligibility profile read and update
 - push device token registration
 
-Route source: `plans/odin-api-backend-implementation-plan.md:497-639`
+Route source: `plans/odin-api-backend-implementation-plan.md:497-681`
 Schema source: `schema/draft-schema-priority-modules-v3.sql:592-724`
 Schema source: `schema/draft-schema-priority-modules-v3.sql:3055-3073`
 
 ## Routes To Cover
 
-1. `POST /odin/api/auth/session`
-   Reference: `plans/odin-api-backend-implementation-plan.md:497-530`
-2. `POST /odin/api/auth/password-reset`
-   Reference: `plans/odin-api-backend-implementation-plan.md:532-550`
-3. `POST /odin/api/auth/logout`
-   Reference: `plans/odin-api-backend-implementation-plan.md:553-571`
-4. `GET /odin/api/me`
-   Reference: `plans/odin-api-backend-implementation-plan.md:574-604`
-5. `PATCH /odin/api/me`
-   Reference: `plans/odin-api-backend-implementation-plan.md:606-618`
-6. `GET /odin/api/eligibility-profile`
-   Reference: `plans/odin-api-backend-implementation-plan.md:620-623`
-7. `PATCH /odin/api/eligibility-profile`
-   Reference: `plans/odin-api-backend-implementation-plan.md:624-639`
-8. `POST /odin/api/push-device-tokens`
+1. `POST /odin/api/auth/register`
+   Reference: `plans/odin-api-backend-implementation-plan.md:497-531`
+2. `POST /odin/api/auth/session`
+   Reference: `plans/odin-api-backend-implementation-plan.md:533-566`
+3. `POST /odin/api/auth/password-reset`
+   Reference: `plans/odin-api-backend-implementation-plan.md:568-586`
+4. `POST /odin/api/auth/logout`
+   Reference: `plans/odin-api-backend-implementation-plan.md:589-607`
+5. `GET /odin/api/me`
+   Reference: `plans/odin-api-backend-implementation-plan.md:610-640`
+6. `PATCH /odin/api/me`
+   Reference: `plans/odin-api-backend-implementation-plan.md:642-654`
+7. `GET /odin/api/eligibility-profile`
+   Reference: `plans/odin-api-backend-implementation-plan.md:656-659`
+8. `PATCH /odin/api/eligibility-profile`
+   Reference: `plans/odin-api-backend-implementation-plan.md:660-675`
+9. `POST /odin/api/push-device-tokens`
    Reference: `plans/odin-api-backend-implementation-plan.md:3246-3248`
 
 ## Tables To Use
@@ -53,6 +56,15 @@ Schema source: `schema/draft-schema-priority-modules-v3.sql:3055-3073`
    Reference: `schema/draft-schema-priority-modules-v3.sql:839-869`
 
 ## Route To Table Mapping
+
+### `POST /odin/api/auth/register`
+
+- Create the user through Supabase Auth using email and password.
+- Return the created Supabase user id plus the initial access and refresh tokens.
+- Rely on Supabase email confirmation for account activation.
+- Expect the confirmation deep link to reopen Odin with the same authenticated user context.
+- Ensure first-login bootstrap still works after confirmation when the app exchanges the Supabase token through `/odin/api/auth/session`.
+- Tables: none required directly; follow-up profile bootstrap depends on the `auth.users` trigger
 
 ### `POST /odin/api/auth/session`
 
@@ -117,6 +129,7 @@ Schema source: `schema/draft-schema-priority-modules-v3.sql:3055-3073`
 ## Implementation Notes
 
 - Scope every read and write by authenticated `user_id`.
+- Keep `POST /odin/api/auth/register` aligned with Supabase Auth email-confirmation behavior.
 - Keep `POST /odin/api/auth/session` idempotent.
 - Prefer upsert for `user_eligibility_profiles` and `push_device_tokens`.
 - Return thin responses matching the route catalog.
@@ -124,7 +137,8 @@ Schema source: `schema/draft-schema-priority-modules-v3.sql:3055-3073`
 
 ## Done Criteria
 
-- All 8 routes above exist and are wired.
+- All 9 routes above exist and are wired.
+- Registration creates a Supabase Auth user and returns the auth tokens needed for the confirmation-link login flow.
 - Profile bootstrap works for a first-time Supabase user.
 - `/me` and `/eligibility-profile` are user-scoped.
 - Push device token registration is persisted.

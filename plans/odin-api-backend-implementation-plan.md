@@ -74,6 +74,7 @@ App/odin/apps/api/
       support-tickets.routes.ts
     services/
       auth/
+        registration.service.ts
         session.service.ts
         password-reset.service.ts
       onboarding/
@@ -135,6 +136,7 @@ App/odin/apps/api/
         support-ticket.service.ts
     actions/
       auth/
+        register.action.ts
         exchange-token.action.ts
         logout.action.ts
         request-password-reset.action.ts
@@ -278,7 +280,7 @@ Use a linear branch sequence so each merge unlocks the next dependent slice. Kee
    - Review size: infrastructure only, no domain logic.
 
 2. `feat/identity-governance`
-   - Scope: auth session exchange, password reset, logout, `me`, eligibility profile, privacy settings, consents, export requests, account deletion requests, and push device tokens.
+   - Scope: auth registration, auth session exchange, password reset, logout, `me`, eligibility profile, privacy settings, consents, export requests, account deletion requests, and push device tokens.
    - Reason: onboarding and all user-owned data depend on identity and consent state.
    - Review size: keep account governance separate from onboarding so reviewers do not mix lifecycle rules with profile logic.
 
@@ -340,7 +342,7 @@ Use a linear branch sequence so each merge unlocks the next dependent slice. Kee
 
 - **Base path**: use `/odin/api` for all application routes.
 - **Bootstrap routes**: keep `GET /health` and `GET /` as the existing service checks.
-- **Auth boundary**: Supabase Auth owns login and identity. The API should accept a Supabase access token, establish the user context through the project's Supabase token-exchange flow (`signInWithToken` in the current repo language), and then scope every request to `auth.uid()`.
+- **Auth boundary**: Supabase Auth owns registration, email confirmation, login, and identity. The API should register users through Supabase Auth, accept a Supabase access token, establish the user context through the project's Supabase token-exchange flow (`signInWithToken` in the current repo language), and then scope every request to `auth.uid()`.
 - **Ownership rule**: every read, write, and join against user-owned data must verify `profiles.user_id` ownership before use. RLS is the last line of defense, not the only one.
 - **Route style**: use plural resource routes, `POST` for create, `PATCH` for partial edit, `DELETE` for soft delete, and explicit action routes for confirmation, approval, rejection, refresh, and archive.
 - **Data shape rule**: raw ledger tables are the source of truth. Forecasts, budgets, recommendations, projections, alerts, reports, and health snapshots are derived snapshots that must preserve their input snapshots and explanation fields.
@@ -365,7 +367,7 @@ What to build:
 
 Acceptance criteria:
 
-- A new user can sign in, create a profile row, and continue into onboarding.
+- A new user can register, confirm their email, open Odin from the confirmation link, create a profile row, and continue into onboarding.
 - A returning user can sign in and land on the dashboard when onboarding is complete.
 - Consent, privacy, and account-governance records are captured as timestamped audit data.
 - A user can review a suggested financial profile, confirm it, reject it, manually select a profile, or request another assessment.
@@ -493,6 +495,39 @@ Use this section as the canonical route inventory for the v3 schema. If a detail
 ### Phase 1: Identity, Consent, and Onboarding
 
 #### Identity and Governance
+
+POST /odin/api/auth/register | Register with email and password through Supabase Auth
+
+request:
+```json
+{
+  "payload": {
+    "email": "user@example.com", // Email address for the new Supabase account.
+    "password": "plain-text-password", // Password that satisfies Supabase Auth requirements.
+    "display_name": "Juan Dela Cruz" // Optional bootstrap display name mirrored into the profile row later.
+  }
+}
+```
+
+response:
+```json
+{
+  "headers": {},
+  "payload": {
+    "user": {
+      "id": "uuid" // Supabase user id for the new account.
+    },
+    "session": {
+      "access_token": "supabase-access-token", // Client stores this so the confirmation-link open can keep the user authenticated.
+      "refresh_token": "supabase-refresh-token" // Client uses this to restore or refresh the session when needed.
+    },
+    "activation": {
+      "email_confirmation_required": true, // Supabase must confirm the email before the account is considered activated.
+      "delivery": "email_link" // Confirmation arrives through the Supabase email link.
+    }
+  }
+}
+```
 
 POST /odin/api/auth/session | Exchange a Supabase token for an app session
 
