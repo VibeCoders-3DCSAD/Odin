@@ -104,6 +104,34 @@ describe("GET /odin/api/me", () => {
     expect(response.body.payload.current_profile).toBeNull();
   });
 
+  it("returns 200 with default privacy settings when no privacy row exists", async () => {
+    mockAuth();
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery({
+        data: { display_name: "Juan", metro_manila_city: null },
+        error: null,
+      }))
+      .mockReturnValueOnce(createMockQuery({
+        data: null,
+        error: { message: "Not found", code: "PGRST116" },
+      }))
+      .mockReturnValueOnce(createMockQuery({
+        data: null,
+        error: { message: "Not found", code: "PGRST116" },
+      }));
+
+    const response = await request(app)
+      .get("/odin/api/me")
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload.privacy_settings).toEqual({
+      personalization_enabled: true,
+      notifications_opt_in: false,
+    });
+  });
+
   it("respects include expansions", async () => {
     mockAuth();
 
@@ -202,6 +230,56 @@ describe("GET /odin/api/me", () => {
       .set(authHeader());
 
     expect(response.status).toBe(500);
+  });
+
+  it("returns 500 when privacy query fails", async () => {
+    mockAuth();
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery({
+        data: { display_name: "Juan", metro_manila_city: null },
+        error: null,
+      }))
+      .mockReturnValueOnce(createMockQuery({
+        data: null,
+        error: { message: "DB error", code: "XX000" },
+      }));
+
+    const response = await request(app)
+      .get("/odin/api/me")
+      .set(authHeader());
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      message: expect.stringMatching(/privacy/i),
+    });
+  });
+
+  it("returns 500 when assignment query fails", async () => {
+    mockAuth();
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery({
+        data: { display_name: "Juan", metro_manila_city: null },
+        error: null,
+      }))
+      .mockReturnValueOnce(createMockQuery({
+        data: { personalization_enabled: true, notifications_opt_in: false },
+        error: null,
+      }))
+      .mockReturnValueOnce(createMockQuery({
+        data: null,
+        error: { message: "DB error", code: "XX000" },
+      }));
+
+    const response = await request(app)
+      .get("/odin/api/me")
+      .set(authHeader());
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      message: expect.stringMatching(/assignment/i),
+    });
   });
 });
 

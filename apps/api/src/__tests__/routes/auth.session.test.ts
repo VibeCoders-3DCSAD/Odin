@@ -143,6 +143,28 @@ describe("POST /odin/api/auth/session", () => {
     expect(response.body.payload.onboarding.status).toBe("in_progress");
   });
 
+  it("returns 500 when onboarding query fails", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: validUserId } },
+      error: null,
+    });
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery({ data: { id: validProfileId }, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: { personalization_enabled: true }, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: null, error: { message: "DB error" } }));
+
+    const response = await request(app)
+      .post("/odin/api/auth/session")
+      .set(authHeader())
+      .send({ payload: { refresh_token: validRefreshToken } });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      message: expect.stringMatching(/onboarding/i),
+    });
+  });
+
   it("returns 500 when profile creation fails", async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: validUserId } },

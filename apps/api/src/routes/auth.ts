@@ -155,13 +155,21 @@ router.post("/session", async (request: Request, response: Response) => {
 
   const privacy = await ensurePrivacySettings(userId, authenticatedSupabase);
 
-  const { data: onboarding } = await authenticatedSupabase
+  const { data: onboarding, error: onboardingError } = await authenticatedSupabase
     .from("onboarding_sessions")
     .select("status")
     .eq("user_id", userId)
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (onboardingError) {
+    response.status(500).json({
+      error: "Internal Server Error",
+      message: "Failed to fetch onboarding status",
+    });
+    return;
+  }
 
   response.status(200).json({
     payload: {

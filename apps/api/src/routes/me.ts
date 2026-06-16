@@ -68,11 +68,19 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
   }
 
   if (includeFields.has("privacy")) {
-    const { data: privacy } = await authenticatedSupabase
+    const { data: privacy, error: privacyError } = await authenticatedSupabase
       .from("user_privacy_settings")
       .select("personalization_enabled, notifications_opt_in")
       .eq("user_id", userId)
       .single();
+
+    if (privacyError && privacyError.code !== "PGRST116") {
+      response.status(500).json({
+        error: "Internal Server Error",
+        message: "Failed to fetch privacy settings",
+      });
+      return;
+    }
 
     payload.privacy_settings = {
       personalization_enabled: privacy?.personalization_enabled ?? true,
@@ -100,12 +108,20 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
   }
 
   if (includeFields.has("assignment")) {
-    const { data: assignment } = await authenticatedSupabase
+    const { data: assignment, error: assignmentError } = await authenticatedSupabase
       .from("financial_profile_assignments")
       .select("profile_label, confirmed_at")
       .eq("user_id", userId)
       .eq("is_active", true)
       .single();
+
+    if (assignmentError && assignmentError.code !== "PGRST116") {
+      response.status(500).json({
+        error: "Internal Server Error",
+        message: "Failed to fetch active profile assignment",
+      });
+      return;
+    }
 
     payload.current_profile = assignment
       ? {
