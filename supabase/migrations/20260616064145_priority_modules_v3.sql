@@ -611,33 +611,6 @@ CREATE TABLE user_privacy_settings (
     CHECK (data_retention_days IS NULL OR data_retention_days > 0)
 );
 
-CREATE OR REPLACE FUNCTION handle_new_auth_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  INSERT INTO public.profiles (user_id, display_name)
-  VALUES (
-    NEW.id,
-    NULLIF(trim(COALESCE(NEW.raw_user_meta_data ->> 'display_name', '')), '')
-  )
-  ON CONFLICT (user_id) DO NOTHING;
-
-  INSERT INTO public.user_privacy_settings (user_id)
-  VALUES (NEW.id)
-  ON CONFLICT (user_id) DO NOTHING;
-
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION handle_new_auth_user();
-
 CREATE TABLE user_consents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
@@ -781,14 +754,13 @@ CREATE TABLE onboarding_sessions (
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   CONSTRAINT onboarding_sessions_submit_chk
-    CHECK (status <> 'submitted' OR submitted_at IS NOT NULL)
+    CHECK (status <> 'submitted' OR submitted_at IS NOT NULL),
+  CONSTRAINT onboarding_sessions_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX onboarding_sessions_user_status_idx
   ON onboarding_sessions (user_id, status, started_at DESC);
 
-CREATE UNIQUE INDEX onboarding_sessions_id_user_unique_idx
-  ON onboarding_sessions (id, user_id);
 
 CREATE TABLE onboarding_responses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -828,14 +800,13 @@ CREATE TABLE financial_profile_assessments (
     CHECK (
       status IN ('queued', 'running', 'failed')
       OR proposed_profile_label IS NOT NULL
-    )
+    ),
+  CONSTRAINT financial_profile_assessments_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX financial_profile_assessments_user_idx
   ON financial_profile_assessments (user_id, requested_at DESC);
 
-CREATE UNIQUE INDEX financial_profile_assessments_id_user_unique_idx
-  ON financial_profile_assessments (id, user_id);
 
 CREATE TABLE financial_profile_explanation_drivers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -870,7 +841,8 @@ CREATE TABLE financial_profile_assignments (
   CONSTRAINT financial_profile_assignments_period_chk
     CHECK (effective_to IS NULL OR effective_from < effective_to),
   CONSTRAINT financial_profile_assignments_decision_chk
-    CHECK (confirmed_at IS NULL OR rejected_at IS NULL)
+    CHECK (confirmed_at IS NULL OR rejected_at IS NULL),
+  CONSTRAINT financial_profile_assignments_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE UNIQUE INDEX financial_profile_assignments_active_unique_idx
@@ -880,8 +852,6 @@ CREATE UNIQUE INDEX financial_profile_assignments_active_unique_idx
 CREATE INDEX financial_profile_assignments_user_history_idx
   ON financial_profile_assignments (user_id, effective_from DESC);
 
-CREATE UNIQUE INDEX financial_profile_assignments_id_user_unique_idx
-  ON financial_profile_assignments (id, user_id);
 
 CREATE TABLE financial_profile_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1338,14 +1308,13 @@ CREATE TABLE financial_accounts (
   CONSTRAINT financial_accounts_credit_limit_chk
     CHECK (credit_limit_centavos IS NULL OR credit_limit_centavos >= 0),
   CONSTRAINT financial_accounts_deleted_status_chk
-    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL)
+    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL),
+  CONSTRAINT financial_accounts_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX financial_accounts_user_status_idx
   ON financial_accounts (user_id, status, sort_order);
 
-CREATE UNIQUE INDEX financial_accounts_id_user_unique_idx
-  ON financial_accounts (id, user_id);
 
 CREATE TABLE transaction_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1395,15 +1364,14 @@ CREATE TABLE transaction_templates (
         AND subcategory_id IS NULL
       )
       OR (status IN ('archived', 'deleted'))
-    )
+    ),
+  CONSTRAINT transaction_templates_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE UNIQUE INDEX transaction_templates_user_name_unique_idx
   ON transaction_templates (user_id, lower(name))
   WHERE status <> 'deleted';
 
-CREATE UNIQUE INDEX transaction_templates_id_user_unique_idx
-  ON transaction_templates (id, user_id);
 
 CREATE INDEX transaction_templates_user_status_idx
   ON transaction_templates (user_id, status, last_used_at DESC);
@@ -1472,14 +1440,13 @@ CREATE TABLE recurring_transaction_templates (
         AND source_account_id <> destination_account_id
         AND subcategory_id IS NULL
       )
-    )
+    ),
+  CONSTRAINT recurring_transaction_templates_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX recurring_transaction_templates_user_status_idx
   ON recurring_transaction_templates (user_id, status, next_occurrence_date);
 
-CREATE UNIQUE INDEX recurring_transaction_templates_id_user_unique_idx
-  ON recurring_transaction_templates (id, user_id);
 
 CREATE TABLE financial_obligations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1539,6 +1506,7 @@ CREATE TABLE transactions (
     CHECK (amount_centavos > 0),
   CONSTRAINT transactions_deleted_status_chk
     CHECK (status <> 'deleted' OR deleted_at IS NOT NULL),
+  CONSTRAINT transactions_id_user_uq UNIQUE (id, user_id),
   CONSTRAINT transactions_posted_status_chk
     CHECK (status <> 'posted' OR posted_at IS NOT NULL),
   CONSTRAINT transactions_shape_chk
@@ -1579,8 +1547,6 @@ CREATE INDEX transactions_subcategory_date_idx
   ON transactions (subcategory_id, transaction_date DESC)
   WHERE subcategory_id IS NOT NULL;
 
-CREATE UNIQUE INDEX transactions_id_user_unique_idx
-  ON transactions (id, user_id);
 
 CREATE TABLE transaction_line_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1740,7 +1706,8 @@ CREATE TABLE budget_strategy_configs (
     CHECK (
       (is_system = true AND user_id IS NULL)
       OR (is_system = false AND user_id IS NOT NULL)
-    )
+    ),
+  CONSTRAINT budget_strategy_configs_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE UNIQUE INDEX budget_strategy_configs_system_unique_idx
@@ -1751,9 +1718,6 @@ CREATE UNIQUE INDEX budget_strategy_configs_user_unique_idx
   ON budget_strategy_configs (user_id, lower(name))
   WHERE user_id IS NOT NULL;
 
-CREATE UNIQUE INDEX budget_strategy_configs_id_user_unique_idx
-  ON budget_strategy_configs (id, user_id)
-  WHERE user_id IS NOT NULL;
 
 CREATE TABLE budget_strategy_rules (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1865,7 +1829,8 @@ CREATE TABLE budgets (
   CONSTRAINT budgets_active_chk
     CHECK (status <> 'active' OR activated_at IS NOT NULL),
   CONSTRAINT budgets_deleted_status_chk
-    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL)
+    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL),
+  CONSTRAINT budgets_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX budgets_user_period_idx
@@ -1874,8 +1839,6 @@ CREATE INDEX budgets_user_period_idx
 CREATE INDEX budgets_user_status_idx
   ON budgets (user_id, status, period_start DESC);
 
-CREATE UNIQUE INDEX budgets_id_user_unique_idx
-  ON budgets (id, user_id);
 
 CREATE TABLE budget_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2002,14 +1965,13 @@ CREATE TABLE savings_goals (
   CONSTRAINT savings_goals_archived_status_chk
     CHECK (status <> 'archived' OR archived_at IS NOT NULL),
   CONSTRAINT savings_goals_deleted_status_chk
-    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL)
+    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL),
+  CONSTRAINT savings_goals_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX savings_goals_user_status_idx
   ON savings_goals (user_id, status, priority_rank);
 
-CREATE UNIQUE INDEX savings_goals_id_user_unique_idx
-  ON savings_goals (id, user_id);
 
 CREATE TABLE savings_goal_allocation_preferences (
   user_id uuid PRIMARY KEY REFERENCES profiles(user_id) ON DELETE CASCADE,
@@ -2129,14 +2091,13 @@ CREATE TABLE debt_accounts (
   CONSTRAINT debt_accounts_paid_off_chk
     CHECK (status <> 'paid_off' OR paid_off_at IS NOT NULL),
   CONSTRAINT debt_accounts_deleted_status_chk
-    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL)
+    CHECK (status <> 'deleted' OR deleted_at IS NOT NULL),
+  CONSTRAINT debt_accounts_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX debt_accounts_user_status_idx
   ON debt_accounts (user_id, status);
 
-CREATE UNIQUE INDEX debt_accounts_id_user_unique_idx
-  ON debt_accounts (id, user_id);
 
 CREATE TABLE debt_payments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2301,7 +2262,8 @@ CREATE TABLE forecast_runs (
       input_window_start IS NULL
       OR input_window_end IS NULL
       OR input_window_start <= input_window_end
-    )
+    ),
+  CONSTRAINT forecast_runs_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX forecast_runs_user_generated_idx
@@ -2310,8 +2272,6 @@ CREATE INDEX forecast_runs_user_generated_idx
 CREATE INDEX forecast_runs_user_status_idx
   ON forecast_runs (user_id, status);
 
-CREATE UNIQUE INDEX forecast_runs_id_user_unique_idx
-  ON forecast_runs (id, user_id);
 
 -- A series is one line or target inside a forecast run.
 -- For the forecast dashboard, the four category_spending series are the
@@ -2471,7 +2431,8 @@ CREATE TABLE budget_recommendations (
       AND recommended_total_centavos >= 0
     ),
   CONSTRAINT budget_recommendations_savings_rate_chk
-    CHECK (target_savings_rate_bps >= 0 AND target_savings_rate_bps <= 10000)
+    CHECK (target_savings_rate_bps >= 0 AND target_savings_rate_bps <= 10000),
+  CONSTRAINT budget_recommendations_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX budget_recommendations_user_created_idx
@@ -2483,8 +2444,6 @@ CREATE INDEX budget_recommendations_user_status_idx
 CREATE INDEX budget_recommendations_forecast_run_idx
   ON budget_recommendations (forecast_run_id);
 
-CREATE UNIQUE INDEX budget_recommendations_id_user_unique_idx
-  ON budget_recommendations (id, user_id);
 
 -- Allocation rows hold the money recommended for each category or
 -- detailed subcategory. Subcategory rows should include subcategory_id.
@@ -2677,7 +2636,8 @@ CREATE TABLE anomaly_evaluations (
     CHECK (
       (should_alert_user = false)
       OR (suppression_reason IS NULL)
-    )
+    ),
+  CONSTRAINT anomaly_evaluations_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX anomaly_evaluations_user_evaluated_idx
@@ -2693,8 +2653,6 @@ CREATE INDEX anomaly_evaluations_pending_review_idx
 CREATE INDEX anomaly_evaluations_anomalies_idx
   ON anomaly_evaluations (user_id, is_anomaly, should_alert_user, evaluated_at DESC);
 
-CREATE UNIQUE INDEX anomaly_evaluations_id_user_unique_idx
-  ON anomaly_evaluations (id, user_id);
 
 -- Feature rows make the anomaly explanation auditable. The JSON snapshot on
 -- anomaly_evaluations is convenient for replay; these rows are convenient for
@@ -2739,14 +2697,13 @@ CREATE TABLE overspending_evaluations (
       AND budgeted_amount_centavos >= 0
       AND overspent_amount_centavos >= 0
       AND (overspent_percent_bps IS NULL OR overspent_percent_bps >= 0)
-    )
+    ),
+  CONSTRAINT overspending_evaluations_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX overspending_evaluations_user_evaluated_idx
   ON overspending_evaluations (user_id, evaluated_at DESC);
 
-CREATE UNIQUE INDEX overspending_evaluations_id_user_unique_idx
-  ON overspending_evaluations (id, user_id);
 
 -- Central alert inbox. Anomaly alerts, budget overspending warnings,
 -- forecast advisories, savings milestones, and debt alerts all land here.
@@ -2818,7 +2775,8 @@ CREATE TABLE alerts (
       AND (status <> 'acknowledged' OR acknowledged_at IS NOT NULL)
       AND (status <> 'dismissed' OR dismissed_at IS NOT NULL)
       AND (status <> 'cleared' OR cleared_at IS NOT NULL)
-    )
+    ),
+  CONSTRAINT alerts_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX alerts_user_status_idx
@@ -2843,8 +2801,6 @@ CREATE INDEX alerts_overspending_evaluation_idx
   ON alerts (overspending_evaluation_id)
   WHERE overspending_evaluation_id IS NOT NULL;
 
-CREATE UNIQUE INDEX alerts_id_user_unique_idx
-  ON alerts (id, user_id);
 
 -- A single inbox alert can point at several transactions or subcategories,
 -- especially when anomalies are bundled within the two-hour bundling window.
@@ -3041,14 +2997,13 @@ CREATE TABLE debt_hardship_plans (
       AND (status <> 'resolved' OR resolved_at IS NOT NULL)
       AND (status <> 'cancelled' OR cancelled_at IS NOT NULL)
       AND (status <> 'archived' OR archived_at IS NOT NULL)
-    )
+    ),
+  CONSTRAINT debt_hardship_plans_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX debt_hardship_plans_user_status_idx
   ON debt_hardship_plans (user_id, status);
 
-CREATE UNIQUE INDEX debt_hardship_plans_id_user_unique_idx
-  ON debt_hardship_plans (id, user_id);
 
 CREATE TABLE debt_hardship_plan_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3078,14 +3033,13 @@ CREATE TABLE push_device_tokens (
   updated_at timestamptz NOT NULL DEFAULT now(),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 
-  UNIQUE (user_id, device_token)
+  UNIQUE (user_id, device_token),
+  CONSTRAINT push_device_tokens_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX push_device_tokens_user_active_idx
   ON push_device_tokens (user_id, is_active);
 
-CREATE UNIQUE INDEX push_device_tokens_id_user_unique_idx
-  ON push_device_tokens (id, user_id);
 
 -- ============================================================================
 -- Help & Problem Reporting
@@ -3107,14 +3061,13 @@ CREATE TABLE support_tickets (
   CONSTRAINT support_tickets_resolved_chk
     CHECK (status <> 'resolved' OR resolved_at IS NOT NULL),
   CONSTRAINT support_tickets_closed_chk
-    CHECK (status <> 'closed' OR closed_at IS NOT NULL)
+    CHECK (status <> 'closed' OR closed_at IS NOT NULL),
+  CONSTRAINT support_tickets_id_user_uq UNIQUE (id, user_id)
 );
 
 CREATE INDEX support_tickets_user_status_idx
   ON support_tickets (user_id, status, created_at DESC);
 
-CREATE UNIQUE INDEX support_tickets_id_user_unique_idx
-  ON support_tickets (id, user_id);
 
 CREATE TABLE support_ticket_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
