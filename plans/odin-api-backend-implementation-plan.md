@@ -2,7 +2,7 @@
 
 > Source PRD: `Papers/Documents/PRD-Full-Odin-App.md`
 >
-> Source schema: `App/odin/schema/draft-schema-priority-modules-v2.sql`
+> Source schema: `App/odin/schema/draft-schema-priority-modules-v3.sql`
 >
 > Current bootstrap: `App/odin/apps/api/src/index.ts`
 
@@ -28,24 +28,34 @@ App/odin/apps/api/
       consent.routes.ts
       onboarding.routes.ts
       profile.routes.ts
+      eligibility.routes.ts
+      category-groups.routes.ts
       categories.routes.ts
       subcategories.routes.ts
+      category-restrictions.routes.ts
+      subcategory-restrictions.routes.ts
       accounts.routes.ts
       income-sources.routes.ts
       obligations.routes.ts
       transactions.routes.ts
+      transaction-templates.routes.ts
       transaction-drafts.routes.ts
+      transaction-retention-settings.routes.ts
       recurring-templates.routes.ts
       recurring-occurrences.routes.ts
       dashboard.routes.ts
       budgets.routes.ts
       budget-allocations.routes.ts
+      budget-strategy-configs.routes.ts
+      budget-health.routes.ts
       budget-recommendations.routes.ts
       forecasts.routes.ts
       expected-events.routes.ts
       anomaly-evaluations.routes.ts
+      overspending-evaluations.routes.ts
       alerts.routes.ts
       alert-notification-preferences.routes.ts
+      push-device-tokens.routes.ts
       anomaly-whitelist-rules.routes.ts
       alert-suppression-rules.routes.ts
       savings-goals.routes.ts
@@ -54,47 +64,59 @@ App/odin/apps/api/
       savings-goal-priority-table.routes.ts
       debts.routes.ts
       debt-payments.routes.ts
+      debt-priorities.routes.ts
+      debt-hardship-plans.routes.ts
       debt-strategy-preferences.routes.ts
       debt-projections.routes.ts
       reports.routes.ts
       export-requests.routes.ts
       account-deletion-requests.routes.ts
-      internal-model-evaluations.routes.ts
+      support-tickets.routes.ts
     services/
       auth/
         session.service.ts
         password-reset.service.ts
       onboarding/
         onboarding.service.ts
+        eligibility.service.ts
         profile-assessment.service.ts
       taxonomy/
+        category-groups.service.ts
         categories.service.ts
         subcategories.service.ts
+        category-restrictions.service.ts
+        subcategory-restrictions.service.ts
       ledger/
         accounts.service.ts
         income-sources.service.ts
         obligations.service.ts
         transactions.service.ts
+        transaction-templates.service.ts
         recurring-templates.service.ts
         recurring-occurrences.service.ts
         transaction-drafts.service.ts
+        transaction-retention.service.ts
       dashboard/
         dashboard-summary.service.ts
       budgets/
         budget.service.ts
         budget-validation.service.ts
         budget-allocation.service.ts
+        budget-strategy-config.service.ts
+        budget-health.service.ts
         budget-recommendation.service.ts
       forecasts/
         forecast.service.ts
         expected-events.service.ts
       anomalies/
         anomaly-evaluation.service.ts
+        overspending-evaluation.service.ts
         anomaly-whitelist.service.ts
         alert-suppression.service.ts
       alerts/
         alert-inbox.service.ts
         notification-preferences.service.ts
+        push-device-token.service.ts
       savings/
         savings-goal.service.ts
         savings-contribution.service.ts
@@ -102,13 +124,15 @@ App/odin/apps/api/
       debt/
         debt-account.service.ts
         debt-payment.service.ts
+        debt-priority.service.ts
+        debt-hardship.service.ts
         debt-projection.service.ts
         debt-strategy.service.ts
       reports/
         report.service.ts
         report-export.service.ts
-      evaluation/
-        model-evaluation.service.ts
+      support/
+        support-ticket.service.ts
     actions/
       auth/
         exchange-token.action.ts
@@ -118,13 +142,16 @@ App/odin/apps/api/
         start-onboarding.action.ts
         save-onboarding-response.action.ts
         submit-onboarding.action.ts
+        save-eligibility-profile.action.ts
         confirm-profile.action.ts
         reject-profile.action.ts
+        select-profile.action.ts
         reassess-profile.action.ts
       ledger/
         create-transaction.action.ts
         edit-transaction.action.ts
         delete-transaction.action.ts
+        create-transaction-template.action.ts
         create-recurring-template.action.ts
         pause-recurring-template.action.ts
         resume-recurring-template.action.ts
@@ -134,6 +161,7 @@ App/odin/apps/api/
         create-budget.action.ts
         activate-budget.action.ts
         validate-budget.action.ts
+        save-budget-strategy-config.action.ts
         generate-budget-recommendation.action.ts
         accept-budget-recommendation.action.ts
         reject-budget-recommendation.action.ts
@@ -158,6 +186,8 @@ App/odin/apps/api/
       debt/
         create-debt-account.action.ts
         add-debt-payment.action.ts
+        save-debt-priority-order.action.ts
+        create-debt-hardship-plan.action.ts
         generate-debt-projection.action.ts
         refresh-debt-projection.action.ts
       reports/
@@ -167,51 +197,64 @@ App/odin/apps/api/
         request-account-deletion.action.ts
         confirm-account-deletion.action.ts
         cancel-account-deletion.action.ts
-      internal/
-        create-model-evaluation.action.ts
-    models/
-      profile.model.ts
-      onboarding.model.ts
-      consent.model.ts
-      privacy-settings.model.ts
-      category.model.ts
-      subcategory.model.ts
-      account.model.ts
-      income-source.model.ts
-      obligation.model.ts
-      transaction.model.ts
-      recurring-template.model.ts
-      recurring-occurrence.model.ts
-      budget.model.ts
-      budget-allocation.model.ts
-      budget-recommendation.model.ts
-      forecast.model.ts
-      forecast-series.model.ts
-      forecast-point.model.ts
-      anomaly.model.ts
-      alert.model.ts
-      savings-goal.model.ts
-      savings-contribution.model.ts
-      debt-account.model.ts
-      debt-payment.model.ts
-      debt-projection.model.ts
-      report.model.ts
-      model-evaluation.model.ts
-    validators/
-      auth.validator.ts
-      onboarding.validator.ts
-      profile.validator.ts
-      taxonomy.validator.ts
-      ledger.validator.ts
-      budget.validator.ts
-      forecast.validator.ts
-      anomaly.validator.ts
-      alert.validator.ts
-      savings.validator.ts
-      debt.validator.ts
-      report.validator.ts
-      governance.validator.ts
-      internal.validator.ts
+      support/
+        create-support-ticket.action.ts
+      models/
+        profile.model.ts
+        eligibility-profile.model.ts
+        onboarding.model.ts
+        consent.model.ts
+        privacy-settings.model.ts
+        category-group.model.ts
+        category.model.ts
+        subcategory.model.ts
+        category-restriction.model.ts
+        subcategory-restriction.model.ts
+        account.model.ts
+        income-source.model.ts
+        obligation.model.ts
+        transaction.model.ts
+        transaction-template.model.ts
+        transaction-line-item.model.ts
+        recurring-template.model.ts
+        recurring-occurrence.model.ts
+        transaction-retention-settings.model.ts
+        budget.model.ts
+        budget-allocation.model.ts
+        budget-strategy-config.model.ts
+        budget-health.model.ts
+        budget-recommendation.model.ts
+        forecast.model.ts
+        forecast-series.model.ts
+        forecast-point.model.ts
+        anomaly.model.ts
+        overspending-evaluation.model.ts
+        alert.model.ts
+        push-device-token.model.ts
+        savings-goal.model.ts
+        savings-contribution.model.ts
+        debt-account.model.ts
+        debt-priority.model.ts
+        debt-hardship-plan.model.ts
+        debt-payment.model.ts
+        debt-projection.model.ts
+        report.model.ts
+        support-ticket.model.ts
+      validators/
+        auth.validator.ts
+        onboarding.validator.ts
+        profile.validator.ts
+        taxonomy.validator.ts
+        ledger.validator.ts
+        budget.validator.ts
+        forecast.validator.ts
+        anomaly.validator.ts
+        alert.validator.ts
+        savings.validator.ts
+        debt.validator.ts
+        report.validator.ts
+        governance.validator.ts
+        support.validator.ts
   utils/
       ownership.ts
       money.ts
@@ -235,19 +278,19 @@ Use a linear branch sequence so each merge unlocks the next dependent slice. Kee
    - Review size: infrastructure only, no domain logic.
 
 2. `feat/identity-governance`
-   - Scope: auth session exchange, password reset, logout, `me`, privacy settings, consents, export requests, and account deletion requests.
+   - Scope: auth session exchange, password reset, logout, `me`, eligibility profile, privacy settings, consents, export requests, account deletion requests, and push device tokens.
    - Reason: onboarding and all user-owned data depend on identity and consent state.
    - Review size: keep account governance separate from onboarding so reviewers do not mix lifecycle rules with profile logic.
 
 3. `feat/onboarding-profile`
-   - Scope: onboarding sessions, onboarding responses, submission, profile assessment, profile assignment confirmation/rejection, and reassessment.
+   - Scope: onboarding sessions, onboarding responses, submission, profile assessment, profile assignment confirmation/rejection, manual selection, and reassessment.
    - Reason: this branch depends on the identity/governance branch and unlocks profile-aware downstream modules.
    - Review size: keep the onboarding flow and the profile classifier wiring in the same branch because they share the same source data.
 
 4. `feat/taxonomy`
-   - Scope: categories and subcategories.
+   - Scope: category groups, categories, subcategories, and category/subcategory restrictions.
    - Reason: ledger, budgets, forecasts, alerts, savings, and debt all depend on stable taxonomy data.
-   - Review size: one small branch because taxonomy is mostly read path and seed-safe write path for user subcategories.
+   - Review size: keep user-owned taxonomy writes and restriction settings together because protected and locked amounts affect later budget logic.
 
 5. `feat/accounts-obligations`
    - Scope: financial accounts, income sources, financial obligations.
@@ -255,17 +298,17 @@ Use a linear branch sequence so each merge unlocks the next dependent slice. Kee
    - Review size: keep accounts and obligations together because they share the same ownership and validation rules.
 
 6. `feat/ledger-transactions`
-   - Scope: transactions, transaction drafts, recurring templates, recurring occurrences, and ledger audit events.
+   - Scope: transactions, transaction line items, transaction templates, transaction drafts, transaction retention settings, recurring templates, recurring occurrences, and ledger audit events.
    - Reason: this is the raw data backbone for forecasts, anomaly detection, budgets, reports, savings contributions, and debt payments.
    - Review size: split only if needed between CRUD and recurring generation, but keep them adjacent in the sequence.
 
 7. `feat/budget-core`
-   - Scope: dashboard summary, budgets, budget allocations, budget validation, and budget recommendation generation/acceptance.
+   - Scope: dashboard summary, budgets, budget allocations, budget validation, budget strategy configs, budget health snapshots, and budget recommendation generation/acceptance.
    - Reason: the dashboard and budget solver need transaction history, taxonomy, and profile output already merged.
    - Review size: keep dashboard summary and budget setup close together because they are the same user journey.
 
 8. `feat/forecast-alerts`
-   - Scope: forecasts, expected spending events, anomaly evaluations, alert inbox, notification preferences, whitelist rules, and suppression rules.
+   - Scope: forecasts, expected spending events, anomaly evaluations, overspending evaluations, alert inbox, notification preferences, whitelist rules, and suppression rules.
    - Reason: forecast output feeds alerts, and alerts need the same transaction and category context.
    - Review size: keep forecast generation next to alert generation so the explanation and suppression rules stay easy to review.
 
@@ -275,19 +318,14 @@ Use a linear branch sequence so each merge unlocks the next dependent slice. Kee
    - Review size: keep goal CRUD next to contribution logging and allocation rules because they share the same source-of-truth record.
 
 10. `feat/debt-management`
-    - Scope: debt accounts, debt payments, debt strategy preferences, and debt projections.
+    - Scope: debt accounts, debt payments, debt priorities, debt hardship plans, debt strategy preferences, and debt projections.
     - Reason: debt projections depend on ledger history and should be reviewed immediately after the savings goal branch because both consume future allocation logic.
     - Review size: keep account CRUD next to projection generation so the stale-projection rules are visible in one pass.
 
 11. `feat/reports-governance`
-    - Scope: reports, metrics, breakdowns, comparisons, snapshots, data export completion, and account deletion workflow completion.
+    - Scope: reports, metrics, breakdowns, comparisons, snapshots, support tickets, data export completion, and account deletion workflow completion.
     - Reason: reporting depends on nearly every prior branch and should be merged only after the core data flows are stable.
     - Review size: keep report generation and governance completion together because both are read-heavy and audit-sensitive.
-
-12. `feat/internal-evaluation`
-    - Scope: internal model evaluation routes and artifacts.
-    - Reason: evaluation depends on stable forecast, anomaly, and profile outputs and should land last so it can reference the final data contracts.
-    - Review size: isolate from user-facing routes so thesis evaluation logic does not expand unrelated API surfaces.
 
 ### Branching Rules
 
@@ -305,10 +343,12 @@ Use a linear branch sequence so each merge unlocks the next dependent slice. Kee
 - **Auth boundary**: Supabase Auth owns login and identity. The API should accept a Supabase access token, establish the user context through the project's Supabase token-exchange flow (`signInWithToken` in the current repo language), and then scope every request to `auth.uid()`.
 - **Ownership rule**: every read, write, and join against user-owned data must verify `profiles.user_id` ownership before use. RLS is the last line of defense, not the only one.
 - **Route style**: use plural resource routes, `POST` for create, `PATCH` for partial edit, `DELETE` for soft delete, and explicit action routes for confirmation, approval, rejection, refresh, and archive.
-- **Data shape rule**: raw ledger tables are the source of truth. Forecasts, budgets, recommendations, projections, alerts, reports, and model evaluations are derived snapshots that must preserve their input snapshots and explanation fields.
+- **Data shape rule**: raw ledger tables are the source of truth. Forecasts, budgets, recommendations, projections, alerts, reports, and health snapshots are derived snapshots that must preserve their input snapshots and explanation fields.
 - **Budgeting rule**: protected categories must never be reduced by recommendation logic unless the user explicitly changes protection settings.
 - **Alerts rule**: budget overspending alerts must always be stored and visible in-app, even if external notifications are disabled.
 - **Debt and savings rule**: debt and savings projections are generated on demand and become stale when the user changes balances, payments, strategy, or contribution assumptions.
+- **Eligibility rule**: onboarding cannot be treated as complete until demographic, geography, and primary employment eligibility fields have been captured in the app-owned eligibility profile.
+- **Notification rule**: notification preferences and push device registration are separate concerns; alert delivery endpoints should not double as device-token storage.
 - **Response style**: keep responses thin and readable. Return the created or requested record, a compact `meta` object, and any explanation or derived artifacts needed by the UI.
 
 ## Build Phases
@@ -319,31 +359,34 @@ What to build:
 
 - Supabase session bootstrap.
 - Login, registration, logout, and password reset routes.
-- `profiles`, privacy settings, consent history, export requests, and deletion requests.
+- `profiles`, eligibility profile, privacy settings, consent history, export requests, deletion requests, and push device token registration.
 - Onboarding sessions, onboarding responses, and profile assessment flows.
-- Profile assignment confirmation, rejection, and reassessment.
+- Profile assignment confirmation, rejection, manual selection, and reassessment.
 
 Acceptance criteria:
 
 - A new user can sign in, create a profile row, and continue into onboarding.
 - A returning user can sign in and land on the dashboard when onboarding is complete.
 - Consent, privacy, and account-governance records are captured as timestamped audit data.
-- A user can review a suggested financial profile, confirm it, or request another assessment.
+- A user can review a suggested financial profile, confirm it, reject it, manually select a profile, or request another assessment.
+- The API captures Filipino, Metro Manila, and employment eligibility fields before onboarding completion is marked done.
 
 ### Phase 2: Taxonomy, Accounts, and Ledger
 
 What to build:
 
-- System category and subcategory read routes.
-- User-created subcategories.
+- Category-group read routes, category read routes, category CRUD for user-owned categories, and user-created subcategories.
+- Category and subcategory restriction routes.
 - Income sources, financial accounts, and financial obligations.
-- Transaction create, edit, delete, list, and detail routes.
+- Transaction create, edit, delete, list, detail, line-item, and template routes.
 - Transaction drafts for offline-tolerant entry.
+- Transaction retention settings routes.
 - Recurring transaction templates and occurrences.
 
 Acceptance criteria:
 
 - Transaction logging works for income, expense, and transfer flows.
+- Itemized expenses and split-category expenses can be stored without the client inventing hidden persistence rules.
 - Transfers stay excluded from income and expense totals.
 - Recurring templates can be paused, resumed, stopped, and surfaced in history.
 - All ledger writes create audit events and stay idempotent when a client mutation id is supplied.
@@ -354,6 +397,8 @@ What to build:
 
 - Dashboard summary route for the home screen.
 - Budget CRUD routes and budget allocation editing.
+- Budget strategy config routes and restriction-aware validation rules.
+- Budget health read routes for prescribed-versus-actual tracking.
 - Recommendation generation, presentation, modification, acceptance, and rejection.
 - Budget validation and activation logic.
 - Savings allocation distribution inside budget recommendations.
@@ -361,6 +406,7 @@ What to build:
 Acceptance criteria:
 
 - A user can create, edit, activate, close, and archive a budget.
+- A user can define or select reusable budget strategy configs that match the schema-backed strategy rules.
 - Protected allocations are preserved during recommendation generation.
 - The dashboard can show current balance, budget status, recent transactions, alerts, goals, and forecast highlights from one read path.
 
@@ -370,8 +416,8 @@ What to build:
 
 - Forecast generation, lookup, refresh, and display routes.
 - Expected spending events for cultural and calendar context.
-- Anomaly evaluation records, anomaly feedback actions, whitelist rules, and suppression rules.
-- Alert inbox, alert actions, and notification preferences.
+- Anomaly evaluation records, overspending evaluation read routes, anomaly feedback actions, whitelist rules, and suppression rules.
+- Alert inbox, alert actions, notification preferences, and push-delivery registration.
 
 Acceptance criteria:
 
@@ -385,29 +431,62 @@ What to build:
 
 - Savings goal CRUD, contribution logging, priority table, and allocation preferences.
 - Goal completion and archiving actions.
-- Debt account CRUD, payment logging, strategy preferences, and projection generation.
+- Debt account CRUD, payment logging, debt hierarchy ordering, hardship plans, strategy preferences, and projection generation.
 - On-demand debt projections and stale-projection refresh logic.
 
 Acceptance criteria:
 
 - Savings goals remain the source of truth for target amount, saved amount, progress state, priority, and allocation strategy.
 - Debt repayment projections can be regenerated when strategy, extra payment, balance, or payment history changes.
+- Debt priority ordering and hardship records are readable by the UI without reconstructing them from notes or alerts.
 - The UI can read a priority table for goals and a projection table for debts without reconstructing the logic client-side.
 
-### Phase 6: Reporting, Exports, and Evaluation
+### Phase 6: Reporting, Support, and Governance Completion
 
 What to build:
 
 - Report run generation and report detail routes.
 - Metrics, category breakdowns, budget comparisons, forecast comparisons, savings snapshots, and debt snapshots.
-- Data export and account deletion request workflows.
-- Internal model evaluation routes for forecasting, anomaly detection, profile classification, and budget recommendation quality tracking.
+- Support ticket, support event, and support attachment routes.
+- Data export and account deletion request completion workflows.
 
 Acceptance criteria:
 
 - Reports can be generated for week, month, and custom periods.
-- Thesis evaluation data is stored separately from user-facing screens.
-- Export, deletion, and evaluation workflows are auditable.
+- Help and problem reporting is available from the settings surface with auditable ticket history.
+- Export and deletion workflows are auditable.
+
+## Route Alignment Summary
+
+Use this section as the canonical route inventory for the v3 schema. If a detailed example block later in the document conflicts with this summary, this summary wins.
+
+### Add Route Families
+
+- `/odin/api/eligibility-profile`
+- `/odin/api/category-groups`
+- `/odin/api/categories` user CRUD in addition to read routes
+- `/odin/api/category-restrictions`
+- `/odin/api/subcategory-restrictions`
+- `/odin/api/transaction-templates`
+- `/odin/api/transaction-retention-settings`
+- `/odin/api/budget-strategy-configs`
+- `/odin/api/budgets/:id/health`
+- `/odin/api/overspending-evaluations`
+- `/odin/api/push-device-tokens`
+- `/odin/api/debt-priorities`
+- `/odin/api/debt-hardship-plans`
+- `/odin/api/support-tickets`
+
+### Rename or Reshape Existing Route Families
+
+- `GET /odin/api/categories` must stop returning category-group rows and instead return actual `categories` rows from the v3 schema.
+- Add `GET /odin/api/category-groups` for the four top-level buckets previously exposed through `GET /odin/api/categories`.
+- `/odin/api/transactions` create, read, and update payloads must support transaction line items so expense-item splits are first-class.
+- `POST /odin/api/data-export-requests/:id/complete` should be treated as an internal job/system transition, not a normal user-facing route.
+
+### Remove Route Families
+
+- `/odin/api/internal/model-evaluations`
 
 ## Route Catalog
 
@@ -537,6 +616,14 @@ request:
   }
 }
 ```
+
+GET /odin/api/eligibility-profile | Read the user's eligibility profile
+
+This route owns the Filipino, Metro Manila, and primary employment fields required by the updated specification and stored in `user_eligibility_profiles`.
+
+PATCH /odin/api/eligibility-profile | Create or update the user's eligibility profile
+
+This route captures `date_of_birth`, `is_filipino`, `metro_manila_presence`, `metro_manila_locality_code`, and `primary_employment_classification` before onboarding can be marked complete.
 
 response:
 ```json
@@ -987,6 +1074,10 @@ request:
 }
 ```
 
+POST /odin/api/profile/assignment/select | Manually select a financial profile
+
+This route supports manual classification and profile reassignment when the user chooses a profile directly instead of accepting a generated assignment.
+
 response:
 ```json
 {
@@ -1003,7 +1094,7 @@ response:
 
 #### Taxonomy
 
-GET /odin/api/categories | List broad category buckets
+GET /odin/api/category-groups | List broad category buckets
 
 request:
 ```json
@@ -1029,6 +1120,10 @@ response:
   }
 }
 ```
+
+GET /odin/api/categories | List accessible categories
+
+This route returns actual `categories` rows from the v3 schema. User-owned category CRUD is allowed for non-system rows, and the older broad-bucket behavior now belongs to `GET /odin/api/category-groups`.
 
 GET /odin/api/subcategories | List accessible subcategories
 
@@ -1059,6 +1154,14 @@ response:
   }
 }
 ```
+
+GET /odin/api/category-restrictions | List user category restrictions
+
+PUT /odin/api/category-restrictions/:categoryId | Upsert one category restriction
+
+GET /odin/api/subcategory-restrictions | List user subcategory restrictions
+
+PUT /odin/api/subcategory-restrictions/:subcategoryId | Upsert one subcategory restriction
 
 POST /odin/api/subcategories | Create a user-defined subcategory
 
@@ -1630,6 +1733,16 @@ request:
 }
 ```
 
+Route note: transaction create, read, and update payloads must support `line_items` so a single transaction can persist multiple expense items or category splits through `transaction_line_items`.
+
+GET /odin/api/transaction-templates | List reusable transaction templates
+
+POST /odin/api/transaction-templates | Create a reusable transaction template
+
+PATCH /odin/api/transaction-templates/:id | Update a reusable transaction template
+
+DELETE /odin/api/transaction-templates/:id | Archive a reusable transaction template
+
 response:
 ```json
 {
@@ -1680,6 +1793,10 @@ request:
   }
 }
 ```
+
+GET /odin/api/transaction-retention-settings | Read transaction retention settings
+
+PATCH /odin/api/transaction-retention-settings | Update transaction retention settings
 
 response:
 ```json
@@ -2257,6 +2374,18 @@ request:
   }
 }
 ```
+
+GET /odin/api/budget-strategy-configs | List reusable budget strategy configs
+
+POST /odin/api/budget-strategy-configs | Create a reusable budget strategy config
+
+GET /odin/api/budget-strategy-configs/:id/rules | Read one strategy config's rules
+
+PUT /odin/api/budget-strategy-configs/:id/rules | Replace one strategy config's rules
+
+GET /odin/api/budgets/:id/health | Read budget health snapshots
+
+This route exposes prescribed-versus-actual tracking from `budget_health_snapshots` for the budget health feature in the updated specification.
 
 response:
 ```json
@@ -2900,6 +3029,10 @@ request:
 }
 ```
 
+GET /odin/api/overspending-evaluations | List budget overspending evaluations
+
+GET /odin/api/overspending-evaluations/:id | Read one budget overspending evaluation
+
 response:
 ```json
 {
@@ -3109,6 +3242,10 @@ request:
   }
 }
 ```
+
+POST /odin/api/push-device-tokens | Register a push notification device token
+
+DELETE /odin/api/push-device-tokens/:id | Deactivate a push notification device token
 
 response:
 ```json
@@ -3583,6 +3720,22 @@ response:
 ```
 
 #### Debt Management
+
+GET /odin/api/debt-priorities | Read the user's debt hierarchy order
+
+PUT /odin/api/debt-priorities | Replace the user's debt hierarchy order
+
+GET /odin/api/debt-hardship-plans | List debt hardship plans
+
+POST /odin/api/debt-hardship-plans | Create a debt hardship plan
+
+PATCH /odin/api/debt-hardship-plans/:id | Update a debt hardship plan draft
+
+POST /odin/api/debt-hardship-plans/:id/activate | Activate a debt hardship plan
+
+POST /odin/api/debt-hardship-plans/:id/resolve | Resolve a debt hardship plan
+
+POST /odin/api/debt-hardship-plans/:id/cancel | Cancel a debt hardship plan
 
 GET /odin/api/debts | List debt accounts
 
@@ -4156,6 +4309,8 @@ response:
 
 POST /odin/api/data-export-requests/:id/complete | Mark an export request complete
 
+This route is intended for an internal export worker or system job after the generated file has been written. Do not expose it as a normal client-facing settings action.
+
 request:
 ```json
 {
@@ -4177,94 +4332,15 @@ response:
 }
 ```
 
-POST /odin/api/internal/model-evaluations | Create an internal model evaluation run
+GET /odin/api/support-tickets | List support tickets
 
-request:
-```json
-{
-  "payload": {
-    "evaluation_kind": "forecasting" // Forecasting, anomaly_detection, profile_classification, or budget_recommendation.
-    "model_kind": "lstm" // Model family being evaluated.
-    "model_version": "v1" // Model version string.
-    "dataset_name": "forecast_validation_set" // Dataset label used for the run.
-    "period_start": "2026-01-01" // Optional evaluation window start.
-    "period_end": "2026-06-30" // Optional evaluation window end.
-  }
-}
-```
+POST /odin/api/support-tickets | Create a support ticket
 
-response:
-```json
-{
-  "headers": {},
-  "payload": {
-    "evaluation_run": {
-      "id": "uuid" // Model evaluation run id.
-      "status": "queued" // Run lifecycle state.
-    }
-  }
-}
-```
+GET /odin/api/support-tickets/:id | Read one support ticket
 
-GET /odin/api/internal/model-evaluations | List internal model evaluation runs
+POST /odin/api/support-tickets/:id/attachments | Add a support ticket attachment
 
-request:
-```json
-{
-  "query": {
-    "evaluation_kind": "forecasting" // Optional evaluation kind filter.
-  }
-}
-```
-
-response:
-```json
-{
-  "headers": {},
-  "payload": {
-    "items": [
-      {
-        "id": "uuid" // Evaluation run id.
-        "evaluation_kind": "forecasting" // Evaluation family.
-        "status": "available" // Run state.
-        "model_kind": "lstm" // Model family.
-      }
-    ]
-  }
-}
-```
-
-GET /odin/api/internal/model-evaluations/:id | Read one internal model evaluation run
-
-request:
-```json
-{
-  "query": {
-    "include": "metrics,artifacts" // Optional detail expansion.
-  }
-}
-```
-
-response:
-```json
-{
-  "headers": {},
-  "payload": {
-    "evaluation_run": {
-      "id": "uuid" // Evaluation run id.
-      "status": "available" // Run state.
-    },
-    "metrics": [
-      {
-        "metric_key": "mae" // Metric key.
-        "metric_value": 0.23 // Metric value.
-        "direction": "lower_is_better" // Expected direction for the metric.
-      }
-    ],
-    "artifacts": [] // Optional stored JSON or file paths.
-  }
-}
-```
+These routes back the Help & Problem Reporting screen and map to `support_tickets`, `support_ticket_events`, and `support_ticket_attachments` in the v3 schema.
 
 ## Notes for Implementation
 
