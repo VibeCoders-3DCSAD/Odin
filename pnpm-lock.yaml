@@ -66,6 +66,9 @@ importers:
       '@expo/vector-icons':
         specifier: ^15.1.1
         version: 15.1.1(expo-font@55.0.6(expo@55.0.0)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
+      '@react-native-google-signin/google-signin':
+        specifier: ^16.1.2
+        version: 16.1.2(expo@55.0.0)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
       '@supabase/supabase-js':
         specifier: 2.57.4
         version: 2.57.4
@@ -99,7 +102,7 @@ importers:
     devDependencies:
       '@testing-library/react-native':
         specifier: ^13.3.3
-        version: 13.3.3(jest@30.3.0)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
+        version: 13.3.3(jest@30.3.0(@types/node@25.6.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
@@ -1020,12 +1023,6 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
 
-  '@babel/plugin-transform-template-literals@7.27.1':
-    resolution: {integrity: sha512-fBJKiV7F2DxZUkg5EtHKXQdbsbURW3DZKQUWphDum0uRP6eHGGa/He9mc0mypL680pb+e/lDIthRohlv8NCHkg==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
   '@babel/plugin-transform-template-literals@7.29.7':
     resolution: {integrity: sha512-NCSEJ4sLFU2gqAub45HYh4fus2yQ36rr6ei6vpU7NdoJqCpxvEG8E6eJpscGyXP3VHD2Ny+fSXr04k1hoUrFqA==}
     engines: {node: '>=6.9.0'}
@@ -1898,6 +1895,16 @@ packages:
       react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
     peerDependenciesMeta:
       '@types/react':
+        optional: true
+
+  '@react-native-google-signin/google-signin@16.1.2':
+    resolution: {integrity: sha512-1hf4pRmpnS5t0dHtqU72Q1FmWzsCZR2Sm3uVQbbfMKeNPl5TKjpAsP6F8QTZ9L+Q6Cnn9tL9BXpDCb1nyutdCQ==}
+    peerDependencies:
+      expo: '>=52.0.40'
+      react: '*'
+      react-native: '*'
+    peerDependenciesMeta:
+      expo:
         optional: true
 
   '@react-native/assets-registry@0.83.0':
@@ -5423,7 +5430,7 @@ snapshots:
 
   '@babel/highlight@7.25.9':
     dependencies:
-      '@babel/helper-validator-identifier': 7.28.5
+      '@babel/helper-validator-identifier': 7.29.7
       chalk: 2.4.2
       js-tokens: 4.0.0
       picocolors: 1.1.1
@@ -6189,11 +6196,6 @@ snapshots:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
 
-  '@babel/plugin-transform-template-literals@7.27.1(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.28.6
-
   '@babel/plugin-transform-template-literals@7.29.7(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
@@ -6589,7 +6591,7 @@ snapshots:
       ws: 8.20.0
       zod: 3.25.76
     optionalDependencies:
-      expo-router: 6.0.23(a4410ef3d79daa8075ef2d22fe4b4b72)
+      expo-router: 6.0.23(b266f8c6a10c8a287fe30f8b72cec231)
       react-native: 0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0)
     transitivePeerDependencies:
       - '@expo/dom-webview'
@@ -6901,7 +6903,7 @@ snapshots:
       react: 19.2.0
     optionalDependencies:
       '@expo/metro-runtime': 6.1.2(expo@55.0.0)(react-dom@19.1.0(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
-      expo-router: 6.0.23(a4410ef3d79daa8075ef2d22fe4b4b72)
+      expo-router: 6.0.23(b266f8c6a10c8a287fe30f8b72cec231)
       react-dom: 19.1.0(react@19.2.0)
     transitivePeerDependencies:
       - supports-color
@@ -7478,6 +7480,13 @@ snapshots:
       '@types/react': 19.1.17
     optional: true
 
+  '@react-native-google-signin/google-signin@16.1.2(expo@55.0.0)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)':
+    dependencies:
+      react: 19.2.0
+      react-native: 0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0)
+    optionalDependencies:
+      expo: 55.0.0(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-dom@19.1.0(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)(typescript@5.9.2)
+
   '@react-native/assets-registry@0.83.0': {}
 
   '@react-native/babel-plugin-codegen@0.83.6(@babel/core@7.29.7)':
@@ -7794,7 +7803,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@testing-library/react-native@13.3.3(jest@30.3.0)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)':
+  '@testing-library/react-native@13.3.3(jest@30.3.0(@types/node@25.6.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)':
     dependencies:
       jest-matcher-utils: 30.3.0
       picocolors: 1.1.1
@@ -8766,7 +8775,7 @@ snapshots:
       react: 19.2.0
       react-native: 0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0)
 
-  expo-router@6.0.23(a4410ef3d79daa8075ef2d22fe4b4b72):
+  expo-router@6.0.23(b266f8c6a10c8a287fe30f8b72cec231):
     dependencies:
       '@expo/metro-runtime': 6.1.2(expo@55.0.0)(react-dom@19.1.0(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
       '@expo/schema-utils': 0.1.8
@@ -8799,7 +8808,7 @@ snapshots:
       use-latest-callback: 0.2.6(react@19.2.0)
       vaul: 1.1.2(@types/react@19.1.17)(react-dom@19.1.0(react@19.2.0))(react@19.2.0)
     optionalDependencies:
-      '@testing-library/react-native': 13.3.3(jest@30.3.0)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
+      '@testing-library/react-native': 13.3.3(jest@30.3.0(@types/node@25.6.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react-test-renderer@19.2.5(react@19.2.0))(react@19.2.0)
       react-dom: 19.1.0(react@19.2.0)
       react-native-gesture-handler: 2.28.0(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
       react-native-reanimated: 4.1.7(react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0))(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
@@ -9986,7 +9995,7 @@ snapshots:
   metro-source-map@0.83.3:
     dependencies:
       '@babel/traverse': 7.29.0
-      '@babel/traverse--for-generate-function-map': '@babel/traverse@7.29.0'
+      '@babel/traverse--for-generate-function-map': '@babel/traverse@7.29.7'
       '@babel/types': 7.29.0
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
@@ -10603,15 +10612,15 @@ snapshots:
   react-native-worklets@0.5.1(@babel/core@7.29.7)(react-native@0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0):
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/plugin-transform-arrow-functions': 7.27.1(@babel/core@7.29.7)
-      '@babel/plugin-transform-class-properties': 7.28.6(@babel/core@7.29.7)
-      '@babel/plugin-transform-classes': 7.28.6(@babel/core@7.29.7)
-      '@babel/plugin-transform-nullish-coalescing-operator': 7.28.6(@babel/core@7.29.7)
-      '@babel/plugin-transform-optional-chaining': 7.28.6(@babel/core@7.29.7)
-      '@babel/plugin-transform-shorthand-properties': 7.27.1(@babel/core@7.29.7)
-      '@babel/plugin-transform-template-literals': 7.27.1(@babel/core@7.29.7)
-      '@babel/plugin-transform-unicode-regex': 7.27.1(@babel/core@7.29.7)
-      '@babel/preset-typescript': 7.28.5(@babel/core@7.29.7)
+      '@babel/plugin-transform-arrow-functions': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-class-properties': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-classes': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-nullish-coalescing-operator': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-optional-chaining': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-shorthand-properties': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-template-literals': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-unicode-regex': 7.29.7(@babel/core@7.29.7)
+      '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
       convert-source-map: 2.0.0
       react: 19.2.0
       react-native: 0.83.0(@babel/core@7.29.7)(@types/react@19.1.17)(react@19.2.0)
