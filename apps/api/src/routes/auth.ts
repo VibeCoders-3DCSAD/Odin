@@ -9,70 +9,6 @@ import type { AuthenticatedRequest } from "../middleware/auth.js";
 
 const router = Router();
 
-router.post("/register", async (request: Request, response: Response) => {
-  const { email, password, display_name } = request.body?.payload ?? {};
-
-  if (!email) {
-    response.status(400).json({
-      error: "Bad Request",
-      message: "Email is required",
-    });
-    return;
-  }
-
-  if (!password) {
-    response.status(400).json({
-      error: "Bad Request",
-      message: "Password is required",
-    });
-    return;
-  }
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: display_name ? { display_name } : undefined },
-  });
-
-  if (error) {
-    if (error.status === 429) {
-      response.status(429).json({
-        error: "Too Many Requests",
-        message: error.message,
-      });
-      return;
-    }
-
-    if (error.status === 409) {
-      response.status(409).json({
-        error: "Conflict",
-        message: error.message,
-      });
-      return;
-    }
-
-    response.status(500).json({
-      error: "Internal Server Error",
-      message: "Registration failed",
-    });
-    return;
-  }
-
-  response.status(201).json({
-    payload: {
-      user: { id: data.user?.id },
-      session: {
-        access_token: data.session?.access_token,
-        refresh_token: data.session?.refresh_token,
-      },
-      activation: {
-        email_confirmation_required: true,
-        delivery: "email_link",
-      },
-    },
-  });
-});
-
 async function ensureProfile(
   userId: string,
   authenticatedSupabase = supabase,
@@ -107,6 +43,95 @@ async function ensurePrivacySettings(
   return privacy;
 }
 
+async function bootstrapAuthenticatedUser(
+  userId: string,
+  accessToken: string,
+): Promise<{
+  user: { id: string };
+  profile: { id: string };
+  onboarding: { status: string };
+  privacy_settings: { personalization_enabled: boolean };
+}> {
+  const authenticatedSupabase = createAuthenticatedSupabaseClient(accessToken);
+  const profile = await ensureProfile(userId, authenticatedSupabase);
+  const privacy = await ensurePrivacySettings(userId, authenticatedSupabase);
+
+  const { data: onboarding, error: onboardingError } = await authenticatedSupabase
+    .from("onboarding_sessions")
+    .select("status")
+    .eq("user_id", userId)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (onboardingError) {
+    throw new Error("Failed to fetch onboarding status");
+  }
+
+  return {
+    user: { id: userId },
+    profile: { id: profile.id },
+    onboarding: {
+      status: onboarding?.status ?? "in_progress",
+    },
+    privacy_settings: {
+      personalization_enabled: privacy?.personalization_enabled ?? true,
+    },
+  };
+}
+
+router.post("/google", async (request: Request, response: Response) => {
+  const { googleIdToken } = request.body?.payload ?? {};
+
+  if (!googleIdToken) {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Google ID token is required",
+    });
+    return;
+  }
+
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: "google",
+    token: googleIdToken,
+  });
+
+  if (error || !data.user || !data.session?.access_token) {
+    response.status(401).json({
+      error: "Unauthorized",
+      message: "Google sign-in failed",
+    });
+    return;
+  }
+
+  let bootstrapPayload: Awaited<ReturnType<typeof bootstrapAuthenticatedUser>>;
+  try {
+    bootstrapPayload = await bootstrapAuthenticatedUser(
+      data.user.id,
+      data.session.access_token,
+    );
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "Failed to bootstrap user session";
+    response.status(500).json({
+      error: "Internal Server Error",
+      message,
+    });
+    return;
+  }
+
+  response.status(200).json({
+    payload: {
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      },
+      ...bootstrapPayload,
+    },
+  });
+});
+
 router.post("/session", async (request: Request, response: Response) => {
   const authHeader = request.headers.authorization;
 
@@ -140,82 +165,23 @@ router.post("/session", async (request: Request, response: Response) => {
   }
 
   const userId = userData.user.id;
-  const authenticatedSupabase = createAuthenticatedSupabaseClient(token);
-
-  let profile: { id: string };
+  let bootstrapPayload: Awaited<ReturnType<typeof bootstrapAuthenticatedUser>>;
   try {
-    profile = await ensureProfile(userId, authenticatedSupabase);
-  } catch {
+    bootstrapPayload = await bootstrapAuthenticatedUser(userId, token);
+  } catch (error) {
+    const message = error instanceof Error
+      && error.message === "Failed to fetch onboarding status"
+        ? error.message
+        : "Failed to bootstrap user profile";
     response.status(500).json({
       error: "Internal Server Error",
-      message: "Failed to bootstrap user profile",
-    });
-    return;
-  }
-
-  const privacy = await ensurePrivacySettings(userId, authenticatedSupabase);
-
-  const { data: onboarding, error: onboardingError } = await authenticatedSupabase
-    .from("onboarding_sessions")
-    .select("status")
-    .eq("user_id", userId)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (onboardingError) {
-    response.status(500).json({
-      error: "Internal Server Error",
-      message: "Failed to fetch onboarding status",
+      message,
     });
     return;
   }
 
   response.status(200).json({
-    payload: {
-      user: { id: userId },
-      profile: { id: profile.id },
-      onboarding: {
-        status: onboarding?.status ?? "in_progress",
-      },
-      privacy_settings: {
-        personalization_enabled: privacy?.personalization_enabled ?? true,
-      },
-    },
-  });
-});
-
-router.post("/password-reset", async (request: Request, response: Response) => {
-  const { email } = request.body?.payload ?? {};
-
-  if (!email) {
-    response.status(400).json({
-      error: "Bad Request",
-      message: "Email is required",
-    });
-    return;
-  }
-
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-
-  if (error) {
-    if (error.status === 429) {
-      response.status(429).json({
-        error: "Too Many Requests",
-        message: error.message,
-      });
-      return;
-    }
-
-    response.status(500).json({
-      error: "Internal Server Error",
-      message: "Password reset request failed",
-    });
-    return;
-  }
-
-  response.status(200).json({
-    payload: { requested: true },
+    payload: bootstrapPayload,
   });
 });
 

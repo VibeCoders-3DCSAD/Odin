@@ -37,7 +37,7 @@ Version pins in this repo:
 
 Optional but typically needed for mobile work:
 
-- Expo Go on your phone
+- Expo development builds for native Google Sign-In testing
 - Android Studio for Android emulator
 - Xcode for iOS simulator on macOS
 
@@ -168,6 +168,9 @@ Create an `.env` file when Supabase and service URLs are ready:
 EXPO_PUBLIC_SUPABASE_URL=
 EXPO_PUBLIC_SUPABASE_ANON_KEY=
 API_BASE_URL=http://localhost:3001
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3001
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
 ```
 
 For the API, you will likely also need:
@@ -180,6 +183,21 @@ PORT=3001
 ```
 
 Do not commit real secrets.
+
+## Google Auth QA
+
+The Expo app entry screen is currently a Google auth smoke-test page. It calls
+native Google Sign-In, sends the Google ID token to
+`POST /odin/api/auth/google`, and displays the Supabase session bootstrap
+response.
+
+This flow uses `@react-native-google-signin/google-signin`, so it does not work
+inside Expo Go. Use an Expo development build or EAS development build when
+testing Google auth.
+
+For Android emulator testing, `localhost` points at the emulator itself. Use
+`http://10.0.2.2:3001` as the API base URL when the API is running on your host
+machine.
 
 ## Common Commands
 
@@ -240,6 +258,9 @@ The API currently exposes:
 
 - `GET /`
 - `GET /health`
+- `POST /odin/api/auth/google`
+- `POST /odin/api/auth/session`
+- `POST /odin/api/auth/logout`
 
 Default local API URL:
 
