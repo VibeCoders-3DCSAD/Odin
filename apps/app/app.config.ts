@@ -5,13 +5,13 @@ const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME
     : null);
 const processWithArgv = process as typeof process & { argv?: string[] };
 const expoCommand = processWithArgv.argv?.slice(2).join(" ").toLowerCase() ?? "";
-const requiresNativeGoogleConfig = Boolean(process.env.EAS_BUILD)
+const requiresIosGoogleConfig = (Boolean(process.env.EAS_BUILD) && process.env.EXPO_OS === "ios")
   || process.env.EXPO_OS === "ios"
-  || /\b(prebuild|run:ios|run:android)\b/.test(expoCommand);
+  || /\b(run:ios)\b/.test(expoCommand);
 
-if (requiresNativeGoogleConfig && !googleIosUrlScheme) {
+if (requiresIosGoogleConfig && !googleIosUrlScheme) {
   throw new Error(
-    "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID or EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME is required for native builds with Google Sign-In.",
+    "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID or EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME is required for iOS builds with Google Sign-In.",
   );
 }
 
