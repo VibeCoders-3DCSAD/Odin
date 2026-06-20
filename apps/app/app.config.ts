@@ -5,8 +5,11 @@ const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME
     : null);
 const processWithArgv = process as typeof process & { argv?: string[] };
 const expoCommand = processWithArgv.argv?.slice(2).join(" ").toLowerCase() ?? "";
+const isPrebuildCommand = /\bprebuild\b/.test(expoCommand);
+const isAndroidOnlyPrebuild = /\bprebuild\b.*\b(--platform|-p)\s+android\b/.test(expoCommand);
 const requiresIosGoogleConfig = (Boolean(process.env.EAS_BUILD) && process.env.EXPO_OS === "ios")
   || process.env.EXPO_OS === "ios"
+  || (isPrebuildCommand && !isAndroidOnlyPrebuild)
   || /\b(run:ios)\b/.test(expoCommand);
 
 if (requiresIosGoogleConfig && !googleIosUrlScheme) {
