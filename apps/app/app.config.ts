@@ -2,13 +2,7 @@ const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME
   ?? (googleIosClientId
     ? `com.googleusercontent.apps.${googleIosClientId.replace(".apps.googleusercontent.com", "")}`
-    : undefined);
-
-if (!googleIosUrlScheme) {
-  throw new Error(
-    "Missing Google iOS config. Set EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME or EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID before generating the Expo config.",
-  );
-}
+    : "com.googleusercontent.apps.missing-google-ios-client-id");
 
 const plugins = [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }]];
 
