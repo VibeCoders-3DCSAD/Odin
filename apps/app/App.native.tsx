@@ -130,10 +130,15 @@ export default function App() {
         throw new Error(body.message ?? "Logout failed.");
       }
 
-      await GoogleSignin.signOut();
       setAccessToken(null);
       setAuthResponse(null);
       setStatus("Logged out.");
+
+      try {
+        await GoogleSignin.signOut();
+      } catch (error) {
+        setStatus(`Logged out from API. Native Google sign-out failed: ${getErrorMessage(error)}`);
+      }
     } catch (error) {
       setStatus(getErrorMessage(error));
     } finally {
