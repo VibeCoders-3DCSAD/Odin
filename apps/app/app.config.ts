@@ -3,10 +3,15 @@ const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME
   ?? (googleIosClientId
     ? `com.googleusercontent.apps.${googleIosClientId.replace(".apps.googleusercontent.com", "")}`
     : null);
+const processWithArgv = process as typeof process & { argv?: string[] };
+const expoCommand = processWithArgv.argv?.slice(2).join(" ").toLowerCase() ?? "";
+const requiresNativeGoogleConfig = Boolean(process.env.EAS_BUILD)
+  || process.env.EXPO_OS === "ios"
+  || /\b(prebuild|run:ios|run:android)\b/.test(expoCommand);
 
-if (process.env.EAS_BUILD && !googleIosUrlScheme) {
+if (requiresNativeGoogleConfig && !googleIosUrlScheme) {
   throw new Error(
-    "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID or EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME is required for EAS builds with Google Sign-In.",
+    "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID or EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME is required for native builds with Google Sign-In.",
   );
 }
 

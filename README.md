@@ -200,6 +200,11 @@ Set `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` to the reversed iOS client ID, such as
 `com.googleusercontent.apps.<id>`, so the native iOS callback URL is registered
 correctly in the Expo config plugin.
 
+Local iOS native builds also need that Google iOS config. If you run
+`expo prebuild`, `expo run:ios`, or another native iOS build path without
+`EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` or `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, the
+config now fails fast instead of generating a broken native callback setup.
+
 For Android emulator testing, `localhost` points at the emulator itself. Use
 `http://10.0.2.2:3001` as the API base URL when the API is running on your host
 machine.
