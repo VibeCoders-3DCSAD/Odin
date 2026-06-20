@@ -81,9 +81,9 @@ async function bootstrapAuthenticatedUser(
 }
 
 router.post("/google", async (request: Request, response: Response) => {
-  const { googleIdToken } = request.body?.payload ?? {};
+  const googleIdToken = request.body?.payload?.googleIdToken;
 
-  if (!googleIdToken) {
+  if (typeof googleIdToken !== "string" || googleIdToken.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
       message: "Google ID token is required",
@@ -93,7 +93,7 @@ router.post("/google", async (request: Request, response: Response) => {
 
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: "google",
-    token: googleIdToken,
+    token: googleIdToken.trim(),
   });
 
   if (error || !data.user || !data.session?.access_token) {

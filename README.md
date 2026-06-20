@@ -171,6 +171,7 @@ API_BASE_URL=http://localhost:3001
 EXPO_PUBLIC_API_BASE_URL=http://localhost:3001
 EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
 EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
+EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME=
 ```
 
 For the API, you will likely also need:
@@ -194,6 +195,10 @@ response.
 This flow uses `@react-native-google-signin/google-signin`, so it does not work
 inside Expo Go. Use an Expo development build or EAS development build when
 testing Google auth.
+
+Set `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` to the reversed iOS client ID, such as
+`com.googleusercontent.apps.<id>`, so the native iOS callback URL is registered
+correctly in the Expo config plugin.
 
 For Android emulator testing, `localhost` points at the emulator itself. Use
 `http://10.0.2.2:3001` as the API base URL when the API is running on your host

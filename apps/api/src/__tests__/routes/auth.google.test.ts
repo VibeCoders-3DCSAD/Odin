@@ -111,6 +111,39 @@ describe("POST /odin/api/auth/google", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when Google ID token is blank", async () => {
+    const response = await request(app)
+      .post("/odin/api/auth/google")
+      .send({ payload: { googleIdToken: "   " } });
+
+    expect(response.status).toBe(400);
+    expect(mockSignInWithIdToken).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when Google ID token is not a string", async () => {
+    const response = await request(app)
+      .post("/odin/api/auth/google")
+      .send({ payload: { googleIdToken: { token: validGoogleIdToken } } });
+
+    expect(response.status).toBe(400);
+    expect(mockSignInWithIdToken).not.toHaveBeenCalled();
+  });
+
+  it("trims the Google ID token before passing it to Supabase", async () => {
+    mockSuccessfulGoogleSignIn();
+    mockSuccessfulBootstrap();
+
+    const response = await request(app)
+      .post("/odin/api/auth/google")
+      .send({ payload: { googleIdToken: `  ${validGoogleIdToken}  ` } });
+
+    expect(response.status).toBe(200);
+    expect(mockSignInWithIdToken).toHaveBeenCalledWith({
+      provider: "google",
+      token: validGoogleIdToken,
+    });
+  });
+
   it("returns 401 when Supabase rejects the Google token", async () => {
     mockSignInWithIdToken.mockResolvedValue({
       data: { user: null, session: null },
