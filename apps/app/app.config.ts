@@ -2,9 +2,17 @@ const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME
   ?? (googleIosClientId
     ? `com.googleusercontent.apps.${googleIosClientId.replace(".apps.googleusercontent.com", "")}`
-    : "com.googleusercontent.apps.missing-google-ios-client-id");
+    : null);
 
-const plugins = [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }]];
+if (process.env.EAS_BUILD && !googleIosUrlScheme) {
+  throw new Error(
+    "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID or EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME is required for EAS builds with Google Sign-In.",
+  );
+}
+
+const plugins = googleIosUrlScheme
+  ? [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }]]
+  : [];
 
 const config = {
   name: "app",
