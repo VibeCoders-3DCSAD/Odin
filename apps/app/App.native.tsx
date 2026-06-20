@@ -39,30 +39,12 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong";
 }
 
-function maskSessionTokens(response: AuthResponse): AuthResponse {
-  const session = response.payload?.session;
-
-  if (!response.payload || !session) {
-    return response;
-  }
-
-  return {
-    ...response,
-    payload: {
-      ...response.payload,
-      session: {
-        access_token: session.access_token ? "[present]" : undefined,
-        refresh_token: session.refresh_token ? "[present]" : undefined,
-      },
-    },
-  };
-}
-
 export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiUrl, setApiUrl] = useState(apiBaseUrl);
   const [status, setStatus] = useState("Ready to test Google auth.");
   const [authResponse, setAuthResponse] = useState<AuthResponse | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -75,6 +57,7 @@ export default function App() {
     setIsLoading(true);
     setStatus("Opening Google sign-in...");
     setAuthResponse(null);
+    setAccessToken(null);
 
     try {
       if (Platform.OS === "android") {
@@ -104,7 +87,8 @@ export default function App() {
         });
 
         const body = await response.json() as AuthResponse;
-        setAuthResponse(maskSessionTokens(body));
+        setAccessToken(body.payload?.session?.access_token ?? null);
+        setAuthResponse(body);
 
         if (!response.ok) {
           throw new Error(body.message ?? "Backend Google sign-in failed.");
@@ -117,6 +101,43 @@ export default function App() {
     } catch (error) {
       setStatus(getErrorMessage(error));
     } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function logout() {
+    if (!accessToken) {
+      return;
+    }
+
+    setIsLoading(true);
+    setStatus("Logging out...");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), googleAuthTimeoutMs);
+
+    try {
+      const response = await fetch(`${apiUrl}/odin/api/auth/logout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        signal: controller.signal,
+      });
+      const body = await response.json() as AuthResponse;
+
+      if (!response.ok) {
+        throw new Error(body.message ?? "Logout failed.");
+      }
+
+      await GoogleSignin.signOut();
+      setAccessToken(null);
+      setAuthResponse(null);
+      setStatus("Logged out.");
+    } catch (error) {
+      setStatus(getErrorMessage(error));
+    } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }
@@ -173,14 +194,25 @@ export default function App() {
             ) : null}
           </View>
 
-          <Button
-            disabled={isLoading}
-            loading={isLoading}
-            mode="contained"
-            onPress={signInWithGoogle}
-          >
-            Continue with Google
-          </Button>
+          {accessToken ? (
+            <Button
+              disabled={isLoading}
+              loading={isLoading}
+              mode="contained"
+              onPress={logout}
+            >
+              Logout
+            </Button>
+          ) : (
+            <Button
+              disabled={isLoading}
+              loading={isLoading}
+              mode="contained"
+              onPress={signInWithGoogle}
+            >
+              Continue with Google
+            </Button>
+          )}
         </ScrollView>
         <StatusBar style="dark" />
       </SafeAreaView>
