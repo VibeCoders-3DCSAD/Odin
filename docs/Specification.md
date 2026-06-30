@@ -673,7 +673,29 @@
 
 ### Section 4. Help and Problem Reporting
 
----
+1. The Help and Problem Reporting screen shall provide two distinct functions: self‑serve help content and direct problem reporting.
+
+    1.1. The help content shall consist of static in‑app documentation covering common topics such as navigating the app, understanding the financial behavioral profiles, and interpreting forecasts and anomalies.
+
+    1.2. The problem reporting function shall allow the user to submit a report directly from the app without leaving the screen.
+
+2. The problem reporting form shall contain at least the following fields:
+
+    2.1. **Subject.** A concise title for the issue.
+
+    2.2. **Message body.** A free‑text description of the problem, concern, or question.
+
+    2.3. *Optional file attachment. This may be omitted in the initial implementation and added later.*
+
+3. Upon submission, the System shall dispatch the report to the development team via email using the already‑configured SMTP server.
+
+    3.1. The email shall include the user's registered email address as the reply‑to so the team can respond directly.
+
+    3.2. The email shall also include the user's internal user ID for diagnostic context.
+
+    3.3. No full ticketing system, admin dashboard, agent role, or status workflow shall be implemented. The team shall manage incoming reports via their email inbox.
+
+4. *The form shall show a success confirmation after sending and shall handle network or server errors gracefully with a retry option.*
 
 ## ===== Article XXXIII. Offboarding =====
 
