@@ -16,7 +16,7 @@ const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:300
 const requestTimeoutMs = 10_000;
 const odinLogo = require("../assets/odin-logo.png");
 
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "reset_password" | "reset_complete";
 type AuthProvider = "password" | "google";
 type NoticeTone = "default" | "success" | "error";
 
@@ -473,6 +473,48 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
       setNotice({
         tone: "success",
         message: "If that email exists, a reset link is on the way now.",
+      });
+    } catch (error) {
+      setNotice({ tone: "error", message: getErrorMessage(error) });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handlePasswordUpdate() {
+    if (!recoveryToken.trim()) {
+      setNotice({ tone: "error", message: "Paste the recovery link from your email first." });
+      return;
+    }
+
+    if (!password) {
+      setNotice({ tone: "error", message: "Choose a new password first." });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setNotice({ tone: "error", message: "Your new passwords do not match yet." });
+      return;
+    }
+
+    setIsBusy(true);
+    setNotice({ tone: "default", message: "Updating your password..." });
+
+    try {
+      const { response, body } = await postJson("/password-update", {
+        recovery_token: recoveryToken.trim(),
+        password,
+      });
+
+      if (!response.ok) {
+        throw new Error(body.message ?? "Password update failed.");
+      }
+
+      setMode("login");
+      resetSensitiveFields();
+      setNotice({
+        tone: "success",
+        message: "Password updated. Sign in with your new password.",
       });
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });
