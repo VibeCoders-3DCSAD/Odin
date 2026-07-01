@@ -1,0 +1,1429 @@
+Table profiles {
+  id uuid [pk]
+  user_id uuid [not null, unique, ref: > auth.users.id]
+  display_name text
+  metro_manila_city text
+  lifecycle_status text [not null]
+  onboarding_completed_at timestamp
+  last_active_at timestamp
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  deleted_at timestamp
+  metadata json [not null]
+}
+
+Table user_privacy_settings {
+  user_id uuid [pk, ref: > profiles.user_id]
+  personalization_enabled boolean [not null]
+  model_training_opt_in boolean [not null]
+  research_evaluation_opt_in boolean [not null]
+  notifications_opt_in boolean [not null]
+  data_retention_days integer
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+Table user_consents {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  consent_kind text [not null]
+  status text [not null]
+  version text [not null]
+  recorded_at timestamp [not null]
+  effective_at timestamp [not null]
+  withdrawn_at timestamp
+  source text
+  ip_address inet
+  user_agent text
+  metadata json [not null]
+}
+
+Table data_export_requests {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  status text [not null]
+  requested_at timestamp [not null]
+  processed_at timestamp
+  expires_at timestamp
+  export_storage_path text
+  failure_reason text
+  metadata json [not null]
+}
+
+Table account_deletion_requests {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  status text [not null]
+  requested_at timestamp [not null]
+  confirmed_at timestamp
+  scheduled_delete_at timestamp
+  completed_at timestamp
+  cancelled_at timestamp
+  reason text
+  metadata json [not null]
+}
+
+Table metro_manila_localities {
+  code text [pk]
+  name text [not null, unique]
+  is_city boolean [not null]
+  sort_order integer [not null]
+}
+
+Table user_eligibility_profiles {
+  user_id uuid [pk, ref: > profiles.user_id]
+  date_of_birth date
+  is_filipino boolean
+  metro_manila_presence text
+  metro_manila_locality_code text [ref: > metro_manila_localities.code]
+  primary_employment_classification text
+  primary_employment_other text
+  eligibility_confirmed_at timestamp
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+// Note: (id, user_id) unique
+Table onboarding_sessions {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  status text [not null]
+  started_at timestamp [not null]
+  submitted_at timestamp
+  abandoned_at timestamp
+  superseded_at timestamp
+  current_step_key text
+  raw_answers json [not null]
+  review_snapshot json [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table onboarding_responses {
+  id uuid [pk]
+  onboarding_session_id uuid [not null, ref: > onboarding_sessions.id]
+  question_key text [not null]
+  answer json [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (onboarding_session_id, question_key) [unique]
+  }
+}
+
+// Note: (onboarding_session_id, user_id) references onboarding_sessions(id, user_id) ON DELETE SET NULL
+Table financial_profile_assessments {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  onboarding_session_id uuid [ref: > onboarding_sessions.id]
+  status text [not null]
+  assessment_method text [not null]
+  requested_at timestamp [not null]
+  assessed_at timestamp
+  model_kind text [not null]
+  model_version text
+  proposed_profile_label text
+  confidence_score decimal
+  income_type text
+  obligation_load_bps integer
+  explanation_summary text
+  input_snapshot json [not null]
+  output_snapshot json [not null]
+  failure_reason text
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table financial_profile_explanation_drivers {
+  id uuid [pk]
+  assessment_id uuid [not null, ref: > financial_profile_assessments.id]
+  driver_key text [not null]
+  driver_label text [not null]
+  value_text text
+  impact_label text
+  explanation text [not null]
+  sort_order integer [not null]
+}
+
+// Note: (assessment_id, user_id) references financial_profile_assessments(id, user_id) ON DELETE SET NULL
+Table financial_profile_assignments {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  assessment_id uuid [ref: > financial_profile_assessments.id]
+  profile_label text [not null]
+  is_active boolean [not null]
+  confirmation_required boolean [not null]
+  effective_from timestamp [not null]
+  effective_to timestamp
+  confirmed_at timestamp
+  rejected_at timestamp
+  override_reason text
+  explanation text [not null]
+  created_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+// Note: (assessment_id, user_id) references financial_profile_assessments(id, user_id) ON DELETE SET NULL
+// Note: (assignment_id, user_id) references financial_profile_assignments(id, user_id) ON DELETE SET NULL
+Table financial_profile_events {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  assessment_id uuid [ref: > financial_profile_assessments.id]
+  assignment_id uuid [ref: > financial_profile_assignments.id]
+  action text [not null]
+  created_at timestamp [not null]
+  notes text
+  payload json [not null]
+}
+
+// Note: (last_assessment_id, user_id) references financial_profile_assessments(id, user_id) ON DELETE SET NULL
+Table financial_profile_reclassification_schedules {
+  user_id uuid [pk, ref: > profiles.user_id]
+  status text [not null]
+  trigger_source text [not null]
+  cadence_days integer [not null]
+  last_checked_at timestamp
+  last_reclassified_at timestamp
+  next_due_at timestamp
+  last_assessment_id uuid [ref: > financial_profile_assessments.id]
+  failure_reason text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+Table category_groups {
+  id uuid [pk]
+  slug text [not null, unique]
+  label text [not null]
+  short_label text
+  description text [not null]
+  sort_order integer [not null]
+  is_active boolean [not null]
+  metadata json [not null]
+}
+
+Table categories {
+  id uuid [pk]
+  category_group_id uuid [not null, ref: > category_groups.id]
+  user_id uuid [ref: > profiles.user_id]
+  slug text [not null]
+  label text [not null]
+  short_label text
+  description text [not null]
+  is_system boolean [not null]
+  is_filipino_context boolean [not null]
+  sort_order integer [not null]
+  is_active boolean [not null]
+  metadata json [not null]
+
+  indexes {
+    (user_id, slug) [unique]
+    (label, category_group_id) [unique]
+    (user_id, label, category_group_id) [unique]
+  }
+}
+
+Table subcategories {
+  id uuid [pk]
+  category_id uuid [ref: > categories.id]
+  user_id uuid [ref: > profiles.user_id]
+  slug text [not null]
+  kind text [not null]
+  label text [not null]
+  short_label text
+  description text [not null]
+  is_system boolean [not null]
+  is_filipino_context boolean [not null]
+  is_protected_default boolean [not null]
+  is_protected boolean [not null]
+  sort_order integer [not null]
+  is_active boolean [not null]
+  metadata json [not null]
+}
+
+Table user_subcategory_restrictions {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  subcategory_id uuid [not null, ref: > subcategories.id]
+  restriction_level text [not null]
+  floor_amount_centavos bigint
+  ceiling_amount_centavos bigint
+  effective_from date [not null]
+  effective_to date
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+Table user_category_restrictions {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  category_id uuid [not null, ref: > categories.id]
+  restriction_level text [not null]
+  floor_amount_centavos bigint
+  ceiling_amount_centavos bigint
+  effective_from date [not null]
+  effective_to date
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+Table income_sources {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  name text [not null]
+  income_type text [not null]
+  frequency text [not null]
+  expected_amount_centavos bigint
+  min_amount_centavos bigint
+  max_amount_centavos bigint
+  payday_day_of_month integer
+  payday_second_day_of_month integer
+  payday_day_of_week integer
+  next_expected_date date
+  is_active boolean [not null]
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+// Note: (id, user_id) unique
+Table financial_accounts {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  name text [not null]
+  kind text [not null]
+  status text [not null]
+  opening_balance_centavos bigint [not null]
+  current_balance_centavos bigint [not null]
+  credit_limit_centavos bigint
+  include_in_dashboard_balance boolean [not null]
+  institution_name text
+  opened_on date
+  archived_at timestamp
+  deleted_at timestamp
+  sort_order integer [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+// Note: (id, user_id) unique
+Table transaction_templates {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  transaction_type text [not null]
+  status text [not null]
+  name text [not null]
+  amount_centavos bigint
+  subcategory_id uuid [ref: > subcategories.id]
+  source_account_id uuid [ref: > financial_accounts.id]
+  destination_account_id uuid [ref: > financial_accounts.id]
+  merchant_name text
+  counterparty_name text
+  notes text
+  use_count integer [not null]
+  last_used_at timestamp
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  deleted_at timestamp
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+// Note: (source_account_id, user_id) references financial_accounts(id, user_id) ON DELETE CASCADE
+// Note: (destination_account_id, user_id) references financial_accounts(id, user_id) ON DELETE CASCADE
+Table recurring_transaction_templates {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  transaction_type text [not null]
+  status text [not null]
+  name text [not null]
+  amount_centavos bigint [not null]
+  subcategory_id uuid [ref: > subcategories.id]
+  source_account_id uuid [ref: > financial_accounts.id]
+  destination_account_id uuid [ref: > financial_accounts.id]
+  frequency text [not null]
+  interval_count integer [not null]
+  day_of_month integer
+  second_day_of_month integer
+  day_of_week integer
+  custom_rule json [not null]
+  starts_on date [not null]
+  ends_on date
+  next_occurrence_date date
+  last_generated_date date
+  reminder_enabled boolean [not null]
+  reminder_days_before integer [not null]
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  stopped_at timestamp
+  deleted_at timestamp
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+// Note: (recurring_template_id, user_id) references recurring_transaction_templates(id, user_id) ON DELETE SET NULL
+Table financial_obligations {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  subcategory_id uuid [not null, ref: > subcategories.id]
+  recurring_template_id uuid [ref: > recurring_transaction_templates.id]
+  name text [not null]
+  status text [not null]
+  amount_centavos bigint [not null]
+  frequency text [not null]
+  due_day_of_month integer
+  is_family_support boolean [not null]
+  is_dependent_support boolean [not null]
+  protected_by_default boolean [not null]
+  starts_on date
+  ends_on date
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+// Note: (source_account_id, user_id) references financial_accounts(id, user_id) ON DELETE CASCADE
+// Note: (destination_account_id, user_id) references financial_accounts(id, user_id) ON DELETE CASCADE
+// Note: (recurring_template_id, user_id) references recurring_transaction_templates(id, user_id) ON DELETE SET NULL
+Table transactions {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  transaction_type text [not null]
+  status text [not null]
+  entry_source text [not null]
+  transaction_date date [not null]
+  posted_at timestamp
+  amount_centavos bigint [not null]
+  subcategory_id uuid [ref: > subcategories.id]
+  source_account_id uuid [ref: > financial_accounts.id]
+  destination_account_id uuid [ref: > financial_accounts.id]
+  recurring_template_id uuid [ref: > recurring_transaction_templates.id]
+  merchant_name text
+  counterparty_name text
+  notes text
+  client_mutation_id text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  deleted_at timestamp
+  retain_until date
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table transaction_line_items {
+  id uuid [pk]
+  transaction_id uuid [not null, ref: > transactions.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  subcategory_id uuid [not null, ref: > subcategories.id]
+  item_label text [not null]
+  quantity decimal
+  amount_centavos bigint [not null]
+  notes text
+  sort_order integer [not null]
+  metadata json [not null]
+}
+
+// Note: (transaction_id, user_id) references transactions(id, user_id) ON DELETE CASCADE
+Table transaction_events {
+  id uuid [pk]
+  transaction_id uuid [not null, ref: > transactions.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  action text [not null]
+  created_at timestamp [not null]
+  before_snapshot json
+  after_snapshot json
+  notes text
+  metadata json [not null]
+}
+
+// Note: (synced_transaction_id, user_id) references transactions(id, user_id) ON DELETE SET NULL
+Table transaction_drafts {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  client_draft_id text [not null]
+  status text [not null]
+  payload json [not null]
+  captured_offline_at timestamp
+  synced_transaction_id uuid [ref: > transactions.id]
+  last_error text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (user_id, client_draft_id) [unique]
+  }
+}
+
+Table user_transaction_retention_settings {
+  user_id uuid [pk, ref: > profiles.user_id]
+  retention_days integer [not null]
+  auto_archive_enabled boolean [not null]
+  archive_after_days integer
+  purge_after_days integer
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+// Note: (transaction_id, user_id) references transactions(id, user_id) ON DELETE CASCADE
+Table transaction_retention_events {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  transaction_id uuid [not null, ref: > transactions.id]
+  action text [not null]
+  actioned_at timestamp [not null]
+  retain_until date
+  notes text
+  metadata json [not null]
+}
+
+// Note: (recurring_template_id, user_id) references recurring_transaction_templates(id, user_id) ON DELETE CASCADE
+// Note: (generated_transaction_id, user_id) references transactions(id, user_id) ON DELETE CASCADE
+Table recurring_transaction_occurrences {
+  id uuid [pk]
+  recurring_template_id uuid [not null, ref: > recurring_transaction_templates.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  scheduled_date date [not null]
+  status text [not null]
+  generated_transaction_id uuid [ref: > transactions.id]
+  reminder_sent_at timestamp
+  posted_at timestamp
+  skipped_at timestamp
+  failure_reason text
+  metadata json [not null]
+
+  indexes {
+    (recurring_template_id, scheduled_date) [unique]
+  }
+}
+
+Table expected_spending_events {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  subcategory_id uuid [ref: > subcategories.id]
+  category_id uuid [ref: > categories.id]
+  event_kind text [not null]
+  status text [not null]
+  title text [not null]
+  expected_amount_centavos bigint
+  starts_on date [not null]
+  ends_on date [not null]
+  repeats_yearly boolean [not null]
+  affects_forecast boolean [not null]
+  affects_anomaly_suppression boolean [not null]
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+Table budget_strategy_configs {
+  id uuid [pk]
+  user_id uuid [ref: > profiles.user_id]
+  strategy text [not null]
+  name text [not null]
+  description text
+  is_system boolean [not null]
+  is_active boolean [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+// Note: (strategy_config_id, user_id) references budget_strategy_configs(id, user_id) ON DELETE CASCADE
+Table budget_strategy_rules {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  strategy_config_id uuid [not null, ref: > budget_strategy_configs.id]
+  allocation_scope text [not null]
+  category_id uuid [not null, ref: > categories.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  restriction_level text [not null]
+  target_percent_bps integer
+  min_percent_bps integer
+  max_percent_bps integer
+  min_amount_centavos bigint
+  max_amount_centavos bigint
+  priority_order integer [not null]
+  is_reducible boolean [not null]
+  explanation text
+  metadata json [not null]
+
+  indexes {
+    (strategy_config_id, category_id) [unique]
+    (strategy_config_id, subcategory_id) [unique]
+  }
+}
+
+// Note: (source_recommendation_id, user_id) references budget_recommendations(id, user_id) ON DELETE SET NULL
+// Note: (forecast_run_id, user_id) references forecast_runs(id, user_id) ON DELETE SET NULL
+Table budgets {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  status text [not null]
+  source text [not null]
+  source_recommendation_id uuid
+  forecast_run_id uuid
+  strategy text
+  period_kind text [not null]
+  period_start date [not null]
+  period_end date [not null]
+  budget_period_days integer [not null]
+  total_amount_centavos bigint [not null]
+  starting_balance_centavos bigint
+  surplus_handling text [not null]
+  deficit_handling text [not null]
+  allow_deficit_planning boolean [not null]
+  activated_at timestamp
+  closed_at timestamp
+  archived_at timestamp
+  deleted_at timestamp
+  explanation text
+  metadata json [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table budget_allocations {
+  id uuid [pk]
+  budget_id uuid [not null, ref: > budgets.id]
+  allocation_scope text [not null]
+  category_id uuid [not null, ref: > categories.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  allocated_amount_centavos bigint [not null]
+  rollover_amount_centavos bigint [not null]
+  spent_amount_snapshot_centavos bigint
+  is_protected_snapshot boolean [not null]
+  priority_weight integer
+  notes text
+  sort_order integer [not null]
+  metadata json [not null]
+
+  indexes {
+    (budget_id, category_id) [unique]
+    (budget_id, subcategory_id) [unique]
+  }
+}
+
+Table budget_events {
+  id uuid [pk]
+  budget_id uuid [not null, ref: > budgets.id]
+  actor_user_id uuid [ref: > profiles.user_id]
+  action text [not null]
+  created_at timestamp [not null]
+  notes text
+  payload json [not null]
+}
+
+// Note: (budget_id, user_id) references budgets(id, user_id) ON DELETE CASCADE
+Table budget_health_snapshots {
+  id uuid [pk]
+  budget_id uuid [not null, ref: > budgets.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  measured_at timestamp [not null]
+  health_status text [not null]
+  allocated_amount_centavos bigint [not null]
+  actual_amount_centavos bigint [not null]
+  variance_amount_centavos bigint [not null]
+  adherence_bps integer
+  explanation text
+  metadata json [not null]
+}
+
+// Note: (linked_account_id, user_id) references financial_accounts(id, user_id) ON DELETE SET NULL
+Table savings_goals {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  linked_account_id uuid [ref: > financial_accounts.id]
+  linked_subcategory_id uuid [not null, ref: > subcategories.id]
+  name text [not null]
+  status text [not null]
+  progress_state text [not null]
+  target_amount_centavos bigint [not null]
+  current_amount_centavos bigint [not null]
+  target_date date [not null]
+  priority_rank integer [not null]
+  projected_completion_date date
+  achieved_at timestamp
+  archived_at timestamp
+  deleted_at timestamp
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table savings_goal_allocation_preferences {
+  user_id uuid [pk, ref: > profiles.user_id]
+  strategy text [not null]
+  planned_contribution_centavos bigint [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+// Note: (savings_goal_id, user_id) references savings_goals(id, user_id) ON DELETE CASCADE
+// Note: (transaction_id, user_id) references transactions(id, user_id) ON DELETE SET NULL
+// Note: (source_budget_id, user_id) references budgets(id, user_id) ON DELETE SET NULL
+Table savings_goal_contributions {
+  id uuid [pk]
+  savings_goal_id uuid [not null, ref: > savings_goals.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  transaction_id uuid [ref: > transactions.id]
+  source text [not null]
+  source_budget_id uuid [ref: > budgets.id]
+  contribution_date date [not null]
+  amount_centavos bigint [not null]
+  notes text
+  created_at timestamp [not null]
+  metadata json [not null]
+}
+
+// Note: (savings_goal_id, user_id) references savings_goals(id, user_id) ON DELETE CASCADE
+Table savings_goal_progress_snapshots {
+  id uuid [pk]
+  savings_goal_id uuid [not null, ref: > savings_goals.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  snapshot_date date [not null]
+  current_amount_centavos bigint [not null]
+  progress_percent_bps integer
+  projected_completion_date date
+  progress_state text [not null]
+  metadata json [not null]
+
+  indexes {
+    (savings_goal_id, snapshot_date) [unique]
+  }
+}
+
+Table savings_goal_budget_allocations {
+  id uuid [pk]
+  budget_allocation_id uuid [not null, ref: > budget_allocations.id]
+  savings_goal_id uuid [not null, ref: > savings_goals.id]
+  allocation_strategy text [not null]
+  allocated_amount_centavos bigint [not null]
+  remaining_amount_snapshot_centavos bigint [not null]
+  allocation_order integer [not null]
+  explanation text
+  metadata json [not null]
+
+  indexes {
+    (budget_allocation_id, savings_goal_id) [unique]
+  }
+}
+
+// Note: (linked_account_id, user_id) references financial_accounts(id, user_id) ON DELETE SET NULL
+Table debt_accounts {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  linked_account_id uuid [ref: > financial_accounts.id]
+  name text [not null]
+  lender_name text
+  status text [not null]
+  original_balance_centavos bigint [not null]
+  current_balance_centavos bigint [not null]
+  annual_interest_rate_bps integer [not null]
+  minimum_payment_centavos bigint [not null]
+  due_day_of_month integer
+  opened_on date
+  paid_off_at timestamp
+  archived_at timestamp
+  deleted_at timestamp
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+// Note: (debt_account_id, user_id) references debt_accounts(id, user_id) ON DELETE CASCADE
+// Note: (transaction_id, user_id) references transactions(id, user_id) ON DELETE SET NULL
+Table debt_payments {
+  id uuid [pk]
+  debt_account_id uuid [not null, ref: > debt_accounts.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  transaction_id uuid [ref: > transactions.id]
+  source text [not null]
+  payment_date date [not null]
+  amount_centavos bigint [not null]
+  principal_centavos bigint
+  interest_centavos bigint
+  notes text
+  created_at timestamp [not null]
+  metadata json [not null]
+}
+
+Table debt_strategy_preferences {
+  user_id uuid [pk, ref: > profiles.user_id]
+  strategy text [not null]
+  extra_payment_centavos bigint [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+}
+
+// Note: (debt_account_id, user_id) references debt_accounts(id, user_id) ON DELETE CASCADE
+Table user_debt_priorities {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  debt_account_id uuid [not null, ref: > debt_accounts.id]
+  priority_rank integer [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (user_id, debt_account_id) [unique]
+    (user_id, priority_rank) [unique]
+  }
+}
+
+Table debt_repayment_projection_runs {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  strategy text [not null]
+  generated_at timestamp [not null]
+  horizon_months integer [not null]
+  extra_payment_centavos bigint [not null]
+  projected_debt_free_date date
+  total_interest_centavos bigint
+  total_paid_centavos bigint
+  input_snapshot json [not null]
+  explanation text
+  metadata json [not null]
+}
+
+Table debt_repayment_projection_items {
+  id uuid [pk]
+  projection_run_id uuid [not null, ref: > debt_repayment_projection_runs.id]
+  debt_account_id uuid [not null, ref: > debt_accounts.id]
+  payoff_order integer [not null]
+  projected_payoff_date date
+  projected_total_interest_centavos bigint
+  projected_total_paid_centavos bigint
+  explanation text
+
+  indexes {
+    (projection_run_id, debt_account_id) [unique]
+  }
+}
+
+Table debt_repayment_projection_points {
+  id uuid [pk]
+  projection_item_id uuid [not null, ref: > debt_repayment_projection_items.id]
+  period_start date [not null]
+  period_end date [not null]
+  projected_balance_centavos bigint [not null]
+  projected_payment_centavos bigint [not null]
+  projected_interest_centavos bigint [not null]
+}
+
+// Note: (id, user_id) unique
+Table forecast_runs {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  generated_at timestamp [not null]
+  status text [not null]
+  model_kind text [not null]
+  model_version text
+  personalization_alpha decimal [not null]
+  history_days integer [not null]
+  input_window_start date
+  input_window_end date
+  granularity text [not null]
+  horizon_days integer [not null]
+  forecast_start date [not null]
+  forecast_end date [not null]
+  disclaimer_text text [not null]
+  input_snapshot json [not null]
+  metadata json [not null]
+  failure_reason text
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table forecast_series {
+  id uuid [pk]
+  forecast_run_id uuid [not null, ref: > forecast_runs.id]
+  target text [not null]
+  category_id uuid [ref: > categories.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  related_entity_id uuid
+  label text [not null]
+  unit text [not null]
+  explanation text
+  confidence_label text
+  sort_order integer [not null]
+
+  indexes {
+    (forecast_run_id, category_id) [unique]
+    (forecast_run_id, subcategory_id) [unique]
+  }
+}
+
+Table forecast_points {
+  id uuid [pk]
+  forecast_series_id uuid [not null, ref: > forecast_series.id]
+  period_start date [not null]
+  period_end date [not null]
+  predicted_amount_centavos bigint [not null]
+  lower_amount_centavos bigint
+  upper_amount_centavos bigint
+  actual_amount_centavos bigint
+
+  indexes {
+    (forecast_series_id, period_start, period_end) [unique]
+  }
+}
+
+Table forecast_explanation_drivers {
+  id uuid [pk]
+  forecast_series_id uuid [not null, ref: > forecast_series.id]
+  driver_key text [not null]
+  driver_label text [not null]
+  direction text [not null]
+  impact_amount_centavos bigint
+  explanation text [not null]
+  sort_order integer [not null]
+}
+
+// Note: (forecast_run_id, user_id) references forecast_runs(id, user_id) ON DELETE SET NULL
+Table budget_recommendations {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  forecast_run_id uuid [ref: > forecast_runs.id]
+  created_at timestamp [not null]
+  presented_at timestamp
+  acted_at timestamp
+  status text [not null]
+  period_start date [not null]
+  period_end date [not null]
+  budget_period_days integer [not null]
+  strategy text [not null]
+  profile_label text [not null]
+  current_balance_centavos bigint [not null]
+  forecast_income_centavos bigint [not null]
+  target_savings_rate_bps integer [not null]
+  target_savings_centavos bigint [not null]
+  recommended_total_centavos bigint [not null]
+  surplus_handling text [not null]
+  deficit_handling text [not null]
+  deficit_warning_text text
+  solver_status text [not null]
+  explanation_summary text [not null]
+  optimization_explanation text
+  accepted_budget_id uuid [ref: > budgets.id]
+  input_snapshot json [not null]
+  solver_snapshot json [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table budget_recommendation_allocations {
+  id uuid [pk]
+  recommendation_id uuid [not null, ref: > budget_recommendations.id]
+  allocation_scope text [not null]
+  category_id uuid [not null, ref: > categories.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  recommended_amount_centavos bigint [not null]
+  adjusted_amount_centavos bigint
+  accepted_amount_centavos bigint
+  forecast_amount_centavos bigint
+  min_amount_centavos bigint
+  max_amount_centavos bigint
+  historical_p90_amount_centavos bigint
+  priority_weight integer
+  is_protected boolean [not null]
+  explanation text
+  sort_order integer [not null]
+
+  indexes {
+    (recommendation_id, category_id) [unique]
+    (recommendation_id, subcategory_id) [unique]
+  }
+}
+
+Table savings_goal_recommendation_allocations {
+  id uuid [pk]
+  recommendation_id uuid [not null, ref: > budget_recommendations.id]
+  recommendation_allocation_id uuid [ref: > budget_recommendation_allocations.id]
+  savings_goal_id uuid [not null, ref: > savings_goals.id]
+  allocation_strategy text [not null]
+  recommended_amount_centavos bigint [not null]
+  adjusted_amount_centavos bigint
+  accepted_amount_centavos bigint
+  remaining_amount_snapshot_centavos bigint [not null]
+  allocation_order integer [not null]
+  explanation text
+  metadata json [not null]
+
+  indexes {
+    (recommendation_id, savings_goal_id) [unique]
+  }
+}
+
+Table budget_recommendation_constraints {
+  id uuid [pk]
+  recommendation_id uuid [not null, ref: > budget_recommendations.id]
+  constraint_type text [not null]
+  category_id uuid [ref: > categories.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  min_amount_centavos bigint
+  max_amount_centavos bigint
+  percent_bps integer
+  is_hard boolean [not null]
+  was_relaxed boolean [not null]
+  relaxation_step integer
+  explanation text [not null]
+}
+
+Table budget_recommendation_events {
+  id uuid [pk]
+  recommendation_id uuid [not null, ref: > budget_recommendations.id]
+  action text [not null]
+  actor_user_id uuid [not null, ref: > profiles.user_id]
+  created_at timestamp [not null]
+  notes text
+  payload json [not null]
+}
+
+// Note: (transaction_id, user_id) references transactions(id, user_id) ON DELETE CASCADE
+Table anomaly_evaluations {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  transaction_id uuid [not null, ref: > transactions.id]
+  evaluated_at timestamp [not null]
+  model_version text
+  profile_label text [not null]
+  history_days integer [not null]
+  merchant_name text
+  subcategory_id uuid [not null, ref: > subcategories.id]
+  amount_centavos bigint [not null]
+  raw_anomaly_score decimal
+  threshold_score decimal
+  score_percentile decimal
+  is_anomaly boolean [not null]
+  should_alert_user boolean [not null]
+  review_status text [not null]
+  suppression_reason text
+  suppression_context json [not null]
+  feature_vector json [not null]
+  baseline_snapshot json [not null]
+  top_driver_key text
+  explanation text
+  failure_reason text
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table anomaly_evaluation_features {
+  id uuid [pk]
+  anomaly_evaluation_id uuid [not null, ref: > anomaly_evaluations.id]
+  feature_key text [not null]
+  raw_value decimal
+  normalized_value decimal
+  baseline_value decimal
+  deviation_value decimal
+  is_top_driver boolean [not null]
+  explanation text
+
+  indexes {
+    (anomaly_evaluation_id, feature_key) [unique]
+  }
+}
+
+// Note: (budget_id, user_id) references budgets(id, user_id) ON DELETE SET NULL
+Table overspending_evaluations {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  budget_id uuid [ref: > budgets.id]
+  budget_allocation_id uuid [ref: > budget_allocations.id]
+  category_id uuid [ref: > categories.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  evaluated_at timestamp [not null]
+  actual_amount_centavos bigint [not null]
+  budgeted_amount_centavos bigint [not null]
+  overspent_amount_centavos bigint [not null]
+  overspent_percent_bps integer
+  threshold_snapshot json [not null]
+  should_alert_user boolean [not null]
+  explanation text
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+// Note: (transaction_id, user_id) references transactions(id, user_id) ON DELETE SET NULL
+// Note: (budget_id, user_id) references budgets(id, user_id) ON DELETE SET NULL
+// Note: (debt_account_id, user_id) references debt_accounts(id, user_id) ON DELETE SET NULL
+// Note: (savings_goal_id, user_id) references savings_goals(id, user_id) ON DELETE SET NULL
+// Note: (forecast_run_id, user_id) references forecast_runs(id, user_id) ON DELETE SET NULL
+// Note: (budget_recommendation_id, user_id) references budget_recommendations(id, user_id) ON DELETE SET NULL
+// Note: (anomaly_evaluation_id, user_id) references anomaly_evaluations(id, user_id) ON DELETE CASCADE
+// Note: (parent_alert_id, user_id) references alerts(id, user_id) ON DELETE SET NULL
+// Note: (overspending_evaluation_id, user_id) references overspending_evaluations(id, user_id) ON DELETE CASCADE
+Table alerts {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  category text [not null]
+  source_type text [not null]
+  severity text [not null]
+  status text [not null]
+  title text [not null]
+  body text [not null]
+  explanation text
+  action_label text
+  route_name text
+  route_params json [not null]
+  transaction_id uuid [ref: > transactions.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  budget_id uuid [ref: > budgets.id]
+  debt_account_id uuid [ref: > debt_accounts.id]
+  savings_goal_id uuid [ref: > savings_goals.id]
+  forecast_run_id uuid [ref: > forecast_runs.id]
+  budget_recommendation_id uuid [ref: > budget_recommendations.id]
+  anomaly_evaluation_id uuid [ref: > anomaly_evaluations.id]
+  overspending_evaluation_id uuid [ref: > overspending_evaluations.id]
+  duplicate_key text
+  bundle_key text
+  parent_alert_id uuid [ref: > alerts.id]
+  triggered_at timestamp [not null]
+  delivered_in_app_at timestamp
+  delivered_push_at timestamp
+  read_at timestamp
+  acknowledged_at timestamp
+  dismissed_at timestamp
+  cleared_at timestamp
+  expires_at timestamp
+  remind_at timestamp
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table alert_related_entities {
+  id uuid [pk]
+  alert_id uuid [not null, ref: > alerts.id]
+  entity_type text [not null]
+  entity_id uuid [not null]
+  label text
+  amount_centavos bigint
+  metadata json [not null]
+  sort_order integer [not null]
+}
+
+Table alert_events {
+  id uuid [pk]
+  alert_id uuid [not null, ref: > alerts.id]
+  action text [not null]
+  actor_user_id uuid [ref: > profiles.user_id]
+  created_at timestamp [not null]
+  notes text
+  payload json [not null]
+}
+
+Table alert_notification_preferences {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  category text [not null]
+  mode text [not null]
+  in_app_enabled boolean [not null]
+  push_enabled boolean [not null]
+  duplicate_cooldown_hours integer [not null]
+  snoozed_until timestamp
+  updated_at timestamp [not null]
+
+  indexes {
+    (user_id, category) [unique]
+  }
+}
+
+// Note: (created_from_alert_id, user_id) references alerts(id, user_id) ON DELETE SET NULL
+// Note: (created_from_anomaly_evaluation_id, user_id) references anomaly_evaluations(id, user_id) ON DELETE SET NULL
+Table anomaly_whitelist_rules {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  created_from_alert_id uuid [ref: > alerts.id]
+  created_from_anomaly_evaluation_id uuid [ref: > anomaly_evaluations.id]
+  merchant_name text [not null]
+  subcategory_id uuid [not null, ref: > subcategories.id]
+  base_amount_centavos bigint
+  tolerance_bps integer
+  allow_any_amount boolean [not null]
+  status text [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  disabled_at timestamp
+  deleted_at timestamp
+  notes text
+
+  indexes {
+    (user_id, merchant_name, subcategory_id) [unique]
+  }
+}
+
+// Note: (created_from_alert_id, user_id) references alerts(id, user_id) ON DELETE SET NULL
+Table alert_suppression_rules {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  category text [not null]
+  source_type text
+  status text [not null]
+  created_from_alert_id uuid [ref: > alerts.id]
+  merchant_name text
+  subcategory_id uuid [ref: > subcategories.id]
+  category_id uuid [ref: > categories.id]
+  amount_center_centavos bigint
+  amount_tolerance_bps integer
+  starts_at timestamp [not null]
+  ends_at timestamp
+  reason text [not null]
+  metadata json [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  disabled_at timestamp
+  deleted_at timestamp
+}
+
+// Note: (debt_account_id, user_id) references debt_accounts(id, user_id) ON DELETE CASCADE
+Table debt_hardship_plans {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  debt_account_id uuid [not null, ref: > debt_accounts.id]
+  status text [not null]
+  hardship_reason text [not null]
+  original_payment_centavos bigint [not null]
+  reduced_payment_centavos bigint
+  deferred_months integer
+  deferment_end_date date
+  lender_contacted_at timestamp
+  requested_at timestamp [not null]
+  activated_at timestamp
+  resolved_at timestamp
+  cancelled_at timestamp
+  archived_at timestamp
+  notes text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table debt_hardship_plan_events {
+  id uuid [pk]
+  hardship_plan_id uuid [not null, ref: > debt_hardship_plans.id]
+  action text [not null]
+  actor_user_id uuid [ref: > profiles.user_id]
+  created_at timestamp [not null]
+  notes text
+  payload json [not null]
+}
+
+Table push_device_tokens {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  device_token text [not null]
+  platform text [not null]
+  is_active boolean [not null]
+  last_used_at timestamp
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+    (user_id, device_token) [unique]
+  }
+}
+
+Table support_tickets {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  category text [not null]
+  status text [not null]
+  subject text [not null]
+  description text [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+  resolved_at timestamp
+  closed_at timestamp
+  metadata json [not null]
+
+  indexes {
+    (id, user_id) [unique]
+  }
+}
+
+Table support_ticket_events {
+  id uuid [pk]
+  ticket_id uuid [not null, ref: > support_tickets.id]
+  action text [not null]
+  actor_user_id uuid [ref: > profiles.user_id]
+  created_at timestamp [not null]
+  notes text
+  payload json [not null]
+}
+
+// Note: (ticket_id, user_id) references support_tickets(id, user_id) ON DELETE CASCADE
+Table support_ticket_attachments {
+  id uuid [pk]
+  ticket_id uuid [not null, ref: > support_tickets.id]
+  user_id uuid [not null, ref: > profiles.user_id]
+  storage_bucket text [not null]
+  storage_path text [not null]
+  original_filename text [not null]
+  content_type text
+  size_bytes bigint
+  created_at timestamp [not null]
+  metadata json [not null]
+
+  indexes {
+    (storage_bucket, storage_path) [unique]
+  }
+}
+
+Table report_runs {
+  id uuid [pk]
+  user_id uuid [not null, ref: > profiles.user_id]
+  kind text [not null]
+  status text [not null]
+  period_start date [not null]
+  period_end date [not null]
+  generated_at timestamp
+  filters json [not null]
+  summary json [not null]
+  failure_reason text
+  created_at timestamp [not null]
+  metadata json [not null]
+}
+
+Table report_metrics {
+  id uuid [pk]
+  report_run_id uuid [not null, ref: > report_runs.id]
+  metric_key text [not null]
+  metric_label text [not null]
+  amount_centavos bigint
+  numeric_value decimal
+  unit text
+  metadata json [not null]
+
+  indexes {
+    (report_run_id, metric_key) [unique]
+  }
+}
+
+Table report_category_breakdowns {
+  id uuid [pk]
+  report_run_id uuid [not null, ref: > report_runs.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  category_id uuid [ref: > categories.id]
+  actual_amount_centavos bigint [not null]
+  budgeted_amount_centavos bigint
+  forecasted_amount_centavos bigint
+  transaction_count integer [not null]
+  metadata json [not null]
+}
+
+Table report_budget_comparisons {
+  id uuid [pk]
+  report_run_id uuid [not null, ref: > report_runs.id]
+  budget_id uuid [ref: > budgets.id]
+  budget_allocation_id uuid [ref: > budget_allocations.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  category_id uuid [ref: > categories.id]
+  allocated_amount_centavos bigint [not null]
+  actual_amount_centavos bigint [not null]
+  variance_amount_centavos bigint [not null]
+  metadata json [not null]
+}
+
+Table report_forecast_comparisons {
+  id uuid [pk]
+  report_run_id uuid [not null, ref: > report_runs.id]
+  forecast_run_id uuid [ref: > forecast_runs.id]
+  forecast_series_id uuid [ref: > forecast_series.id]
+  subcategory_id uuid [ref: > subcategories.id]
+  category_id uuid [ref: > categories.id]
+  predicted_amount_centavos bigint [not null]
+  actual_amount_centavos bigint [not null]
+  absolute_error_centavos bigint [not null]
+  metadata json [not null]
+}
+
+Table report_savings_goal_snapshots {
+  id uuid [pk]
+  report_run_id uuid [not null, ref: > report_runs.id]
+  savings_goal_id uuid [ref: > savings_goals.id]
+  target_amount_centavos bigint [not null]
+  current_amount_centavos bigint [not null]
+  progress_state text [not null]
+  projected_completion_date date
+}
+
+Table report_debt_account_snapshots {
+  id uuid [pk]
+  report_run_id uuid [not null, ref: > report_runs.id]
+  debt_account_id uuid [ref: > debt_accounts.id]
+  current_balance_centavos bigint [not null]
+  minimum_payment_centavos bigint [not null]
+  projected_payoff_date date
+  strategy text
+}

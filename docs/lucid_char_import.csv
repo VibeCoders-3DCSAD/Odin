@@ -1,0 +1,1110 @@
+dbms,table_catalog,table_schema,table_name,column_name,ordinal_position,data_type,character_maximum_length,constraint_type,table_schema,table_name,column_name
+postgresql,postgres,public,profiles,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,profiles,user_id,2,uuid,,FOREIGN KEY,auth,users,id
+postgresql,postgres,public,profiles,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,user_privacy_settings,user_id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,user_privacy_settings,user_id,1,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,user_consents,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,user_consents,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,data_export_requests,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,data_export_requests,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,account_deletion_requests,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,account_deletion_requests,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,onboarding_sessions,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,onboarding_sessions,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,onboarding_sessions,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,onboarding_sessions,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,onboarding_responses,onboarding_session_id,2,uuid,,FOREIGN KEY,public,onboarding_sessions,id
+postgresql,postgres,public,onboarding_responses,onboarding_session_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,onboarding_responses,question_key,3,text,,UNIQUE,,,
+postgresql,postgres,public,onboarding_responses,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_profile_assessments,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,financial_profile_assessments,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,financial_profile_assessments,onboarding_session_id,3,uuid,,FOREIGN KEY,public,onboarding_sessions,id
+postgresql,postgres,public,financial_profile_assessments,user_id,2,uuid,,FOREIGN KEY,public,onboarding_sessions,user_id
+postgresql,postgres,public,financial_profile_assessments,onboarding_session_id,3,uuid,,FOREIGN KEY,public,onboarding_sessions,id
+postgresql,postgres,public,financial_profile_assessments,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_profile_assessments,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,financial_profile_explanation_drivers,assessment_id,2,uuid,,FOREIGN KEY,public,financial_profile_assessments,id
+postgresql,postgres,public,financial_profile_explanation_drivers,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_profile_assignments,assessment_id,3,uuid,,FOREIGN KEY,public,financial_profile_assessments,id
+postgresql,postgres,public,financial_profile_assignments,assessment_id,3,uuid,,FOREIGN KEY,public,financial_profile_assessments,id
+postgresql,postgres,public,financial_profile_assignments,user_id,2,uuid,,FOREIGN KEY,public,financial_profile_assessments,user_id
+postgresql,postgres,public,financial_profile_assignments,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,financial_profile_assignments,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,financial_profile_assignments,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_profile_assignments,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,financial_profile_events,assessment_id,3,uuid,,FOREIGN KEY,public,financial_profile_assessments,id
+postgresql,postgres,public,financial_profile_events,assessment_id,3,uuid,,FOREIGN KEY,public,financial_profile_assessments,id
+postgresql,postgres,public,financial_profile_events,user_id,2,uuid,,FOREIGN KEY,public,financial_profile_assessments,user_id
+postgresql,postgres,public,financial_profile_events,assignment_id,4,uuid,,FOREIGN KEY,public,financial_profile_assignments,id
+postgresql,postgres,public,financial_profile_events,assignment_id,4,uuid,,FOREIGN KEY,public,financial_profile_assignments,id
+postgresql,postgres,public,financial_profile_events,user_id,2,uuid,,FOREIGN KEY,public,financial_profile_assignments,user_id
+postgresql,postgres,public,financial_profile_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_profile_events,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,financial_profile_reclassification_schedules,last_assessment_id,8,uuid,,FOREIGN KEY,public,financial_profile_assessments,id
+postgresql,postgres,public,financial_profile_reclassification_schedules,last_assessment_id,8,uuid,,FOREIGN KEY,public,financial_profile_assessments,id
+postgresql,postgres,public,financial_profile_reclassification_schedules,user_id,1,uuid,,FOREIGN KEY,public,financial_profile_assessments,user_id
+postgresql,postgres,public,financial_profile_reclassification_schedules,user_id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,user_id,1,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,category_groups,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,category_groups,slug,2,text,,UNIQUE,,,
+postgresql,postgres,public,categories,category_group_id,2,uuid,,FOREIGN KEY,public,category_groups,id
+postgresql,postgres,public,categories,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,categories,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,subcategories,category_id,2,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,subcategories,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,subcategories,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,user_category_restrictions,category_id,3,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,user_category_restrictions,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,user_category_restrictions,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,income_sources,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,income_sources,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,financial_accounts,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,financial_accounts,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,financial_accounts,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_accounts,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,recurring_transaction_templates,destination_account_id,9,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,recurring_transaction_templates,destination_account_id,9,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,recurring_transaction_templates,user_id,2,uuid,,FOREIGN KEY,public,financial_accounts,user_id
+postgresql,postgres,public,recurring_transaction_templates,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,recurring_transaction_templates,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,recurring_transaction_templates,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,recurring_transaction_templates,source_account_id,8,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,recurring_transaction_templates,source_account_id,8,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,recurring_transaction_templates,user_id,2,uuid,,FOREIGN KEY,public,financial_accounts,user_id
+postgresql,postgres,public,recurring_transaction_templates,subcategory_id,7,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,recurring_transaction_templates,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,financial_obligations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,financial_obligations,recurring_template_id,4,uuid,,FOREIGN KEY,public,recurring_transaction_templates,id
+postgresql,postgres,public,financial_obligations,subcategory_id,3,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,financial_obligations,recurring_template_id,4,uuid,,FOREIGN KEY,public,recurring_transaction_templates,id
+postgresql,postgres,public,financial_obligations,user_id,2,uuid,,FOREIGN KEY,public,recurring_transaction_templates,user_id
+postgresql,postgres,public,financial_obligations,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,transactions,destination_account_id,11,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,transactions,destination_account_id,11,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,transactions,user_id,2,uuid,,FOREIGN KEY,public,financial_accounts,user_id
+postgresql,postgres,public,transactions,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,transactions,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,transactions,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,transactions,recurring_template_id,12,uuid,,FOREIGN KEY,public,recurring_transaction_templates,id
+postgresql,postgres,public,transactions,recurring_template_id,12,uuid,,FOREIGN KEY,public,recurring_transaction_templates,id
+postgresql,postgres,public,transactions,user_id,2,uuid,,FOREIGN KEY,public,recurring_transaction_templates,user_id
+postgresql,postgres,public,transactions,source_account_id,10,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,transactions,source_account_id,10,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,transactions,user_id,2,uuid,,FOREIGN KEY,public,financial_accounts,user_id
+postgresql,postgres,public,transactions,subcategory_id,9,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,transactions,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,transaction_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,transaction_events,transaction_id,2,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,transaction_events,transaction_id,2,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,transaction_events,user_id,3,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,transaction_events,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,transaction_drafts,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,transaction_drafts,synced_transaction_id,7,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,transaction_drafts,synced_transaction_id,7,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,transaction_drafts,user_id,2,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,transaction_drafts,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,transaction_drafts,client_draft_id,3,text,,UNIQUE,,,
+postgresql,postgres,public,transaction_drafts,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,user_transaction_retention_settings,user_id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,user_transaction_retention_settings,user_id,1,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,transaction_retention_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,transaction_retention_events,transaction_id,3,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,transaction_retention_events,transaction_id,3,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,transaction_retention_events,user_id,2,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,transaction_retention_events,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,recurring_transaction_occurrences,recurring_template_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,recurring_transaction_occurrences,scheduled_date,4,date,,UNIQUE,,,
+postgresql,postgres,public,recurring_transaction_occurrences,generated_transaction_id,6,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,recurring_transaction_occurrences,generated_transaction_id,6,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,recurring_transaction_occurrences,user_id,3,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,recurring_transaction_occurrences,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,recurring_transaction_occurrences,recurring_template_id,2,uuid,,FOREIGN KEY,public,recurring_transaction_templates,id
+postgresql,postgres,public,recurring_transaction_occurrences,recurring_template_id,2,uuid,,FOREIGN KEY,public,recurring_transaction_templates,id
+postgresql,postgres,public,recurring_transaction_occurrences,user_id,3,uuid,,FOREIGN KEY,public,recurring_transaction_templates,user_id
+postgresql,postgres,public,recurring_transaction_occurrences,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,expected_spending_events,category_id,4,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,expected_spending_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,expected_spending_events,subcategory_id,3,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,expected_spending_events,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,budgets,forecast_run_id,6,uuid,,FOREIGN KEY,public,forecast_runs,id
+postgresql,postgres,public,budgets,user_id,2,uuid,,FOREIGN KEY,public,forecast_runs,user_id
+postgresql,postgres,public,budgets,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,budgets,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,budgets,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budgets,source_recommendation_id,5,uuid,,FOREIGN KEY,public,budget_recommendations,id
+postgresql,postgres,public,budgets,user_id,2,uuid,,FOREIGN KEY,public,budget_recommendations,user_id
+postgresql,postgres,public,budgets,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,budget_allocations,budget_id,2,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,budget_allocations,category_id,4,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,budget_allocations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_allocations,subcategory_id,5,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,budget_events,actor_user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,budget_events,budget_id,2,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,budget_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_health_snapshots,budget_id,2,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,budget_health_snapshots,budget_id,2,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,budget_health_snapshots,user_id,3,uuid,,FOREIGN KEY,public,budgets,user_id
+postgresql,postgres,public,budget_health_snapshots,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_health_snapshots,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,savings_goals,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,savings_goals,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,savings_goals,linked_account_id,3,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,savings_goals,linked_account_id,3,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,savings_goals,user_id,2,uuid,,FOREIGN KEY,public,financial_accounts,user_id
+postgresql,postgres,public,savings_goals,linked_subcategory_id,4,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,savings_goals,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,savings_goals,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,savings_goal_allocation_preferences,user_id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,savings_goal_allocation_preferences,user_id,1,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,savings_goal_contributions,source_budget_id,6,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,savings_goal_contributions,user_id,3,uuid,,FOREIGN KEY,public,budgets,user_id
+postgresql,postgres,public,savings_goal_contributions,savings_goal_id,2,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,savings_goal_contributions,user_id,3,uuid,,FOREIGN KEY,public,savings_goals,user_id
+postgresql,postgres,public,savings_goal_contributions,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,savings_goal_contributions,savings_goal_id,2,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,savings_goal_contributions,source_budget_id,6,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,savings_goal_contributions,transaction_id,4,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,savings_goal_contributions,transaction_id,4,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,savings_goal_contributions,user_id,3,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,savings_goal_contributions,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,savings_goal_progress_snapshots,savings_goal_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,snapshot_date,4,date,,UNIQUE,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,savings_goal_id,2,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,savings_goal_progress_snapshots,user_id,3,uuid,,FOREIGN KEY,public,savings_goals,user_id
+postgresql,postgres,public,savings_goal_progress_snapshots,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,savings_goal_id,2,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,savings_goal_progress_snapshots,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,savings_goal_budget_allocations,budget_allocation_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,savings_goal_budget_allocations,savings_goal_id,3,uuid,,UNIQUE,,,
+postgresql,postgres,public,savings_goal_budget_allocations,budget_allocation_id,2,uuid,,FOREIGN KEY,public,budget_allocations,id
+postgresql,postgres,public,savings_goal_budget_allocations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,savings_goal_budget_allocations,savings_goal_id,3,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,debt_accounts,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,debt_accounts,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,debt_accounts,linked_account_id,3,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,debt_accounts,linked_account_id,3,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,debt_accounts,user_id,2,uuid,,FOREIGN KEY,public,financial_accounts,user_id
+postgresql,postgres,public,debt_accounts,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,debt_accounts,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,debt_payments,debt_account_id,2,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,debt_payments,user_id,3,uuid,,FOREIGN KEY,public,debt_accounts,user_id
+postgresql,postgres,public,debt_payments,debt_account_id,2,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,debt_payments,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,debt_payments,transaction_id,4,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,debt_payments,transaction_id,4,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,debt_payments,user_id,3,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,debt_payments,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,debt_strategy_preferences,user_id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,debt_strategy_preferences,user_id,1,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,user_debt_priorities,debt_account_id,3,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,user_debt_priorities,user_id,2,uuid,,FOREIGN KEY,public,debt_accounts,user_id
+postgresql,postgres,public,user_debt_priorities,debt_account_id,3,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,user_debt_priorities,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,user_debt_priorities,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,user_debt_priorities,debt_account_id,3,uuid,,UNIQUE,,,
+postgresql,postgres,public,user_debt_priorities,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,user_debt_priorities,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,user_debt_priorities,priority_rank,4,integer,,UNIQUE,,,
+postgresql,postgres,public,debt_repayment_projection_runs,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,debt_repayment_projection_runs,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,debt_repayment_projection_items,projection_run_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,debt_repayment_projection_items,debt_account_id,3,uuid,,UNIQUE,,,
+postgresql,postgres,public,debt_repayment_projection_items,debt_account_id,3,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,debt_repayment_projection_items,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,debt_repayment_projection_items,projection_run_id,2,uuid,,FOREIGN KEY,public,debt_repayment_projection_runs,id
+postgresql,postgres,public,debt_repayment_projection_points,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,debt_repayment_projection_points,projection_item_id,2,uuid,,FOREIGN KEY,public,debt_repayment_projection_items,id
+postgresql,postgres,public,forecast_runs,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,forecast_runs,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,forecast_runs,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,forecast_runs,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,forecast_series,category_id,4,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,forecast_series,forecast_run_id,2,uuid,,FOREIGN KEY,public,forecast_runs,id
+postgresql,postgres,public,forecast_series,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,forecast_series,subcategory_id,5,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,forecast_points,forecast_series_id,2,uuid,,FOREIGN KEY,public,forecast_series,id
+postgresql,postgres,public,forecast_points,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,forecast_explanation_drivers,forecast_series_id,2,uuid,,FOREIGN KEY,public,forecast_series,id
+postgresql,postgres,public,forecast_explanation_drivers,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_recommendations,accepted_budget_id,24,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,budget_recommendations,forecast_run_id,3,uuid,,FOREIGN KEY,public,forecast_runs,id
+postgresql,postgres,public,budget_recommendations,forecast_run_id,3,uuid,,FOREIGN KEY,public,forecast_runs,id
+postgresql,postgres,public,budget_recommendations,user_id,2,uuid,,FOREIGN KEY,public,forecast_runs,user_id
+postgresql,postgres,public,budget_recommendations,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,budget_recommendations,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,budget_recommendations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_recommendations,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,budget_recommendation_allocations,category_id,4,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,budget_recommendation_allocations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_recommendation_allocations,recommendation_id,2,uuid,,FOREIGN KEY,public,budget_recommendations,id
+postgresql,postgres,public,budget_recommendation_allocations,subcategory_id,5,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,savings_goal_recommendation_allocations,recommendation_allocation_id,3,uuid,,FOREIGN KEY,public,budget_recommendation_allocations,id
+postgresql,postgres,public,savings_goal_recommendation_allocations,recommendation_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,savings_goal_id,4,uuid,,UNIQUE,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,recommendation_id,2,uuid,,FOREIGN KEY,public,budget_recommendations,id
+postgresql,postgres,public,savings_goal_recommendation_allocations,savings_goal_id,4,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,budget_recommendation_constraints,category_id,4,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,budget_recommendation_constraints,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_recommendation_constraints,recommendation_id,2,uuid,,FOREIGN KEY,public,budget_recommendations,id
+postgresql,postgres,public,budget_recommendation_constraints,subcategory_id,5,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,budget_recommendation_events,actor_user_id,4,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,budget_recommendation_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_recommendation_events,recommendation_id,2,uuid,,FOREIGN KEY,public,budget_recommendations,id
+postgresql,postgres,public,anomaly_evaluations,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,anomaly_evaluations,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,anomaly_evaluations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,anomaly_evaluations,subcategory_id,9,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,anomaly_evaluations,transaction_id,3,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,anomaly_evaluations,transaction_id,3,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,anomaly_evaluations,user_id,2,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,anomaly_evaluations,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,anomaly_evaluation_features,anomaly_evaluation_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,anomaly_evaluation_features,feature_key,3,USER-DEFINED,,UNIQUE,,,
+postgresql,postgres,public,anomaly_evaluation_features,anomaly_evaluation_id,2,uuid,,FOREIGN KEY,public,anomaly_evaluations,id
+postgresql,postgres,public,anomaly_evaluation_features,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,overspending_evaluations,budget_allocation_id,4,uuid,,FOREIGN KEY,public,budget_allocations,id
+postgresql,postgres,public,overspending_evaluations,budget_id,3,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,overspending_evaluations,budget_id,3,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,overspending_evaluations,user_id,2,uuid,,FOREIGN KEY,public,budgets,user_id
+postgresql,postgres,public,overspending_evaluations,category_id,5,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,overspending_evaluations,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,overspending_evaluations,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,overspending_evaluations,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,overspending_evaluations,subcategory_id,6,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,overspending_evaluations,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,alerts,anomaly_evaluation_id,20,uuid,,FOREIGN KEY,public,anomaly_evaluations,id
+postgresql,postgres,public,alerts,anomaly_evaluation_id,20,uuid,,FOREIGN KEY,public,anomaly_evaluations,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,anomaly_evaluations,user_id
+postgresql,postgres,public,alerts,budget_id,15,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,alerts,budget_id,15,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,budgets,user_id
+postgresql,postgres,public,alerts,budget_recommendation_id,19,uuid,,FOREIGN KEY,public,budget_recommendations,id
+postgresql,postgres,public,alerts,budget_recommendation_id,19,uuid,,FOREIGN KEY,public,budget_recommendations,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,budget_recommendations,user_id
+postgresql,postgres,public,alerts,debt_account_id,16,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,alerts,debt_account_id,16,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,debt_accounts,user_id
+postgresql,postgres,public,alerts,forecast_run_id,18,uuid,,FOREIGN KEY,public,forecast_runs,id
+postgresql,postgres,public,alerts,forecast_run_id,18,uuid,,FOREIGN KEY,public,forecast_runs,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,forecast_runs,user_id
+postgresql,postgres,public,alerts,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,alerts,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,alerts,overspending_evaluation_id,21,uuid,,FOREIGN KEY,public,overspending_evaluations,id
+postgresql,postgres,public,alerts,overspending_evaluation_id,21,uuid,,FOREIGN KEY,public,overspending_evaluations,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,overspending_evaluations,user_id
+postgresql,postgres,public,alerts,parent_alert_id,24,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,alerts,parent_alert_id,24,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,alerts,user_id
+postgresql,postgres,public,alerts,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,alerts,savings_goal_id,17,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,alerts,savings_goal_id,17,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,savings_goals,user_id
+postgresql,postgres,public,alerts,subcategory_id,14,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,alerts,transaction_id,13,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,alerts,transaction_id,13,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,transactions,user_id
+postgresql,postgres,public,alerts,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,alert_related_entities,alert_id,2,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,alert_related_entities,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,alert_events,actor_user_id,4,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,alert_events,alert_id,2,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,alert_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,alert_notification_preferences,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,alert_notification_preferences,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,alert_notification_preferences,category,3,USER-DEFINED,,UNIQUE,,,
+postgresql,postgres,public,alert_notification_preferences,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,anomaly_whitelist_rules,created_from_alert_id,3,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,anomaly_whitelist_rules,user_id,2,uuid,,FOREIGN KEY,public,alerts,user_id
+postgresql,postgres,public,anomaly_whitelist_rules,created_from_alert_id,3,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,anomaly_whitelist_rules,created_from_anomaly_evaluation_id,4,uuid,,FOREIGN KEY,public,anomaly_evaluations,id
+postgresql,postgres,public,anomaly_whitelist_rules,created_from_anomaly_evaluation_id,4,uuid,,FOREIGN KEY,public,anomaly_evaluations,id
+postgresql,postgres,public,anomaly_whitelist_rules,user_id,2,uuid,,FOREIGN KEY,public,anomaly_evaluations,user_id
+postgresql,postgres,public,anomaly_whitelist_rules,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,anomaly_whitelist_rules,subcategory_id,6,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,anomaly_whitelist_rules,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,alert_suppression_rules,created_from_alert_id,6,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,alert_suppression_rules,user_id,2,uuid,,FOREIGN KEY,public,alerts,user_id
+postgresql,postgres,public,alert_suppression_rules,category_id,9,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,alert_suppression_rules,created_from_alert_id,6,uuid,,FOREIGN KEY,public,alerts,id
+postgresql,postgres,public,alert_suppression_rules,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,alert_suppression_rules,subcategory_id,8,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,alert_suppression_rules,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,report_runs,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,report_runs,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,report_metrics,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,report_metrics,report_run_id,2,uuid,,FOREIGN KEY,public,report_runs,id
+postgresql,postgres,public,report_metrics,report_run_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,report_metrics,metric_key,3,text,,UNIQUE,,,
+postgresql,postgres,public,report_category_breakdowns,category_id,4,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,report_category_breakdowns,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,report_category_breakdowns,report_run_id,2,uuid,,FOREIGN KEY,public,report_runs,id
+postgresql,postgres,public,report_category_breakdowns,subcategory_id,3,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,report_budget_comparisons,budget_allocation_id,4,uuid,,FOREIGN KEY,public,budget_allocations,id
+postgresql,postgres,public,report_budget_comparisons,budget_id,3,uuid,,FOREIGN KEY,public,budgets,id
+postgresql,postgres,public,report_budget_comparisons,category_id,6,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,report_budget_comparisons,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,report_budget_comparisons,report_run_id,2,uuid,,FOREIGN KEY,public,report_runs,id
+postgresql,postgres,public,report_budget_comparisons,subcategory_id,5,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,report_forecast_comparisons,category_id,6,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,report_forecast_comparisons,forecast_run_id,3,uuid,,FOREIGN KEY,public,forecast_runs,id
+postgresql,postgres,public,report_forecast_comparisons,forecast_series_id,4,uuid,,FOREIGN KEY,public,forecast_series,id
+postgresql,postgres,public,report_forecast_comparisons,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,report_forecast_comparisons,report_run_id,2,uuid,,FOREIGN KEY,public,report_runs,id
+postgresql,postgres,public,report_forecast_comparisons,subcategory_id,5,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,report_savings_goal_snapshots,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,report_savings_goal_snapshots,report_run_id,2,uuid,,FOREIGN KEY,public,report_runs,id
+postgresql,postgres,public,report_savings_goal_snapshots,savings_goal_id,3,uuid,,FOREIGN KEY,public,savings_goals,id
+postgresql,postgres,public,report_debt_account_snapshots,debt_account_id,3,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,report_debt_account_snapshots,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,report_debt_account_snapshots,report_run_id,2,uuid,,FOREIGN KEY,public,report_runs,id
+postgresql,postgres,public,user_eligibility_profiles,metro_manila_locality_code,5,text,,FOREIGN KEY,public,metro_manila_localities,code
+postgresql,postgres,public,user_eligibility_profiles,user_id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,user_eligibility_profiles,user_id,1,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,user_subcategory_restrictions,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,user_subcategory_restrictions,subcategory_id,3,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,user_subcategory_restrictions,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,transaction_templates,destination_account_id,9,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,transaction_templates,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,transaction_templates,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,transaction_templates,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,transaction_templates,source_account_id,8,uuid,,FOREIGN KEY,public,financial_accounts,id
+postgresql,postgres,public,transaction_templates,subcategory_id,7,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,transaction_templates,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,transaction_line_items,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,transaction_line_items,subcategory_id,4,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,transaction_line_items,transaction_id,2,uuid,,FOREIGN KEY,public,transactions,id
+postgresql,postgres,public,transaction_line_items,user_id,3,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,budget_strategy_configs,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,budget_strategy_configs,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,budget_strategy_configs,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_strategy_configs,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,budget_strategy_rules,category_id,5,uuid,,FOREIGN KEY,public,categories,id
+postgresql,postgres,public,budget_strategy_rules,strategy_config_id,3,uuid,,FOREIGN KEY,public,budget_strategy_configs,id
+postgresql,postgres,public,budget_strategy_rules,user_id,2,uuid,,FOREIGN KEY,public,budget_strategy_configs,user_id
+postgresql,postgres,public,budget_strategy_rules,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,budget_strategy_rules,strategy_config_id,3,uuid,,FOREIGN KEY,public,budget_strategy_configs,id
+postgresql,postgres,public,budget_strategy_rules,subcategory_id,6,uuid,,FOREIGN KEY,public,subcategories,id
+postgresql,postgres,public,budget_strategy_rules,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,debt_hardship_plans,debt_account_id,3,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,debt_hardship_plans,user_id,2,uuid,,FOREIGN KEY,public,debt_accounts,user_id
+postgresql,postgres,public,debt_hardship_plans,debt_account_id,3,uuid,,FOREIGN KEY,public,debt_accounts,id
+postgresql,postgres,public,debt_hardship_plans,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,debt_hardship_plans,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,debt_hardship_plans,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,debt_hardship_plans,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,debt_hardship_plan_events,actor_user_id,4,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,debt_hardship_plan_events,hardship_plan_id,2,uuid,,FOREIGN KEY,public,debt_hardship_plans,id
+postgresql,postgres,public,debt_hardship_plan_events,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,push_device_tokens,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,push_device_tokens,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,push_device_tokens,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,push_device_tokens,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,push_device_tokens,device_token,3,text,,UNIQUE,,,
+postgresql,postgres,public,push_device_tokens,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,problem_reports,id,1,uuid,,UNIQUE,,,
+postgresql,postgres,public,problem_reports,user_id,2,uuid,,UNIQUE,,,
+postgresql,postgres,public,problem_reports,id,1,uuid,,PRIMARY KEY,,,
+postgresql,postgres,public,problem_reports,user_id,2,uuid,,FOREIGN KEY,public,profiles,user_id
+postgresql,postgres,public,problem_reports,subject,3,text,,,,,
+postgresql,postgres,public,problem_reports,message_body,4,text,,,,,
+postgresql,postgres,public,problem_reports,sent_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,problem_reports,failed_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,problem_reports,failure_error,7,text,,,,,
+postgresql,postgres,public,problem_reports,retry_count,8,integer,,,,,
+postgresql,postgres,public,problem_reports,created_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,metro_manila_localities,name,2,text,,UNIQUE,,,
+postgresql,postgres,public,metro_manila_localities,code,1,text,,PRIMARY KEY,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,recommended_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,anomaly_evaluations,threshold_score,12,numeric,,,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,explanation,11,text,,,,,
+postgresql,postgres,public,onboarding_sessions,abandoned_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,user_consents,withdrawn_at,8,timestamp with time zone,,,,,
+postgresql,postgres,public,anomaly_evaluations,evaluated_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,alerts,metadata,34,jsonb,,,,,
+postgresql,postgres,public,financial_accounts,created_at,15,timestamp with time zone,,,,,
+postgresql,postgres,public,push_device_tokens,updated_at,8,timestamp with time zone,,,,,
+postgresql,postgres,public,budgets,budget_period_days,11,integer,,,,,
+postgresql,postgres,public,user_category_restrictions,floor_amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,debt_accounts,due_day_of_month,11,integer,,,,,
+postgresql,postgres,public,budget_recommendations,surplus_handling,18,USER-DEFINED,,,,,
+postgresql,postgres,public,savings_goals,projected_completion_date,12,date,,,,,
+postgresql,postgres,public,debt_hardship_plans,lender_contacted_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,alerts,severity,5,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_obligations,is_dependent_support,11,boolean,,,,,
+postgresql,postgres,public,debt_payments,created_at,11,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_recommendations,input_snapshot,25,jsonb,,,,,
+postgresql,postgres,public,onboarding_sessions,superseded_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,data_export_requests,expires_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goals,notes,16,text,,,,,
+postgresql,postgres,public,debt_strategy_preferences,extra_payment_centavos,3,bigint,,,,,
+postgresql,postgres,public,recurring_transaction_templates,stopped_at,25,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,relaxation_step,11,integer,,,,,
+postgresql,postgres,public,debt_repayment_projection_items,projected_total_interest_centavos,6,bigint,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,created_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,recurring_transaction_templates,ends_on,17,date,,,,,
+postgresql,postgres,public,debt_accounts,updated_at,18,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_repayment_projection_items,projected_total_paid_centavos,7,bigint,,,,,
+postgresql,postgres,public,budget_strategy_rules,restriction_level,7,USER-DEFINED,,,,,
+postgresql,postgres,public,transaction_events,metadata,9,jsonb,,,,,
+postgresql,postgres,public,debt_accounts,opened_on,12,date,,,,,
+postgresql,postgres,public,alert_suppression_rules,metadata,15,jsonb,,,,,
+postgresql,postgres,public,savings_goal_budget_allocations,metadata,9,jsonb,,,,,
+postgresql,postgres,public,alerts,action_label,10,text,,,,,
+postgresql,postgres,public,anomaly_evaluations,failure_reason,23,text,,,,,
+postgresql,postgres,public,expected_spending_events,event_kind,5,USER-DEFINED,,,,,
+postgresql,postgres,public,anomaly_evaluations,feature_vector,19,jsonb,,,,,
+postgresql,postgres,public,budgets,total_amount_centavos,12,bigint,,,,,
+postgresql,postgres,public,transactions,metadata,21,jsonb,,,,,
+postgresql,postgres,public,user_eligibility_profiles,date_of_birth,2,date,,,,,
+postgresql,postgres,public,user_category_restrictions,updated_at,11,timestamp with time zone,,,,,
+postgresql,postgres,public,expected_spending_events,starts_on,9,date,,,,,
+postgresql,postgres,public,report_runs,failure_reason,10,text,,,,,
+postgresql,postgres,public,transaction_drafts,last_error,8,text,,,,,
+postgresql,postgres,public,budget_recommendations,current_balance_centavos,13,bigint,,,,,
+postgresql,postgres,public,expected_spending_events,affects_anomaly_suppression,13,boolean,,,,,
+postgresql,postgres,public,expected_spending_events,notes,14,text,,,,,
+postgresql,postgres,public,budget_strategy_rules,explanation,15,text,,,,,
+postgresql,postgres,public,savings_goals,name,5,text,,,,,
+postgresql,postgres,public,forecast_points,upper_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,debt_hardship_plans,activated_at,12,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_assignments,created_at,13,timestamp with time zone,,,,,
+postgresql,postgres,public,alerts,duplicate_key,22,text,,,,,
+postgresql,postgres,public,debt_accounts,status,6,USER-DEFINED,,,,,
+postgresql,postgres,public,recurring_transaction_occurrences,posted_at,8,timestamp with time zone,,,,,
+postgresql,postgres,public,transactions,deleted_at,19,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_assessments,requested_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_suppression_rules,deleted_at,19,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_obligations,is_family_support,10,boolean,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,created_at,11,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_strategy_rules,is_reducible,14,boolean,,,,,
+postgresql,postgres,public,forecast_points,lower_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,accepted_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,report_debt_account_snapshots,minimum_payment_centavos,5,bigint,,,,,
+postgresql,postgres,public,alerts,body,8,text,,,,,
+postgresql,postgres,public,anomaly_evaluations,should_alert_user,15,boolean,,,,,
+postgresql,postgres,public,budget_recommendations,deficit_handling,19,USER-DEFINED,,,,,
+postgresql,postgres,public,alerts,remind_at,33,timestamp with time zone,,,,,
+postgresql,postgres,public,forecast_series,unit,8,text,,,,,
+postgresql,postgres,public,savings_goal_allocation_preferences,metadata,5,jsonb,,,,,
+postgresql,postgres,public,budget_strategy_rules,min_percent_bps,9,integer,,,,,
+postgresql,postgres,public,budget_recommendations,explanation_summary,22,text,,,,,
+postgresql,postgres,public,debt_payments,amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,user_privacy_settings,personalization_enabled,2,boolean,,,,,
+postgresql,postgres,public,report_category_breakdowns,transaction_count,8,integer,,,,,
+postgresql,postgres,public,budget_strategy_rules,priority_order,13,integer,,,,,
+postgresql,postgres,public,recurring_transaction_templates,next_occurrence_date,18,date,,,,,
+postgresql,postgres,public,overspending_evaluations,overspent_amount_centavos,10,bigint,,,,,
+postgresql,postgres,public,forecast_runs,disclaimer_text,15,text,,,,,
+postgresql,postgres,public,user_privacy_settings,research_evaluation_opt_in,4,boolean,,,,,
+postgresql,postgres,public,budget_recommendations,period_start,8,date,,,,,
+postgresql,postgres,public,income_sources,expected_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,explanation,12,text,,,,,
+postgresql,postgres,public,financial_profile_events,notes,7,text,,,,,
+postgresql,postgres,public,forecast_explanation_drivers,sort_order,8,integer,,,,,
+postgresql,postgres,public,budget_strategy_configs,is_active,7,boolean,,,,,
+postgresql,postgres,public,budget_health_snapshots,measured_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_allocations,is_protected_snapshot,9,boolean,,,,,
+postgresql,postgres,public,budget_health_snapshots,explanation,10,text,,,,,
+postgresql,postgres,public,financial_profile_assignments,effective_from,7,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_payments,payment_date,6,date,,,,,
+postgresql,postgres,public,user_transaction_retention_settings,metadata,7,jsonb,,,,,
+postgresql,postgres,public,financial_profile_assessments,model_version,9,text,,,,,
+postgresql,postgres,public,recurring_transaction_templates,notes,22,text,,,,,
+postgresql,postgres,public,alerts,bundle_key,23,text,,,,,
+postgresql,postgres,public,debt_hardship_plan_events,payload,7,jsonb,,,,,
+postgresql,postgres,public,user_consents,metadata,12,jsonb,,,,,
+postgresql,postgres,public,user_debt_priorities,updated_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,subcategories,is_system,9,boolean,,,,,
+postgresql,postgres,public,financial_accounts,kind,4,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendation_events,notes,6,text,,,,,
+postgresql,postgres,public,budgets,deleted_at,20,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_hardship_plans,hardship_reason,5,text,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,strategy,3,USER-DEFINED,,,,,
+postgresql,postgres,public,transactions,client_mutation_id,16,text,,,,,
+postgresql,postgres,public,anomaly_evaluations,top_driver_key,21,USER-DEFINED,,,,,
+postgresql,postgres,public,budgets,starting_balance_centavos,13,bigint,,,,,
+postgresql,postgres,public,alerts,delivered_in_app_at,26,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_retention_events,action,4,USER-DEFINED,,,,,
+postgresql,postgres,public,expected_spending_events,repeats_yearly,11,boolean,,,,,
+postgresql,postgres,public,debt_hardship_plans,created_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,horizon_months,5,integer,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,is_protected,14,boolean,,,,,
+postgresql,postgres,public,user_consents,source,9,text,,,,,
+postgresql,postgres,public,financial_accounts,current_balance_centavos,7,bigint,,,,,
+postgresql,postgres,public,transaction_templates,name,5,text,,,,,
+postgresql,postgres,public,user_privacy_settings,model_training_opt_in,3,boolean,,,,,
+postgresql,postgres,public,report_budget_comparisons,variance_amount_centavos,9,bigint,,,,,
+postgresql,postgres,public,anomaly_evaluation_features,raw_value,4,numeric,,,,,
+postgresql,postgres,public,categories,label,5,text,,,,,
+postgresql,postgres,public,alert_related_entities,metadata,7,jsonb,,,,,
+postgresql,postgres,public,financial_profile_assessments,assessment_method,5,USER-DEFINED,,,,,
+postgresql,postgres,public,profiles,onboarding_completed_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goal_contributions,contribution_date,7,date,,,,,
+postgresql,postgres,public,account_deletion_requests,reason,9,text,,,,,
+postgresql,postgres,public,financial_profile_assessments,metadata,18,jsonb,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,notes,9,text,,,,,
+postgresql,postgres,public,anomaly_evaluations,history_days,7,integer,,,,,
+postgresql,postgres,public,forecast_points,actual_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,income_sources,frequency,5,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_payments,interest_centavos,9,bigint,,,,,
+postgresql,postgres,public,savings_goals,archived_at,14,timestamp with time zone,,,,,
+postgresql,postgres,public,income_sources,name,3,text,,,,,
+postgresql,postgres,public,report_debt_account_snapshots,current_balance_centavos,4,bigint,,,,,
+postgresql,postgres,public,user_consents,user_agent,11,text,,,,,
+postgresql,postgres,public,data_export_requests,export_storage_path,7,text,,,,,
+postgresql,postgres,public,profiles,lifecycle_status,5,USER-DEFINED,,,,,
+postgresql,postgres,public,report_runs,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendations,solver_snapshot,26,jsonb,,,,,
+postgresql,postgres,public,financial_obligations,metadata,18,jsonb,,,,,
+postgresql,postgres,public,debt_hardship_plans,deferred_months,8,integer,,,,,
+postgresql,postgres,public,alert_notification_preferences,updated_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,min_amount_centavos,10,bigint,,,,,
+postgresql,postgres,public,budget_recommendations,target_savings_rate_bps,15,integer,,,,,
+postgresql,postgres,public,savings_goal_budget_allocations,allocation_order,7,integer,,,,,
+postgresql,postgres,public,anomaly_evaluations,score_percentile,13,numeric,,,,,
+postgresql,postgres,public,financial_profile_assignments,explanation,12,text,,,,,
+postgresql,postgres,public,transaction_templates,notes,12,text,,,,,
+postgresql,postgres,public,forecast_runs,generated_at,3,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_related_entities,sort_order,8,integer,,,,,
+postgresql,postgres,public,recurring_transaction_templates,name,5,text,,,,,
+postgresql,postgres,public,forecast_runs,input_snapshot,16,jsonb,,,,,
+postgresql,postgres,public,expected_spending_events,expected_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,recurring_transaction_templates,frequency,10,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendations,created_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,income_sources,max_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,recurring_transaction_occurrences,skipped_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,anomaly_evaluation_features,deviation_value,7,numeric,,,,,
+postgresql,postgres,public,budget_events,payload,7,jsonb,,,,,
+postgresql,postgres,public,expected_spending_events,ends_on,10,date,,,,,
+postgresql,postgres,public,financial_obligations,protected_by_default,12,boolean,,,,,
+postgresql,postgres,public,income_sources,notes,14,text,,,,,
+postgresql,postgres,public,budget_strategy_configs,description,5,text,,,,,
+postgresql,postgres,public,alert_notification_preferences,duplicate_cooldown_hours,7,integer,,,,,
+postgresql,postgres,public,forecast_explanation_drivers,driver_key,3,text,,,,,
+postgresql,postgres,public,forecast_runs,horizon_days,12,integer,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,adjusted_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,user_eligibility_profiles,metadata,10,jsonb,,,,,
+postgresql,postgres,public,budgets,metadata,22,jsonb,,,,,
+postgresql,postgres,public,transaction_templates,merchant_name,10,text,,,,,
+postgresql,postgres,public,forecast_runs,granularity,11,USER-DEFINED,,,,,
+postgresql,postgres,public,categories,is_filipino_context,9,boolean,,,,,
+postgresql,postgres,public,report_budget_comparisons,allocated_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,forecast_explanation_drivers,impact_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,budget_strategy_configs,metadata,10,jsonb,,,,,
+postgresql,postgres,public,savings_goal_budget_allocations,allocation_strategy,4,USER-DEFINED,,,,,
+postgresql,postgres,public,user_category_restrictions,effective_to,8,date,,,,,
+postgresql,postgres,public,budgets,source,4,USER-DEFINED,,,,,
+postgresql,postgres,public,user_eligibility_profiles,is_filipino,3,boolean,,,,,
+postgresql,postgres,public,recurring_transaction_templates,starts_on,16,date,,,,,
+postgresql,postgres,public,savings_goal_contributions,notes,9,text,,,,,
+postgresql,postgres,public,report_metrics,amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,explanation,15,text,,,,,
+postgresql,postgres,public,debt_accounts,created_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goals,deleted_at,15,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_accounts,credit_limit_centavos,8,bigint,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,recommended_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,debt_hardship_plan_events,notes,6,text,,,,,
+postgresql,postgres,public,report_category_breakdowns,forecasted_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,user_consents,consent_kind,3,USER-DEFINED,,,,,
+postgresql,postgres,public,alert_suppression_rules,starts_at,12,timestamp with time zone,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,status,10,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_repayment_projection_points,period_start,3,date,,,,,
+postgresql,postgres,public,financial_profile_assessments,model_kind,8,text,,,,,
+postgresql,postgres,public,budget_recommendation_events,payload,7,jsonb,,,,,
+postgresql,postgres,public,debt_accounts,annual_interest_rate_bps,9,integer,,,,,
+postgresql,postgres,public,anomaly_evaluations,review_status,16,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,metadata,12,jsonb,,,,,
+postgresql,postgres,public,data_export_requests,processed_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,income_sources,is_active,13,boolean,,,,,
+postgresql,postgres,public,transaction_line_items,item_label,5,text,,,,,
+postgresql,postgres,public,user_category_restrictions,created_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_suppression_rules,amount_tolerance_bps,11,integer,,,,,
+postgresql,postgres,public,overspending_evaluations,budgeted_amount_centavos,9,bigint,,,,,
+postgresql,postgres,public,financial_profile_explanation_drivers,driver_key,3,text,,,,,
+postgresql,postgres,public,alert_events,created_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_accounts,opened_on,11,date,,,,,
+postgresql,postgres,public,onboarding_sessions,raw_answers,9,jsonb,,,,,
+postgresql,postgres,public,financial_accounts,updated_at,16,timestamp with time zone,,,,,
+postgresql,postgres,public,push_device_tokens,created_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,report_savings_goal_snapshots,progress_state,6,USER-DEFINED,,,,,
+postgresql,postgres,public,recurring_transaction_occurrences,reminder_sent_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,recurring_transaction_templates,interval_count,11,integer,,,,,
+postgresql,postgres,public,user_category_restrictions,effective_from,7,date,,,,,
+postgresql,postgres,public,transactions,posted_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,budgets,archived_at,19,timestamp with time zone,,,,,
+postgresql,postgres,public,report_runs,generated_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,updated_at,11,timestamp with time zone,,,,,
+postgresql,postgres,public,transactions,retain_until,20,date,,,,,
+postgresql,postgres,public,anomaly_evaluations,baseline_snapshot,20,jsonb,,,,,
+postgresql,postgres,public,expected_spending_events,metadata,17,jsonb,,,,,
+postgresql,postgres,public,forecast_explanation_drivers,direction,5,text,,,,,
+postgresql,postgres,public,push_device_tokens,last_used_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,user_transaction_retention_settings,auto_archive_enabled,3,boolean,,,,,
+postgresql,postgres,public,debt_accounts,minimum_payment_centavos,10,bigint,,,,,
+postgresql,postgres,public,report_runs,period_start,5,date,,,,,
+postgresql,postgres,public,alerts,dismissed_at,30,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,status,2,USER-DEFINED,,,,,
+postgresql,postgres,public,forecast_runs,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,transactions,notes,15,text,,,,,
+postgresql,postgres,public,anomaly_evaluation_features,explanation,9,text,,,,,
+postgresql,postgres,public,financial_profile_assessments,output_snapshot,16,jsonb,,,,,
+postgresql,postgres,public,report_budget_comparisons,metadata,10,jsonb,,,,,
+postgresql,postgres,public,report_forecast_comparisons,actual_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,alert_suppression_rules,disabled_at,18,timestamp with time zone,,,,,
+postgresql,postgres,public,forecast_runs,history_days,8,integer,,,,,
+postgresql,postgres,public,recurring_transaction_occurrences,metadata,11,jsonb,,,,,
+postgresql,postgres,public,forecast_points,period_start,3,date,,,,,
+postgresql,postgres,public,transaction_events,notes,8,text,,,,,
+postgresql,postgres,public,budget_recommendations,forecast_income_centavos,14,bigint,,,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,progress_state,8,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_accounts,status,5,USER-DEFINED,,,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,accepted_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,budget_events,notes,6,text,,,,,
+postgresql,postgres,public,alerts,delivered_push_at,27,timestamp with time zone,,,,,
+postgresql,postgres,public,user_transaction_retention_settings,retention_days,2,integer,,,,,
+postgresql,postgres,public,savings_goals,metadata,19,jsonb,,,,,
+postgresql,postgres,public,financial_obligations,ends_on,14,date,,,,,
+postgresql,postgres,public,budget_strategy_configs,strategy,3,USER-DEFINED,,,,,
+postgresql,postgres,public,transactions,merchant_name,13,text,,,,,
+postgresql,postgres,public,subcategories,is_active,14,boolean,,,,,
+postgresql,postgres,public,alert_suppression_rules,merchant_name,7,text,,,,,
+postgresql,postgres,public,report_runs,kind,3,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,constraint_type,3,USER-DEFINED,,,,,
+postgresql,postgres,public,user_privacy_settings,updated_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,onboarding_sessions,current_step_key,8,text,,,,,
+postgresql,postgres,public,recurring_transaction_templates,reminder_enabled,20,boolean,,,,,
+postgresql,postgres,public,budgets,strategy,7,USER-DEFINED,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,updated_at,12,timestamp with time zone,,,,,
+postgresql,postgres,public,anomaly_evaluations,explanation,22,text,,,,,
+postgresql,postgres,public,user_consents,ip_address,10,inet,,,,,
+postgresql,postgres,public,data_export_requests,status,3,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendations,optimization_explanation,23,text,,,,,
+postgresql,postgres,public,debt_hardship_plans,reduced_payment_centavos,7,bigint,,,,,
+postgresql,postgres,public,forecast_runs,input_window_end,10,date,,,,,
+postgresql,postgres,public,budget_strategy_rules,min_amount_centavos,11,bigint,,,,,
+postgresql,postgres,public,budget_recommendations,status,7,USER-DEFINED,,,,,
+postgresql,postgres,public,onboarding_sessions,review_snapshot,10,jsonb,,,,,
+postgresql,postgres,public,savings_goal_contributions,metadata,11,jsonb,,,,,
+postgresql,postgres,public,profiles,deleted_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,onboarding_sessions,status,3,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_accounts,opening_balance_centavos,6,bigint,,,,,
+postgresql,postgres,public,savings_goal_budget_allocations,allocated_amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,account_deletion_requests,status,3,USER-DEFINED,,,,,
+postgresql,postgres,public,savings_goals,priority_rank,11,integer,,,,,
+postgresql,postgres,public,transaction_drafts,captured_offline_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,total_paid_centavos,9,bigint,,,,,
+postgresql,postgres,public,recurring_transaction_templates,day_of_week,14,integer,,,,,
+postgresql,postgres,public,subcategories,sort_order,13,integer,,,,,
+postgresql,postgres,public,financial_obligations,frequency,8,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_strategy_preferences,updated_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,anomaly_evaluation_features,is_top_driver,8,boolean,,,,,
+postgresql,postgres,public,debt_accounts,current_balance_centavos,8,bigint,,,,,
+postgresql,postgres,public,savings_goal_contributions,source,5,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_obligations,name,5,text,,,,,
+postgresql,postgres,public,financial_profile_explanation_drivers,impact_label,6,text,,,,,
+postgresql,postgres,public,anomaly_evaluations,amount_centavos,10,bigint,,,,,
+postgresql,postgres,public,overspending_evaluations,threshold_snapshot,12,jsonb,,,,,
+postgresql,postgres,public,budget_strategy_configs,is_system,6,boolean,,,,,
+postgresql,postgres,public,transaction_line_items,amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,income_sources,metadata,17,jsonb,,,,,
+postgresql,postgres,public,recurring_transaction_templates,deleted_at,26,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_drafts,payload,5,jsonb,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,historical_p90_amount_centavos,12,bigint,,,,,
+postgresql,postgres,public,debt_accounts,paid_off_at,13,timestamp with time zone,,,,,
+postgresql,postgres,public,income_sources,next_expected_date,12,date,,,,,
+postgresql,postgres,public,budget_health_snapshots,actual_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,forecast_series,sort_order,11,integer,,,,,
+postgresql,postgres,public,alerts,read_at,28,timestamp with time zone,,,,,
+postgresql,postgres,public,user_debt_priorities,created_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_explanation_drivers,value_text,5,text,,,,,
+postgresql,postgres,public,financial_profile_assignments,effective_to,8,timestamp with time zone,,,,,
+postgresql,postgres,public,report_category_breakdowns,actual_amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,min_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,transaction_templates,metadata,18,jsonb,,,,,
+postgresql,postgres,public,report_savings_goal_snapshots,current_amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,debt_hardship_plans,updated_at,18,timestamp with time zone,,,,,
+postgresql,postgres,public,transactions,entry_source,5,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_obligations,starts_on,13,date,,,,,
+postgresql,postgres,public,report_savings_goal_snapshots,target_amount_centavos,4,bigint,,,,,
+postgresql,postgres,public,overspending_evaluations,metadata,15,jsonb,,,,,
+postgresql,postgres,public,categories,slug,4,text,,,,,
+postgresql,postgres,public,financial_profile_explanation_drivers,sort_order,8,integer,,,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,remaining_amount_snapshot_centavos,9,bigint,,,,,
+postgresql,postgres,public,user_transaction_retention_settings,archive_after_days,4,integer,,,,,
+postgresql,postgres,public,transaction_templates,use_count,13,integer,,,,,
+postgresql,postgres,public,financial_obligations,notes,15,text,,,,,
+postgresql,postgres,public,subcategories,is_protected_default,11,boolean,,,,,
+postgresql,postgres,public,debt_hardship_plans,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,forecast_runs,failure_reason,18,text,,,,,
+postgresql,postgres,public,alerts,source_type,4,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,failure_reason,9,text,,,,,
+postgresql,postgres,public,alert_notification_preferences,snoozed_until,8,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_events,action,3,USER-DEFINED,,,,,
+postgresql,postgres,public,budgets,period_end,10,date,,,,,
+postgresql,postgres,public,transaction_templates,deleted_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,ceiling_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,subcategories,short_label,7,text,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,metadata,12,jsonb,,,,,
+postgresql,postgres,public,forecast_series,confidence_label,10,text,,,,,
+postgresql,postgres,public,onboarding_responses,updated_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_strategy_configs,name,4,text,,,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,current_amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,alert_suppression_rules,amount_center_centavos,10,bigint,,,,,
+postgresql,postgres,public,profiles,metadata,11,jsonb,,,,,
+postgresql,postgres,public,report_runs,filters,8,jsonb,,,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,adjusted_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,user_eligibility_profiles,primary_employment_classification,6,USER-DEFINED,,,,,
+postgresql,postgres,public,subcategories,metadata,15,jsonb,,,,,
+postgresql,postgres,public,user_category_restrictions,restriction_level,4,USER-DEFINED,,,,,
+postgresql,postgres,public,report_debt_account_snapshots,projected_payoff_date,6,date,,,,,
+postgresql,postgres,public,report_runs,created_at,11,timestamp with time zone,,,,,
+postgresql,postgres,public,category_groups,label,3,text,,,,,
+postgresql,postgres,public,onboarding_sessions,started_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_hardship_plans,resolved_at,13,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goal_allocation_preferences,planned_contribution_centavos,3,bigint,,,,,
+postgresql,postgres,public,financial_profile_events,payload,8,jsonb,,,,,
+postgresql,postgres,public,income_sources,payday_second_day_of_month,10,integer,,,,,
+postgresql,postgres,public,subcategories,description,8,text,,,,,
+postgresql,postgres,public,savings_goal_allocation_preferences,strategy,2,USER-DEFINED,,,,,
+postgresql,postgres,public,data_export_requests,failure_reason,8,text,,,,,
+postgresql,postgres,public,recurring_transaction_templates,metadata,27,jsonb,,,,,
+postgresql,postgres,public,alert_suppression_rules,source_type,4,USER-DEFINED,,,,,
+postgresql,postgres,public,budgets,period_start,9,date,,,,,
+postgresql,postgres,public,financial_profile_assessments,assessed_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,user_privacy_settings,metadata,8,jsonb,,,,,
+postgresql,postgres,public,alerts,title,7,text,,,,,
+postgresql,postgres,public,transactions,amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,last_reclassified_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_assessments,proposed_profile_label,10,USER-DEFINED,,,,,
+postgresql,postgres,public,alert_suppression_rules,reason,14,text,,,,,
+postgresql,postgres,public,savings_goals,updated_at,18,timestamp with time zone,,,,,
+postgresql,postgres,public,budgets,period_kind,8,USER-DEFINED,,,,,
+postgresql,postgres,public,overspending_evaluations,evaluated_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,budgets,deficit_handling,15,USER-DEFINED,,,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,allocation_strategy,5,USER-DEFINED,,,,,
+postgresql,postgres,public,alert_events,notes,6,text,,,,,
+postgresql,postgres,public,financial_profile_assignments,metadata,14,jsonb,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,trigger_source,3,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_profile_explanation_drivers,driver_label,4,text,,,,,
+postgresql,postgres,public,report_metrics,metric_label,4,text,,,,,
+postgresql,postgres,public,income_sources,payday_day_of_month,9,integer,,,,,
+postgresql,postgres,public,report_category_breakdowns,budgeted_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,financial_accounts,deleted_at,13,timestamp with time zone,,,,,
+postgresql,postgres,public,expected_spending_events,status,6,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,priority_weight,13,integer,,,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,allocation_order,10,integer,,,,,
+postgresql,postgres,public,anomaly_evaluations,raw_anomaly_score,11,numeric,,,,,
+postgresql,postgres,public,user_category_restrictions,notes,9,text,,,,,
+postgresql,postgres,public,debt_hardship_plans,requested_at,11,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,allocation_scope,3,USER-DEFINED,,,,,
+postgresql,postgres,public,transaction_retention_events,metadata,8,jsonb,,,,,
+postgresql,postgres,public,financial_profile_assessments,input_snapshot,15,jsonb,,,,,
+postgresql,postgres,public,budgets,closed_at,18,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_drafts,updated_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_accounts,notes,16,text,,,,,
+postgresql,postgres,public,debt_hardship_plan_events,created_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_suppression_rules,ends_at,13,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_accounts,sort_order,14,integer,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,cadence_days,4,integer,,,,,
+postgresql,postgres,public,financial_profile_assignments,rejected_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,report_savings_goal_snapshots,projected_completion_date,7,date,,,,,
+postgresql,postgres,public,budgets,explanation,21,text,,,,,
+postgresql,postgres,public,anomaly_evaluations,suppression_context,18,jsonb,,,,,
+postgresql,postgres,public,transaction_drafts,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_accounts,metadata,17,jsonb,,,,,
+postgresql,postgres,public,debt_payments,source,5,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_profile_assignments,profile_label,4,USER-DEFINED,,,,,
+postgresql,postgres,public,recurring_transaction_occurrences,status,5,USER-DEFINED,,,,,
+postgresql,postgres,public,category_groups,is_active,7,boolean,,,,,
+postgresql,postgres,public,budget_events,created_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_payments,metadata,12,jsonb,,,,,
+postgresql,postgres,public,budget_strategy_rules,target_percent_bps,8,integer,,,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,projected_completion_date,7,date,,,,,
+postgresql,postgres,public,budget_recommendations,target_savings_centavos,16,bigint,,,,,
+postgresql,postgres,public,expected_spending_events,updated_at,16,timestamp with time zone,,,,,
+postgresql,postgres,public,forecast_runs,metadata,17,jsonb,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,metadata,12,jsonb,,,,,
+postgresql,postgres,public,budget_strategy_rules,max_percent_bps,10,integer,,,,,
+postgresql,postgres,public,anomaly_evaluation_features,normalized_value,5,numeric,,,,,
+postgresql,postgres,public,financial_profile_assessments,explanation_summary,14,text,,,,,
+postgresql,postgres,public,report_budget_comparisons,actual_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,report_forecast_comparisons,metadata,10,jsonb,,,,,
+postgresql,postgres,public,budget_allocations,notes,11,text,,,,,
+postgresql,postgres,public,debt_repayment_projection_items,projected_payoff_date,5,date,,,,,
+postgresql,postgres,public,user_transaction_retention_settings,purge_after_days,5,integer,,,,,
+postgresql,postgres,public,profiles,last_active_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,alerts,acknowledged_at,29,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_accounts,name,4,text,,,,,
+postgresql,postgres,public,data_export_requests,metadata,9,jsonb,,,,,
+postgresql,postgres,public,budgets,surplus_handling,14,USER-DEFINED,,,,,
+postgresql,postgres,public,transaction_events,created_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,budgets,activated_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,user_consents,version,5,text,,,,,
+postgresql,postgres,public,account_deletion_requests,requested_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,alerts,triggered_at,25,timestamp with time zone,,,,,
+postgresql,postgres,public,overspending_evaluations,should_alert_user,13,boolean,,,,,
+postgresql,postgres,public,expected_spending_events,affects_forecast,12,boolean,,,,,
+postgresql,postgres,public,forecast_runs,personalization_alpha,7,numeric,,,,,
+postgresql,postgres,public,savings_goals,target_date,10,date,,,,,
+postgresql,postgres,public,user_eligibility_profiles,metro_manila_presence,4,USER-DEFINED,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,deleted_at,14,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_suppression_rules,created_at,16,timestamp with time zone,,,,,
+postgresql,postgres,public,alerts,expires_at,32,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_recommendations,budget_period_days,10,integer,,,,,
+postgresql,postgres,public,budget_health_snapshots,health_status,5,USER-DEFINED,,,,,
+postgresql,postgres,public,transaction_line_items,quantity,6,numeric,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,effective_to,8,date,,,,,
+postgresql,postgres,public,savings_goals,status,6,USER-DEFINED,,,,,
+postgresql,postgres,public,transactions,created_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_obligations,amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,forecast_runs,model_version,6,text,,,,,
+postgresql,postgres,public,subcategories,is_filipino_context,10,boolean,,,,,
+postgresql,postgres,public,report_metrics,unit,7,text,,,,,
+postgresql,postgres,public,forecast_points,period_end,4,date,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,floor_amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,profiles,updated_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,user_consents,effective_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,metro_manila_localities,sort_order,4,integer,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,projected_debt_free_date,7,date,,,,,
+postgresql,postgres,public,income_sources,min_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,forecast_runs,forecast_start,13,date,,,,,
+postgresql,postgres,public,transaction_events,action,4,USER-DEFINED,,,,,
+postgresql,postgres,public,recurring_transaction_templates,updated_at,24,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_accounts,lender_name,5,text,,,,,
+postgresql,postgres,public,income_sources,income_type,4,USER-DEFINED,,,,,
+postgresql,postgres,public,onboarding_sessions,metadata,11,jsonb,,,,,
+postgresql,postgres,public,budget_strategy_rules,metadata,16,jsonb,,,,,
+postgresql,postgres,public,recurring_transaction_templates,custom_rule,15,jsonb,,,,,
+postgresql,postgres,public,financial_profile_assignments,is_active,5,boolean,,,,,
+postgresql,postgres,public,anomaly_evaluations,suppression_reason,17,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,max_amount_centavos,11,bigint,,,,,
+postgresql,postgres,public,savings_goals,achieved_at,13,timestamp with time zone,,,,,
+postgresql,postgres,public,account_deletion_requests,metadata,10,jsonb,,,,,
+postgresql,postgres,public,debt_accounts,archived_at,14,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_allocations,allocated_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,report_runs,period_end,6,date,,,,,
+postgresql,postgres,public,alert_related_entities,amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,data_export_requests,requested_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,user_eligibility_profiles,primary_employment_other,7,text,,,,,
+postgresql,postgres,public,debt_repayment_projection_items,payoff_order,4,integer,,,,,
+postgresql,postgres,public,budget_recommendations,metadata,27,jsonb,,,,,
+postgresql,postgres,public,budgets,created_at,23,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_events,action,4,USER-DEFINED,,,,,
+postgresql,postgres,public,transaction_templates,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_health_snapshots,metadata,11,jsonb,,,,,
+postgresql,postgres,public,subcategories,is_protected,12,boolean,,,,,
+postgresql,postgres,public,debt_hardship_plans,cancelled_at,14,timestamp with time zone,,,,,
+postgresql,postgres,public,overspending_evaluations,actual_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,category_groups,sort_order,6,integer,,,,,
+postgresql,postgres,public,financial_accounts,institution_name,10,text,,,,,
+postgresql,postgres,public,profiles,display_name,3,text,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,updated_at,11,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_strategy_configs,created_at,8,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_templates,transaction_type,3,USER-DEFINED,,,,,
+postgresql,postgres,public,report_category_breakdowns,metadata,9,jsonb,,,,,
+postgresql,postgres,public,category_groups,metadata,8,jsonb,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,next_due_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_hardship_plan_events,action,3,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendations,profile_label,12,USER-DEFINED,,,,,
+postgresql,postgres,public,subcategories,label,6,text,,,,,
+postgresql,postgres,public,recurring_transaction_occurrences,failure_reason,10,text,,,,,
+postgresql,postgres,public,savings_goal_recommendation_allocations,metadata,12,jsonb,,,,,
+postgresql,postgres,public,category_groups,description,5,text,,,,,
+postgresql,postgres,public,debt_hardship_plans,metadata,19,jsonb,,,,,
+postgresql,postgres,public,alerts,explanation,9,text,,,,,
+postgresql,postgres,public,user_privacy_settings,notifications_opt_in,5,boolean,,,,,
+postgresql,postgres,public,debt_repayment_projection_points,period_end,4,date,,,,,
+postgresql,postgres,public,transaction_templates,updated_at,16,timestamp with time zone,,,,,
+postgresql,postgres,public,alerts,cleared_at,31,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_line_items,notes,8,text,,,,,
+postgresql,postgres,public,forecast_explanation_drivers,explanation,7,text,,,,,
+postgresql,postgres,public,budget_allocations,allocation_scope,3,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_allocations,priority_weight,10,integer,,,,,
+postgresql,postgres,public,forecast_points,predicted_amount_centavos,5,bigint,,,,,
+postgresql,postgres,public,recurring_transaction_templates,day_of_month,12,integer,,,,,
+postgresql,postgres,public,recurring_transaction_templates,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,savings_goal_budget_allocations,explanation,8,text,,,,,
+postgresql,postgres,public,categories,is_system,8,boolean,,,,,
+postgresql,postgres,public,financial_profile_assessments,obligation_load_bps,13,integer,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,tolerance_bps,8,integer,,,,,
+postgresql,postgres,public,report_forecast_comparisons,absolute_error_centavos,9,bigint,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,base_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,financial_profile_assignments,override_reason,11,text,,,,,
+postgresql,postgres,public,alert_related_entities,entity_id,4,uuid,,,,,
+postgresql,postgres,public,recurring_transaction_templates,reminder_days_before,21,integer,,,,,
+postgresql,postgres,public,budget_health_snapshots,adherence_bps,9,integer,,,,,
+postgresql,postgres,public,recurring_transaction_templates,transaction_type,3,USER-DEFINED,,,,,
+postgresql,postgres,public,category_groups,short_label,4,text,,,,,
+postgresql,postgres,public,budgets,allow_deficit_planning,16,boolean,,,,,
+postgresql,postgres,public,anomaly_evaluations,merchant_name,8,text,,,,,
+postgresql,postgres,public,account_deletion_requests,cancelled_at,8,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_obligations,created_at,16,timestamp with time zone,,,,,
+postgresql,postgres,public,income_sources,updated_at,16,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_strategy_preferences,metadata,5,jsonb,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,percent_bps,8,integer,,,,,
+postgresql,postgres,public,forecast_series,label,7,text,,,,,
+postgresql,postgres,public,transactions,counterparty_name,14,text,,,,,
+postgresql,postgres,public,alert_notification_preferences,mode,4,USER-DEFINED,,,,,
+postgresql,postgres,public,forecast_series,explanation,9,text,,,,,
+postgresql,postgres,public,budget_recommendations,strategy,11,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_hardship_plans,archived_at,15,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goal_allocation_preferences,updated_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,categories,is_active,11,boolean,,,,,
+postgresql,postgres,public,income_sources,payday_day_of_week,11,integer,,,,,
+postgresql,postgres,public,transaction_events,after_snapshot,7,jsonb,,,,,
+postgresql,postgres,public,budget_health_snapshots,allocated_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,transaction_drafts,created_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,user_transaction_retention_settings,updated_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,account_deletion_requests,scheduled_delete_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_recommendations,recommended_total_centavos,17,bigint,,,,,
+postgresql,postgres,public,savings_goals,progress_state,7,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_profile_explanation_drivers,explanation,7,text,,,,,
+postgresql,postgres,public,alerts,status,6,USER-DEFINED,,,,,
+postgresql,postgres,public,transaction_retention_events,retain_until,6,date,,,,,
+postgresql,postgres,public,savings_goal_budget_allocations,remaining_amount_snapshot_centavos,6,bigint,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,is_hard,9,boolean,,,,,
+postgresql,postgres,public,budget_allocations,metadata,13,jsonb,,,,,
+postgresql,postgres,public,recurring_transaction_templates,second_day_of_month,13,integer,,,,,
+postgresql,postgres,public,onboarding_sessions,submitted_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,metadata,9,jsonb,,,,,
+postgresql,postgres,public,debt_payments,notes,10,text,,,,,
+postgresql,postgres,public,subcategories,kind,5,USER-DEFINED,,,,,
+postgresql,postgres,public,alert_suppression_rules,status,5,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_repayment_projection_points,projected_balance_centavos,5,bigint,,,,,
+postgresql,postgres,public,debt_accounts,deleted_at,15,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goals,created_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,transactions,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_repayment_projection_items,explanation,8,text,,,,,
+postgresql,postgres,public,debt_payments,principal_centavos,8,bigint,,,,,
+postgresql,postgres,public,budget_recommendations,presented_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_assessments,failure_reason,17,text,,,,,
+postgresql,postgres,public,account_deletion_requests,completed_at,7,timestamp with time zone,,,,,
+postgresql,postgres,public,report_forecast_comparisons,predicted_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,report_metrics,metadata,8,jsonb,,,,,
+postgresql,postgres,public,expected_spending_events,title,7,text,,,,,
+postgresql,postgres,public,transactions,transaction_date,6,date,,,,,
+postgresql,postgres,public,transactions,transaction_type,3,USER-DEFINED,,,,,
+postgresql,postgres,public,recurring_transaction_templates,last_generated_date,19,date,,,,,
+postgresql,postgres,public,debt_repayment_projection_points,projected_payment_centavos,6,bigint,,,,,
+postgresql,postgres,public,debt_hardship_plans,deferment_end_date,9,date,,,,,
+postgresql,postgres,public,financial_profile_events,created_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_accounts,metadata,19,jsonb,,,,,
+postgresql,postgres,public,budget_recommendation_events,action,3,USER-DEFINED,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,merchant_name,5,text,,,,,
+postgresql,postgres,public,budget_allocations,sort_order,12,integer,,,,,
+postgresql,postgres,public,user_category_restrictions,metadata,12,jsonb,,,,,
+postgresql,postgres,public,financial_profile_assignments,confirmed_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_retention_events,notes,7,text,,,,,
+postgresql,postgres,public,user_category_restrictions,ceiling_amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,alert_suppression_rules,updated_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,report_runs,summary,9,jsonb,,,,,
+postgresql,postgres,public,onboarding_responses,answer,4,jsonb,,,,,
+postgresql,postgres,public,transactions,updated_at,18,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_health_snapshots,variance_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,user_eligibility_profiles,eligibility_confirmed_at,8,timestamp with time zone,,,,,
+postgresql,postgres,public,push_device_tokens,metadata,9,jsonb,,,,,
+postgresql,postgres,public,debt_strategy_preferences,strategy,2,USER-DEFINED,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,notes,15,text,,,,,
+postgresql,postgres,public,financial_accounts,name,3,text,,,,,
+postgresql,postgres,public,budget_strategy_rules,allocation_scope,4,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendations,deficit_warning_text,20,text,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,restriction_level,4,USER-DEFINED,,,,,
+postgresql,postgres,public,overspending_evaluations,explanation,14,text,,,,,
+postgresql,postgres,public,forecast_runs,input_window_start,9,date,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,disabled_at,13,timestamp with time zone,,,,,
+postgresql,postgres,public,expected_spending_events,created_at,15,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_templates,counterparty_name,11,text,,,,,
+postgresql,postgres,public,anomaly_evaluations,model_version,5,text,,,,,
+postgresql,postgres,public,budget_recommendations,solver_status,21,text,,,,,
+postgresql,postgres,public,user_eligibility_profiles,updated_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,budgets,updated_at,24,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_notification_preferences,in_app_enabled,5,boolean,,,,,
+postgresql,postgres,public,user_privacy_settings,data_retention_days,6,integer,,,,,
+postgresql,postgres,public,transaction_templates,amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,generated_at,4,timestamp with time zone,,,,,
+postgresql,postgres,public,alert_related_entities,label,5,text,,,,,
+postgresql,postgres,public,categories,metadata,12,jsonb,,,,,
+postgresql,postgres,public,savings_goals,target_amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,financial_accounts,archived_at,12,timestamp with time zone,,,,,
+postgresql,postgres,public,transaction_templates,last_used_at,14,timestamp with time zone,,,,,
+postgresql,postgres,public,user_consents,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_allocations,spent_amount_snapshot_centavos,8,bigint,,,,,
+postgresql,postgres,public,alert_events,payload,7,jsonb,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,input_snapshot,10,jsonb,,,,,
+postgresql,postgres,public,savings_goals,current_amount_centavos,9,bigint,,,,,
+postgresql,postgres,public,financial_profile_assessments,confidence_score,11,numeric,,,,,
+postgresql,postgres,public,budget_strategy_configs,updated_at,9,timestamp with time zone,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,created_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,categories,description,7,text,,,,,
+postgresql,postgres,public,report_runs,metadata,12,jsonb,,,,,
+postgresql,postgres,public,user_consents,recorded_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,sort_order,16,integer,,,,,
+postgresql,postgres,public,transaction_line_items,metadata,10,jsonb,,,,,
+postgresql,postgres,public,financial_obligations,status,6,USER-DEFINED,,,,,
+postgresql,postgres,public,financial_profile_assessments,income_type,12,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendations,period_end,9,date,,,,,
+postgresql,postgres,public,budget_recommendations,acted_at,6,timestamp with time zone,,,,,
+postgresql,postgres,public,anomaly_evaluations,is_anomaly,14,boolean,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,total_interest_centavos,8,bigint,,,,,
+postgresql,postgres,public,alert_related_entities,entity_type,3,text,,,,,
+postgresql,postgres,public,debt_hardship_plans,notes,16,text,,,,,
+postgresql,postgres,public,profiles,created_at,8,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_reclassification_schedules,last_checked_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,financial_profile_assessments,status,4,USER-DEFINED,,,,,
+postgresql,postgres,public,user_subcategory_restrictions,effective_from,7,date,,,,,
+postgresql,postgres,public,financial_profile_events,action,5,USER-DEFINED,,,,,
+postgresql,postgres,public,recurring_transaction_templates,created_at,23,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goal_contributions,amount_centavos,8,bigint,,,,,
+postgresql,postgres,public,budget_recommendation_events,created_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,categories,short_label,6,text,,,,,
+postgresql,postgres,public,alert_notification_preferences,push_enabled,6,boolean,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,explanation,11,text,,,,,
+postgresql,postgres,public,recurring_transaction_templates,amount_centavos,6,bigint,,,,,
+postgresql,postgres,public,transaction_retention_events,actioned_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,debt_hardship_plans,original_payment_centavos,6,bigint,,,,,
+postgresql,postgres,public,transaction_events,before_snapshot,6,jsonb,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,was_relaxed,10,boolean,,,,,
+postgresql,postgres,public,financial_profile_assignments,confirmation_required,6,boolean,,,,,
+postgresql,postgres,public,budget_recommendation_allocations,forecast_amount_centavos,9,bigint,,,,,
+postgresql,postgres,public,forecast_series,target,3,USER-DEFINED,,,,,
+postgresql,postgres,public,savings_goal_contributions,created_at,10,timestamp with time zone,,,,,
+postgresql,postgres,public,budget_strategy_rules,max_amount_centavos,12,bigint,,,,,
+postgresql,postgres,public,transaction_line_items,sort_order,9,integer,,,,,
+postgresql,postgres,public,push_device_tokens,platform,4,USER-DEFINED,,,,,
+postgresql,postgres,public,debt_repayment_projection_points,projected_interest_centavos,7,bigint,,,,,
+postgresql,postgres,public,financial_obligations,updated_at,17,timestamp with time zone,,,,,
+postgresql,postgres,public,income_sources,created_at,15,timestamp with time zone,,,,,
+postgresql,postgres,public,report_metrics,numeric_value,6,numeric,,,,,
+postgresql,postgres,public,subcategories,slug,4,text,,,,,
+postgresql,postgres,public,alert_suppression_rules,category,3,USER-DEFINED,,,,,
+postgresql,postgres,public,anomaly_whitelist_rules,allow_any_amount,9,boolean,,,,,
+postgresql,postgres,public,forecast_explanation_drivers,driver_label,4,text,,,,,
+postgresql,postgres,public,account_deletion_requests,confirmed_at,5,timestamp with time zone,,,,,
+postgresql,postgres,public,user_debt_priorities,metadata,7,jsonb,,,,,
+postgresql,postgres,public,alerts,category,3,USER-DEFINED,,,,,
+postgresql,postgres,public,budget_recommendation_constraints,max_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,financial_accounts,include_in_dashboard_balance,9,boolean,,,,,
+postgresql,postgres,public,profiles,metro_manila_city,4,text,,,,,
+postgresql,postgres,public,budget_allocations,rollover_amount_centavos,7,bigint,,,,,
+postgresql,postgres,public,alerts,route_name,11,text,,,,,
+postgresql,postgres,public,push_device_tokens,is_active,5,boolean,,,,,
+postgresql,postgres,public,debt_accounts,original_balance_centavos,7,bigint,,,,,
+postgresql,postgres,public,metro_manila_localities,is_city,3,boolean,,,,,
+postgresql,postgres,public,forecast_runs,model_kind,5,USER-DEFINED,,,,,
+postgresql,postgres,public,budgets,status,3,USER-DEFINED,,,,,
+postgresql,postgres,public,report_debt_account_snapshots,strategy,7,USER-DEFINED,,,,,
+postgresql,postgres,public,forecast_runs,forecast_end,14,date,,,,,
+postgresql,postgres,public,overspending_evaluations,overspent_percent_bps,11,integer,,,,,
+postgresql,postgres,public,anomaly_evaluations,profile_label,6,USER-DEFINED,,,,,
+postgresql,postgres,public,forecast_series,related_entity_id,6,uuid,,,,,
+postgresql,postgres,public,debt_repayment_projection_runs,extra_payment_centavos,6,bigint,,,,,
+postgresql,postgres,public,categories,sort_order,10,integer,,,,,
+postgresql,postgres,public,alerts,route_params,12,jsonb,,,,,
+postgresql,postgres,public,financial_obligations,due_day_of_month,9,integer,,,,,
+postgresql,postgres,public,anomaly_evaluation_features,baseline_value,6,numeric,,,,,
+postgresql,postgres,public,transaction_templates,created_at,15,timestamp with time zone,,,,,
+postgresql,postgres,public,savings_goal_progress_snapshots,progress_percent_bps,6,integer,,,,,
+(1129 rows)
