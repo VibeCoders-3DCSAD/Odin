@@ -37,6 +37,7 @@ export function createMockSupabase() {
       resetPasswordForEmail: jest.fn(),
       getUser: jest.fn(),
       getSession: jest.fn(),
+      setSession: jest.fn(),
       onAuthStateChange: jest.fn(),
     },
   };

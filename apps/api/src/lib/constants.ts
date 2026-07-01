@@ -9,6 +9,7 @@ export const AUTH_ERRORS = {
   google_failed: "Google sign-in failed.",
   token_expired: "Invalid or expired access token.",
   token_required: "Authorization header is required.",
+  refresh_token_required: "Refresh token is required.",
   email_required: "Email is required.",
   password_required: "Password is required.",
   new_password_required: "New password is required.",

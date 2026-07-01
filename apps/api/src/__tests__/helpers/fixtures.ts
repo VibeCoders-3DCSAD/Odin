@@ -65,6 +65,7 @@ export function validPasswordUpdatePayload(
   return {
     payload: {
       password: "NewStr0ng!Pass",
+      refresh_token: validRefreshToken,
       ...overrides,
     },
   };

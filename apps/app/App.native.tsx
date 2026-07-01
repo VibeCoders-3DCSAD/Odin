@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { Platform } from "react-native";
 import AuthExperience from "./components/AuthExperience";
+import { useDeepLink } from "./hooks/useDeepLink";
 import { supabase } from "./lib/supabase";
 
 const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -49,6 +50,8 @@ async function getGoogleIdToken() {
 }
 
 export default function App() {
+  const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
+
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: googleWebClientId,
@@ -90,6 +93,10 @@ export default function App() {
             await GoogleSignin.signOut();
           },
         }}
+        isPasswordRecovery={isPasswordRecovery}
+        isResolvingRecoveryToken={isResolvingRecoveryToken}
+        recoveryRefreshToken={recoveryRefreshToken ?? undefined}
+        recoveryToken={recoveryToken ?? undefined}
       />
       <StatusBar style="dark" />
     </>
