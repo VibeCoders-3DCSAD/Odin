@@ -528,33 +528,8 @@ CREATE TYPE odin_request_status AS ENUM (
   'cancelled'
 );
 
-CREATE TYPE odin_support_ticket_status AS ENUM (
-  'open',
-  'in_review',
-  'waiting_for_user',
-  'resolved',
-  'closed'
-);
-
-CREATE TYPE odin_support_ticket_category AS ENUM (
-  'bug',
-  'account',
-  'transaction',
-  'budget',
-  'forecast',
-  'anomaly',
-  'privacy',
-  'general'
-);
-
-CREATE TYPE odin_support_ticket_event_action AS ENUM (
-  'created',
-  'commented',
-  'status_changed',
-  'attachment_added',
-  'closed',
-  'reopened'
-);
+-- Problem reports are submitted via email dispatch only (no ticketing system).
+-- See Specification.md Article XXXVII Section 4.
 
 CREATE TYPE odin_push_device_platform AS ENUM (
   'android',
@@ -3045,62 +3020,8 @@ CREATE INDEX push_device_tokens_user_active_idx
 -- Help & Problem Reporting
 -- ============================================================================
 
-CREATE TABLE support_tickets (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-  category odin_support_ticket_category NOT NULL,
-  status odin_support_ticket_status NOT NULL DEFAULT 'open',
-  subject text NOT NULL,
-  description text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  resolved_at timestamptz,
-  closed_at timestamptz,
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-
-  CONSTRAINT support_tickets_resolved_chk
-    CHECK (status <> 'resolved' OR resolved_at IS NOT NULL),
-  CONSTRAINT support_tickets_closed_chk
-    CHECK (status <> 'closed' OR closed_at IS NOT NULL),
-  CONSTRAINT support_tickets_id_user_uq UNIQUE (id, user_id)
-);
-
-CREATE INDEX support_tickets_user_status_idx
-  ON support_tickets (user_id, status, created_at DESC);
-
-
-CREATE TABLE support_ticket_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  ticket_id uuid NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
-  action odin_support_ticket_event_action NOT NULL,
-  actor_user_id uuid REFERENCES profiles(user_id) ON DELETE SET NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  notes text,
-  payload jsonb NOT NULL DEFAULT '{}'::jsonb
-);
-
-CREATE INDEX support_ticket_events_ticket_idx
-  ON support_ticket_events (ticket_id, created_at);
-
-CREATE TABLE support_ticket_attachments (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  ticket_id uuid NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES profiles(user_id) ON DELETE CASCADE,
-  storage_bucket text NOT NULL,
-  storage_path text NOT NULL,
-  original_filename text NOT NULL,
-  content_type text,
-  size_bytes bigint,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-
-  CONSTRAINT support_ticket_attachments_size_chk
-    CHECK (size_bytes IS NULL OR size_bytes >= 0),
-  UNIQUE (storage_bucket, storage_path)
-);
-
-CREATE INDEX support_ticket_attachments_ticket_idx
-  ON support_ticket_attachments (ticket_id, created_at);
+-- Problem reporting uses email dispatch — no ticketing tables needed.
+-- See Specification.md Article XXXVII Section 4.
 
 ALTER TABLE budgets
   ADD CONSTRAINT budgets_source_recommendation_fk
@@ -3504,11 +3425,6 @@ ALTER TABLE alerts
   REFERENCES overspending_evaluations(id, user_id)
   ON DELETE CASCADE;
 
-ALTER TABLE support_ticket_attachments
-  ADD CONSTRAINT support_ticket_attachments_ticket_owner_fk
-  FOREIGN KEY (ticket_id, user_id)
-  REFERENCES support_tickets(id, user_id)
-  ON DELETE CASCADE;
 
 -- Row-level security. Authenticated clients can only access rows owned by
 -- auth.uid(). System lookup tables are readable, but writes are left to service
@@ -4632,44 +4548,6 @@ CREATE POLICY push_device_tokens_owner_access
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
-ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY support_tickets_owner_access
-  ON support_tickets
-  FOR ALL
-  TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
-
-ALTER TABLE support_ticket_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY support_ticket_events_owner_access
-  ON support_ticket_events
-  FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM support_tickets
-      WHERE support_tickets.id = support_ticket_events.ticket_id
-        AND support_tickets.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1
-      FROM support_tickets
-      WHERE support_tickets.id = support_ticket_events.ticket_id
-        AND support_tickets.user_id = auth.uid()
-    )
-  );
-
-ALTER TABLE support_ticket_attachments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY support_ticket_attachments_owner_access
-  ON support_ticket_attachments
-  FOR ALL
-  TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
-
 ALTER TABLE metro_manila_localities ENABLE ROW LEVEL SECURITY;
 CREATE POLICY metro_manila_localities_read_authenticated
   ON metro_manila_localities
@@ -4677,46 +4555,4 @@ CREATE POLICY metro_manila_localities_read_authenticated
   TO authenticated
   USING (true);
 
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('support-ticket-attachments', 'support-ticket-attachments', false)
-ON CONFLICT (id) DO NOTHING;
-
-CREATE POLICY support_ticket_attachments_storage_select
-  ON storage.objects
-  FOR SELECT
-  TO authenticated
-  USING (
-    bucket_id = 'support-ticket-attachments'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
-
-CREATE POLICY support_ticket_attachments_storage_insert
-  ON storage.objects
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    bucket_id = 'support-ticket-attachments'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
-
-CREATE POLICY support_ticket_attachments_storage_update
-  ON storage.objects
-  FOR UPDATE
-  TO authenticated
-  USING (
-    bucket_id = 'support-ticket-attachments'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  )
-  WITH CHECK (
-    bucket_id = 'support-ticket-attachments'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
-
-CREATE POLICY support_ticket_attachments_storage_delete
-  ON storage.objects
-  FOR DELETE
-  TO authenticated
-  USING (
-    bucket_id = 'support-ticket-attachments'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
+-- support_tickets RLS, storage bucket, and storage policies removed per Article XXXVII §4
