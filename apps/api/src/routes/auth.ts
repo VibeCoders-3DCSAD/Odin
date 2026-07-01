@@ -6,6 +6,7 @@ import {
 } from "../lib/supabase.js";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
+import { AUTH_ERRORS } from "../lib/constants.js";
 
 const router = Router();
 
@@ -86,7 +87,7 @@ router.post("/google", async (request: Request, response: Response) => {
   if (typeof googleIdToken !== "string" || googleIdToken.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
-      message: "Google ID token is required",
+      message: AUTH_ERRORS.google_id_token_required,
     });
     return;
   }
@@ -99,7 +100,7 @@ router.post("/google", async (request: Request, response: Response) => {
   if (error || !data.user || !data.session?.access_token) {
     response.status(401).json({
       error: "Unauthorized",
-      message: "Google sign-in failed",
+      message: AUTH_ERRORS.google_failed,
     });
     return;
   }
@@ -110,13 +111,10 @@ router.post("/google", async (request: Request, response: Response) => {
       data.user.id,
       data.session.access_token,
     );
-  } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : "Failed to bootstrap user session";
+  } catch {
     response.status(500).json({
       error: "Internal Server Error",
-      message,
+      message: AUTH_ERRORS.bootstrap_failed,
     });
     return;
   }
@@ -138,7 +136,7 @@ router.post("/register", async (request: Request, response: Response) => {
   if (typeof email !== "string" || email.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
-      message: "Email is required",
+      message: AUTH_ERRORS.email_required,
     });
     return;
   }
@@ -146,7 +144,7 @@ router.post("/register", async (request: Request, response: Response) => {
   if (typeof password !== "string" || password.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
-      message: "Password is required",
+      message: AUTH_ERRORS.password_required,
     });
     return;
   }
@@ -166,7 +164,7 @@ router.post("/register", async (request: Request, response: Response) => {
     if (error.status === 429) {
       response.status(429).json({
         error: "Too Many Requests",
-        message: error.message,
+        message: AUTH_ERRORS.too_many_requests,
       });
       return;
     }
@@ -174,14 +172,14 @@ router.post("/register", async (request: Request, response: Response) => {
     if (error.status === 409) {
       response.status(409).json({
         error: "Conflict",
-        message: error.message,
+        message: AUTH_ERRORS.conflict,
       });
       return;
     }
 
     response.status(500).json({
       error: "Internal Server Error",
-      message: "Registration failed",
+      message: AUTH_ERRORS.registration_failed,
     });
     return;
   }
@@ -207,7 +205,7 @@ router.post("/login", async (request: Request, response: Response) => {
   if (typeof email !== "string" || email.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
-      message: "Email is required",
+      message: AUTH_ERRORS.email_required,
     });
     return;
   }
@@ -215,7 +213,7 @@ router.post("/login", async (request: Request, response: Response) => {
   if (typeof password !== "string" || password.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
-      message: "Password is required",
+      message: AUTH_ERRORS.password_required,
     });
     return;
   }
@@ -228,7 +226,7 @@ router.post("/login", async (request: Request, response: Response) => {
   if (error || !data.user || !data.session?.access_token) {
     response.status(401).json({
       error: "Unauthorized",
-      message: "Invalid email or password",
+      message: AUTH_ERRORS.unauthorized,
     });
     return;
   }
@@ -239,13 +237,10 @@ router.post("/login", async (request: Request, response: Response) => {
       data.user.id,
       data.session.access_token,
     );
-  } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : "Failed to bootstrap user session";
+  } catch {
     response.status(500).json({
       error: "Internal Server Error",
-      message,
+      message: AUTH_ERRORS.bootstrap_failed,
     });
     return;
   }
@@ -267,7 +262,7 @@ router.post("/password-reset", async (request: Request, response: Response) => {
   if (typeof email !== "string" || email.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
-      message: "Email is required",
+      message: AUTH_ERRORS.email_required,
     });
     return;
   }
@@ -278,14 +273,14 @@ router.post("/password-reset", async (request: Request, response: Response) => {
     if (error.status === 429) {
       response.status(429).json({
         error: "Too Many Requests",
-        message: error.message,
+        message: AUTH_ERRORS.too_many_requests,
       });
       return;
     }
 
     response.status(500).json({
       error: "Internal Server Error",
-      message: "Password reset request failed",
+      message: AUTH_ERRORS.password_reset_failed,
     });
     return;
   }
@@ -304,7 +299,7 @@ router.post(
     if (typeof password !== "string" || password.trim() === "") {
       response.status(400).json({
         error: "Bad Request",
-        message: "New password is required",
+        message: AUTH_ERRORS.new_password_required,
       });
       return;
     }
@@ -316,7 +311,7 @@ router.post(
     if (error) {
       response.status(500).json({
         error: "Internal Server Error",
-        message: "Password update failed",
+        message: AUTH_ERRORS.password_update_failed,
       });
       return;
     }
@@ -333,7 +328,7 @@ router.post("/session", async (request: Request, response: Response) => {
   if (!authHeader?.startsWith("Bearer ")) {
     response.status(400).json({
       error: "Bad Request",
-      message: "Authorization header is required",
+      message: AUTH_ERRORS.token_required,
     });
     return;
   }
@@ -343,7 +338,7 @@ router.post("/session", async (request: Request, response: Response) => {
   if (!token) {
     response.status(400).json({
       error: "Bad Request",
-      message: "Access token is required",
+      message: AUTH_ERRORS.token_required,
     });
     return;
   }
@@ -354,7 +349,7 @@ router.post("/session", async (request: Request, response: Response) => {
   if (userError || !userData.user) {
     response.status(401).json({
       error: "Unauthorized",
-      message: "Invalid or expired access token",
+      message: AUTH_ERRORS.token_expired,
     });
     return;
   }
@@ -363,14 +358,10 @@ router.post("/session", async (request: Request, response: Response) => {
   let bootstrapPayload: Awaited<ReturnType<typeof bootstrapAuthenticatedUser>>;
   try {
     bootstrapPayload = await bootstrapAuthenticatedUser(userId, token);
-  } catch (error) {
-    const message = error instanceof Error
-      && error.message === "Failed to fetch onboarding status"
-        ? error.message
-        : "Failed to bootstrap user profile";
+  } catch {
     response.status(500).json({
       error: "Internal Server Error",
-      message,
+      message: AUTH_ERRORS.bootstrap_profile_failed,
     });
     return;
   }
@@ -389,7 +380,7 @@ router.post(
     if (error) {
       response.status(500).json({
         error: "Internal Server Error",
-        message: "Logout failed",
+        message: AUTH_ERRORS.logout_failed,
       });
       return;
     }

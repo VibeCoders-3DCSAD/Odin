@@ -161,7 +161,7 @@ describe("POST /odin/api/auth/session", () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      message: expect.stringMatching(/onboarding/i),
+      message: "Failed to bootstrap user profile.",
     });
   });
 
