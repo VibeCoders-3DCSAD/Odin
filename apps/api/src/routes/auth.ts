@@ -296,7 +296,7 @@ router.post(
   "/password-update",
   requireAuth,
   async (request: AuthenticatedRequest, response: Response) => {
-    const { password } = request.body?.payload ?? {};
+    const { password, refresh_token: refreshToken } = request.body?.payload ?? {};
 
     if (typeof password !== "string" || password.trim() === "") {
       response.status(400).json({
@@ -306,7 +306,29 @@ router.post(
       return;
     }
 
-    const { error } = await request.supabase!.auth.updateUser({
+    if (typeof refreshToken !== "string" || refreshToken.trim() === "") {
+      response.status(400).json({
+        error: "Bad Request",
+        message: AUTH_ERRORS.refresh_token_required,
+      });
+      return;
+    }
+
+    const recoverySupabase = createAuthenticatedSupabaseClient(request.accessToken!);
+    const { error: sessionError } = await recoverySupabase.auth.setSession({
+      access_token: request.accessToken!,
+      refresh_token: refreshToken.trim(),
+    });
+
+    if (sessionError) {
+      response.status(401).json({
+        error: "Unauthorized",
+        message: AUTH_ERRORS.token_expired,
+      });
+      return;
+    }
+
+    const { error } = await recoverySupabase.auth.updateUser({
       password,
     });
 

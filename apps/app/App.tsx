@@ -5,7 +5,7 @@ import AuthExperience from "./components/AuthExperience";
 import { useDeepLink } from "./hooks/useDeepLink";
 
 export default function App() {
-  const { recoveryToken } = useDeepLink();
+  const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
 
   return (
     <>
@@ -14,6 +14,9 @@ export default function App() {
           enabled: false,
           helperText: "Email and password are live here. Google sign-in stays on native dev builds for now.",
         }}
+        isPasswordRecovery={isPasswordRecovery}
+        isResolvingRecoveryToken={isResolvingRecoveryToken}
+        recoveryRefreshToken={recoveryRefreshToken ?? undefined}
         recoveryToken={recoveryToken ?? undefined}
       />
       <StatusBar style="dark" />

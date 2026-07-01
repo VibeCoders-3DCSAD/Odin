@@ -59,6 +59,9 @@ type GoogleAuthConfig = {
 
 type AuthExperienceProps = {
   google: GoogleAuthConfig;
+  isPasswordRecovery?: boolean;
+  isResolvingRecoveryToken?: boolean;
+  recoveryRefreshToken?: string;
   recoveryToken?: string;
 };
 
@@ -291,7 +294,13 @@ function SwatchStrip() {
   );
 }
 
-export default function AuthExperience({ google, recoveryToken: recoveryTokenProp }: AuthExperienceProps) {
+export default function AuthExperience({
+  google,
+  isPasswordRecovery,
+  isResolvingRecoveryToken,
+  recoveryRefreshToken: recoveryRefreshTokenProp,
+  recoveryToken: recoveryTokenProp,
+}: AuthExperienceProps) {
   const { width } = useWindowDimensions();
   const isWide = width >= 960;
 
@@ -312,13 +321,19 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
   const [isBusy, setIsBusy] = useState(false);
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
   const [recoveryToken, setRecoveryToken] = useState(recoveryTokenProp ?? "");
+  const [recoveryRefreshToken, setRecoveryRefreshToken] = useState(recoveryRefreshTokenProp ?? "");
 
   useEffect(() => {
-    if (recoveryTokenProp) {
-      setRecoveryToken(recoveryTokenProp);
+    if (isPasswordRecovery || recoveryTokenProp || recoveryRefreshTokenProp) {
+      if (recoveryTokenProp) {
+        setRecoveryToken(recoveryTokenProp);
+      }
+      if (recoveryRefreshTokenProp) {
+        setRecoveryRefreshToken(recoveryRefreshTokenProp);
+      }
       setMode("reset_complete");
     }
-  }, [recoveryTokenProp]);
+  }, [isPasswordRecovery, recoveryRefreshTokenProp, recoveryTokenProp]);
 
   async function bootstrapSession(token: string) {
     const { response, body } = await postJson("/session", undefined, token);
@@ -482,11 +497,6 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
   }
 
   async function handlePasswordUpdate() {
-    if (!recoveryToken.trim()) {
-      setNotice({ tone: "error", message: "Paste the recovery link from your email first." });
-      return;
-    }
-
     if (!password) {
       setNotice({ tone: "error", message: "Choose a new password first." });
       return;
@@ -497,14 +507,26 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
       return;
     }
 
+    const recoveryAccessToken = recoveryToken.trim();
+    const recoveryRefreshSessionToken = recoveryRefreshToken.trim();
+
+    if (!recoveryAccessToken || !recoveryRefreshSessionToken) {
+      setNotice({ tone: "error", message: "Recovery session missing. Request a new reset link and open it on this device." });
+      return;
+    }
+
     setIsBusy(true);
     setNotice({ tone: "default", message: "Updating your password..." });
 
     try {
-      const { response, body } = await postJson("/password-update", {
-        recovery_token: recoveryToken.trim(),
-        password,
-      });
+      const { response, body } = await postJson(
+        "/password-update",
+        {
+          password,
+          refresh_token: recoveryRefreshSessionToken,
+        },
+        recoveryAccessToken,
+      );
 
       if (!response.ok) {
         throw new Error(body.message ?? "Password update failed.");
@@ -512,6 +534,8 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
 
       setMode("login");
       resetSensitiveFields();
+      setRecoveryToken("");
+      setRecoveryRefreshToken("");
       setNotice({
         tone: "success",
         message: "Password updated. Sign in with your new password.",
@@ -597,9 +621,11 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
     }
   }
 
-  const title = mode === "login" ? "Welcome back" : "Create your account";
+  const title = mode === "login" ? "Welcome back" : mode === "reset_complete" ? "Reset your password" : "Create your account";
   const subtitle = mode === "login"
     ? "Sign in to continue your Odin flow with email and password, or use Google on native builds."
+    : mode === "reset_complete"
+    ? "Choose a new password for your account."
     : "Set up your Odin account with a clean email flow, then finish onboarding right after auth.";
 
   return (
@@ -725,18 +751,16 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
             ) : mode === "reset_complete" ? (
               <View className="gap-6">
                 <View className="gap-4">
-                  {recoveryToken ? null : (
-                    <AuthField
-                      focused={focusedField === "recovery_token"}
-                      icon="link-variant"
-                      label="Recovery link from email"
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setRecoveryToken}
-                      onFocus={() => setFocusedField("recovery_token")}
-                      placeholder="Paste the link from your email"
-                      value={recoveryToken}
-                    />
-                  )}
+                  {!recoveryToken || !recoveryRefreshToken ? (
+                    <Text className="text-subtle text-xs leading-[18px]">
+                      {isResolvingRecoveryToken
+                        ? "Opening your reset session..."
+                        : "This reset link did not include a recovery session. Request a new reset link and open it on this device."}
+                    </Text>
+                  ) : null}
+                  {recoveryToken && recoveryRefreshToken ? (
+                    <Text className="text-brand text-xs font-bold">Reset session ready.</Text>
+                  ) : null}
                   <AuthField
                     focused={focusedField === "password"}
                     icon="lock-outline"
@@ -780,7 +804,7 @@ export default function AuthExperience({ google, recoveryToken: recoveryTokenPro
                 </View>
 
                 <AuthButton
-                  disabled={isBusy}
+                  disabled={isBusy || !recoveryToken || !recoveryRefreshToken}
                   label="Update password"
                   loading={isBusy}
                   onPress={handlePasswordUpdate}
