@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 
-const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "https://odin-budgets.buzz";
+const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const requestTimeoutMs = 10_000;
 const odinLogo = require("../assets/odin-logo.png");
 
