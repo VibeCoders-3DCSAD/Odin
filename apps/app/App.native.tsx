@@ -21,11 +21,13 @@ type GoogleTokensResult = {
 };
 
 async function getGoogleIdToken() {
-  const googleResult = await GoogleSignin.signIn() as GoogleSignInResult;
-
-  if (googleResult.type === "cancelled") {
-    throw new Error("Google sign-in was cancelled.");
+  if (!googleWebClientId) {
+    throw new Error(
+      "Google sign-in is not configured. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env — get it from Google Cloud Console > APIs & Services > Credentials.",
+    );
   }
+
+  const googleResult = await GoogleSignin.signIn() as GoogleSignInResult;
 
   const signInIdToken = googleResult.data?.idToken ?? googleResult.idToken;
 
@@ -39,7 +41,9 @@ async function getGoogleIdToken() {
     return googleTokens.idToken;
   }
 
-  throw new Error("Google did not return an ID token.");
+  throw new Error(
+    "Google did not return an ID token. Check that EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env matches the web client ID in your Google Cloud project.",
+  );
 }
 
 export default function App() {
