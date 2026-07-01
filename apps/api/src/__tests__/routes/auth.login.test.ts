@@ -170,7 +170,7 @@ describe("POST /odin/api/auth/login", () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      message: expect.stringMatching(/profile/i),
+      message: "Failed to bootstrap user session.",
     });
   });
 
@@ -191,7 +191,7 @@ describe("POST /odin/api/auth/login", () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toMatchObject({
-      message: expect.stringMatching(/onboarding/i),
+      message: "Failed to bootstrap user session.",
     });
   });
 });

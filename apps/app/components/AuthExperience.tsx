@@ -6,7 +6,6 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -120,14 +119,7 @@ function getErrorMessage(error: unknown) {
 
 function FieldLabel({ children }: { children: string }) {
   return (
-    <Text
-      style={{
-        color: palette.text,
-        fontSize: 12,
-        lineHeight: 16,
-        fontWeight: "600",
-      }}
-    >
+    <Text className="text-text text-xs font-semibold">
       {children}
     </Text>
   );
@@ -163,13 +155,12 @@ function AuthField({
   trailing,
 }: AuthFieldProps) {
   return (
-    <View style={{ gap: 8 }}>
+    <View className="gap-2">
       <FieldLabel>{label}</FieldLabel>
       <View
-        style={[
-          styles.inputShell,
-          focused ? styles.inputShellFocused : null,
-        ]}
+        className={`min-h-[56px] rounded-[16px] border bg-white px-4 flex-row items-center gap-3 ${
+          focused ? "border-cta" : "border-accent"
+        }`}
       >
         <MaterialCommunityIcons color={palette.brand} name={icon} size={18} />
         <TextInput
@@ -182,7 +173,7 @@ function AuthField({
           placeholder={placeholder}
           placeholderTextColor={palette.subtle}
           secureTextEntry={secureTextEntry}
-          style={styles.input}
+          className="flex-1 text-heading text-base leading-[20px] font-medium py-4"
           value={value}
         />
         {trailing}
@@ -215,19 +206,16 @@ function AuthButton({
       accessibilityRole="button"
       disabled={disabled || loading}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.buttonBase,
-        {
-          backgroundColor: primary ? palette.cta : palette.white,
-          borderColor: primary ? palette.cta : palette.accent,
-          opacity: disabled || loading ? 0.5 : pressed ? 0.92 : 1,
-        },
-      ]}
+      className={`min-h-[56px] rounded-[16px] border items-center justify-center px-4 ${
+        primary
+          ? "bg-cta border-cta"
+          : "bg-white border-accent"
+      } ${disabled || loading ? "opacity-50" : "active:opacity-90"}`}
     >
       {loading ? (
         <ActivityIndicator color={primary ? palette.white : palette.brand} />
       ) : (
-        <View style={styles.buttonContent}>
+        <View className="flex-row items-center justify-center gap-2">
           {icon ? (
             <MaterialCommunityIcons
               color={primary ? palette.white : palette.heading}
@@ -236,12 +224,9 @@ function AuthButton({
             />
           ) : null}
           <Text
-            style={{
-              color: primary ? palette.white : palette.heading,
-              fontSize: 16,
-              lineHeight: 20,
-              fontWeight: "700",
-            }}
+            className={`${
+              primary ? "text-white" : "text-heading"
+            } text-base leading-[20px] font-bold`}
           >
             {label}
           </Text>
@@ -257,11 +242,11 @@ type NoticeProps = {
 };
 
 function Notice({ tone, message }: NoticeProps) {
-  const backgroundColor = tone === "error"
-    ? palette.dangerSoft
+  const bgClass = tone === "error"
+    ? "bg-dangerSoft"
     : tone === "success"
-    ? palette.successSoft
-    : palette.accent;
+    ? "bg-successSoft"
+    : "bg-accent";
   const iconColor = tone === "error"
     ? palette.cta
     : tone === "success"
@@ -274,9 +259,9 @@ function Notice({ tone, message }: NoticeProps) {
     : "information-outline";
 
   return (
-    <View style={[styles.notice, { backgroundColor }]}> 
+    <View className={`rounded-[16px] p-4 flex-row items-start gap-3 ${bgClass}`}>
       <MaterialCommunityIcons color={iconColor} name={iconName} size={18} />
-      <Text style={styles.noticeText}>{message}</Text>
+      <Text className="flex-1 text-heading text-xs leading-[18px] font-medium">{message}</Text>
     </View>
   );
 }
@@ -291,13 +276,13 @@ function SwatchStrip() {
   ];
 
   return (
-    <View style={{ gap: 12 }}>
-      <Text style={styles.overline}>ODIN AUTH KIT</Text>
-      <View style={styles.swatchRow}>
+    <View className="gap-3">
+      <Text className="text-white/72 text-xs tracking-[1.6px] font-semibold">ODIN AUTH KIT</Text>
+      <View className="flex-row gap-3 flex-wrap">
         {swatches.map((swatch) => (
-          <View key={swatch.name} style={styles.swatchItem}>
-            <View style={[styles.swatchTile, { backgroundColor: swatch.color }]} />
-            <Text style={styles.swatchLabel}>{swatch.name}</Text>
+          <View key={swatch.name} className="gap-2">
+            <View className="w-[92px] h-[68px] rounded-[16px]" style={{ backgroundColor: swatch.color }} />
+            <Text className="text-white text-xs font-semibold">{swatch.name}</Text>
           </View>
         ))}
       </View>
@@ -567,22 +552,22 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
     : "Set up your Odin account with a clean email flow, then finish onboarding right after auth.";
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={[styles.frame, isWide ? styles.frameWide : styles.frameNarrow]}>
-          <View style={[styles.hero, isWide ? styles.heroWide : styles.heroNarrow]}>
-            <View style={styles.heroBadge}>
+    <SafeAreaView className="flex-1 bg-canvas">
+      <ScrollView contentContainerClassName="flex-grow p-6">
+        <View className={`w-full max-w-[1120px] self-center flex-1 gap-6 ${isWide ? "flex-row items-stretch" : "justify-center"}`}>
+          <View className={`gap-6 ${isWide ? "flex-1 bg-heading rounded-[24px] p-6 justify-between" : "items-center pt-2 pb-2"}`}>
+            <View className="w-[72px] h-[72px] rounded-[36px] border-2 border-brand bg-white items-center justify-center overflow-hidden">
               <Image
                 resizeMode="contain"
                 source={odinLogo}
-                style={styles.heroLogo}
+                className="w-[54px] h-[54px]"
               />
             </View>
-            <View style={{ gap: 8, alignItems: isWide ? "flex-start" : "center" }}>
-              <Text style={[styles.heroHeading, !isWide ? { textAlign: "center" } : null]}>
+            <View className={`gap-2 ${isWide ? "items-start" : "items-center"}`}>
+              <Text className={`text-white text-2xl leading-[30px] font-extrabold ${!isWide ? "text-center" : ""}`}>
                 Calm money decisions start with a sharp sign-in flow.
               </Text>
-              <Text style={[styles.heroBody, !isWide ? { textAlign: "center" } : null]}>
+              <Text className={`text-white/76 text-base max-w-[420px] ${!isWide ? "text-center" : ""}`}>
                 Dedicated login and registration screens, built around your spacing,
                 type scale, and palette instead of the old QA stub.
               </Text>
@@ -590,46 +575,59 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
             {isWide ? <SwatchStrip /> : null}
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.segmentedControl}>
+          <View
+            className="flex-1 bg-white rounded-[24px] p-6 gap-6 border border-[rgba(15,15,44,0.06)]"
+            style={{
+              shadowColor: palette.heading,
+              shadowOpacity: 0.12,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 5,
+            }}
+          >
+            <View className="flex-row gap-2 bg-accent rounded-[16px] p-1">
               <Pressable
                 onPress={() => setMode("login")}
-                style={[styles.segment, mode === "login" ? styles.segmentActive : null]}
+                className={`flex-1 rounded-xl py-3 items-center justify-center ${
+                  mode === "login" ? "bg-white shadow-sm" : ""
+                }`}
               >
-                <Text style={[styles.segmentText, mode === "login" ? styles.segmentTextActive : null]}>
+                <Text className={`text-xs font-bold ${mode === "login" ? "text-heading" : "text-subtle"}`}>
                   Sign in
                 </Text>
               </Pressable>
               <Pressable
                 onPress={() => setMode("register")}
-                style={[styles.segment, mode === "register" ? styles.segmentActive : null]}
+                className={`flex-1 rounded-xl py-3 items-center justify-center ${
+                  mode === "register" ? "bg-white shadow-sm" : ""
+                }`}
               >
-                <Text style={[styles.segmentText, mode === "register" ? styles.segmentTextActive : null]}>
+                <Text className={`text-xs font-bold ${mode === "register" ? "text-heading" : "text-subtle"}`}>
                   Create account
                 </Text>
               </Pressable>
             </View>
 
-            <View style={{ gap: 8 }}>
-              <Text style={styles.cardTitle}>{title}</Text>
-              <Text style={styles.cardSubtitle}>{subtitle}</Text>
+            <View className="gap-2">
+              <Text className="text-heading text-2xl leading-[30px] font-extrabold">{title}</Text>
+              <Text className="text-text text-base">{subtitle}</Text>
             </View>
 
             {authenticated ? (
-              <View style={{ gap: 24 }}>
-                <View style={styles.successPanel}>
-                  <View style={styles.successIcon}>
+              <View className="gap-6">
+                <View className="flex-row gap-4 p-6 rounded-[24px] bg-accent items-start">
+                  <View className="w-12 h-12 rounded-full bg-white items-center justify-center">
                     <MaterialCommunityIcons color={palette.brand} name="check" size={24} />
                   </View>
-                  <View style={{ gap: 8, flex: 1 }}>
-                    <Text style={styles.successTitle}>You are authenticated.</Text>
-                    <Text style={styles.successBody}>
+                  <View className="gap-2 flex-1">
+                    <Text className="text-heading text-xl leading-[24px] font-bold">You are authenticated.</Text>
+                    <Text className="text-text text-xs leading-[18px]">
                       Provider: {authenticated.provider === "google" ? "Google" : "Email + password"}
                     </Text>
-                    <Text style={styles.successBody}>
+                    <Text className="text-text text-xs leading-[18px]">
                       User: {authenticated.userId ?? "Unavailable"}
                     </Text>
-                    <Text style={styles.successBody}>
+                    <Text className="text-text text-xs leading-[18px]">
                       Onboarding: {authenticated.onboardingStatus ?? "in_progress"}
                     </Text>
                   </View>
@@ -642,8 +640,8 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
                 />
               </View>
             ) : (
-              <View style={{ gap: 24 }}>
-                <View style={{ gap: 16 }}>
+              <View className="gap-6">
+                <View className="gap-4">
                   {mode === "register" ? (
                     <AuthField
                       autoCapitalize="words"
@@ -717,15 +715,15 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
 
                 {mode === "login" ? (
                   <Pressable onPress={handlePasswordReset}>
-                    <Text style={styles.inlineLink}>Forgot password?</Text>
+                    <Text className="text-link text-xs text-right font-bold">Forgot password?</Text>
                   </Pressable>
                 ) : (
-                  <Text style={styles.footnote}>
+                  <Text className="text-subtle text-xs leading-[18px]">
                     By creating an account, you agree to continue through Odin's verification and onboarding flow.
                   </Text>
                 )}
 
-                <View style={{ gap: 16 }}>
+                <View className="gap-4">
                   <AuthButton
                     disabled={isBusy || isGoogleBusy}
                     label={mode === "login" ? "Sign in" : "Create account"}
@@ -733,10 +731,10 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
                     onPress={mode === "login" ? handleLogin : handleRegister}
                   />
 
-                  <View style={styles.dividerRow}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>or continue with</Text>
-                    <View style={styles.dividerLine} />
+                  <View className="flex-row items-center gap-3">
+                    <View className="flex-1 h-[1px] bg-accent" />
+                    <Text className="text-subtle text-xs font-semibold">or continue with</Text>
+                    <View className="flex-1 h-[1px] bg-accent" />
                   </View>
 
                   <AuthButton
@@ -750,20 +748,20 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
                 </View>
 
                 {pendingVerificationEmail ? (
-                  <View style={styles.pendingPanel}>
+                  <View className="flex-row items-start gap-3 p-4 rounded-[16px] bg-accent">
                     <MaterialCommunityIcons color={palette.brand} name="email-check-outline" size={20} />
-                    <Text style={styles.pendingText}>
+                    <Text className="flex-1 text-text text-xs leading-[18px] font-medium">
                       Verification email sent to {pendingVerificationEmail}. Tap the link there, then come back and sign in.
                     </Text>
                   </View>
                 ) : null}
 
-                <View style={styles.footerRow}>
-                  <Text style={styles.footerText}>
+                <View className="flex-row flex-wrap items-center justify-center gap-2">
+                  <Text className="text-subtle text-xs">
                     {mode === "login" ? "New to Odin?" : "Already have an account?"}
                   </Text>
                   <Pressable onPress={() => setMode(mode === "login" ? "register" : "login")}>
-                    <Text style={styles.footerLink}>
+                    <Text className="text-brand text-xs font-bold">
                       {mode === "login" ? "Create account" : "Sign in"}
                     </Text>
                   </Pressable>
@@ -778,290 +776,3 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: palette.canvas,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 24,
-  },
-  frame: {
-    width: "100%",
-    maxWidth: 1120,
-    alignSelf: "center",
-    flex: 1,
-    gap: 24,
-  },
-  frameWide: {
-    flexDirection: "row",
-    alignItems: "stretch",
-  },
-  frameNarrow: {
-    justifyContent: "center",
-  },
-  hero: {
-    gap: 24,
-  },
-  heroWide: {
-    flex: 1,
-    backgroundColor: palette.heading,
-    borderRadius: 24,
-    padding: 24,
-    justifyContent: "space-between",
-  },
-  heroNarrow: {
-    alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  heroBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: palette.brand,
-    backgroundColor: palette.white,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  heroLogo: {
-    width: 54,
-    height: 54,
-  },
-  heroHeading: {
-    color: palette.white,
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: "800",
-  },
-  heroBody: {
-    color: "rgba(255,255,255,0.76)",
-    fontSize: 16,
-    lineHeight: 24,
-    maxWidth: 420,
-  },
-  overline: {
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 1.6,
-    fontWeight: "600",
-  },
-  swatchRow: {
-    flexDirection: "row",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  swatchItem: {
-    gap: 8,
-  },
-  swatchTile: {
-    width: 92,
-    height: 68,
-    borderRadius: 16,
-  },
-  swatchLabel: {
-    color: palette.white,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-  },
-  card: {
-    flex: 1,
-    backgroundColor: palette.white,
-    borderRadius: 24,
-    padding: 24,
-    gap: 24,
-    shadowColor: palette.heading,
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: "rgba(15, 15, 44, 0.06)",
-  },
-  segmentedControl: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: palette.accent,
-    borderRadius: 16,
-    padding: 4,
-  },
-  segment: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentActive: {
-    backgroundColor: palette.white,
-    shadowColor: palette.heading,
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  segmentText: {
-    color: palette.subtle,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "700",
-  },
-  segmentTextActive: {
-    color: palette.heading,
-  },
-  cardTitle: {
-    color: palette.heading,
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: "800",
-  },
-  cardSubtitle: {
-    color: palette.text,
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  inputShell: {
-    minHeight: 56,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: palette.accent,
-    backgroundColor: palette.white,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  inputShellFocused: {
-    borderColor: palette.cta,
-  },
-  input: {
-    flex: 1,
-    color: palette.heading,
-    fontSize: 16,
-    lineHeight: 20,
-    paddingVertical: 16,
-    fontWeight: "500",
-  },
-  inlineLink: {
-    color: palette.link,
-    fontSize: 12,
-    lineHeight: 16,
-    textAlign: "right",
-    fontWeight: "700",
-  },
-  footnote: {
-    color: palette.subtle,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  buttonBase: {
-    minHeight: 56,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: palette.accent,
-  },
-  dividerText: {
-    color: palette.subtle,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-  },
-  pendingPanel: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: palette.accent,
-  },
-  pendingText: {
-    flex: 1,
-    color: palette.text,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "500",
-  },
-  footerRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  footerText: {
-    color: palette.subtle,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  footerLink: {
-    color: palette.brand,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "700",
-  },
-  notice: {
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  noticeText: {
-    flex: 1,
-    color: palette.heading,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "500",
-  },
-  successPanel: {
-    flexDirection: "row",
-    gap: 16,
-    padding: 24,
-    borderRadius: 24,
-    backgroundColor: palette.accent,
-    alignItems: "flex-start",
-  },
-  successIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: palette.white,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  successTitle: {
-    color: palette.heading,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: "700",
-  },
-  successBody: {
-    color: palette.text,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-});
