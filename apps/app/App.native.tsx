@@ -10,10 +10,15 @@ const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 const googleAuthTimeoutMs = 10_000;
 
 type GoogleSignInResult = {
+  type?: string;
   idToken?: string | null;
   data?: {
     idToken?: string | null;
   } | null;
+};
+
+type GoogleTokensResult = {
+  idToken?: string | null;
 };
 
 type AuthResponse = {
@@ -37,6 +42,28 @@ function getErrorMessage(error: unknown) {
   }
 
   return error instanceof Error ? error.message : "Something went wrong";
+}
+
+async function getGoogleIdToken() {
+  const googleResult = await GoogleSignin.signIn() as GoogleSignInResult;
+
+  if (googleResult.type === "cancelled") {
+    throw new Error("Google sign-in was cancelled.");
+  }
+
+  const signInIdToken = googleResult.data?.idToken ?? googleResult.idToken;
+
+  if (signInIdToken) {
+    return signInIdToken;
+  }
+
+  const googleTokens = await GoogleSignin.getTokens() as GoogleTokensResult;
+
+  if (googleTokens.idToken) {
+    return googleTokens.idToken;
+  }
+
+  throw new Error("Google did not return an ID token.");
 }
 
 export default function App() {
@@ -64,12 +91,7 @@ export default function App() {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       }
 
-      const googleResult = await GoogleSignin.signIn() as GoogleSignInResult;
-      const googleIdToken = googleResult.data?.idToken ?? googleResult.idToken;
-
-      if (!googleIdToken) {
-        throw new Error("Google did not return an ID token.");
-      }
+      const googleIdToken = await getGoogleIdToken();
 
       setStatus("Sending Google token to Odin API...");
 
