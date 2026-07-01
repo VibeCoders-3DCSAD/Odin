@@ -1,3 +1,5 @@
+import "./global.css";
+
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
