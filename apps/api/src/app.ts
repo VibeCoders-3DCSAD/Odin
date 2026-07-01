@@ -1,3 +1,4 @@
+import cors from "cors";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import authRoutes from "./routes/auth.js";
@@ -7,7 +8,18 @@ import pushDeviceTokenRoutes from "./routes/push-device-tokens.js";
 
 const app = express();
 
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+app.use((request: Request, response: Response, next: NextFunction) => {
+  const start = Date.now();
+  response.on("finish", () => {
+    console.log(
+      `${request.method} ${request.originalUrl} → ${response.statusCode} (${Date.now() - start}ms)`,
+    );
+  });
+  next();
+});
 
 app.get("/health", (_request: Request, response: Response) => {
   response.status(200).json({

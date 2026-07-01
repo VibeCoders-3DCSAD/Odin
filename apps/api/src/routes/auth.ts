@@ -132,6 +132,201 @@ router.post("/google", async (request: Request, response: Response) => {
   });
 });
 
+router.post("/register", async (request: Request, response: Response) => {
+  const { email, password, display_name } = request.body?.payload ?? {};
+
+  if (typeof email !== "string" || email.trim() === "") {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Email is required",
+    });
+    return;
+  }
+
+  if (typeof password !== "string" || password.trim() === "") {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Password is required",
+    });
+    return;
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      data:
+        typeof display_name === "string" && display_name.trim() !== ""
+          ? { display_name: display_name.trim() }
+          : undefined,
+    },
+  });
+
+  if (error) {
+    if (error.status === 429) {
+      response.status(429).json({
+        error: "Too Many Requests",
+        message: error.message,
+      });
+      return;
+    }
+
+    if (error.status === 409) {
+      response.status(409).json({
+        error: "Conflict",
+        message: error.message,
+      });
+      return;
+    }
+
+    response.status(500).json({
+      error: "Internal Server Error",
+      message: "Registration failed",
+    });
+    return;
+  }
+
+  response.status(201).json({
+    payload: {
+      user: { id: data.user?.id },
+      session: {
+        access_token: data.session?.access_token,
+        refresh_token: data.session?.refresh_token,
+      },
+      activation: {
+        email_confirmation_required: true,
+        delivery: "email_link",
+      },
+    },
+  });
+});
+
+router.post("/login", async (request: Request, response: Response) => {
+  const { email, password } = request.body?.payload ?? {};
+
+  if (typeof email !== "string" || email.trim() === "") {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Email is required",
+    });
+    return;
+  }
+
+  if (typeof password !== "string" || password.trim() === "") {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Password is required",
+    });
+    return;
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+
+  if (error || !data.user || !data.session?.access_token) {
+    response.status(401).json({
+      error: "Unauthorized",
+      message: "Invalid email or password",
+    });
+    return;
+  }
+
+  let bootstrapPayload: Awaited<ReturnType<typeof bootstrapAuthenticatedUser>>;
+  try {
+    bootstrapPayload = await bootstrapAuthenticatedUser(
+      data.user.id,
+      data.session.access_token,
+    );
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "Failed to bootstrap user session";
+    response.status(500).json({
+      error: "Internal Server Error",
+      message,
+    });
+    return;
+  }
+
+  response.status(200).json({
+    payload: {
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      },
+      ...bootstrapPayload,
+    },
+  });
+});
+
+router.post("/password-reset", async (request: Request, response: Response) => {
+  const { email } = request.body?.payload ?? {};
+
+  if (typeof email !== "string" || email.trim() === "") {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Email is required",
+    });
+    return;
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+
+  if (error) {
+    if (error.status === 429) {
+      response.status(429).json({
+        error: "Too Many Requests",
+        message: error.message,
+      });
+      return;
+    }
+
+    response.status(500).json({
+      error: "Internal Server Error",
+      message: "Password reset request failed",
+    });
+    return;
+  }
+
+  response.status(200).json({
+    payload: { requested: true },
+  });
+});
+
+router.post(
+  "/password-update",
+  requireAuth,
+  async (request: AuthenticatedRequest, response: Response) => {
+    const { password } = request.body?.payload ?? {};
+
+    if (typeof password !== "string" || password.trim() === "") {
+      response.status(400).json({
+        error: "Bad Request",
+        message: "New password is required",
+      });
+      return;
+    }
+
+    const { error } = await request.supabase!.auth.updateUser({
+      password,
+    });
+
+    if (error) {
+      response.status(500).json({
+        error: "Internal Server Error",
+        message: "Password update failed",
+      });
+      return;
+    }
+
+    response.status(200).json({
+      payload: { updated: true },
+    });
+  },
+);
+
 router.post("/session", async (request: Request, response: Response) => {
   const authHeader = request.headers.authorization;
 

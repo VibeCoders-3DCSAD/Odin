@@ -42,10 +42,30 @@ export function validSessionPayload() {
   };
 }
 
+export function validLoginPayload() {
+  return {
+    payload: {
+      email: validEmail,
+      password: validPassword,
+    },
+  };
+}
+
 export function validPasswordResetPayload() {
   return {
     payload: {
       email: validEmail,
+    },
+  };
+}
+
+export function validPasswordUpdatePayload(
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    payload: {
+      password: "NewStr0ng!Pass",
+      ...overrides,
     },
   };
 }
