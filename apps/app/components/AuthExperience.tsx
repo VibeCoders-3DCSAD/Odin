@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -59,6 +59,7 @@ type GoogleAuthConfig = {
 
 type AuthExperienceProps = {
   google: GoogleAuthConfig;
+  recoveryToken?: string;
 };
 
 const palette = {
@@ -290,7 +291,7 @@ function SwatchStrip() {
   );
 }
 
-export default function AuthExperience({ google }: AuthExperienceProps) {
+export default function AuthExperience({ google, recoveryToken: recoveryTokenProp }: AuthExperienceProps) {
   const { width } = useWindowDimensions();
   const isWide = width >= 960;
 
@@ -310,6 +311,14 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
   });
   const [isBusy, setIsBusy] = useState(false);
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
+  const [recoveryToken, setRecoveryToken] = useState(recoveryTokenProp ?? "");
+
+  useEffect(() => {
+    if (recoveryTokenProp) {
+      setRecoveryToken(recoveryTokenProp);
+      setMode("reset_complete");
+    }
+  }, [recoveryTokenProp]);
 
   async function bootstrapSession(token: string) {
     const { response, body } = await postJson("/session", undefined, token);
@@ -585,28 +594,30 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
               elevation: 5,
             }}
           >
-            <View className="flex-row gap-2 bg-accent rounded-[16px] p-1">
-              <Pressable
-                onPress={() => setMode("login")}
-                className={`flex-1 rounded-xl py-3 items-center justify-center ${
-                  mode === "login" ? "bg-white shadow-sm" : ""
-                }`}
-              >
-                <Text className={`text-xs font-bold ${mode === "login" ? "text-heading" : "text-subtle"}`}>
-                  Sign in
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setMode("register")}
-                className={`flex-1 rounded-xl py-3 items-center justify-center ${
-                  mode === "register" ? "bg-white shadow-sm" : ""
-                }`}
-              >
-                <Text className={`text-xs font-bold ${mode === "register" ? "text-heading" : "text-subtle"}`}>
-                  Create account
-                </Text>
-              </Pressable>
-            </View>
+            {mode === "login" || mode === "register" ? (
+              <View className="flex-row gap-2 bg-accent rounded-[16px] p-1">
+                <Pressable
+                  onPress={() => { setMode("login"); setRecoveryToken(""); }}
+                  className={`flex-1 rounded-xl py-3 items-center justify-center ${
+                    mode === "login" ? "bg-white shadow-sm" : ""
+                  }`}
+                >
+                  <Text className={`text-xs font-bold ${mode === "login" ? "text-heading" : "text-subtle"}`}>
+                    Sign in
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => { setMode("register"); setRecoveryToken(""); }}
+                  className={`flex-1 rounded-xl py-3 items-center justify-center ${
+                    mode === "register" ? "bg-white shadow-sm" : ""
+                  }`}
+                >
+                  <Text className={`text-xs font-bold ${mode === "register" ? "text-heading" : "text-subtle"}`}>
+                    Create account
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             <View className="gap-2">
               <Text className="text-heading text-2xl leading-[30px] font-extrabold">{title}</Text>
@@ -638,6 +649,107 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
                   loading={isBusy}
                   onPress={handleLogout}
                 />
+              </View>
+            ) : mode === "reset_password" ? (
+              <View className="gap-6">
+                <View className="gap-4">
+                  <AuthField
+                    focused={focusedField === "email"}
+                    icon="email-outline"
+                    keyboardType="email-address"
+                    label="Email"
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setEmail}
+                    onFocus={() => setFocusedField("email")}
+                    placeholder="you@example.com"
+                    value={email}
+                  />
+                </View>
+
+                <AuthButton
+                  disabled={isBusy}
+                  label="Send reset link"
+                  loading={isBusy}
+                  onPress={handlePasswordReset}
+                />
+
+                <View className="flex-row flex-wrap items-center justify-center gap-2">
+                  <Text className="text-subtle text-xs">Remember your password?</Text>
+                  <Pressable onPress={() => { setMode("login"); }}>
+                    <Text className="text-brand text-xs font-bold">Sign in</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : mode === "reset_complete" ? (
+              <View className="gap-6">
+                <View className="gap-4">
+                  {recoveryToken ? null : (
+                    <AuthField
+                      focused={focusedField === "recovery_token"}
+                      icon="link-variant"
+                      label="Recovery link from email"
+                      onBlur={() => setFocusedField(null)}
+                      onChangeText={setRecoveryToken}
+                      onFocus={() => setFocusedField("recovery_token")}
+                      placeholder="Paste the link from your email"
+                      value={recoveryToken}
+                    />
+                  )}
+                  <AuthField
+                    focused={focusedField === "password"}
+                    icon="lock-outline"
+                    label="New password"
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setPassword}
+                    onFocus={() => setFocusedField("password")}
+                    placeholder="Enter new password"
+                    secureTextEntry={!showPassword}
+                    trailing={
+                      <Pressable onPress={() => setShowPassword((value) => !value)}>
+                        <MaterialCommunityIcons
+                          color={palette.subtle}
+                          name={showPassword ? "eye-off-outline" : "eye-outline"}
+                          size={18}
+                        />
+                      </Pressable>
+                    }
+                    value={password}
+                  />
+                  <AuthField
+                    focused={focusedField === "confirm_password"}
+                    icon="shield-check-outline"
+                    label="Confirm new password"
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setConfirmPassword}
+                    onFocus={() => setFocusedField("confirm_password")}
+                    placeholder="Repeat new password"
+                    secureTextEntry={!showConfirmPassword}
+                    trailing={
+                      <Pressable onPress={() => setShowConfirmPassword((value) => !value)}>
+                        <MaterialCommunityIcons
+                          color={palette.subtle}
+                          name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                          size={18}
+                        />
+                      </Pressable>
+                    }
+                    value={confirmPassword}
+                  />
+                </View>
+
+                <AuthButton
+                  disabled={isBusy}
+                  label="Update password"
+                  loading={isBusy}
+                  onPress={handlePasswordUpdate}
+                />
+
+                <View className="flex-row flex-wrap items-center justify-center gap-2">
+                  <Text className="text-subtle text-xs">Remember your password?</Text>
+                  <Pressable onPress={() => { setMode("login"); setRecoveryToken(""); }}>
+                    <Text className="text-brand text-xs font-bold">Sign in</Text>
+                  </Pressable>
+                </View>
               </View>
             ) : (
               <View className="gap-6">
@@ -714,7 +826,7 @@ export default function AuthExperience({ google }: AuthExperienceProps) {
                 </View>
 
                 {mode === "login" ? (
-                  <Pressable onPress={handlePasswordReset}>
+                  <Pressable onPress={() => setMode("reset_password")}>
                     <Text className="text-link text-xs text-right font-bold">Forgot password?</Text>
                   </Pressable>
                 ) : (

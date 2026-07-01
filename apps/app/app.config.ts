@@ -39,6 +39,7 @@ const config = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.odin.finances",
+    associatedDomains: ["applinks:odin-budgets.buzz"],
   },
   android: {
     package: "com.odin.finances",
@@ -48,6 +49,14 @@ const config = {
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
+    intentFilters: [
+      {
+        action: "VIEW",
+        autoVerify: true,
+        data: [{ scheme: "https", host: "odin-budgets.buzz", pathPrefix: "/auth" }],
+        category: ["BROWSABLE", "DEFAULT"],
+      },
+    ],
   },
   web: {
     favicon: "./assets/favicon.png",
