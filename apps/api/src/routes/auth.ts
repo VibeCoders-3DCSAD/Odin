@@ -268,7 +268,7 @@ router.post("/password-reset", async (request: Request, response: Response) => {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: process.env.AUTH_REDIRECT_URL ?? "https://odin-budgets.buzz/auth/reset",
+    redirectTo: process.env.AUTH_REDIRECT_URL ?? "odin://auth/reset",
   });
 
   if (error) {

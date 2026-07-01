@@ -11,26 +11,6 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-app.get("/.well-known/apple-app-site-association", (_request: Request, response: Response) => {
-  response.json({
-    applinks: {
-      apps: [],
-      details: [{ appID: "TEAM_ID.com.odin.finances", paths: ["/auth/*"] }],
-    },
-  });
-});
-
-app.get("/.well-known/assetlinks.json", (_request: Request, response: Response) => {
-  response.json([{
-    relation: ["delegate_permission/common.handle_all_urls"],
-    target: {
-      namespace: "android_app",
-      package_name: "com.odin.finances",
-      sha256_cert_fingerprints: [],
-    },
-  }]);
-});
-
 app.use((request: Request, response: Response, next: NextFunction) => {
   const start = Date.now();
   response.on("finish", () => {
