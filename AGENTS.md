@@ -212,8 +212,7 @@ Detailed repository standards live in [REPOSITORY-STANDARDS.md](docs/standards/R
 - Read the source before writing selectors, redirects, or interaction assertions.
 - Mock the full call graph a component depends on, not only the obvious first-level requests.
 - Mock data must match the real runtime shape returned by the backend or database layer.
-- In Playwright, register specific routes after broad routes and be deliberate about LIFO matching behavior.
-- Block non-essential external resources in E2E tests when they interfere with deterministic load behavior.
+- Write E2E flows as Maestro YAML against the installed APK on emulator or device.
 - Keep test method signatures aligned with the production method signatures they exercise.
 
 ### Remediation Rules
@@ -245,7 +244,7 @@ Use this file as the single project-level reference for dependency versions and 
 Main product repository for:
 
 - Expo mobile app
-- React Native Web frontend
+- React Native frontend
 - Express API
 - future shared TypeScript packages
 
@@ -266,7 +265,6 @@ Secondary repository for:
 - TypeScript `5.9.2`
 - React `19.2.0`
 - React Native `0.83.0`
-- React Native Web `0.21.0`
 - Expo SDK `55.0.0`
 - Express `5.1.0`
 - `@supabase/supabase-js` `2.57.4`
@@ -290,7 +288,7 @@ Secondary repository for:
 - Git
 - GitHub
 - Jest
-- Playwright
+- Maestro
 - React Native Testing Library
 - Supertest
 - Pytest

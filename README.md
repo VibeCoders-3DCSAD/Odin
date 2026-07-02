@@ -4,7 +4,7 @@ Monorepo for the main Odin application.
 
 This repository currently contains:
 
-- `apps/app`: Expo app for React Native mobile and React Native Web
+- `apps/app`: Expo app for React Native mobile
 - `apps/api`: Express API written in TypeScript
 - `packages/`: reserved for shared packages
 
@@ -15,7 +15,7 @@ This repository currently contains:
 - TypeScript `5.9.2`
 - React `19.2.0`
 - React Native `0.83.0`
-- React Native Web `0.21.0`
+
 - Expo SDK `55`
 - Express `5.1.0`
 - Supabase JS `2.57.4`
@@ -38,7 +38,9 @@ Version pins in this repo:
 Optional but typically needed for mobile work:
 
 - Expo development builds for native Google Sign-In testing
-- Android Studio for Android emulator
+- Android Studio for Android emulator and device builds
+- JDK 17 for Android builds
+- Android SDK Platform 36, Build-Tools, Emulator, and platform-tools (`adb`)
 - Xcode for iOS simulator on macOS
 
 ## Repository Layout
@@ -71,93 +73,6 @@ odin/
 └─ tsconfig.base.json
 ```
 
-## First-Time Setup
-
-### Windows
-
-Use PowerShell from the repo root:
-
-```powershell
-cd C:\path\to\App\odin
-corepack enable
-corepack prepare pnpm@10.26.1 --activate
-pnpm install
-```
-
-Start the frontend:
-
-```powershell
-pnpm dev:app
-```
-
-Start the web build:
-
-```powershell
-pnpm dev:web
-```
-
-Start the API:
-
-```powershell
-pnpm dev:api
-```
-
-### Bash
-
-Use this on Linux, macOS, WSL, or Git Bash:
-
-```bash
-cd /path/to/App/odin
-corepack enable
-corepack prepare pnpm@10.26.1 --activate
-pnpm install
-```
-
-Start the frontend:
-
-```bash
-pnpm dev:app
-```
-
-Start the web build:
-
-```bash
-pnpm dev:web
-```
-
-Start the API:
-
-```bash
-pnpm dev:api
-```
-
-### Fish
-
-```fish
-cd /path/to/App/odin
-corepack enable
-corepack prepare pnpm@10.26.1 --activate
-pnpm install
-```
-
-Start the frontend:
-
-```fish
-pnpm dev:app
-```
-
-Start the web build:
-
-```fish
-pnpm dev:web
-```
-
-Start the API:
-
-```fish
-pnpm dev:api
-```
-
 ## Environment Variables
 
 The current scaffold does not require runtime secrets yet, but these are the variables you should expect to add next.
@@ -185,79 +100,10 @@ PORT=3001
 
 Do not commit real secrets.
 
-## Google Auth QA
-
-The Expo app entry screen is currently a Google auth smoke-test page. It calls
-native Google Sign-In, sends the Google ID token to
-`POST /odin/api/auth/google`, and displays the Supabase session bootstrap
-response.
-
-This flow uses `@react-native-google-signin/google-signin`, so it does not work
-inside Expo Go. Use an Expo development build or EAS development build when
-testing Google auth.
-
-Set `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` to the reversed iOS client ID, such as
-`com.googleusercontent.apps.<id>`, so the native iOS callback URL is registered
-correctly in the Expo config plugin.
-
-Local iOS native builds also need that Google iOS config. If you run
-`expo prebuild`, `expo run:ios`, or another native iOS build path without
-`EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` or `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, the
-config now fails fast instead of generating a broken native callback setup.
-
-For Android emulator testing, `localhost` points at the emulator itself. Use
-`http://10.0.2.2:3001` as the API base URL when the API is running on your host
-machine.
-
-## Common Commands
-
-Install dependencies:
-
-```bash
-pnpm install
-```
-
-Run the mobile app:
-
-```bash
-pnpm dev:app
-```
-
-Run the web app:
-
-```bash
-pnpm dev:web
-```
-
-Run the API in watch mode:
-
-```bash
-pnpm dev:api
-```
-
-Build the API:
-
-```bash
-pnpm --filter api build
-```
-
-Type-check the Expo app:
-
-```bash
-pnpm --filter app exec tsc --noEmit
-```
-
-Run workspace tests:
-
-```bash
-pnpm test
-```
-
 ## What Is Already Wired
 
 - Shared monorepo TypeScript base config
 - Expo app scaffold
-- React Native Web support through Expo
 - NativeWind config for app styling
 - React Native Paper in the app shell
 - Express API entrypoint with `/` and `/health`
@@ -314,6 +160,123 @@ If needed, remove `node_modules` and reinstall manually.
 - Add `.env.example`
 - Add shared packages under `packages/`
 - Add Jest config for app and API
-- Add Playwright web tests
+- Add Maestro E2E tests
 - Add Supabase client wrappers
 - Add Dockerfile for the API service
+
+## Dev Instructions
+
+### Arch Linux
+
+Install the Android prerequisites:
+
+```bash
+sudo pacman -S --needed jdk17-openjdk android-tools
+```
+
+Install Android Studio from the official download, then keep the SDK in Android
+Studio's SDK Manager.
+
+Then install these SDK components in Android Studio:
+
+- Android SDK Platform 36
+- Android SDK Build-Tools
+- Android Emulator
+- Platform-Tools
+
+Make sure `adb` is on your PATH:
+
+```bash
+adb devices
+```
+
+From the repo root:
+
+```bash
+corepack enable
+corepack prepare pnpm@10.26.1 --activate
+pnpm install
+```
+
+### Linux Mint
+
+Install the Android prerequisites:
+
+```bash
+sudo apt update
+sudo apt install openjdk-17-jdk
+```
+
+Install Android Studio from the official download, then use SDK Manager to add:
+
+- Android SDK Platform 36
+- Android SDK Build-Tools
+- Android Emulator
+- Platform-Tools
+
+Make sure `adb` works:
+
+```bash
+adb devices
+```
+
+From the repo root:
+
+```bash
+corepack enable
+corepack prepare pnpm@10.26.1 --activate
+pnpm install
+```
+
+### Windows
+
+Install Microsoft OpenJDK 17 and Android Studio.
+
+In Android Studio, install these SDK components:
+
+- Android SDK Platform 36
+- Android SDK Build-Tools
+- Android Emulator
+- Platform-Tools
+
+Add the Android platform-tools folder to `PATH`, then verify:
+
+```powershell
+adb devices
+```
+
+From PowerShell in the repo root:
+
+```powershell
+corepack enable
+corepack prepare pnpm@10.26.1 --activate
+pnpm install
+```
+
+### Android Device Flow
+
+Use a physical Android phone for local development:
+
+1. Connect an Android phone.
+2. Turn on Developer Options.
+3. Turn on USB debugging.
+4. Make sure `adb devices` shows the phone.
+5. Make the host API reachable from the phone with `adb reverse tcp:3001 tcp:3001` or set `EXPO_PUBLIC_API_BASE_URL` to your machine's LAN IP.
+6. Start the API with `pnpm run --filter api dev`.
+7. Start the app with `pnpm run --filter app android`.
+
+The app talks to the API on `EXPO_PUBLIC_API_BASE_URL`.
+If you are testing on an Android emulator instead of a phone, `localhost`
+points at the emulator itself. Use `http://10.0.2.2:3001` for the API base URL
+when the API is running on your host machine.
+
+### Commands
+
+```bash
+pnpm dev:app
+pnpm dev:web
+pnpm dev:api
+pnpm --filter api build
+pnpm --filter app exec tsc --noEmit
+pnpm test
+```

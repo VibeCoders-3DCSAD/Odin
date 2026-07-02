@@ -13,7 +13,6 @@
 | Framework | React Native | 0.83.6 |
 | UI Library | React | 19.2.0 |
 | Toolchain | Expo SDK | ~55.0.26 |
-| Web target | React Native Web | 0.21.0 |
 | Language | TypeScript | 5.9.2 |
 | Styling | NativeWind (Tailwind) | 4.2.3 |
 | Material UI | React Native Paper | 5.15.1 |
@@ -84,7 +83,7 @@
 | Frontend unit | Jest + React Native Testing Library | 29.7.0 / 13.3.3 |
 | Backend unit | Jest | 30.3.0 |
 | API integration | Supertest | 7.2.2 |
-| E2E | Playwright | 1.59.1 |
+| E2E (native) | Maestro | — |
 | Python/ML | Pytest + HTTPX | — |
 
 ---
@@ -93,7 +92,6 @@
 
 - **Android**: Google Play Store (APK via Expo dev builds)
 - **iOS**: Explicitly **excluded from thesis scope** (per Specification v4.0)
-- **Web**: React Native Web via Expo, centered container ≤1200px
 - **Mobile-first**: 375dp minimum, no horizontal scroll 320–450dp
 
 ---
