@@ -78,6 +78,7 @@ const palette = {
   white: "#FFFFFF",
   dangerSoft: "#FFF0F2",
   successSoft: "#EFFEF7",
+  error: "#D9001F",
 };
 
 async function postJson(
@@ -123,7 +124,7 @@ function getErrorMessage(error: unknown) {
 
 function FieldLabel({ children }: { children: string }) {
   return (
-    <Text className="text-text text-xs font-semibold">
+    <Text className="text-ink2 text-[12.5px] font-semibold">
       {children}
     </Text>
   );
@@ -162,8 +163,8 @@ function AuthField({
     <View className="gap-2">
       <FieldLabel>{label}</FieldLabel>
       <View
-        className={`min-h-[56px] rounded-[16px] border bg-white px-4 flex-row items-center gap-3 ${
-          focused ? "border-cta" : "border-accent"
+        className={`min-h-[52px] rounded-[14px] border px-4 flex-row items-center gap-3 ${
+          focused ? "border-aqua500 bg-card" : "border-line bg-surface"
         }`}
       >
         <MaterialCommunityIcons color={palette.brand} name={icon} size={18} />
@@ -210,11 +211,12 @@ function AuthButton({
       accessibilityRole="button"
       disabled={disabled || loading}
       onPress={onPress}
-      className={`min-h-[56px] rounded-[16px] border items-center justify-center px-4 ${
+      className={`min-h-[54px] rounded-[14px] border items-center justify-center px-4 ${
         primary
-          ? "bg-cta border-cta"
-          : "bg-white border-accent"
+          ? "bg-aqua950 border-aqua950"
+          : "bg-card border-line"
       } ${disabled || loading ? "opacity-50" : "active:opacity-90"}`}
+      style={primary && !disabled && !loading ? { shadowColor: "rgba(1,50,32,0.28)", shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 4 } : undefined}
     >
       {loading ? (
         <ActivityIndicator color={primary ? palette.white : palette.brand} />
@@ -247,15 +249,11 @@ type NoticeProps = {
 
 function Notice({ tone, message }: NoticeProps) {
   const bgClass = tone === "error"
-    ? "bg-dangerSoft"
-    : tone === "success"
-    ? "bg-successSoft"
-    : "bg-accent";
+    ? "bg-errorSoft"
+    : "bg-aqua50";
   const iconColor = tone === "error"
-    ? palette.cta
-    : tone === "success"
-    ? palette.brand
-    : palette.link;
+    ? palette.error
+    : palette.brand;
   const iconName = tone === "error"
     ? "alert-circle-outline"
     : tone === "success"
