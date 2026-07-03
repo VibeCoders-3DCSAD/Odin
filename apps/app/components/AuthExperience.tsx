@@ -591,12 +591,12 @@ export default function AuthExperience({
     }
   }
 
-  const title = mode === "login" ? "Welcome back" : mode === "reset_complete" ? "Reset your password" : "Create your account";
+  const title = mode === "login" ? "Welcome back" : mode === "reset_complete" ? "Reset your password" : "Create account";
   const subtitle = mode === "login"
-    ? "Sign in to continue your Odin flow with email and password, or use Google on native builds."
+    ? "Sign in to your Odin account"
     : mode === "reset_complete"
     ? "Choose a new password for your account."
-    : "Set up your Odin account with a clean email flow, then finish onboarding right after auth.";
+    : "Set up your Odin account";
 
   return (
     <SafeAreaView className="flex-1 bg-canvas">
@@ -630,20 +630,20 @@ export default function AuthExperience({
                 <Pressable
                   onPress={() => { setMode("login"); setRecoveryToken(""); }}
                   className={`flex-1 rounded-xl py-3 items-center justify-center ${
-                    mode === "login" ? "bg-white shadow-sm" : ""
+                    mode === "login" ? "bg-aqua50 shadow-sm" : ""
                   }`}
                 >
-                  <Text className={`text-xs font-bold ${mode === "login" ? "text-heading" : "text-subtle"}`}>
+                  <Text className={`text-xs font-bold ${mode === "login" ? "text-aqua950" : "text-subtle"}`}>
                     Sign in
                   </Text>
                 </Pressable>
                 <Pressable
                   onPress={() => { setMode("register"); setRecoveryToken(""); }}
                   className={`flex-1 rounded-xl py-3 items-center justify-center ${
-                    mode === "register" ? "bg-white shadow-sm" : ""
+                    mode === "register" ? "bg-aqua50 shadow-sm" : ""
                   }`}
                 >
-                  <Text className={`text-xs font-bold ${mode === "register" ? "text-heading" : "text-subtle"}`}>
+                  <Text className={`text-xs font-bold ${mode === "register" ? "text-aqua950" : "text-subtle"}`}>
                     Create account
                   </Text>
                 </Pressable>
