@@ -835,9 +835,9 @@ export default function AuthExperience({
                   </View>
 
                   <AuthButton
-                    disabled={isBusy || isGoogleBusy}
+                    disabled={!google.signIn || isBusy || isGoogleBusy}
                     icon="google"
-                    label="Google"
+                    label={google.signIn ? "Google" : "Google on native builds"}
                     loading={isGoogleBusy}
                     onPress={handleGoogle}
                     tone="secondary"
