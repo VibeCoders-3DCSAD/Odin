@@ -282,10 +282,7 @@ export default function AuthExperience({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
-  const [notice, setNotice] = useState<NoticeProps | null>({
-    tone: "default",
-    message: "Google sign-in works on native dev build. Email and password stay available here too.",
-  });
+  const [notice, setNotice] = useState<NoticeProps | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
   const [recoveryToken, setRecoveryToken] = useState(recoveryTokenProp ?? "");
@@ -517,7 +514,6 @@ export default function AuthExperience({
 
   async function handleGoogle() {
     if (!google.signIn) {
-      setNotice({ tone: "default", message: "Google sign-in works on native dev build. Email and password stay available here too." });
       return;
     }
 
@@ -598,8 +594,8 @@ export default function AuthExperience({
 
   return (
     <SafeAreaView className="flex-1 bg-canvas">
-      <ScrollView contentContainerClassName="flex-grow p-6">
-        <View className="w-full max-w-[480px] self-center flex-1 justify-center gap-6">
+      <ScrollView contentContainerClassName="flex-grow justify-center p-6">
+        <View className="w-full max-w-[480px] self-center gap-6">
           <View className="items-center gap-3 pt-2">
             <View className="w-[72px] h-[72px] rounded-[36px] border-2 border-aqua500 bg-white items-center justify-center overflow-hidden">
               <Image
