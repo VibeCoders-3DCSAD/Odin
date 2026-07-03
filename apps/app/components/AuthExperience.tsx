@@ -50,8 +50,6 @@ type AuthenticatedState = {
 };
 
 type GoogleAuthConfig = {
-  enabled: boolean;
-  helperText: string;
   signIn?: () => Promise<{ accessToken: string; userId: string; refreshToken?: string }>;
   signOut?: () => Promise<void>;
 };
@@ -286,7 +284,7 @@ export default function AuthExperience({
   const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
   const [notice, setNotice] = useState<NoticeProps | null>({
     tone: "default",
-    message: google.helperText,
+    message: "Google sign-in works on native dev build. Email and password stay available here too.",
   });
   const [isBusy, setIsBusy] = useState(false);
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
@@ -518,8 +516,8 @@ export default function AuthExperience({
   }
 
   async function handleGoogle() {
-    if (!google.enabled || !google.signIn) {
-      setNotice({ tone: "default", message: google.helperText });
+    if (!google.signIn) {
+      setNotice({ tone: "default", message: "Google sign-in works on native dev build. Email and password stay available here too." });
       return;
     }
 
@@ -874,9 +872,9 @@ export default function AuthExperience({
                   </View>
 
                   <AuthButton
-                    disabled={!google.enabled || isBusy || isGoogleBusy}
+                    disabled={isBusy || isGoogleBusy}
                     icon="google"
-                    label={google.enabled ? "Google" : "Google on native builds"}
+                    label="Google"
                     loading={isGoogleBusy}
                     onPress={handleGoogle}
                     tone="secondary"
