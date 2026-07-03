@@ -10,10 +10,7 @@ export default function App() {
   return (
     <>
       <AuthExperience
-        google={{
-          enabled: false,
-          helperText: "Email and password are live here. Google sign-in stays on native dev builds for now.",
-        }}
+        google={{}}
         isPasswordRecovery={isPasswordRecovery}
         isResolvingRecoveryToken={isResolvingRecoveryToken}
         recoveryRefreshToken={recoveryRefreshToken ?? undefined}

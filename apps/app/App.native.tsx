@@ -86,8 +86,6 @@ export default function App() {
     <>
       <AuthExperience
         google={{
-          enabled: true,
-          helperText: "Google sign-in works on native dev builds. Email and password stay available here too.",
           signIn: startGoogleSignIn,
           signOut: async () => {
             await GoogleSignin.signOut();
