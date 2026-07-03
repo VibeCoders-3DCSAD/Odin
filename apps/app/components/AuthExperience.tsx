@@ -593,32 +593,24 @@ export default function AuthExperience({
     : "Set up your Odin account";
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas">
-      <ScrollView contentContainerClassName="flex-grow p-6" keyboardShouldPersistTaps="handled">
-        <View className="w-full max-w-[480px] self-center flex-1 justify-center gap-6">
-          <View className="items-center gap-3 pt-2">
-            <View className="w-[72px] h-[72px] rounded-[36px] border-2 border-aqua500 bg-white items-center justify-center overflow-hidden">
+    <SafeAreaView className="flex-1 bg-card">
+      <ScrollView contentContainerClassName="flex-grow px-7 py-10" keyboardShouldPersistTaps="handled">
+        <View className="w-full max-w-[420px] self-center flex-1 justify-center gap-8">
+          <View className="items-center gap-5">
+            <View className="w-[64px] h-[64px] rounded-[32px] border-[3px] border-aqua950 items-center justify-center">
               <Image
                 resizeMode="contain"
                 source={odinLogo}
-                className="w-[54px] h-[54px]"
+                className="w-[48px] h-[48px]"
               />
             </View>
             <View className="items-center gap-1">
-              <Text className="text-ink text-2xl leading-[30px] font-extrabold text-center">{title}</Text>
+              <Text className="text-ink text-[26px] leading-[32px] font-extrabold text-center">{title}</Text>
               <Text className="text-ink2 text-base text-center">{subtitle}</Text>
             </View>
           </View>
 
-          <View
-            className="bg-card rounded-[28px] p-6 gap-6"
-            style={{
-              shadowColor: "rgba(1,50,32,0.16)",
-              shadowOffset: { width: 0, height: 8 },
-              shadowRadius: 24,
-              elevation: 8,
-            }}
-          >
+          <View className="gap-6">
             {authenticated ? (
               <View className="gap-6">
                 <View className="flex-row gap-4 p-6 rounded-[24px] bg-accent items-start">
