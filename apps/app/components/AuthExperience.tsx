@@ -594,8 +594,8 @@ export default function AuthExperience({
 
   return (
     <SafeAreaView className="flex-1 bg-canvas">
-      <ScrollView contentContainerClassName="flex-grow justify-center p-6">
-        <View className="w-full max-w-[480px] self-center gap-6">
+      <ScrollView contentContainerClassName="flex-grow p-6" keyboardShouldPersistTaps="handled">
+        <View className="w-full max-w-[480px] self-center flex-1 justify-center gap-6">
           <View className="items-center gap-3 pt-2">
             <View className="w-[72px] h-[72px] rounded-[36px] border-2 border-aqua500 bg-white items-center justify-center overflow-hidden">
               <Image
@@ -619,31 +619,6 @@ export default function AuthExperience({
               elevation: 8,
             }}
           >
-            {mode === "login" || mode === "register" ? (
-              <View className="flex-row gap-2 bg-accent rounded-[16px] p-1">
-                <Pressable
-                  onPress={() => { setMode("login"); setRecoveryToken(""); }}
-                  className={`flex-1 rounded-xl py-3 items-center justify-center ${
-                    mode === "login" ? "bg-aqua50 shadow-sm" : ""
-                  }`}
-                >
-                  <Text className={`text-xs font-bold ${mode === "login" ? "text-aqua950" : "text-subtle"}`}>
-                    Sign in
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => { setMode("register"); setRecoveryToken(""); }}
-                  className={`flex-1 rounded-xl py-3 items-center justify-center ${
-                    mode === "register" ? "bg-aqua50 shadow-sm" : ""
-                  }`}
-                >
-                  <Text className={`text-xs font-bold ${mode === "register" ? "text-aqua950" : "text-subtle"}`}>
-                    Create account
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-
             {authenticated ? (
               <View className="gap-6">
                 <View className="flex-row gap-4 p-6 rounded-[24px] bg-accent items-start">
