@@ -828,20 +828,24 @@ export default function AuthExperience({
                     onPress={mode === "login" ? handleLogin : handleRegister}
                   />
 
-                  <View className="flex-row items-center gap-3">
-                    <View className="flex-1 h-[1px] bg-accent" />
-                    <Text className="text-subtle text-xs font-semibold">or continue with</Text>
-                    <View className="flex-1 h-[1px] bg-accent" />
-                  </View>
+                  {google.signIn ? (
+                    <>
+                      <View className="flex-row items-center gap-3">
+                        <View className="flex-1 h-[1px] bg-accent" />
+                        <Text className="text-subtle text-xs font-semibold">or continue with</Text>
+                        <View className="flex-1 h-[1px] bg-accent" />
+                      </View>
 
-                  <AuthButton
-                    disabled={!google.signIn || isBusy || isGoogleBusy}
-                    icon="google"
-                    label={google.signIn ? "Google" : "Google on native builds"}
-                    loading={isGoogleBusy}
-                    onPress={handleGoogle}
-                    tone="secondary"
-                  />
+                      <AuthButton
+                        disabled={isBusy || isGoogleBusy}
+                        icon="google"
+                        label="Google"
+                        loading={isGoogleBusy}
+                        onPress={handleGoogle}
+                        tone="secondary"
+                      />
+                    </>
+                  ) : null}
                 </View>
 
                 {pendingVerificationEmail ? (
