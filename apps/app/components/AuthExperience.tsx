@@ -9,7 +9,6 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from "react-native";
 
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
@@ -268,30 +267,6 @@ function Notice({ tone, message }: NoticeProps) {
   );
 }
 
-function SwatchStrip() {
-  const swatches = [
-    { name: "Brand", color: palette.brand },
-    { name: "Links", color: palette.link },
-    { name: "Success", color: palette.success },
-    { name: "Active", color: palette.cta },
-    { name: "Light", color: palette.canvas },
-  ];
-
-  return (
-    <View className="gap-3">
-      <Text className="text-white/72 text-xs tracking-[1.6px] font-semibold">ODIN AUTH KIT</Text>
-      <View className="flex-row gap-3 flex-wrap">
-        {swatches.map((swatch) => (
-          <View key={swatch.name} className="gap-2">
-            <View className="w-[92px] h-[68px] rounded-[16px]" style={{ backgroundColor: swatch.color }} />
-            <Text className="text-white text-xs font-semibold">{swatch.name}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 export default function AuthExperience({
   google,
   isPasswordRecovery,
@@ -299,9 +274,6 @@ export default function AuthExperience({
   recoveryRefreshToken: recoveryRefreshTokenProp,
   recoveryToken: recoveryTokenProp,
 }: AuthExperienceProps) {
-  const { width } = useWindowDimensions();
-  const isWide = width >= 960;
-
   const [mode, setMode] = useState<AuthMode>("login");
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -629,35 +601,28 @@ export default function AuthExperience({
   return (
     <SafeAreaView className="flex-1 bg-canvas">
       <ScrollView contentContainerClassName="flex-grow p-6">
-        <View className={`w-full max-w-[1120px] self-center flex-1 gap-6 ${isWide ? "flex-row items-stretch" : "justify-center"}`}>
-          <View className={`gap-6 ${isWide ? "flex-1 bg-heading rounded-[24px] p-6 justify-between" : "items-center pt-2 pb-2"}`}>
-            <View className="w-[72px] h-[72px] rounded-[36px] border-2 border-brand bg-white items-center justify-center overflow-hidden">
+        <View className="w-full max-w-[480px] self-center flex-1 justify-center gap-6">
+          <View className="items-center gap-3 pt-2">
+            <View className="w-[72px] h-[72px] rounded-[36px] border-2 border-aqua500 bg-white items-center justify-center overflow-hidden">
               <Image
                 resizeMode="contain"
                 source={odinLogo}
                 className="w-[54px] h-[54px]"
               />
             </View>
-            <View className={`gap-2 ${isWide ? "items-start" : "items-center"}`}>
-              <Text className={`text-white text-2xl leading-[30px] font-extrabold ${!isWide ? "text-center" : ""}`}>
-                Calm money decisions start with a sharp sign-in flow.
-              </Text>
-              <Text className={`text-white/76 text-base max-w-[420px] ${!isWide ? "text-center" : ""}`}>
-                Dedicated login and registration screens, built around your spacing,
-                type scale, and palette instead of the old QA stub.
-              </Text>
+            <View className="items-center gap-1">
+              <Text className="text-ink text-2xl leading-[30px] font-extrabold text-center">{title}</Text>
+              <Text className="text-ink2 text-base text-center">{subtitle}</Text>
             </View>
-            {isWide ? <SwatchStrip /> : null}
           </View>
 
           <View
-            className="flex-1 bg-white rounded-[24px] p-6 gap-6 border border-[rgba(15,15,44,0.06)]"
+            className="bg-card rounded-[28px] p-6 gap-6"
             style={{
-              shadowColor: palette.heading,
-              shadowOpacity: 0.12,
-              shadowRadius: 10,
-              shadowOffset: { width: 0, height: 2 },
-              elevation: 5,
+              shadowColor: "rgba(1,50,32,0.16)",
+              shadowOffset: { width: 0, height: 8 },
+              shadowRadius: 24,
+              elevation: 8,
             }}
           >
             {mode === "login" || mode === "register" ? (
@@ -684,11 +649,6 @@ export default function AuthExperience({
                 </Pressable>
               </View>
             ) : null}
-
-            <View className="gap-2">
-              <Text className="text-heading text-2xl leading-[30px] font-extrabold">{title}</Text>
-              <Text className="text-text text-base">{subtitle}</Text>
-            </View>
 
             {authenticated ? (
               <View className="gap-6">
