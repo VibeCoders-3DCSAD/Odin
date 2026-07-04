@@ -47,13 +47,33 @@ router.post("/account-deletion-requests", requireAuth, async (request: Authentic
     return;
   }
 
+  const minDate = new Date();
+  minDate.setDate(minDate.getDate() + 30);
+  const minDeleteAt = minDate.toISOString();
+
   let scheduledDeleteAt: string;
   if (payload.scheduled_delete_at !== undefined) {
-    scheduledDeleteAt = new Date(payload.scheduled_delete_at as string).toISOString();
+    let parsed: Date;
+    try {
+      parsed = new Date(payload.scheduled_delete_at as string);
+      if (isNaN(parsed.getTime())) throw new Error();
+    } catch {
+      response.status(400).json({
+        error: "Bad Request",
+        message: "scheduled_delete_at must be a valid date string",
+      });
+      return;
+    }
+    scheduledDeleteAt = parsed.toISOString();
+    if (scheduledDeleteAt < minDeleteAt) {
+      response.status(400).json({
+        error: "Bad Request",
+        message: "scheduled_delete_at must be at least 30 days from now",
+      });
+      return;
+    }
   } else {
-    const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 30);
-    scheduledDeleteAt = defaultDate.toISOString();
+    scheduledDeleteAt = minDeleteAt;
   }
 
   const { data, error } = await authenticatedSupabase

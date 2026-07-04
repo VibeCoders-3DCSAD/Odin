@@ -197,6 +197,43 @@ describe("POST /odin/api/account-deletion-requests", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 for invalid scheduled_delete_at", async () => {
+    mockAuth();
+
+    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
+    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
+    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
+    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
+    mockFrom.mockReturnValue({ select: activeMockSelect });
+
+    const response = await request(app)
+      .post("/odin/api/account-deletion-requests")
+      .set(authHeader())
+      .send({ payload: { scheduled_delete_at: "not-a-date" } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 for scheduled_delete_at less than 30 days", async () => {
+    mockAuth();
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
+    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
+    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
+    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
+    mockFrom.mockReturnValue({ select: activeMockSelect });
+
+    const response = await request(app)
+      .post("/odin/api/account-deletion-requests")
+      .set(authHeader())
+      .send({ payload: { scheduled_delete_at: tomorrow.toISOString() } });
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns 401 without authorization header", async () => {
     const response = await request(app)
       .post("/odin/api/account-deletion-requests")
