@@ -7,6 +7,7 @@ import eligibilityProfileRoutes from "./routes/eligibility-profile.js";
 import privacyRoutes from "./routes/privacy.js";
 import pushDeviceTokenRoutes from "./routes/push-device-tokens.js";
 import dataExportRoutes from "./routes/data-export-requests.js";
+import accountDeletionRoutes from "./routes/account-deletion-requests.js";
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/odin/api", eligibilityProfileRoutes);
 app.use("/odin/api/privacy", privacyRoutes);
 app.use("/odin/api", pushDeviceTokenRoutes);
 app.use("/odin/api", dataExportRoutes);
+app.use("/odin/api", accountDeletionRoutes);
 
 app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };
