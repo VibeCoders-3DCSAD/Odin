@@ -8,6 +8,10 @@
 
 - [Tech Stack](adr/tech-stack.md)
 
+## Runbooks
+
+- [New User Consent Kind](runbooks/new-user-consent-kind.md)
+
 ## Standards
 
 - [Repository Standards](standards/REPOSITORY-STANDARDS.md)
