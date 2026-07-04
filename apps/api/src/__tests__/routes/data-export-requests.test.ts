@@ -97,6 +97,17 @@ describe("POST /odin/api/data-export-requests", () => {
     expect(insertData).toMatchObject({ user_id: validUserId });
   });
 
+  it("returns 400 for array payload", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post("/odin/api/data-export-requests")
+      .set(authHeader())
+      .send({ payload: ["format", "json"] });
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns 400 for missing payload", async () => {
     mockAuth();
 
