@@ -42,3 +42,33 @@ export const VALID_EMPLOYMENT_CLASSIFICATIONS = [
   "gig_worker",
   "other",
 ];
+
+export const VALID_CONSENT_KINDS = [
+  "data_collection",
+  "personalization",
+  "model_training",
+  "research_evaluation",
+  "notifications",
+  "terms",
+  "advisory_disclaimer",
+];
+
+export const VALID_CONSENT_STATUSES = ["granted", "withdrawn"];
+
+export const VALID_REQUEST_STATUSES = [
+  "requested",
+  "processing",
+  "available",
+  "completed",
+  "failed",
+  "expired",
+  "cancelled",
+];
+
+export const PRIVACY_SETTINGS_DEFAULTS = {
+  personalization_enabled: true,
+  model_training_opt_in: false,
+  research_evaluation_opt_in: false,
+  notifications_opt_in: false,
+  data_retention_days: null,
+} as const;
