@@ -22,6 +22,34 @@ import { authHeader, validAccessToken, validUserId } from "../helpers/fixtures.j
 const mockGetUser = supabase.auth.getUser as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
 
+function createActiveChain(data?: unknown[]) {
+  const limit = jest.fn().mockResolvedValue({ data: data ?? [], error: null });
+  const in_ = jest.fn().mockReturnValue({ limit });
+  const eq = jest.fn().mockReturnValue({ in: in_ });
+  const select = jest.fn().mockReturnValue({ eq });
+  return { select, eq, in: in_, limit };
+}
+
+function mockActive(data?: unknown[]) {
+  const chain = createActiveChain(data);
+  mockFrom.mockReturnValue({ select: chain.select });
+  return chain;
+}
+
+function mockActiveThenInsert(insertResult: Record<string, unknown>) {
+  const active = createActiveChain();
+  const single = jest.fn().mockReturnValue({ data: insertResult, error: null });
+  const select = jest.fn().mockReturnValue({ single });
+  const insert = jest.fn().mockReturnValue({ select });
+  mockFrom.mockImplementation((table: string) => {
+    if (table === "account_deletion_requests" && active.select.mock.calls.length === 0) {
+      return { select: active.select };
+    }
+    return { insert };
+  });
+  return { active, insert };
+}
+
 describe("POST /odin/api/account-deletion-requests", () => {
   function mockAuth() {
     mockGetUser.mockResolvedValue({
@@ -35,26 +63,9 @@ describe("POST /odin/api/account-deletion-requests", () => {
 
     const requestId = "00000000-0000-0000-0000-000000000030";
     const scheduledDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const insertResult = { id: requestId, status: "requested", requested_at: new Date().toISOString(), scheduled_delete_at: scheduledDate };
 
-    const activeMockSelect = jest.fn().mockResolvedValue({ data: [], error: null });
-    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
-    const activeMockSelect2 = jest.fn().mockReturnValue({ eq: activeMockEq });
-
-    const mockSingle = jest.fn().mockReturnValue({
-      data: { id: requestId, status: "requested", requested_at: new Date().toISOString(), scheduled_delete_at: scheduledDate },
-      error: null,
-    });
-    const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
-    const mockInsert = jest.fn().mockReturnValue({ select: mockSelect });
-
-    mockFrom.mockImplementation((table: string) => {
-      if (table === "account_deletion_requests" && activeMockSelect2.mock.calls.length === 0) {
-        return { select: activeMockSelect2 };
-      }
-      return { insert: mockInsert };
-    });
+    mockActiveThenInsert(insertResult);
 
     const response = await request(app)
       .post("/odin/api/account-deletion-requests")
@@ -73,26 +84,9 @@ describe("POST /odin/api/account-deletion-requests", () => {
 
     const requestId = "00000000-0000-0000-0000-000000000031";
     const scheduledDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const insertResult = { id: requestId, status: "requested", requested_at: new Date().toISOString(), scheduled_delete_at: scheduledDate };
 
-    const activeMockSelect = jest.fn().mockResolvedValue({ data: [], error: null });
-    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
-    const activeMockSelect2 = jest.fn().mockReturnValue({ eq: activeMockEq });
-
-    const mockSingle = jest.fn().mockReturnValue({
-      data: { id: requestId, status: "requested", requested_at: new Date().toISOString(), scheduled_delete_at: scheduledDate },
-      error: null,
-    });
-    const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
-    const mockInsert = jest.fn().mockReturnValue({ select: mockSelect });
-
-    mockFrom.mockImplementation((table: string) => {
-      if (table === "account_deletion_requests" && activeMockSelect2.mock.calls.length === 0) {
-        return { select: activeMockSelect2 };
-      }
-      return { insert: mockInsert };
-    });
+    mockActiveThenInsert(insertResult);
 
     const response = await request(app)
       .post("/odin/api/account-deletion-requests")
@@ -105,14 +99,7 @@ describe("POST /odin/api/account-deletion-requests", () => {
   it("rejects duplicate active deletion request", async () => {
     mockAuth();
 
-    const activeMockLimit = jest.fn().mockReturnValue({
-      data: [{ id: "existing-id" }],
-      error: null,
-    });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
-    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
-    mockFrom.mockReturnValue({ select: activeMockSelect });
+    mockActive([{ id: "existing-id" }]);
 
     const response = await request(app)
       .post("/odin/api/account-deletion-requests")
@@ -128,26 +115,26 @@ describe("POST /odin/api/account-deletion-requests", () => {
 
     let activeEqUserId: string | undefined;
 
-    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockImplementation((_field: string, value: string) => {
+    const activeLimit = jest.fn().mockResolvedValue({ data: [], error: null });
+    const activeIn = jest.fn().mockReturnValue({ limit: activeLimit });
+    const activeEq = jest.fn().mockImplementation((_field: string, value: string) => {
       activeEqUserId = value;
-      return { in: activeMockIn };
+      return { in: activeIn };
     });
-    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
+    const activeSelect = jest.fn().mockReturnValue({ eq: activeEq });
 
-    const mockSingle = jest.fn().mockReturnValue({
+    const single = jest.fn().mockReturnValue({
       data: { id: "id", status: "requested", requested_at: new Date().toISOString(), scheduled_delete_at: new Date().toISOString() },
       error: null,
     });
-    const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
-    const mockInsert = jest.fn().mockReturnValue({ select: mockSelect });
+    const select = jest.fn().mockReturnValue({ single });
+    const insert = jest.fn().mockReturnValue({ select });
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === "account_deletion_requests" && !activeMockSelect.mock.calls.length) {
-        return { select: activeMockSelect };
+      if (table === "account_deletion_requests" && !activeSelect.mock.calls.length) {
+        return { select: activeSelect };
       }
-      return { insert: mockInsert };
+      return { insert };
     });
 
     await request(app)
@@ -182,12 +169,7 @@ describe("POST /odin/api/account-deletion-requests", () => {
 
   it("returns 400 for non-string reason", async () => {
     mockAuth();
-
-    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
-    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
-    mockFrom.mockReturnValue({ select: activeMockSelect });
+    mockActive();
 
     const response = await request(app)
       .post("/odin/api/account-deletion-requests")
@@ -199,12 +181,7 @@ describe("POST /odin/api/account-deletion-requests", () => {
 
   it("returns 400 for invalid scheduled_delete_at", async () => {
     mockAuth();
-
-    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
-    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
-    mockFrom.mockReturnValue({ select: activeMockSelect });
+    mockActive();
 
     const response = await request(app)
       .post("/odin/api/account-deletion-requests")
@@ -220,11 +197,7 @@ describe("POST /odin/api/account-deletion-requests", () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
-    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
-    mockFrom.mockReturnValue({ select: activeMockSelect });
+    mockActive();
 
     const response = await request(app)
       .post("/odin/api/account-deletion-requests")
@@ -259,23 +232,19 @@ describe("POST /odin/api/account-deletion-requests", () => {
   it("returns 500 when database insert fails", async () => {
     mockAuth();
 
-    const activeMockLimit = jest.fn().mockReturnValue({ data: [], error: null });
-    const activeMockIn = jest.fn().mockReturnValue({ limit: activeMockLimit });
-    const activeMockEq = jest.fn().mockReturnValue({ in: activeMockIn });
-    const activeMockSelect = jest.fn().mockReturnValue({ eq: activeMockEq });
-
-    const mockSingle = jest.fn().mockReturnValue({
+    const active = createActiveChain();
+    const single = jest.fn().mockReturnValue({
       data: null,
       error: { message: "Database error" },
     });
-    const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
-    const mockInsert = jest.fn().mockReturnValue({ select: mockSelect });
+    const select = jest.fn().mockReturnValue({ single });
+    const insert = jest.fn().mockReturnValue({ select });
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === "account_deletion_requests" && activeMockSelect.mock.calls.length === 0) {
-        return { select: activeMockSelect };
+      if (table === "account_deletion_requests" && active.select.mock.calls.length === 0) {
+        return { select: active.select };
       }
-      return { insert: mockInsert };
+      return { insert };
     });
 
     const response = await request(app)
@@ -476,7 +445,7 @@ describe("POST /odin/api/account-deletion-requests/:id/cancel", () => {
     mockAuth();
 
     const requestId = "test-id";
-    let eqCalls: string[] = [];
+    const eqCalls: string[] = [];
     let inStatuses: string[] = [];
 
     const mockSingle = jest.fn().mockReturnValue({
