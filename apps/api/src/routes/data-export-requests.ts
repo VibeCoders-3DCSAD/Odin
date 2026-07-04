@@ -12,7 +12,7 @@ router.post("/data-export-requests", requireAuth, async (request: AuthenticatedR
   const authenticatedSupabase = request.supabase!;
 
   const payload = request.body?.payload;
-  if (!payload || typeof payload !== "object") {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     response.status(400).json({
       error: "Bad Request",
       message: "Payload is required",
