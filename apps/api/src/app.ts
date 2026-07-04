@@ -5,6 +5,7 @@ import authRoutes from "./routes/auth.js";
 import meRoutes from "./routes/me.js";
 import eligibilityProfileRoutes from "./routes/eligibility-profile.js";
 import privacyRoutes from "./routes/privacy.js";
+import consentRoutes from "./routes/consents.js";
 import pushDeviceTokenRoutes from "./routes/push-device-tokens.js";
 
 const app = express();
@@ -40,6 +41,7 @@ app.use("/odin/api/auth", authRoutes);
 app.use("/odin/api/me", meRoutes);
 app.use("/odin/api", eligibilityProfileRoutes);
 app.use("/odin/api/privacy", privacyRoutes);
+app.use("/odin/api/consents", consentRoutes);
 app.use("/odin/api", pushDeviceTokenRoutes);
 
 app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {
