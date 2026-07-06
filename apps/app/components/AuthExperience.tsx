@@ -66,10 +66,7 @@ type AuthExperienceProps = {
   isResolvingRecoveryToken?: boolean;
   recoveryRefreshToken?: string;
   recoveryToken?: string;
-  isEmailVerification?: boolean;
-  isResolvingVerification?: boolean;
   verificationToken?: string;
-  verificationRefreshToken?: string;
   onAuthenticated: (state: AuthenticatedState) => void;
   onLoggedOut: () => void;
 };
@@ -283,10 +280,7 @@ export default function AuthExperience({
   isResolvingRecoveryToken,
   recoveryRefreshToken: recoveryRefreshTokenProp,
   recoveryToken: recoveryTokenProp,
-  isEmailVerification,
-  isResolvingVerification,
   verificationToken: verificationTokenProp,
-  verificationRefreshToken: verificationRefreshTokenProp,
   onAuthenticated,
   onLoggedOut,
 }: AuthExperienceProps) {
@@ -407,18 +401,16 @@ export default function AuthExperience({
 
       const consentsRes = await getConsents(accessToken);
       if (!consentsRes.response.ok) {
+        throw new Error("Failed to check consent status. Please try again.");
+      }
+      const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
+      const hasGranted = existing?.some((c) => c.status === "granted");
+      if (hasGranted) {
+        onAuthenticated(authState);
+        setPendingVerificationEmail(null);
+      } else {
         setPendingAuthState(authState);
         setShowConsent(true);
-      } else {
-        const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
-        const hasGranted = existing?.some((c) => c.status === "granted");
-        if (hasGranted) {
-          onAuthenticated(authState);
-          setPendingVerificationEmail(null);
-        } else {
-          setPendingAuthState(authState);
-          setShowConsent(true);
-        }
       }
 
       resetSensitiveFields();
@@ -582,18 +574,16 @@ export default function AuthExperience({
 
       const consentsRes = await getConsents(session.accessToken);
       if (!consentsRes.response.ok) {
+        throw new Error("Failed to check consent status. Please try again.");
+      }
+      const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
+      const hasGranted = existing?.some((c) => c.status === "granted");
+      if (hasGranted) {
+        onAuthenticated(authState);
+        setPendingVerificationEmail(null);
+      } else {
         setPendingAuthState(authState);
         setShowConsent(true);
-      } else {
-        const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
-        const hasGranted = existing?.some((c) => c.status === "granted");
-        if (hasGranted) {
-          onAuthenticated(authState);
-          setPendingVerificationEmail(null);
-        } else {
-          setPendingAuthState(authState);
-          setShowConsent(true);
-        }
       }
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });

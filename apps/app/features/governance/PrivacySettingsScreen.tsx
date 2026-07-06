@@ -5,7 +5,6 @@ import {
   Brain,
   CaretRight,
   ClockAfternoon,
-  Database,
   DownloadSimple,
   Flask,
   LockKey,
@@ -356,11 +355,6 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
           subtitle={consents.some((c) => c.status === "granted") ? `Active · v${consents.find((c) => c.status === "granted")!.version}` : "No consent recorded"}
           iconColor={AQUA700}
           labelColor={INK}
-        />
-        <Divider />
-        <NavRow
-          icon={<Database size={18} color={MUTED} />}
-          label="Data access & correction"
         />
         <Divider />
         <NavRow

@@ -10,7 +10,7 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
   const {
     isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken,
-    isEmailVerification, isResolvingVerification, verificationToken, verificationRefreshToken,
+    verificationToken,
   } = useDeepLink();
 
   if (authenticated) {
@@ -33,10 +33,7 @@ export default function App() {
         isResolvingRecoveryToken={isResolvingRecoveryToken}
         recoveryRefreshToken={recoveryRefreshToken ?? undefined}
         recoveryToken={recoveryToken ?? undefined}
-        isEmailVerification={isEmailVerification}
-        isResolvingVerification={isResolvingVerification}
         verificationToken={verificationToken ?? undefined}
-        verificationRefreshToken={verificationRefreshToken ?? undefined}
         onAuthenticated={(state) => setAuthenticated(state)}
         onLoggedOut={() => setAuthenticated(null)}
       />
