@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Pressable,
@@ -14,6 +15,8 @@ import ShellPlaceholderPage from "./ShellPlaceholderPage";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(300, SCREEN_WIDTH * 0.8);
 const TOOLBAR_MAX_WIDTH = 430;
+const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
+const requestTimeoutMs = 10_000;
 
 type Page =
   | "dashboard"
@@ -91,6 +94,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
 export default function MobileShell({ accessToken, onLoggedOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
@@ -117,6 +121,22 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
     closeDrawer();
   }
 
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+      await fetch(`${apiBaseUrl}/odin/api/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch {
+    }
+    onLoggedOut();
+  }
+
   function renderPage() {
     if (currentPage === "settings") {
       return (
@@ -129,10 +149,15 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
           </View>
           <Pressable
             accessibilityRole="button"
-            onPress={onLoggedOut}
-            className="min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#FCF8F0] items-center justify-center active:opacity-90"
+            disabled={isLoggingOut}
+            onPress={handleLogout}
+            className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#FCF8F0] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
           >
-            <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
+            {isLoggingOut ? (
+              <ActivityIndicator color="#D9001F" />
+            ) : (
+              <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
+            )}
           </Pressable>
         </View>
       );
