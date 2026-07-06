@@ -41,15 +41,18 @@ function getErrorMessage(error: unknown) {
 function SettingsToggle({
   value,
   onToggle,
+  accessibilityLabel,
 }: {
   value: boolean;
   onToggle: () => void;
+  accessibilityLabel: string;
 }) {
   return (
     <Pressable
       onPress={onToggle}
       accessibilityRole="switch"
       accessibilityState={{ checked: value }}
+      accessibilityLabel={accessibilityLabel}
     >
       <View
         style={{
@@ -189,12 +192,13 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
   }, [accessToken]);
 
   const save = useCallback(
-    async (payload: Partial<PrivacySettings>) => {
+    async (payload: Partial<PrivacySettings>, previous?: PrivacySettings) => {
       setSaving(true);
       setError(null);
       try {
         const { response, body } = await updatePrivacySettings(accessToken, payload);
         if (!response.ok) {
+          if (previous) setSettings(previous);
           setError(body.message ?? "Failed to save.");
           return;
         }
@@ -202,6 +206,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         if (savedTimer.current) clearTimeout(savedTimer.current);
         savedTimer.current = setTimeout(() => setSaved(false), 2000);
       } catch (err) {
+        if (previous) setSettings(previous);
         setError(getErrorMessage(err));
       } finally {
         setSaving(false);
@@ -214,8 +219,9 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
     if (!settings) return;
     const current = settings[key];
     if (typeof current !== "boolean") return;
+    const previous = settings;
     setSettings({ ...settings, [key]: !current });
-    save({ [key]: !current });
+    save({ [key]: !current }, previous);
   }
 
   if (loading) {
@@ -280,6 +286,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
             <SettingsToggle
               value={settings?.personalization_enabled ?? false}
               onToggle={() => toggle("personalization_enabled")}
+              accessibilityLabel="Personalization"
             />
           }
         />
@@ -292,6 +299,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
             <SettingsToggle
               value={settings?.model_training_opt_in ?? false}
               onToggle={() => toggle("model_training_opt_in")}
+              accessibilityLabel="Model Training"
             />
           }
         />
@@ -304,6 +312,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
             <SettingsToggle
               value={settings?.research_evaluation_opt_in ?? false}
               onToggle={() => toggle("research_evaluation_opt_in")}
+              accessibilityLabel="Research Evaluation"
             />
           }
         />
@@ -322,10 +331,11 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
           icon={<Bell size={18} color={MUTED} />}
           label="Budget & anomaly alerts"
           trailing={
-            <SettingsToggle
-              value={settings?.notifications_opt_in ?? false}
-              onToggle={() => toggle("notifications_opt_in")}
-            />
+          <SettingsToggle
+            value={settings?.notifications_opt_in ?? false}
+            onToggle={() => toggle("notifications_opt_in")}
+            accessibilityLabel="Budget and anomaly alerts"
+          />
           }
         />
         <Divider />
