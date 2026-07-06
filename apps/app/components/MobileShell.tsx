@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -73,6 +74,7 @@ const drawerSections: DrawerSection[] = [
       { page: "dashboard", icon: "view-dashboard-outline", label: "Dashboard" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
       { page: "history", icon: "clock-outline", label: "History" },
+      { page: "settings", icon: "cog-outline", label: "Settings" },
     ],
   },
   {
@@ -168,13 +170,8 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
   function renderPage() {
     if (currentPage === "settings") {
       return (
-        <View className="gap-4">
-          <View className="bg-[#F1F0EB] rounded-[1.75rem] p-6 items-center justify-center">
-            <MaterialCommunityIcons color={palette.brand} name="cog-outline" size={40} />
-            <Text className="text-[#414942] text-sm mt-3 text-center">
-              Settings loaded from backend in the next slice
-            </Text>
-          </View>
+        <View className="gap-6">
+          <PrivacySettingsScreen accessToken={accessToken} />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Log out"
@@ -436,12 +433,7 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
 
             {/* Drawer footer - profile */}
             <View className="mt-auto pt-6">
-              <Pressable
-                onPress={() => navigate("settings")}
-                accessibilityRole="button"
-                accessibilityLabel="Profile"
-                className="flex-row items-center gap-3 px-4 py-3 rounded-xl"
-              >
+              <View className="flex-row items-center gap-3 px-4 py-3 rounded-xl">
                 <View className="w-9 h-9 rounded-full bg-[#0a7c5a] items-center justify-center">
                   <Text className="text-white text-xs font-semibold">CT</Text>
                 </View>
@@ -449,7 +441,7 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
                   <Text className="text-white/90 text-xs font-medium">Charles Togle</Text>
                   <Text className="text-white/40 text-[10px]">Stable-Obligated</Text>
                 </View>
-              </Pressable>
+              </View>
             </View>
           </View>
         </Animated.View>
