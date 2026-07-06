@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -10,6 +12,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { getConsents } from "../features/governance/api";
+import PrivacyConsentScreen from "../features/governance/PrivacyConsentScreen";
 
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const requestTimeoutMs = 10_000;
@@ -62,6 +66,10 @@ type AuthExperienceProps = {
   isResolvingRecoveryToken?: boolean;
   recoveryRefreshToken?: string;
   recoveryToken?: string;
+  isEmailVerification?: boolean;
+  isResolvingVerification?: boolean;
+  verificationToken?: string;
+  verificationRefreshToken?: string;
   onAuthenticated: (state: AuthenticatedState) => void;
   onLoggedOut: () => void;
 };
@@ -275,6 +283,10 @@ export default function AuthExperience({
   isResolvingRecoveryToken,
   recoveryRefreshToken: recoveryRefreshTokenProp,
   recoveryToken: recoveryTokenProp,
+  isEmailVerification,
+  isResolvingVerification,
+  verificationToken: verificationTokenProp,
+  verificationRefreshToken: verificationRefreshTokenProp,
   onAuthenticated,
   onLoggedOut,
 }: AuthExperienceProps) {
@@ -292,6 +304,28 @@ export default function AuthExperience({
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
   const [recoveryToken, setRecoveryToken] = useState(recoveryTokenProp ?? "");
   const [recoveryRefreshToken, setRecoveryRefreshToken] = useState(recoveryRefreshTokenProp ?? "");
+  const [showConsent, setShowConsent] = useState(false);
+  const [pendingAuthState, setPendingAuthState] = useState<{
+    accessToken: string; provider: AuthProvider; userId?: string; profileId?: string; onboardingStatus?: string;
+  } | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const verifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (notice) {
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+      noticeTimer.current = setTimeout(() => setNotice(null), 5000);
+    }
+    return () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); };
+  }, [notice]);
+
+  useEffect(() => {
+    if (pendingVerificationEmail) {
+      if (verifTimer.current) clearTimeout(verifTimer.current);
+      verifTimer.current = setTimeout(() => setPendingVerificationEmail(null), 5000);
+    }
+    return () => { if (verifTimer.current) clearTimeout(verifTimer.current); };
+  }, [pendingVerificationEmail]);
 
   useEffect(() => {
     if (isPasswordRecovery || recoveryTokenProp || recoveryRefreshTokenProp) {
@@ -304,6 +338,13 @@ export default function AuthExperience({
       setMode("reset_complete");
     }
   }, [isPasswordRecovery, recoveryRefreshTokenProp, recoveryTokenProp]);
+
+  useEffect(() => {
+    if (!verificationTokenProp) return;
+    setPendingVerificationEmail(null);
+    setNotice({ tone: "success", message: "Email verified! You can now log in." });
+    setMode("login");
+  }, [verificationTokenProp]);
 
   async function bootstrapSession(token: string) {
     const { response, body } = await postJson("/session", undefined, token);
@@ -320,26 +361,6 @@ export default function AuthExperience({
     setConfirmPassword("");
     setShowPassword(false);
     setShowConfirmPassword(false);
-  }
-
-  function setAuthenticatedState(
-    body: AuthResponse,
-    provider: AuthProvider,
-  ) {
-    const accessToken = body.payload?.session?.access_token;
-
-    if (!accessToken) {
-      throw new Error("No access token returned from the auth route.");
-    }
-
-    onAuthenticated({
-      accessToken,
-      provider,
-      userId: body.payload?.user?.id,
-      profileId: body.payload?.profile?.id,
-      onboardingStatus: body.payload?.onboarding?.status,
-    });
-    setPendingVerificationEmail(null);
   }
 
   async function handleLogin() {
@@ -366,9 +387,28 @@ export default function AuthExperience({
         throw new Error(body.message ?? "Sign in failed.");
       }
 
-      setAuthenticatedState(body, "password");
+      const accessToken = body.payload?.session?.access_token;
+      if (!accessToken) throw new Error("No access token returned.");
+
+      const authState = {
+        accessToken,
+        provider: "password" as const,
+        userId: body.payload?.user?.id,
+        profileId: body.payload?.profile?.id,
+        onboardingStatus: body.payload?.onboarding?.status,
+      };
+
+      const consentsRes = await getConsents(accessToken).catch(() => ({ body: {} }));
+      const existingConsents = (consentsRes.body as { payload?: unknown[] }).payload;
+      if (existingConsents && existingConsents.length > 0) {
+        onAuthenticated(authState);
+        setPendingVerificationEmail(null);
+      } else {
+        setPendingAuthState(authState);
+        setShowConsent(true);
+      }
+
       resetSensitiveFields();
-      setNotice({ tone: "success", message: "You are signed in and ready to continue." });
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });
     } finally {
@@ -410,23 +450,20 @@ export default function AuthExperience({
 
       if (accessToken) {
         const bootstrappedBody = await bootstrapSession(accessToken);
-        setAuthenticatedState(
-          {
-            payload: {
-              ...bootstrappedBody.payload,
-              session: body.payload?.session,
-            },
-          },
-          "password",
-        );
-        setNotice({ tone: "success", message: "Account created. You are already signed in." });
+        const authState = {
+          accessToken,
+          provider: "password" as const,
+          userId: bootstrappedBody.payload?.user?.id ?? body.payload?.user?.id,
+          profileId: bootstrappedBody.payload?.profile?.id,
+          onboardingStatus: bootstrappedBody.payload?.onboarding?.status,
+        };
+        setPendingAuthState(authState);
+        setShowConsent(true);
+        setNotice({ tone: "success", message: "Account created. One more step." });
       } else {
         setPendingVerificationEmail(email.trim());
         setMode("login");
-        setNotice({
-          tone: "success",
-          message: "Account created. Check your inbox for the verification link, then come back and sign in.",
-        });
+        setNotice(null);
       }
 
       resetSensitiveFields();
@@ -530,16 +567,23 @@ export default function AuthExperience({
 
       const body = await bootstrapSession(session.accessToken);
 
-      setAuthenticatedState(
-        {
-          payload: {
-            ...body.payload,
-            session: { access_token: session.accessToken },
-          },
-        },
-        "google",
-      );
-      setNotice({ tone: "success", message: "Google sign-in worked. You are in." });
+      const authState = {
+        accessToken: session.accessToken,
+        provider: "google" as const,
+        userId: body.payload?.user?.id,
+        profileId: body.payload?.profile?.id,
+        onboardingStatus: body.payload?.onboarding?.status,
+      };
+
+      const consentsRes = await getConsents(session.accessToken).catch(() => ({ body: {} }));
+      const existingConsents = (consentsRes.body as { payload?: unknown[] }).payload;
+      if (existingConsents && existingConsents.length > 0) {
+        onAuthenticated(authState);
+        setPendingVerificationEmail(null);
+      } else {
+        setPendingAuthState(authState);
+        setShowConsent(true);
+      }
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });
     } finally {
@@ -555,10 +599,15 @@ export default function AuthExperience({
     : "Set up your Odin account";
 
   return (
-    <SafeAreaView className="flex-1 bg-card">
-      <ScrollView contentContainerClassName="flex-grow px-7 py-10" keyboardShouldPersistTaps="handled">
-        <View className="w-full max-w-[420px] self-center flex-1 justify-center gap-8">
-          <View className="items-center gap-5">
+    <View className="flex-1 bg-card">
+      <SafeAreaView className="flex-1">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
+          <ScrollView contentContainerClassName="flex-grow px-7 py-10" keyboardShouldPersistTaps="handled">
+            <View className="w-full max-w-[420px] self-center flex-1 justify-center gap-8">
+            <View className="items-center gap-5">
             <View className="w-[64px] h-[64px] rounded-[32px] border-[3px] border-aqua950 items-center justify-center">
               <Image
                 resizeMode="contain"
@@ -810,6 +859,24 @@ export default function AuthExperience({
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </KeyboardAvoidingView>
+  </SafeAreaView>
+
+  {showConsent && pendingAuthState ? (
+    <PrivacyConsentScreen
+      visible={showConsent}
+      accessToken={pendingAuthState.accessToken}
+      onComplete={() => {
+        setShowConsent(false);
+        onAuthenticated(pendingAuthState);
+        setPendingAuthState(null);
+      }}
+      onDismiss={() => {
+        setShowConsent(false);
+        setPendingAuthState(null);
+      }}
+    />
+  ) : null}
+</View>
   );
 }
