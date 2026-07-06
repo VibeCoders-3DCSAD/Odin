@@ -1,11 +1,26 @@
+import { useState } from "react";
 import "./global.css";
 
 import { StatusBar } from "expo-status-bar";
-import AuthExperience from "./components/AuthExperience";
+import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
+import MobileShell from "./components/MobileShell";
 import { useDeepLink } from "./hooks/useDeepLink";
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
   const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
+
+  if (authenticated) {
+    return (
+      <>
+        <MobileShell
+          accessToken={authenticated.accessToken}
+          onLoggedOut={() => setAuthenticated(null)}
+        />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
 
   return (
     <>
@@ -15,6 +30,8 @@ export default function App() {
         isResolvingRecoveryToken={isResolvingRecoveryToken}
         recoveryRefreshToken={recoveryRefreshToken ?? undefined}
         recoveryToken={recoveryToken ?? undefined}
+        onAuthenticated={(state) => setAuthenticated(state)}
+        onLoggedOut={() => setAuthenticated(null)}
       />
       <StatusBar style="dark" />
     </>
