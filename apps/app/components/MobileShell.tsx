@@ -13,14 +13,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(300, SCREEN_WIDTH * 0.8);
 const TOOLBAR_MAX_WIDTH = 430;
-const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
-const requestTimeoutMs = 10_000;
 
 const palette = {
   shell: "#fcf8f0",
@@ -144,8 +143,8 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
     setIsLoggingOut(true);
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
-      const response = await fetch(`${apiBaseUrl}/odin/api/auth/logout`, {
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const response = await fetch(`${API_BASE_URL}/odin/api/auth/logout`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}` },
         signal: controller.signal,
