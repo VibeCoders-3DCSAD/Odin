@@ -1,13 +1,11 @@
+import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { PrivacySettings } from "./types";
-
-const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
-const requestTimeoutMs = 10_000;
 
 export async function getPrivacySettings(accessToken: string) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${apiBaseUrl}/odin/api/privacy/settings`, {
+    const response = await fetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: controller.signal,
     });
@@ -29,9 +27,9 @@ export async function updatePrivacySettings(
   payload: Partial<PrivacySettings>,
 ) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${apiBaseUrl}/odin/api/privacy/settings`, {
+    const response = await fetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
