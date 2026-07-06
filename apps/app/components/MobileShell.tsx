@@ -198,6 +198,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
           <View className="flex-row items-center gap-3">
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Open navigation menu"
               onPress={drawerOpen ? closeDrawer : openDrawer}
               className="w-10 h-10 items-center justify-center"
             >
@@ -230,6 +231,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             </Pressable>
             <Image
               source={require("../assets/odin-logo.png")}
+              accessibilityLabel="Odin logo"
               style={{ width: 68, height: 24, resizeMode: "contain" }}
             />
           </View>
@@ -298,6 +300,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             <Pressable
               onPress={() => setCurrentPage("add-transaction")}
               accessibilityRole="button"
+              accessibilityLabel="Add transaction"
               className="w-[50px] h-[50px] rounded-full items-center justify-center -mt-[22px]"
               style={{
                 backgroundColor: palette.brand,
@@ -372,6 +375,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             <View className="flex-row items-center gap-3 mb-10">
               <Image
                 source={require("../assets/odin-logo.png")}
+                accessibilityLabel="Odin logo"
                 style={{ width: 32, height: 32, resizeMode: "contain" }}
               />
               <View>
@@ -394,6 +398,8 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                         key={item.page}
                         onPress={() => navigate(item.page)}
                         accessibilityRole="button"
+                        accessibilityLabel={item.label}
+                        accessibilityState={{ selected: active }}
                         className={`flex-row items-center gap-3 px-4 py-3 rounded-xl ${
                           active ? "bg-white/12" : ""
                         }`}
@@ -427,6 +433,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
               <Pressable
                 onPress={() => navigate("settings")}
                 accessibilityRole="button"
+                accessibilityLabel="Profile"
                 className="flex-row items-center gap-3 px-4 py-3 rounded-xl"
               >
                 <View className="w-9 h-9 rounded-full bg-[#0a7c5a] items-center justify-center">
