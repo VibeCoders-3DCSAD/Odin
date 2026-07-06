@@ -1,3 +1,4 @@
+import React from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
 import { useRef, useState } from "react";
