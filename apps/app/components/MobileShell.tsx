@@ -193,64 +193,139 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
   }
 
   return (
-    <SafeAreaView style={{ backgroundColor: palette.shell }} className="flex-1">
-      {/* Top bar */}
-      <View style={{ backgroundColor: palette.shell }} className="px-5 py-3 flex-row items-center justify-between z-50">
-        <Pressable
-          accessibilityRole="button"
-          onPress={drawerOpen ? closeDrawer : openDrawer}
-          className="w-10 h-10 items-center justify-center"
-        >
-          <View className="w-[18px] h-[18px] items-center justify-center gap-[3px]">
-            <Animated.View
-              style={{
-                width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                transform: [
-                  { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) },
-                  { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] }) },
-                ],
-              }}
-            />
-            <Animated.View
-              style={{
-                width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                opacity: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-              }}
-            />
-            <Animated.View
-              style={{
-                width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                transform: [
-                  { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
-                  { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-45deg"] }) },
-                ],
-              }}
-            />
-          </View>
-        </Pressable>
-        <View className="flex-row items-center gap-3">
-          <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
-          <View className="relative">
-            <MaterialCommunityIcons color={palette.ink2} name="bell-outline" size={20} />
-            <View className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#ba1a1a] rounded-full" />
+    <View className="flex-1">
+      <SafeAreaView style={{ backgroundColor: palette.shell }} className="flex-1">
+        {/* Top bar */}
+        <View style={{ backgroundColor: palette.shell }} className="px-5 py-3 flex-row items-center justify-between">
+          <Pressable
+            accessibilityRole="button"
+            onPress={drawerOpen ? closeDrawer : openDrawer}
+            className="w-10 h-10 items-center justify-center"
+          >
+            <View className="w-[18px] h-[18px] items-center justify-center gap-[3px]">
+              <Animated.View
+                style={{
+                  width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                  transform: [
+                    { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) },
+                    { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] }) },
+                  ],
+                }}
+              />
+              <Animated.View
+                style={{
+                  width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                  opacity: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                }}
+              />
+              <Animated.View
+                style={{
+                  width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                  transform: [
+                    { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
+                    { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-45deg"] }) },
+                  ],
+                }}
+              />
+            </View>
+          </Pressable>
+          <View className="flex-row items-center gap-3">
+            <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
+            <View className="relative">
+              <MaterialCommunityIcons color={palette.ink2} name="bell-outline" size={20} />
+              <View className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#ba1a1a] rounded-full" />
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* Content */}
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="px-5 pb-24"
-        keyboardShouldPersistTaps="handled"
-      >
-        {renderPage()}
-      </ScrollView>
+        {/* Content */}
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="px-5 pb-24"
+          keyboardShouldPersistTaps="handled"
+        >
+          {renderPage()}
+        </ScrollView>
 
-      {/* Drawer overlay */}
+        {/* Bottom toolbar */}
+        <View className="absolute bottom-0 left-0 right-0 items-center">
+          <View
+            style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell }}
+            className="w-full px-4 pt-2 pb-6 flex-row items-center justify-around border-t border-[#EAEAE6]"
+          >
+            <Pressable
+              onPress={() => setCurrentPage("dashboard")}
+              className="items-center gap-[2px] px-3 py-[5px]"
+            >
+              {toolbarIcon("dashboard", "view-dashboard", "view-dashboard-outline")}
+              <Text
+                style={{ color: isActive("dashboard") ? palette.brand : palette.mut }}
+                className="text-[10px] font-semibold"
+              >
+                Home
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setCurrentPage("history")}
+              className="items-center gap-[2px] px-3 py-[5px]"
+            >
+              {toolbarIcon("history", "clock", "clock-outline")}
+              <Text
+                style={{ color: isActive("history") ? palette.brand : palette.mut }}
+                className="text-[10px] font-semibold"
+              >
+                History
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setCurrentPage("add-transaction")}
+              accessibilityRole="button"
+              className="w-14 h-14 rounded-full items-center justify-center -mt-8 shadow-lg"
+              style={{ backgroundColor: palette.brand, shadowColor: palette.brand, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}
+            >
+              <MaterialCommunityIcons color="white" name="plus" size={24} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => setCurrentPage("assistant")}
+              className="items-center gap-[2px] px-3 py-[5px]"
+            >
+              <MaterialCommunityIcons
+                color={isActive("assistant") ? palette.brand : palette.mut}
+                name="chart-timeline-variant"
+                size={22}
+              />
+              <Text
+                style={{ color: isActive("assistant") ? palette.brand : palette.mut }}
+                className="text-[10px] font-semibold"
+              >
+                Assistant
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setCurrentPage("savings-goals")}
+              className="items-center gap-[2px] px-3 py-[5px]"
+            >
+              {toolbarIcon("savings-goals", "wallet", "wallet-outline")}
+              <Text
+                style={{ color: isActive("savings-goals") ? palette.brand : palette.mut }}
+                className="text-[10px] font-semibold"
+              >
+                Savings
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+
+      {/* Drawer overlay - rendered last to sit above everything */}
       {drawerOpen ? (
         <Animated.View
           style={{ opacity: overlayAnim }}
-          className="absolute inset-0 bg-black/40 z-200"
+          className="absolute inset-0 bg-black/40"
         >
           <Pressable className="flex-1" onPress={closeDrawer} />
         </Animated.View>
@@ -260,7 +335,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
       {drawerOpen ? (
         <Animated.View
           style={{ transform: [{ translateX: drawerAnim }], backgroundColor: palette.brand }}
-          className="absolute top-0 left-0 bottom-0 z-300"
+          className="absolute top-0 left-0 bottom-0"
         >
           <View style={{ width: DRAWER_WIDTH }} className="flex-1 py-8 px-6">
             {/* Drawer header */}
@@ -335,55 +410,6 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
           </View>
         </Animated.View>
       ) : null}
-
-      {/* Bottom toolbar - icon-only per design spec */}
-      <View className="absolute bottom-0 left-0 right-0 z-100 items-center">
-        <View
-          style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell }}
-          className="w-full px-4 pt-2 pb-6 flex-row items-center justify-around"
-        >
-          <Pressable
-            onPress={() => setCurrentPage("dashboard")}
-            className="items-center px-3 py-[5px]"
-          >
-            {toolbarIcon("dashboard", "view-dashboard", "view-dashboard-outline")}
-          </Pressable>
-
-          <Pressable
-            onPress={() => setCurrentPage("history")}
-            className="items-center px-3 py-[5px]"
-          >
-            {toolbarIcon("history", "clock", "clock-outline")}
-          </Pressable>
-
-          <Pressable
-            onPress={() => setCurrentPage("add-transaction")}
-            accessibilityRole="button"
-            className="w-14 h-14 rounded-full items-center justify-center -mt-8 shadow-lg"
-            style={{ backgroundColor: palette.brand, shadowColor: palette.brand, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}
-          >
-            <MaterialCommunityIcons color="white" name="plus" size={24} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => setCurrentPage("assistant")}
-            className="items-center px-3 py-[5px]"
-          >
-            <MaterialCommunityIcons
-              color={isActive("assistant") ? palette.brand : palette.mut}
-              name="chart-timeline-variant"
-              size={22}
-            />
-          </Pressable>
-
-          <Pressable
-            onPress={() => setCurrentPage("savings-goals")}
-            className="items-center px-3 py-[5px]"
-          >
-            {toolbarIcon("savings-goals", "wallet", "wallet-outline")}
-          </Pressable>
-        </View>
-      </View>
-    </SafeAreaView>
+    </View>
   );
 }
