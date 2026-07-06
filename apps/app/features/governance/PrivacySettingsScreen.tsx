@@ -5,6 +5,7 @@ import {
   Brain,
   CaretRight,
   ClockAfternoon,
+  Database,
   DownloadSimple,
   Flask,
   LockKey,
@@ -12,8 +13,9 @@ import {
   Trash,
   User,
 } from "phosphor-react-native";
-import { getPrivacySettings, updatePrivacySettings } from "./api";
-import type { PrivacySettings } from "./types";
+import { getConsents, getPrivacySettings, updatePrivacySettings } from "./api";
+import type { ConsentRecord, PrivacySettings } from "./types";
+import UserProfileScreen from "./UserProfileScreen";
 
 type PrivacySettingsScreenProps = {
   accessToken: string;
@@ -167,19 +169,28 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [subPage, setSubPage] = useState<string | null>(null);
+  const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getPrivacySettings(accessToken)
-      .then(({ body }) => {
+    Promise.all([
+      getPrivacySettings(accessToken),
+      getConsents(accessToken).catch(() => ({ body: {} })),
+    ])
+      .then(([settingsRes, consentsRes]) => {
         if (cancelled) return;
-        if (body.payload) {
-          setSettings(body.payload);
+        if (settingsRes.body.payload) {
+          setSettings(settingsRes.body.payload);
         } else {
-          setError(body.message ?? "Failed to load privacy settings.");
+          setError(settingsRes.body.message ?? "Failed to load privacy settings.");
+        }
+        const consentPayload = (consentsRes.body as { payload?: ConsentRecord[] }).payload;
+        if (consentPayload) {
+          setConsents(consentPayload);
         }
       })
       .catch((err) => {
@@ -265,6 +276,28 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
     );
   }
 
+  if (subPage === "export") {
+    return (
+      <View>
+        <Pressable
+          onPress={() => setSubPage(null)}
+          accessibilityRole="button"
+          accessibilityLabel="Back to settings"
+          style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}
+        >
+          <CaretRight size={18} color={MUTED} weight="bold" style={{ transform: [{ rotate: "180deg" }] }} />
+          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: MUTED }}>
+            Settings
+          </Text>
+        </Pressable>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: INK, marginBottom: 16 }}>
+          Export data
+        </Text>
+        <UserProfileScreen accessToken={accessToken} />
+      </View>
+    );
+  }
+
   return (
     <View>
       <SectionHeader label="Account" />
@@ -318,8 +351,22 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         />
         <Divider />
         <NavRow
+          icon={<ShieldCheck size={18} color={AQUA700} />}
+          label="Consent status"
+          subtitle={consents.length > 0 ? `Active · Policy ${consents[0]!.policy_version}` : "No consent recorded"}
+          iconColor={AQUA700}
+          labelColor={INK}
+        />
+        <Divider />
+        <NavRow
+          icon={<Database size={18} color={MUTED} />}
+          label="Data access & correction"
+        />
+        <Divider />
+        <NavRow
           icon={<DownloadSimple size={18} color={MUTED} />}
           label="Export data"
+          onPress={() => setSubPage("export")}
         />
       </BorderedGroup>
 

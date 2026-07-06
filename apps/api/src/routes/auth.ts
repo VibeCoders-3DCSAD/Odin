@@ -157,6 +157,7 @@ router.post("/register", async (request: Request, response: Response) => {
         typeof display_name === "string" && display_name.trim() !== ""
           ? { display_name: display_name.trim() }
           : undefined,
+      emailRedirectTo: "odin://auth/verify",
     },
   });
 
