@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -153,16 +154,6 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
 
   const isActive = (page: Page) => currentPage === page;
 
-  function toolbarIcon(page: Page, iconFilled: keyof typeof MaterialCommunityIcons.glyphMap, iconOutline: keyof typeof MaterialCommunityIcons.glyphMap) {
-    return (
-      <MaterialCommunityIcons
-        color={isActive(page) ? palette.brand : palette.mut}
-        name={isActive(page) ? iconFilled : iconOutline}
-        size={21}
-      />
-    );
-  }
-
   function renderPage() {
     if (currentPage === "settings") {
       return (
@@ -265,7 +256,11 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                 onPress={() => setCurrentPage("dashboard")}
                 className="items-center"
               >
-                {toolbarIcon("dashboard", "view-grid", "view-grid-outline")}
+                <SquaresFour
+                  size={21}
+                  color={isActive("dashboard") ? palette.brand : palette.mut}
+                  weight={isActive("dashboard") ? "fill" : "regular"}
+                />
               </Pressable>
               <Text
                 style={{ fontSize: 9.5, fontWeight: isActive("dashboard") ? "600" : "500", color: isActive("dashboard") ? palette.brand : palette.mut }}
@@ -279,10 +274,10 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                 onPress={() => setCurrentPage("history")}
                 className="items-center"
               >
-                <MaterialCommunityIcons
-                  color={isActive("history") ? palette.brand : palette.mut}
-                  name="history"
+                <ClockCounterClockwise
                   size={21}
+                  color={isActive("history") ? palette.brand : palette.mut}
+                  weight={isActive("history") ? "fill" : "regular"}
                 />
               </Pressable>
               <Text
@@ -304,7 +299,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                 shadowOffset: { width: 0, height: 8 },
               }}
             >
-              <MaterialCommunityIcons color="white" name="plus" size={24} />
+              <Plus size={24} color="white" weight="bold" />
             </Pressable>
 
             <View className="items-center gap-[3px]">
@@ -312,10 +307,10 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                 onPress={() => setCurrentPage("assistant")}
                 className="items-center"
               >
-                <MaterialCommunityIcons
-                  color={isActive("assistant") ? palette.brand : palette.mut}
-                  name="pulse"
+                <Pulse
                   size={21}
+                  color={isActive("assistant") ? palette.brand : palette.mut}
+                  weight={isActive("assistant") ? "fill" : "regular"}
                 />
               </Pressable>
               <Text
@@ -330,7 +325,11 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                 onPress={() => setCurrentPage("savings-goals")}
                 className="items-center"
               >
-                {toolbarIcon("savings-goals", "wallet", "wallet-outline")}
+                <Wallet
+                  size={21}
+                  color={isActive("savings-goals") ? palette.brand : palette.mut}
+                  weight={isActive("savings-goals") ? "fill" : "regular"}
+                />
               </Pressable>
               <Text
                 style={{ fontSize: 9.5, fontWeight: isActive("savings-goals") ? "600" : "500", color: isActive("savings-goals") ? palette.brand : palette.mut }}
