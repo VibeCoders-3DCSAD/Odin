@@ -197,38 +197,46 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
       <SafeAreaView style={{ backgroundColor: palette.shell }} className="flex-1">
         {/* Top bar */}
         <View style={{ backgroundColor: palette.shell }} className="px-5 py-3 flex-row items-center justify-between">
-          <Pressable
-            accessibilityRole="button"
-            onPress={drawerOpen ? closeDrawer : openDrawer}
-            className="w-10 h-10 items-center justify-center"
-          >
-            <View className="w-[18px] h-[18px] items-center justify-center gap-[3px]">
-              <Animated.View
-                style={{
-                  width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                  transform: [
-                    { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) },
-                    { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] }) },
-                  ],
-                }}
-              />
-              <Animated.View
-                style={{
-                  width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                  opacity: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-                }}
-              />
-              <Animated.View
-                style={{
-                  width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                  transform: [
-                    { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
-                    { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-45deg"] }) },
-                  ],
-                }}
-              />
+          <View className="flex-row items-center gap-3">
+            <Pressable
+              accessibilityRole="button"
+              onPress={drawerOpen ? closeDrawer : openDrawer}
+              className="w-10 h-10 items-center justify-center"
+            >
+              <View className="w-[18px] h-[18px] items-center justify-center gap-[3px]">
+                <Animated.View
+                  style={{
+                    width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                    transform: [
+                      { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) },
+                      { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] }) },
+                    ],
+                  }}
+                />
+                <Animated.View
+                  style={{
+                    width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                    opacity: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                  }}
+                />
+                <Animated.View
+                  style={{
+                    width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                    transform: [
+                      { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
+                      { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-45deg"] }) },
+                    ],
+                  }}
+                />
+              </View>
+            </Pressable>
+            <View className="flex-row items-center gap-2">
+              <View style={{ width: 30, height: 30, borderRadius: 999, borderWidth: 2, borderColor: palette.brand, alignItems: "center", justifyContent: "center" }}>
+                <MaterialCommunityIcons color={palette.brand} name="layers-triple-outline" size={16} />
+              </View>
+              <Text style={{ color: palette.brand }} className="text-lg font-bold tracking-tight">Odin</Text>
             </View>
-          </Pressable>
+          </View>
           <View className="flex-row items-center gap-3">
             <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
             <View className="relative">
@@ -257,7 +265,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
               onPress={() => setCurrentPage("dashboard")}
               className="items-center gap-[2px] px-3 py-[5px]"
             >
-              {toolbarIcon("dashboard", "view-dashboard", "view-dashboard-outline")}
+              {toolbarIcon("dashboard", "view-grid", "view-grid-outline")}
               <Text
                 style={{ color: isActive("dashboard") ? palette.brand : palette.mut }}
                 className="text-[10px] font-semibold"
@@ -270,7 +278,11 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
               onPress={() => setCurrentPage("history")}
               className="items-center gap-[2px] px-3 py-[5px]"
             >
-              {toolbarIcon("history", "clock", "clock-outline")}
+              <MaterialCommunityIcons
+                color={isActive("history") ? palette.brand : palette.mut}
+                name="history"
+                size={22}
+              />
               <Text
                 style={{ color: isActive("history") ? palette.brand : palette.mut }}
                 className="text-[10px] font-semibold"
@@ -294,7 +306,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             >
               <MaterialCommunityIcons
                 color={isActive("assistant") ? palette.brand : palette.mut}
-                name="chart-timeline-variant"
+                name="pulse"
                 size={22}
               />
               <Text
@@ -341,7 +353,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             {/* Drawer header */}
             <View className="flex-row items-center gap-3 mb-10">
               <View style={{ backgroundColor: palette.brandMedium }} className="w-10 h-10 rounded-xl items-center justify-center">
-                <MaterialCommunityIcons color="white" name="plus" size={20} />
+                <MaterialCommunityIcons color="white" name="layers-triple-outline" size={20} />
               </View>
               <View>
                 <Text className="text-white text-xl font-semibold">Odin</Text>
