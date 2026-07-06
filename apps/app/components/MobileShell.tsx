@@ -142,15 +142,20 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
-      await fetch(`${apiBaseUrl}/odin/api/auth/logout`, {
+      const response = await fetch(`${apiBaseUrl}/odin/api/auth/logout`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}` },
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-    } catch {
+
+      if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
+
+      onLoggedOut();
+    } catch (error) {
+      console.error("Logout request failed", error);
+      setIsLoggingOut(false);
     }
-    onLoggedOut();
   }
 
   const isActive = (page: Page) => currentPage === page;
@@ -252,41 +257,43 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell }}
             className="w-full px-6 pt-2 pb-[6px] flex-row items-end justify-between border-t border-[#EAEAE6]"
           >
-            <View className="items-center gap-[3px]">
-              <Pressable
-                onPress={() => setCurrentPage("dashboard")}
-                className="items-center"
-              >
-                <SquaresFour
-                  size={21}
-                  color={isActive("dashboard") ? palette.brand : palette.mut}
-                  weight={isActive("dashboard") ? "fill" : "regular"}
-                />
-              </Pressable>
+            <Pressable
+              onPress={() => setCurrentPage("dashboard")}
+              accessibilityRole="button"
+              accessibilityLabel="Home"
+              accessibilityState={{ selected: isActive("dashboard") }}
+              className="items-center gap-[3px]"
+            >
+              <SquaresFour
+                size={21}
+                color={isActive("dashboard") ? palette.brand : palette.mut}
+                weight={isActive("dashboard") ? "fill" : "regular"}
+              />
               <Text
                 style={{ fontSize: 9.5, fontWeight: isActive("dashboard") ? "600" : "500", color: isActive("dashboard") ? palette.brand : palette.mut }}
               >
                 Home
               </Text>
-            </View>
+            </Pressable>
 
-            <View className="items-center gap-[3px]">
-              <Pressable
-                onPress={() => setCurrentPage("history")}
-                className="items-center"
-              >
-                <ClockCounterClockwise
-                  size={21}
-                  color={isActive("history") ? palette.brand : palette.mut}
-                  weight={isActive("history") ? "fill" : "regular"}
-                />
-              </Pressable>
+            <Pressable
+              onPress={() => setCurrentPage("history")}
+              accessibilityRole="button"
+              accessibilityLabel="History"
+              accessibilityState={{ selected: isActive("history") }}
+              className="items-center gap-[3px]"
+            >
+              <ClockCounterClockwise
+                size={21}
+                color={isActive("history") ? palette.brand : palette.mut}
+                weight={isActive("history") ? "fill" : "regular"}
+              />
               <Text
                 style={{ fontSize: 9.5, fontWeight: isActive("history") ? "600" : "500", color: isActive("history") ? palette.brand : palette.mut }}
               >
                 History
               </Text>
-            </View>
+            </Pressable>
 
             <Pressable
               onPress={() => setCurrentPage("add-transaction")}
@@ -303,41 +310,43 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
               <Plus size={24} color="white" weight="bold" />
             </Pressable>
 
-            <View className="items-center gap-[3px]">
-              <Pressable
-                onPress={() => setCurrentPage("assistant")}
-                className="items-center"
-              >
-                <Pulse
-                  size={21}
-                  color={isActive("assistant") ? palette.brand : palette.mut}
-                  weight={isActive("assistant") ? "fill" : "regular"}
-                />
-              </Pressable>
+            <Pressable
+              onPress={() => setCurrentPage("assistant")}
+              accessibilityRole="button"
+              accessibilityLabel="Assistant"
+              accessibilityState={{ selected: isActive("assistant") }}
+              className="items-center gap-[3px]"
+            >
+              <Pulse
+                size={21}
+                color={isActive("assistant") ? palette.brand : palette.mut}
+                weight={isActive("assistant") ? "fill" : "regular"}
+              />
               <Text
                 style={{ fontSize: 9.5, fontWeight: isActive("assistant") ? "600" : "500", color: isActive("assistant") ? palette.brand : palette.mut }}
               >
                 Assistant
               </Text>
-            </View>
+            </Pressable>
 
-            <View className="items-center gap-[3px]">
-              <Pressable
-                onPress={() => setCurrentPage("savings-goals")}
-                className="items-center"
-              >
-                <Wallet
-                  size={21}
-                  color={isActive("savings-goals") ? palette.brand : palette.mut}
-                  weight={isActive("savings-goals") ? "fill" : "regular"}
-                />
-              </Pressable>
+            <Pressable
+              onPress={() => setCurrentPage("savings-goals")}
+              accessibilityRole="button"
+              accessibilityLabel="Savings"
+              accessibilityState={{ selected: isActive("savings-goals") }}
+              className="items-center gap-[3px]"
+            >
+              <Wallet
+                size={21}
+                color={isActive("savings-goals") ? palette.brand : palette.mut}
+                weight={isActive("savings-goals") ? "fill" : "regular"}
+              />
               <Text
                 style={{ fontSize: 9.5, fontWeight: isActive("savings-goals") ? "600" : "500", color: isActive("savings-goals") ? palette.brand : palette.mut }}
               >
                 Savings
               </Text>
-            </View>
+            </Pressable>
           </View>
         </View>
       </SafeAreaView>
