@@ -54,12 +54,16 @@ type GoogleAuthConfig = {
   signOut?: () => Promise<void>;
 };
 
+export type { AuthenticatedState };
+
 type AuthExperienceProps = {
   google: GoogleAuthConfig;
   isPasswordRecovery?: boolean;
   isResolvingRecoveryToken?: boolean;
   recoveryRefreshToken?: string;
   recoveryToken?: string;
+  onAuthenticated: (state: AuthenticatedState) => void;
+  onLoggedOut: () => void;
 };
 
 const palette = {
@@ -271,6 +275,8 @@ export default function AuthExperience({
   isResolvingRecoveryToken,
   recoveryRefreshToken: recoveryRefreshTokenProp,
   recoveryToken: recoveryTokenProp,
+  onAuthenticated,
+  onLoggedOut,
 }: AuthExperienceProps) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -281,7 +287,6 @@ export default function AuthExperience({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
-  const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
   const [notice, setNotice] = useState<NoticeProps | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
@@ -327,7 +332,7 @@ export default function AuthExperience({
       throw new Error("No access token returned from the auth route.");
     }
 
-    setAuthenticated({
+    onAuthenticated({
       accessToken,
       provider,
       userId: body.payload?.user?.id,
@@ -542,49 +547,6 @@ export default function AuthExperience({
     }
   }
 
-  async function handleLogout() {
-    if (!authenticated?.accessToken) {
-      return;
-    }
-
-    const provider = authenticated.provider;
-
-    setIsBusy(true);
-    setNotice({ tone: "default", message: "Logging you out..." });
-
-    try {
-      const { response, body } = await postJson(
-        "/logout",
-        undefined,
-        authenticated.accessToken,
-      );
-
-      if (!response.ok) {
-        throw new Error(body.message ?? "Logout failed.");
-      }
-
-      setAuthenticated(null);
-
-      if (provider === "google" && google.signOut) {
-        try {
-          await google.signOut();
-        } catch (error) {
-          setNotice({
-            tone: "default",
-            message: `Logged out from Odin. Native Google sign-out failed: ${getErrorMessage(error)}`,
-          });
-          return;
-        }
-      }
-
-      setNotice({ tone: "success", message: "You are logged out." });
-    } catch (error) {
-      setNotice({ tone: "error", message: getErrorMessage(error) });
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
   const title = mode === "login" ? "Welcome back" : mode === "reset_complete" ? "Reset your password" : "Create account";
   const subtitle = mode === "login"
     ? "Sign in to your Odin account"
@@ -611,33 +573,7 @@ export default function AuthExperience({
           </View>
 
           <View className="gap-6">
-            {authenticated ? (
-              <View className="gap-6">
-                <View className="flex-row gap-4 p-6 rounded-[24px] bg-accent items-start">
-                  <View className="w-12 h-12 rounded-full bg-white items-center justify-center">
-                    <MaterialCommunityIcons color={palette.brand} name="check" size={24} />
-                  </View>
-                  <View className="gap-2 flex-1">
-                    <Text className="text-heading text-xl leading-[24px] font-bold">You are authenticated.</Text>
-                    <Text className="text-text text-xs leading-[18px]">
-                      Provider: {authenticated.provider === "google" ? "Google" : "Email + password"}
-                    </Text>
-                    <Text className="text-text text-xs leading-[18px]">
-                      User: {authenticated.userId ?? "Unavailable"}
-                    </Text>
-                    <Text className="text-text text-xs leading-[18px]">
-                      Onboarding: {authenticated.onboardingStatus ?? "in_progress"}
-                    </Text>
-                  </View>
-                </View>
-                <AuthButton
-                  disabled={isBusy}
-                  label="Log out"
-                  loading={isBusy}
-                  onPress={handleLogout}
-                />
-              </View>
-            ) : mode === "reset_password" ? (
+            {mode === "reset_password" ? (
               <View className="gap-6">
                 <View className="gap-4">
                   <AuthField
