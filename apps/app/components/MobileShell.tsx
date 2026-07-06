@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Image,
   Pressable,
   ScrollView,
   Text,
@@ -230,12 +231,10 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                 />
               </View>
             </Pressable>
-            <View className="flex-row items-center gap-2">
-              <View style={{ width: 30, height: 30, borderRadius: 999, borderWidth: 2, borderColor: palette.brand, alignItems: "center", justifyContent: "center" }}>
-                <MaterialCommunityIcons color={palette.brand} name="layers-triple-outline" size={16} />
-              </View>
-              <Text style={{ color: palette.brand }} className="text-lg font-bold tracking-tight">Odin</Text>
-            </View>
+            <Image
+              source={require("../assets/odin-logo.png")}
+              style={{ width: 68, height: 24, resizeMode: "contain" }}
+            />
           </View>
           <View className="flex-row items-center gap-3">
             <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
@@ -306,7 +305,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             >
               <MaterialCommunityIcons
                 color={isActive("assistant") ? palette.brand : palette.mut}
-                name="pulse"
+                name="auto-fix"
                 size={22}
               />
               <Text
@@ -352,9 +351,10 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
           <View style={{ width: DRAWER_WIDTH }} className="flex-1 py-8 px-6">
             {/* Drawer header */}
             <View className="flex-row items-center gap-3 mb-10">
-              <View style={{ backgroundColor: palette.brandMedium }} className="w-10 h-10 rounded-xl items-center justify-center">
-                <MaterialCommunityIcons color="white" name="layers-triple-outline" size={20} />
-              </View>
+              <Image
+                source={require("../assets/odin-logo.png")}
+                style={{ width: 32, height: 32, resizeMode: "contain" }}
+              />
               <View>
                 <Text className="text-white text-xl font-semibold">Odin</Text>
                 <Text className="text-white/45 text-[10px] uppercase tracking-widest">Personal Finance</Text>
