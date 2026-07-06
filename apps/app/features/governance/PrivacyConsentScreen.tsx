@@ -13,6 +13,8 @@ import { submitConsent } from "./api";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+const CONSENT_VERSION = "2026-06";
+
 const MUTED = "#6B7A6F";
 const LINE = "#EAEAE6";
 const INK = "#1B1C1A";
@@ -28,6 +30,7 @@ type PrivacyConsentScreenProps = {
   accessToken: string;
   onComplete: () => void;
   onDismiss?: () => void;
+  consentVersion?: string;
 };
 
 function getErrorMessage(error: unknown) {
@@ -42,6 +45,7 @@ export default function PrivacyConsentScreen({
   accessToken,
   onComplete,
   onDismiss,
+  consentVersion = CONSENT_VERSION,
 }: PrivacyConsentScreenProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +79,7 @@ export default function PrivacyConsentScreen({
       const { response } = await submitConsent(accessToken, {
         consent_kind: "terms",
         status: "granted",
-        version: "2026-06",
+        version: consentVersion,
       });
       if (!response.ok) {
         setError("Consent service is unavailable. Please try again.");
@@ -211,7 +215,7 @@ export default function PrivacyConsentScreen({
           }}
         >
           <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: MUTED }}>
-            Policy v2.4
+            Policy v{consentVersion}
           </Text>
           <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: MUTED }}>
             Accepted {new Date().toLocaleDateString("en-US", {

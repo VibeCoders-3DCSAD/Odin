@@ -7,10 +7,7 @@ type DeepLinkState = {
   isResolvingRecoveryToken: boolean;
   recoveryToken: string | null;
   recoveryRefreshToken: string | null;
-  isEmailVerification: boolean;
-  isResolvingVerification: boolean;
   verificationToken: string | null;
-  verificationRefreshToken: string | null;
 };
 
 function isAuthUrl(url: string, path: string): boolean {
@@ -46,22 +43,14 @@ export function useDeepLink(): DeepLinkState {
   const [isResolvingRecoveryToken, setIsResolvingRecoveryToken] = useState(false);
   const [recoveryToken, setRecoveryToken] = useState<string | null>(null);
   const [recoveryRefreshToken, setRecoveryRefreshToken] = useState<string | null>(null);
-  const [isEmailVerification, setIsEmailVerification] = useState(false);
-  const [isResolvingVerification, setIsResolvingVerification] = useState(false);
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
-  const [verificationRefreshToken, setVerificationRefreshToken] = useState<string | null>(null);
 
   const processVerifyUrl = useCallback(async (url: string) => {
-    setIsEmailVerification(true);
-    setIsResolvingVerification(true);
-
     const accessToken = getUrlParam(url, "access_token");
     if (accessToken) {
       const refreshToken = getUrlParam(url, "refresh_token");
       if (refreshToken) {
         setVerificationToken(accessToken);
-        setVerificationRefreshToken(refreshToken);
-        setIsResolvingVerification(false);
         return;
       }
     }
@@ -69,13 +58,10 @@ export function useDeepLink(): DeepLinkState {
     const code = getUrlParam(url, "code");
     if (code) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-      if (!error && data.session?.access_token && data.session.refresh_token) {
+      if (!error && data.session?.access_token) {
         setVerificationToken(data.session.access_token);
-        setVerificationRefreshToken(data.session.refresh_token);
       }
     }
-
-    setIsResolvingVerification(false);
   }, []);
 
   const parseLink = useCallback(async (url: string | null) => {
@@ -122,9 +108,6 @@ export function useDeepLink(): DeepLinkState {
     isResolvingRecoveryToken,
     recoveryToken,
     recoveryRefreshToken,
-    isEmailVerification,
-    isResolvingVerification,
     verificationToken,
-    verificationRefreshToken,
   };
 }
