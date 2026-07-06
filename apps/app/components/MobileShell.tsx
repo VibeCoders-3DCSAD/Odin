@@ -158,7 +158,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
       <MaterialCommunityIcons
         color={isActive(page) ? palette.brand : palette.mut}
         name={isActive(page) ? iconFilled : iconOutline}
-        size={22}
+        size={21}
       />
     );
   }
@@ -258,76 +258,86 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
         <View className="absolute bottom-0 left-0 right-0 items-center">
           <View
             style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell }}
-            className="w-full px-4 pt-2 pb-6 flex-row items-center justify-around border-t border-[#EAEAE6]"
+            className="w-full px-6 pt-2 pb-[6px] flex-row items-end justify-between border-t border-[#EAEAE6]"
           >
-            <Pressable
-              onPress={() => setCurrentPage("dashboard")}
-              className="items-center gap-[2px] px-3 py-[5px]"
-            >
-              {toolbarIcon("dashboard", "view-grid", "view-grid-outline")}
+            <View className="items-center gap-[3px]">
+              <Pressable
+                onPress={() => setCurrentPage("dashboard")}
+                className="items-center"
+              >
+                {toolbarIcon("dashboard", "view-grid", "view-grid-outline")}
+              </Pressable>
               <Text
-                style={{ color: isActive("dashboard") ? palette.brand : palette.mut }}
-                className="text-[10px] font-semibold"
+                style={{ fontSize: 9.5, fontWeight: isActive("dashboard") ? "600" : "500", color: isActive("dashboard") ? palette.brand : palette.mut }}
               >
                 Home
               </Text>
-            </Pressable>
+            </View>
 
-            <Pressable
-              onPress={() => setCurrentPage("history")}
-              className="items-center gap-[2px] px-3 py-[5px]"
-            >
-              <MaterialCommunityIcons
-                color={isActive("history") ? palette.brand : palette.mut}
-                name="history"
-                size={22}
-              />
+            <View className="items-center gap-[3px]">
+              <Pressable
+                onPress={() => setCurrentPage("history")}
+                className="items-center"
+              >
+                <MaterialCommunityIcons
+                  color={isActive("history") ? palette.brand : palette.mut}
+                  name="history"
+                  size={21}
+                />
+              </Pressable>
               <Text
-                style={{ color: isActive("history") ? palette.brand : palette.mut }}
-                className="text-[10px] font-semibold"
+                style={{ fontSize: 9.5, fontWeight: isActive("history") ? "600" : "500", color: isActive("history") ? palette.brand : palette.mut }}
               >
                 History
               </Text>
-            </Pressable>
+            </View>
 
             <Pressable
               onPress={() => setCurrentPage("add-transaction")}
               accessibilityRole="button"
-              className="w-14 h-14 rounded-full items-center justify-center -mt-8 shadow-lg"
-              style={{ backgroundColor: palette.brand, shadowColor: palette.brand, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}
+              className="w-[50px] h-[50px] rounded-full items-center justify-center -mt-[22px]"
+              style={{
+                backgroundColor: palette.brand,
+                shadowColor: "#013220",
+                shadowOpacity: 0.3,
+                shadowRadius: 18,
+                shadowOffset: { width: 0, height: 8 },
+              }}
             >
               <MaterialCommunityIcons color="white" name="plus" size={24} />
             </Pressable>
 
-            <Pressable
-              onPress={() => setCurrentPage("assistant")}
-              className="items-center gap-[2px] px-3 py-[5px]"
-            >
-              <MaterialCommunityIcons
-                color={isActive("assistant") ? palette.brand : palette.mut}
-                name="auto-fix"
-                size={22}
-              />
+            <View className="items-center gap-[3px]">
+              <Pressable
+                onPress={() => setCurrentPage("assistant")}
+                className="items-center"
+              >
+                <MaterialCommunityIcons
+                  color={isActive("assistant") ? palette.brand : palette.mut}
+                  name="pulse"
+                  size={21}
+                />
+              </Pressable>
               <Text
-                style={{ color: isActive("assistant") ? palette.brand : palette.mut }}
-                className="text-[10px] font-semibold"
+                style={{ fontSize: 9.5, fontWeight: isActive("assistant") ? "600" : "500", color: isActive("assistant") ? palette.brand : palette.mut }}
               >
                 Assistant
               </Text>
-            </Pressable>
+            </View>
 
-            <Pressable
-              onPress={() => setCurrentPage("savings-goals")}
-              className="items-center gap-[2px] px-3 py-[5px]"
-            >
-              {toolbarIcon("savings-goals", "wallet", "wallet-outline")}
+            <View className="items-center gap-[3px]">
+              <Pressable
+                onPress={() => setCurrentPage("savings-goals")}
+                className="items-center"
+              >
+                {toolbarIcon("savings-goals", "wallet", "wallet-outline")}
+              </Pressable>
               <Text
-                style={{ color: isActive("savings-goals") ? palette.brand : palette.mut }}
-                className="text-[10px] font-semibold"
+                style={{ fontSize: 9.5, fontWeight: isActive("savings-goals") ? "600" : "500", color: isActive("savings-goals") ? palette.brand : palette.mut }}
               >
                 Savings
               </Text>
-            </Pressable>
+            </View>
           </View>
         </View>
       </SafeAreaView>
