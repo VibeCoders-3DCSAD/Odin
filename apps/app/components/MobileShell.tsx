@@ -51,6 +51,7 @@ type Page =
 type MobileShellProps = {
   accessToken: string;
   onLoggedOut: () => void;
+  signOut?: () => Promise<void>;
 };
 
 type DrawerItem = {
@@ -107,7 +108,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
-export default function MobileShell({ accessToken, onLoggedOut }: MobileShellProps) {
+export default function MobileShell({ accessToken, onLoggedOut, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -151,6 +152,10 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
 
       if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
 
+      if (signOut) {
+        try { await signOut(); } catch {}
+      }
+
       onLoggedOut();
     } catch (error) {
       console.error("Logout request failed", error);
@@ -172,6 +177,7 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
           </View>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Log out"
             disabled={isLoggingOut}
             onPress={handleLogout}
             className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
