@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Linking,
   Pressable,
   Text,
   View,
@@ -63,18 +64,18 @@ export default function PrivacyConsentScreen({
     }).start(() => cb?.());
   }, [slideAnim]);
 
-  if (visible && !submitting && !consented) {
-    open();
-  }
+  useEffect(() => {
+    if (visible && !submitting && !consented) open();
+  }, [visible]);
 
   async function handleAgree() {
     setSubmitting(true);
     setError(null);
     try {
       const { response } = await submitConsent(accessToken, {
-        terms_accepted: true,
-        privacy_accepted: true,
-        policy_version: "v2.4",
+        consent_kind: "terms",
+        status: "granted",
+        version: "2026-06",
       });
       if (!response.ok) {
         setError("Consent service is unavailable. Please try again.");
@@ -167,8 +168,17 @@ export default function PrivacyConsentScreen({
         >
           Odin processes your financial data to deliver budgeting insights and forecasts. We never
           sell your data.{" "}
-          <Text style={{ color: AQUA700, fontWeight: "600" }}>Read full policy</Text>
         </Text>
+        <Pressable
+          onPress={() => Linking.openURL("https://vibecoders.com/privacy")}
+          accessibilityRole="link"
+          accessibilityLabel="Read full privacy policy"
+          style={{ alignSelf: "flex-start", marginTop: -12, marginBottom: 16 }}
+        >
+          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: AQUA700 }}>
+            Read full policy
+          </Text>
+        </Pressable>
         <View
           style={{
             flexDirection: "row", gap: 11, alignItems: "flex-start",

@@ -308,6 +308,19 @@ export default function AuthExperience({
   const [pendingAuthState, setPendingAuthState] = useState<{
     accessToken: string; provider: AuthProvider; userId?: string; profileId?: string; onboardingStatus?: string;
   } | null>(null);
+  function buildAuthState(
+    accessToken: string, provider: AuthProvider,
+    payload?: { user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } },
+  ) {
+    return {
+      accessToken,
+      provider,
+      userId: payload?.user?.id,
+      profileId: payload?.profile?.id,
+      onboardingStatus: payload?.onboarding?.status,
+    };
+  }
+
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const verifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -390,22 +403,22 @@ export default function AuthExperience({
       const accessToken = body.payload?.session?.access_token;
       if (!accessToken) throw new Error("No access token returned.");
 
-      const authState = {
-        accessToken,
-        provider: "password" as const,
-        userId: body.payload?.user?.id,
-        profileId: body.payload?.profile?.id,
-        onboardingStatus: body.payload?.onboarding?.status,
-      };
+      const authState = buildAuthState(accessToken, "password", body.payload);
 
-      const consentsRes = await getConsents(accessToken).catch(() => ({ body: {} }));
-      const existingConsents = (consentsRes.body as { payload?: unknown[] }).payload;
-      if (existingConsents && existingConsents.length > 0) {
-        onAuthenticated(authState);
-        setPendingVerificationEmail(null);
-      } else {
+      const consentsRes = await getConsents(accessToken);
+      if (!consentsRes.response.ok) {
         setPendingAuthState(authState);
         setShowConsent(true);
+      } else {
+        const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
+        const hasGranted = existing?.some((c) => c.status === "granted");
+        if (hasGranted) {
+          onAuthenticated(authState);
+          setPendingVerificationEmail(null);
+        } else {
+          setPendingAuthState(authState);
+          setShowConsent(true);
+        }
       }
 
       resetSensitiveFields();
@@ -450,13 +463,11 @@ export default function AuthExperience({
 
       if (accessToken) {
         const bootstrappedBody = await bootstrapSession(accessToken);
-        const authState = {
-          accessToken,
-          provider: "password" as const,
-          userId: bootstrappedBody.payload?.user?.id ?? body.payload?.user?.id,
-          profileId: bootstrappedBody.payload?.profile?.id,
-          onboardingStatus: bootstrappedBody.payload?.onboarding?.status,
+        const mergedPayload = {
+          ...bootstrappedBody.payload,
+          user: { id: bootstrappedBody.payload?.user?.id ?? body.payload?.user?.id },
         };
+        const authState = buildAuthState(accessToken, "password", mergedPayload);
         setPendingAuthState(authState);
         setShowConsent(true);
         setNotice({ tone: "success", message: "Account created. One more step." });
@@ -567,22 +578,22 @@ export default function AuthExperience({
 
       const body = await bootstrapSession(session.accessToken);
 
-      const authState = {
-        accessToken: session.accessToken,
-        provider: "google" as const,
-        userId: body.payload?.user?.id,
-        profileId: body.payload?.profile?.id,
-        onboardingStatus: body.payload?.onboarding?.status,
-      };
+      const authState = buildAuthState(session.accessToken, "google", body.payload);
 
-      const consentsRes = await getConsents(session.accessToken).catch(() => ({ body: {} }));
-      const existingConsents = (consentsRes.body as { payload?: unknown[] }).payload;
-      if (existingConsents && existingConsents.length > 0) {
-        onAuthenticated(authState);
-        setPendingVerificationEmail(null);
-      } else {
+      const consentsRes = await getConsents(session.accessToken);
+      if (!consentsRes.response.ok) {
         setPendingAuthState(authState);
         setShowConsent(true);
+      } else {
+        const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
+        const hasGranted = existing?.some((c) => c.status === "granted");
+        if (hasGranted) {
+          onAuthenticated(authState);
+          setPendingVerificationEmail(null);
+        } else {
+          setPendingAuthState(authState);
+          setShowConsent(true);
+        }
       }
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });
@@ -874,6 +885,7 @@ export default function AuthExperience({
       onDismiss={() => {
         setShowConsent(false);
         setPendingAuthState(null);
+        onLoggedOut();
       }}
     />
   ) : null}
