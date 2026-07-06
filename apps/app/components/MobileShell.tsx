@@ -5,11 +5,11 @@ import {
   Animated,
   Dimensions,
   Pressable,
-  SafeAreaView,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
