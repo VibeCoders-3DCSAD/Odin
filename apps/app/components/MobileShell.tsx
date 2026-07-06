@@ -18,6 +18,19 @@ const TOOLBAR_MAX_WIDTH = 430;
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const requestTimeoutMs = 10_000;
 
+const palette = {
+  shell: "#fcf8f0",
+  brand: "#013220",
+  brandMedium: "#0E6D46",
+  ink: "#1B1C1A",
+  ink2: "#414942",
+  mut: "#6B7A6F",
+  line: "#EAEAE6",
+  error: "#D9001F",
+  success: "#08B16A",
+  card: "#F1F0EB",
+} as const;
+
 type Page =
   | "dashboard"
   | "transactions"
@@ -69,7 +82,7 @@ const drawerSections: DrawerSection[] = [
   {
     label: "Wealth",
     items: [
-      { page: "savings-goals", icon: "piggy-bank-outline", label: "Savings & Goals" },
+      { page: "savings-goals", icon: "wallet-outline", label: "Savings & Goals" },
       { page: "debt-manager", icon: "credit-card-remove-outline", label: "Debt Manager" },
       { page: "insurance", icon: "shield-outline", label: "Insurance" },
     ],
@@ -137,12 +150,24 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
     onLoggedOut();
   }
 
+  const isActive = (page: Page) => currentPage === page;
+
+  function toolbarIcon(page: Page, iconFilled: keyof typeof MaterialCommunityIcons.glyphMap, iconOutline: keyof typeof MaterialCommunityIcons.glyphMap) {
+    return (
+      <MaterialCommunityIcons
+        color={isActive(page) ? palette.brand : palette.mut}
+        name={isActive(page) ? iconFilled : iconOutline}
+        size={22}
+      />
+    );
+  }
+
   function renderPage() {
     if (currentPage === "settings") {
       return (
         <View className="gap-4">
-          <View className="bg-[#f4f4f0] rounded-[1.75rem] p-6 items-center justify-center">
-            <MaterialCommunityIcons color="#003527" name="cog-outline" size={40} />
+          <View className="bg-[#F1F0EB] rounded-[1.75rem] p-6 items-center justify-center">
+            <MaterialCommunityIcons color={palette.brand} name="cog-outline" size={40} />
             <Text className="text-[#414942] text-sm mt-3 text-center">
               Settings loaded from backend in the next slice
             </Text>
@@ -151,10 +176,10 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
             accessibilityRole="button"
             disabled={isLoggingOut}
             onPress={handleLogout}
-            className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#FCF8F0] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
+            className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
           >
             {isLoggingOut ? (
-              <ActivityIndicator color="#D9001F" />
+              <ActivityIndicator color={palette.error} />
             ) : (
               <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
             )}
@@ -168,57 +193,47 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-[#faf9f5]">
+    <SafeAreaView style={{ backgroundColor: palette.shell }} className="flex-1">
       {/* Top bar */}
-      <View className="bg-[#faf9f5]/80 px-5 py-3 flex-row items-center justify-between z-50">
-        <View className="flex-row items-center gap-3">
-          <Pressable
-            accessibilityRole="button"
-            onPress={drawerOpen ? closeDrawer : openDrawer}
-            className="w-10 h-10 rounded-full bg-[#f4f4f0] items-center justify-center"
-          >
-            <View className="w-[18px] h-[18px] items-center justify-center gap-[3px]">
-              <Animated.View
-                style={{
-                  width: 18, height: 2, borderRadius: 2, backgroundColor: "#1b1c1a",
-                  transform: [
-                    { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) },
-                    { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] }) },
-                  ],
-                }}
-              />
-              <Animated.View
-                style={{
-                  width: 18, height: 2, borderRadius: 2, backgroundColor: "#1b1c1a",
-                  opacity: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-                }}
-              />
-              <Animated.View
-                style={{
-                  width: 18, height: 2, borderRadius: 2, backgroundColor: "#1b1c1a",
-                  transform: [
-                    { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
-                    { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-45deg"] }) },
-                  ],
-                }}
-              />
-            </View>
-          </Pressable>
-          <View className="flex-row items-center gap-2">
-            <View className="w-8 h-8 rounded-lg bg-[#064e3b] items-center justify-center">
-              <MaterialCommunityIcons color="white" name="layers-triple-outline" size={16} />
-            </View>
-            <Text className="text-[#1b1c1a] text-lg font-semibold tracking-tight">Odin</Text>
+      <View style={{ backgroundColor: palette.shell }} className="px-5 py-3 flex-row items-center justify-between z-50">
+        <Pressable
+          accessibilityRole="button"
+          onPress={drawerOpen ? closeDrawer : openDrawer}
+          className="w-10 h-10 items-center justify-center"
+        >
+          <View className="w-[18px] h-[18px] items-center justify-center gap-[3px]">
+            <Animated.View
+              style={{
+                width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                transform: [
+                  { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) },
+                  { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] }) },
+                ],
+              }}
+            />
+            <Animated.View
+              style={{
+                width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                opacity: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+              }}
+            />
+            <Animated.View
+              style={{
+                width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
+                transform: [
+                  { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
+                  { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-45deg"] }) },
+                ],
+              }}
+            />
           </View>
-        </View>
-        <View className="flex-row items-center gap-2">
-          <Pressable className="w-9 h-9 rounded-full bg-[#f4f4f0] items-center justify-center">
-            <MaterialCommunityIcons color="#414942" name="magnify" size={18} />
-          </Pressable>
-          <Pressable className="w-9 h-9 rounded-full bg-[#f4f4f0] items-center justify-center relative">
-            <MaterialCommunityIcons color="#414942" name="bell-outline" size={18} />
-            <View className="absolute top-[7px] right-[7px] w-[7px] h-[7px] bg-[#ba1a1a] rounded-full" />
-          </Pressable>
+        </Pressable>
+        <View className="flex-row items-center gap-3">
+          <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
+          <View className="relative">
+            <MaterialCommunityIcons color={palette.ink2} name="bell-outline" size={20} />
+            <View className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#ba1a1a] rounded-full" />
+          </View>
         </View>
       </View>
 
@@ -244,14 +259,14 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
       {/* Drawer */}
       {drawerOpen ? (
         <Animated.View
-          style={{ transform: [{ translateX: drawerAnim }] }}
-          className="absolute top-0 left-0 bottom-0 z-300 bg-[#003527]"
+          style={{ transform: [{ translateX: drawerAnim }], backgroundColor: palette.brand }}
+          className="absolute top-0 left-0 bottom-0 z-300"
         >
           <View style={{ width: DRAWER_WIDTH }} className="flex-1 py-8 px-6">
             {/* Drawer header */}
             <View className="flex-row items-center gap-3 mb-10">
-              <View className="w-10 h-10 rounded-xl bg-[#064e3b] items-center justify-center">
-                <MaterialCommunityIcons color="white" name="layers-triple-outline" size={20} />
+              <View style={{ backgroundColor: palette.brandMedium }} className="w-10 h-10 rounded-xl items-center justify-center">
+                <MaterialCommunityIcons color="white" name="plus" size={20} />
               </View>
               <View>
                 <Text className="text-white text-xl font-semibold">Odin</Text>
@@ -267,24 +282,24 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
                 </Text>
                 <View className="gap-[2px]">
                   {section.items.map((item) => {
-                    const isActive = currentPage === item.page;
+                    const active = currentPage === item.page;
                     return (
                       <Pressable
                         key={item.page}
                         onPress={() => navigate(item.page)}
                         accessibilityRole="button"
                         className={`flex-row items-center gap-3 px-4 py-3 rounded-xl ${
-                          isActive ? "bg-white/12" : ""
+                          active ? "bg-white/12" : ""
                         }`}
                       >
                         <MaterialCommunityIcons
-                          color={isActive ? "white" : "rgba(255,255,255,0.6)"}
+                          color={active ? "white" : "rgba(255,255,255,0.6)"}
                           name={item.icon}
                           size={20}
                         />
                         <Text
                           className={`flex-1 text-sm ${
-                            isActive ? "text-white font-medium" : "text-white/60"
+                            active ? "text-white font-medium" : "text-white/60"
                           }`}
                         >
                           {item.label}
@@ -321,92 +336,51 @@ export default function MobileShell({ accessToken, onLoggedOut }: MobileShellPro
         </Animated.View>
       ) : null}
 
-      {/* Bottom toolbar */}
+      {/* Bottom toolbar - icon-only per design spec */}
       <View className="absolute bottom-0 left-0 right-0 z-100 items-center">
         <View
-          style={{ maxWidth: TOOLBAR_MAX_WIDTH }}
-          className="w-full bg-[#faf9f5]/85 px-4 pt-2 pb-6 flex-row items-center justify-around"
+          style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell }}
+          className="w-full px-4 pt-2 pb-6 flex-row items-center justify-around"
         >
           <Pressable
             onPress={() => setCurrentPage("dashboard")}
-            className={`items-center gap-[2px] px-3 py-[5px] rounded-xl ${
-              currentPage === "dashboard" ? "" : ""
-            }`}
+            className="items-center px-3 py-[5px]"
           >
-            <MaterialCommunityIcons
-              color={currentPage === "dashboard" ? "#003527" : "#414942"}
-              name="home-outline"
-              size={22}
-            />
-            <Text
-              className={`text-[10px] ${
-                currentPage === "dashboard" ? "text-[#003527] font-semibold" : "text-[#414942]"
-              }`}
-            >
-              Home
-            </Text>
+            {toolbarIcon("dashboard", "view-dashboard", "view-dashboard-outline")}
           </Pressable>
 
           <Pressable
             onPress={() => setCurrentPage("history")}
-            className="items-center gap-[2px] px-3 py-[5px] rounded-xl"
+            className="items-center px-3 py-[5px]"
           >
-            <MaterialCommunityIcons
-              color={currentPage === "history" ? "#003527" : "#414942"}
-              name="clock-outline"
-              size={22}
-            />
-            <Text
-              className={`text-[10px] ${
-                currentPage === "history" ? "text-[#003527] font-semibold" : "text-[#414942]"
-              }`}
-            >
-              History
-            </Text>
+            {toolbarIcon("history", "clock", "clock-outline")}
           </Pressable>
 
           <Pressable
             onPress={() => setCurrentPage("add-transaction")}
             accessibilityRole="button"
-            className="w-12 h-12 rounded-full bg-[#003527] items-center justify-center -mt-6 shadow-lg shadow-[#003527]/30"
+            className="w-14 h-14 rounded-full items-center justify-center -mt-8 shadow-lg"
+            style={{ backgroundColor: palette.brand, shadowColor: palette.brand, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}
           >
-            <MaterialCommunityIcons color="white" name="plus" size={22} />
+            <MaterialCommunityIcons color="white" name="plus" size={24} />
           </Pressable>
 
           <Pressable
             onPress={() => setCurrentPage("assistant")}
-            className="items-center gap-[2px] px-3 py-[5px] rounded-xl"
+            className="items-center px-3 py-[5px]"
           >
             <MaterialCommunityIcons
-              color={currentPage === "assistant" ? "#003527" : "#414942"}
+              color={isActive("assistant") ? palette.brand : palette.mut}
               name="chart-timeline-variant"
               size={22}
             />
-            <Text
-              className={`text-[10px] ${
-                currentPage === "assistant" ? "text-[#003527] font-semibold" : "text-[#414942]"
-              }`}
-            >
-              Assistant
-            </Text>
           </Pressable>
 
           <Pressable
             onPress={() => setCurrentPage("savings-goals")}
-            className="items-center gap-[2px] px-3 py-[5px] rounded-xl"
+            className="items-center px-3 py-[5px]"
           >
-            <MaterialCommunityIcons
-              color={currentPage === "savings-goals" ? "#003527" : "#414942"}
-              name="piggy-bank-outline"
-              size={22}
-            />
-            <Text
-              className={`text-[10px] ${
-                currentPage === "savings-goals" ? "text-[#003527] font-semibold" : "text-[#414942]"
-              }`}
-            >
-              Savings
-            </Text>
+            {toolbarIcon("savings-goals", "wallet", "wallet-outline")}
           </Pressable>
         </View>
       </View>
