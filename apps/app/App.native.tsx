@@ -91,6 +91,7 @@ export default function App() {
         <MobileShell
           accessToken={authenticated.accessToken}
           onLoggedOut={() => setAuthenticated(null)}
+          signOut={async () => { await GoogleSignin.signOut(); }}
         />
         <StatusBar style="dark" />
       </>
