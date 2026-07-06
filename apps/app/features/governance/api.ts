@@ -76,16 +76,16 @@ function apiFetch<T>(
 }
 
 export function getConsents(accessToken: string) {
-  return apiFetch<{ payload?: ConsentRecord[]; error?: string; message?: string }>(
-    accessToken, "/odin/api/consents",
+  return apiFetch<{ payload?: { consents: ConsentRecord[] }; error?: string; message?: string }>(
+    accessToken, "/odin/api/me?include=consents",
   );
 }
 
 export function submitConsent(
   accessToken: string,
-  payload: { terms_accepted: boolean; privacy_accepted: boolean; policy_version: string },
+  payload: { consent_kind: string; status: string; version: string },
 ) {
-  return apiFetch<{ payload?: ConsentRecord; error?: string; message?: string }>(
+  return apiFetch<{ payload?: { consent: ConsentRecord }; error?: string; message?: string }>(
     accessToken, "/odin/api/consents", { method: "POST", body: { payload } },
   );
 }

@@ -7,16 +7,15 @@ export type PrivacySettings = {
 };
 
 export type ConsentRecord = {
-  id: string;
-  policy_version: string;
-  accepted_at: string;
-  terms_accepted: boolean;
-  privacy_accepted: boolean;
+  consent_kind: string;
+  status: "granted" | "withdrawn";
+  version: string;
+  recorded_at: string;
 };
 
 export type DataExportRequest = {
-  id: string;
-  status: "requested" | "processing" | "completed" | "failed";
-  created_at: string;
-  completed_at?: string;
+  request: {
+    id: string;
+    status: "requested" | "processing" | "available" | "completed" | "failed" | "expired" | "cancelled";
+  };
 };

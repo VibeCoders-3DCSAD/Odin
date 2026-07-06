@@ -188,9 +188,9 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         } else {
           setError(settingsRes.body.message ?? "Failed to load privacy settings.");
         }
-        const consentPayload = (consentsRes.body as { payload?: ConsentRecord[] }).payload;
-        if (consentPayload) {
-          setConsents(consentPayload);
+        const mePayload = consentsRes.body as { payload?: { consents?: ConsentRecord[] } };
+        if (mePayload.payload?.consents) {
+          setConsents(mePayload.payload.consents);
         }
       })
       .catch((err) => {
@@ -353,7 +353,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         <NavRow
           icon={<ShieldCheck size={18} color={AQUA700} />}
           label="Consent status"
-          subtitle={consents.length > 0 ? `Active · Policy ${consents[0]!.policy_version}` : "No consent recorded"}
+          subtitle={consents.some((c) => c.status === "granted") ? `Active · v${consents.find((c) => c.status === "granted")!.version}` : "No consent recorded"}
           iconColor={AQUA700}
           labelColor={INK}
         />
