@@ -22,6 +22,8 @@ const CANVAS = "#F8EFDC";
 
 type UserProfileScreenProps = {
   accessToken: string;
+  alreadyExported?: boolean;
+  onExported?: () => void;
   onDone?: () => void;
 };
 
@@ -32,9 +34,9 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-export default function UserProfileScreen({ accessToken, onDone }: UserProfileScreenProps) {
+export default function UserProfileScreen({ accessToken, alreadyExported, onExported, onDone }: UserProfileScreenProps) {
   const [exporting, setExporting] = useState(false);
-  const [exported, setExported] = useState(false);
+  const [exported, setExported] = useState(alreadyExported ?? false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleExport() {
@@ -48,6 +50,7 @@ export default function UserProfileScreen({ accessToken, onDone }: UserProfileSc
         return;
       }
       setExported(true);
+      onExported?.();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

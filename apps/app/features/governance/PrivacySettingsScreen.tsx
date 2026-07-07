@@ -169,6 +169,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [subPage, setSubPage] = useState<string | null>(null);
+  const [exported, setExported] = useState(false);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -292,7 +293,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: INK, marginBottom: 16 }}>
           Export data
         </Text>
-        <UserProfileScreen accessToken={accessToken} onDone={() => setSubPage(null)} />
+        <UserProfileScreen accessToken={accessToken} alreadyExported={exported} onExported={() => setExported(true)} onDone={() => setSubPage(null)} />
       </View>
     );
   }
