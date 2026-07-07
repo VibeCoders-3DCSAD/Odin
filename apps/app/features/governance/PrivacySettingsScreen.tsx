@@ -255,8 +255,12 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
   const [exported, setExported] = useState(false);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetched = useRef(false);
 
   useEffect(() => {
+    if (fetched.current) return;
+    fetched.current = true;
+
     let cancelled = false;
     setLoading(true);
     setError(null);

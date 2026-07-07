@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -40,7 +40,12 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
   const [reRequesting, setReRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchedExports = useRef(false);
+
   useEffect(() => {
+    if (fetchedExports.current) return;
+    fetchedExports.current = true;
+
     let cancelled = false;
     getDataExports(accessToken)
       .then((res) => {
