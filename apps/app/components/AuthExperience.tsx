@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -674,7 +673,8 @@ export default function AuthExperience({
         setShowConsent(true);
       }
     } catch (error) {
-      setNotice({ tone: "error", message: getErrorMessage(error) });
+      const msg = getErrorMessage(error);
+      setNotice({ tone: "error", message: /googleId|cancelled/i.test(msg) ? "Google login cancelled." : msg });
     } finally {
       setIsGoogleBusy(false);
     }
@@ -733,7 +733,7 @@ export default function AuthExperience({
   return (
     <View className="flex-1 bg-card">
       <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior="height" style={{ flex: 1 }}>
           <ScrollView contentContainerClassName="flex-grow px-7 py-10" keyboardShouldPersistTaps="handled">
             <View className="w-full max-w-[420px] self-center gap-8 pt-8">
             <View className="items-center gap-5">
