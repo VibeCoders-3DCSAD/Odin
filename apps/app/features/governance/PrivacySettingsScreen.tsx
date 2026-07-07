@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, TextStyle, View } from "react-native";
+import { ActivityIndicator, Animated, Pressable, Text, TextStyle, View } from "react-native";
 import {
   Bell,
   Brain,
@@ -162,6 +162,89 @@ function NavRow({
   );
 }
 
+function SkeletonBar({ width, height = 12, style }: { width: number | string; height?: number; style?: object }) {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+
+  return (
+    <Animated.View
+      style={[{ width: width as any, height, borderRadius: 6, backgroundColor: LINE, opacity }, style]}
+    />
+  );
+}
+
+function SkeletonRow() {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}>
+      <View style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: LINE }} />
+      <View style={{ flex: 1, gap: 4 }}>
+        <SkeletonBar width="40%" height={11} />
+        <SkeletonBar width="25%" height={9} />
+      </View>
+      <View style={{ width: 44, height: 26, borderRadius: 100, backgroundColor: LINE }} />
+    </View>
+  );
+}
+
+function SkeletonSimpleRow() {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}>
+      <View style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: LINE }} />
+      <SkeletonBar width="35%" height={11} />
+      <View style={{ flex: 1 }} />
+      <View style={{ width: 15, height: 15, borderRadius: 4, backgroundColor: LINE }} />
+    </View>
+  );
+}
+
+function SettingsSkeleton() {
+  return (
+    <View>
+      <SkeletonBar width="28%" height={11} style={{ marginBottom: 9 }} />
+      <BorderedGroup>
+        <SkeletonSimpleRow />
+        <Divider />
+        <SkeletonSimpleRow />
+      </BorderedGroup>
+
+      <View style={{ height: 20 }} />
+      <SkeletonBar width="28%" height={11} style={{ marginBottom: 9 }} />
+      <BorderedGroup>
+        <SkeletonRow />
+        <Divider />
+        <SkeletonRow />
+        <Divider />
+        <SkeletonRow />
+        <Divider />
+        <SkeletonSimpleRow />
+        <Divider />
+        <SkeletonSimpleRow />
+      </BorderedGroup>
+
+      <View style={{ height: 20 }} />
+      <SkeletonBar width="28%" height={11} style={{ marginBottom: 9 }} />
+      <BorderedGroup>
+        <SkeletonRow />
+        <Divider />
+        <SkeletonSimpleRow />
+      </BorderedGroup>
+
+      <View style={{ height: 20 }} />
+      <View style={{ height: 54, borderRadius: 14, borderWidth: 1.5, borderColor: LINE, backgroundColor: MONZA50 }} />
+    </View>
+  );
+}
+
 export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -236,11 +319,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
   }
 
   if (loading) {
-    return (
-      <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 80 }}>
-        <ActivityIndicator color="#013220" size="large" />
-      </View>
-    );
+    return <SettingsSkeleton />;
   }
 
   if (error && !settings) {
