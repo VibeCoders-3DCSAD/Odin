@@ -44,21 +44,30 @@ async function ensurePrivacySettings(
   return privacy;
 }
 
+const MAX_CANCEL_RETRIES = 3;
+const CANCEL_RETRY_DELAY_MS = 500;
+
 async function cancelActiveDeletionRequests(
   userId: string,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("account_deletion_requests")
-    .update({
-      status: "cancelled",
-      cancelled_at: new Date().toISOString(),
-      metadata: { cancelled_by: "reauthentication" },
-    })
-    .eq("user_id", userId)
-    .in("status", ["requested", "processing"]);
+  for (let attempt = 1; attempt <= MAX_CANCEL_RETRIES; attempt++) {
+    const { error } = await supabase
+      .from("account_deletion_requests")
+      .update({
+        status: "cancelled",
+        cancelled_at: new Date().toISOString(),
+        metadata: { cancelled_by: "reauthentication" },
+      })
+      .eq("user_id", userId)
+      .in("status", ["requested", "processing"]);
 
-  if (error) {
-    throw new Error(`Failed to cancel active deletion requests: ${error.message}`);
+    if (!error) return;
+
+    console.error("Failed to cancel active deletion requests", { user_id: userId, attempt, error: error.message });
+
+    if (attempt < MAX_CANCEL_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, CANCEL_RETRY_DELAY_MS));
+    }
   }
 }
 
