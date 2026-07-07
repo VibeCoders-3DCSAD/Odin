@@ -253,23 +253,29 @@ type NoticeProps = {
   message: string;
 };
 
+const monza100 = "#FFDEE2";
+const monza700 = "#B71C1C";
+
 function Notice({ tone, message }: NoticeProps) {
-  const bgClass = tone === "error"
-    ? "bg-errorSoft"
-    : "bg-aqua50";
-  const iconColor = tone === "error"
-    ? palette.error
-    : palette.brand;
-  const iconName = tone === "error"
-    ? "alert-circle-outline"
+  const isError = tone === "error";
+  const bgClass = isError ? "bg-errorSoft" : "bg-aqua50";
+  const borderClass = isError ? "border" : "border-0";
+  const iconColor = isError ? palette.error : palette.brand;
+  const iconName = isError
+    ? "alert-circle"
     : tone === "success"
     ? "check-circle-outline"
     : "information-outline";
+  const textColor = isError ? monza700 : palette.heading;
+  const textWeight = isError ? "font-semibold" : "font-medium";
 
   return (
-    <View className={`rounded-[16px] p-4 flex-row items-start gap-3 ${bgClass}`}>
-      <MaterialCommunityIcons color={iconColor} name={iconName} size={18} />
-      <Text className="flex-1 text-heading text-xs leading-[18px] font-medium">{message}</Text>
+    <View
+      className={`rounded-[13px] px-[15px] py-[13px] flex-row items-center gap-[10px] ${bgClass} ${borderClass}`}
+      style={isError ? { borderColor: monza100 } : undefined}
+    >
+      <MaterialCommunityIcons color={iconColor} name={iconName} size={20} />
+      <Text className={`flex-1 text-xs leading-[18px] ${textWeight}`} style={{ color: textColor }}>{message}</Text>
     </View>
   );
 }
@@ -623,7 +629,34 @@ export default function AuthExperience({
           </View>
 
           <View className="gap-6">
-            {mode === "reset_password" ? (
+            {notice ? <Notice message={notice.message} tone={notice.tone} /> : null}
+            {authenticated ? (
+              <View className="gap-6">
+                <View className="flex-row gap-4 p-6 rounded-[24px] bg-accent items-start">
+                  <View className="w-12 h-12 rounded-full bg-white items-center justify-center">
+                    <MaterialCommunityIcons color={palette.brand} name="check" size={24} />
+                  </View>
+                  <View className="gap-2 flex-1">
+                    <Text className="text-heading text-xl leading-[24px] font-bold">You are authenticated.</Text>
+                    <Text className="text-text text-xs leading-[18px]">
+                      Provider: {authenticated.provider === "google" ? "Google" : "Email + password"}
+                    </Text>
+                    <Text className="text-text text-xs leading-[18px]">
+                      User: {authenticated.userId ?? "Unavailable"}
+                    </Text>
+                    <Text className="text-text text-xs leading-[18px]">
+                      Onboarding: {authenticated.onboardingStatus ?? "in_progress"}
+                    </Text>
+                  </View>
+                </View>
+                <AuthButton
+                  disabled={isBusy}
+                  label="Log out"
+                  loading={isBusy}
+                  onPress={handleLogout}
+                />
+              </View>
+            ) : mode === "reset_password" ? (
               <View className="gap-6">
                 <View className="gap-4">
                   <AuthField
@@ -855,8 +888,6 @@ export default function AuthExperience({
                 </View>
               </View>
             )}
-
-            {notice ? <Notice message={notice.message} tone={notice.tone} /> : null}
           </View>
         </View>
       </ScrollView>
