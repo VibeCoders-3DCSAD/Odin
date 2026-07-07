@@ -136,6 +136,8 @@ function FieldLabel({ children }: { children: string }) {
   );
 }
 
+type FieldTone = "default" | "error" | "success";
+
 type AuthFieldProps = {
   label: string;
   value: string;
@@ -148,6 +150,7 @@ type AuthFieldProps = {
   onFocus: () => void;
   onBlur: () => void;
   focused: boolean;
+  tone?: FieldTone;
   trailing?: ReactNode;
 };
 
@@ -163,16 +166,21 @@ function AuthField({
   onFocus,
   onBlur,
   focused,
+  tone = "default",
   trailing,
 }: AuthFieldProps) {
+  const borderBg = tone === "error"
+    ? "border-[#E53935] bg-errorSoft"
+    : tone === "success" && focused
+    ? "border-aqua500 bg-card"
+    : focused
+    ? "border-aqua500 bg-card"
+    : "border-line bg-surface";
+
   return (
     <View className="gap-2">
       <FieldLabel>{label}</FieldLabel>
-      <View
-        className={`min-h-[52px] rounded-[14px] border px-4 flex-row items-center gap-3 ${
-          focused ? "border-aqua500 bg-card" : "border-line bg-surface"
-        }`}
-      >
+      <View className={`min-h-[52px] rounded-[14px] border px-4 flex-row items-center gap-3 ${borderBg}`}>
         <MaterialCommunityIcons color={palette.brand} name={icon} size={18} />
         <TextInput
           autoCapitalize={autoCapitalize}
@@ -256,6 +264,49 @@ type NoticeProps = {
 const monza100 = "#FFDEE2";
 const monza700 = "#B71C1C";
 
+type PasswordRule = {
+  key: keyof typeof passwordChecksTemplate;
+  label: string;
+};
+
+const passwordChecksTemplate = {
+  length: false,
+  upper: false,
+  lower: false,
+  number: false,
+  symbol: false,
+};
+
+const passwordRules: PasswordRule[] = [
+  { key: "length", label: "8+ characters" },
+  { key: "upper", label: "Uppercase letter" },
+  { key: "lower", label: "Lowercase letter" },
+  { key: "number", label: "Number" },
+  { key: "symbol", label: "Symbol" },
+];
+
+function PasswordRules({ checks }: { checks: typeof passwordChecksTemplate }) {
+  return (
+    <View className="gap-1.5">
+      {passwordRules.map((rule) => {
+        const passed = checks[rule.key];
+        return (
+          <View key={rule.key} className="flex-row items-center gap-2">
+            <MaterialCommunityIcons
+              color={passed ? "#12D583" : monza700}
+              name={passed ? "check-circle" : "close-circle"}
+              size={14}
+            />
+            <Text style={{ color: passed ? "#12D583" : monza700, fontSize: 12, fontWeight: "500" }}>
+              {rule.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function Notice({ tone, message }: NoticeProps) {
   const isError = tone === "error";
   const bgClass = isError ? "bg-errorSoft" : "bg-aqua50";
@@ -308,6 +359,26 @@ export default function AuthExperience({
   const [pendingAuthState, setPendingAuthState] = useState<{
     accessToken: string; provider: AuthProvider; userId?: string; profileId?: string; onboardingStatus?: string;
   } | null>(null);
+  const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<string[]>([]);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const passwordChecks = {
+    length: password.length >= 8,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    number: /[0-9]/.test(password),
+    symbol: /[^A-Za-z0-9]/.test(password),
+  };
+  const passwordValid = Object.values(passwordChecks).every(Boolean);
+  const confirmValid = password !== "" && confirmPassword === password;
+
+  const isLoginValid = emailValid && password.length > 0;
+  const isRegisterValid = emailValid && passwordValid && confirmValid;
+
   function buildAuthState(
     accessToken: string, provider: AuthProvider,
     payload?: { user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } },
@@ -339,6 +410,8 @@ export default function AuthExperience({
     }
     return () => { if (verifTimer.current) clearTimeout(verifTimer.current); };
   }, [pendingVerificationEmail]);
+
+  useEffect(() => { setNotice(null); }, [mode]);
 
   useEffect(() => {
     if (isPasswordRecovery || recoveryTokenProp || recoveryRefreshTokenProp) {
@@ -378,11 +451,13 @@ export default function AuthExperience({
 
   async function handleLogin() {
     if (!email.trim()) {
+      setFieldErrors(["email"]);
       setNotice({ tone: "error", message: "Enter your email first." });
       return;
     }
 
     if (!password) {
+      setFieldErrors(["password"]);
       setNotice({ tone: "error", message: "Enter your password first." });
       return;
     }
@@ -397,6 +472,7 @@ export default function AuthExperience({
       });
 
       if (!response.ok) {
+        setFieldErrors(["email", "password"]);
         throw new Error(body.message ?? "Sign in failed.");
       }
 
@@ -428,17 +504,20 @@ export default function AuthExperience({
   }
 
   async function handleRegister() {
-    if (!email.trim()) {
+    if (!emailValid) {
+      setFieldErrors(["email"]);
       setNotice({ tone: "error", message: "Use a valid email to create your account." });
       return;
     }
 
-    if (!password) {
-      setNotice({ tone: "error", message: "Choose a password before continuing." });
+    if (!passwordValid) {
+      setFieldErrors(["password"]);
+      setNotice({ tone: "error", message: "Your password does not meet the requirements." });
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (!confirmValid) {
+      setFieldErrors(["confirm_password"]);
       setNotice({ tone: "error", message: "Your passwords do not match yet." });
       return;
     }
@@ -485,6 +564,7 @@ export default function AuthExperience({
 
   async function handlePasswordReset() {
     if (!email.trim()) {
+      setFieldErrors(["email"]);
       setNotice({ tone: "error", message: "Enter your email first so we know where to send the reset link." });
       return;
     }
@@ -514,11 +594,13 @@ export default function AuthExperience({
 
   async function handlePasswordUpdate() {
     if (!password) {
+      setFieldErrors(["password"]);
       setNotice({ tone: "error", message: "Choose a new password first." });
       return;
     }
 
     if (password !== confirmPassword) {
+      setFieldErrors(["confirm_password"]);
       setNotice({ tone: "error", message: "Your new passwords do not match yet." });
       return;
     }
@@ -598,6 +680,49 @@ export default function AuthExperience({
     }
   }
 
+  async function handleLogout() {
+    if (!authenticated?.accessToken) {
+      return;
+    }
+
+    const provider = authenticated.provider;
+
+    setIsBusy(true);
+    setNotice({ tone: "default", message: "Logging you out..." });
+
+    try {
+      const { response, body } = await postJson(
+        "/logout",
+        undefined,
+        authenticated.accessToken,
+      );
+
+      if (!response.ok) {
+        throw new Error(body.message ?? "Logout failed.");
+      }
+
+      setAuthenticated(null);
+
+      if (provider === "google" && google.signOut) {
+        try {
+          await google.signOut();
+        } catch (error) {
+          setNotice({
+            tone: "default",
+            message: `Logged out from Odin. Native Google sign-out failed: ${getErrorMessage(error)}`,
+          });
+          return;
+        }
+      }
+
+      setNotice({ tone: "success", message: "You are logged out." });
+    } catch (error) {
+      setNotice({ tone: "error", message: getErrorMessage(error) });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   const title = mode === "login" ? "Welcome back" : mode === "reset_complete" ? "Reset your password" : "Create account";
   const subtitle = mode === "login"
     ? "Sign in to your Odin account"
@@ -665,15 +790,21 @@ export default function AuthExperience({
                     keyboardType="email-address"
                     label="Email"
                     onBlur={() => setFocusedField(null)}
-                    onChangeText={setEmail}
-                    onFocus={() => setFocusedField("email")}
+                    onChangeText={(v) => { setEmail(v); setFieldErrors((prev) => prev.filter((f) => f !== "email")); setEmailTouched(true); }}
+                    onFocus={() => { setFocusedField("email"); setFieldErrors((prev) => prev.filter((f) => f !== "email")); }}
                     placeholder="you@example.com"
+                    tone={
+                      fieldErrors.includes("email") ? "error"
+                      : emailTouched && email.length > 0 && !emailValid ? "error"
+                      : emailTouched && email.length > 0 && emailValid && focusedField === "email" ? "success"
+                      : "default"
+                    }
                     value={email}
                   />
                 </View>
 
                 <AuthButton
-                  disabled={isBusy}
+                  disabled={isBusy || email.length === 0}
                   label="Send reset link"
                   loading={isBusy}
                   onPress={handlePasswordReset}
@@ -704,10 +835,16 @@ export default function AuthExperience({
                     icon="lock-outline"
                     label="New password"
                     onBlur={() => setFocusedField(null)}
-                    onChangeText={setPassword}
-                    onFocus={() => setFocusedField("password")}
+                    onChangeText={(v) => { setPassword(v); setFieldErrors((prev) => prev.filter((f) => f !== "password")); setPasswordTouched(true); }}
+                    onFocus={() => { setFocusedField("password"); setFieldErrors((prev) => prev.filter((f) => f !== "password")); }}
                     placeholder="Enter new password"
                     secureTextEntry={!showPassword}
+                    tone={
+                      fieldErrors.includes("password") ? "error"
+                      : passwordTouched && !passwordValid ? "error"
+                      : passwordTouched && passwordValid ? "success"
+                      : "default"
+                    }
                     trailing={
                       <Pressable onPress={() => setShowPassword((value) => !value)}>
                         <MaterialCommunityIcons
@@ -724,10 +861,16 @@ export default function AuthExperience({
                     icon="shield-check-outline"
                     label="Confirm new password"
                     onBlur={() => setFocusedField(null)}
-                    onChangeText={setConfirmPassword}
-                    onFocus={() => setFocusedField("confirm_password")}
+                    onChangeText={(v) => { setConfirmPassword(v); setFieldErrors((prev) => prev.filter((f) => f !== "confirm_password")); setConfirmTouched(true); }}
+                    onFocus={() => { setFocusedField("confirm_password"); setFieldErrors((prev) => prev.filter((f) => f !== "confirm_password")); }}
                     placeholder="Repeat new password"
                     secureTextEntry={!showConfirmPassword}
+                    tone={
+                      fieldErrors.includes("confirm_password") ? "error"
+                      : confirmTouched && !confirmValid ? "error"
+                      : confirmTouched && confirmValid ? "success"
+                      : "default"
+                    }
                     trailing={
                       <Pressable onPress={() => setShowConfirmPassword((value) => !value)}>
                         <MaterialCommunityIcons
@@ -739,10 +882,11 @@ export default function AuthExperience({
                     }
                     value={confirmPassword}
                   />
+                  {passwordTouched ? <PasswordRules checks={passwordChecks} /> : null}
                 </View>
 
                 <AuthButton
-                  disabled={isBusy || !recoveryToken || !recoveryRefreshToken}
+                  disabled={isBusy || !recoveryToken || !recoveryRefreshToken || !passwordValid || !confirmValid}
                   label="Update password"
                   loading={isBusy}
                   onPress={handlePasswordUpdate}
@@ -778,9 +922,15 @@ export default function AuthExperience({
                     keyboardType="email-address"
                     label="Email"
                     onBlur={() => setFocusedField(null)}
-                    onChangeText={setEmail}
-                    onFocus={() => setFocusedField("email")}
+                    onChangeText={(v) => { setEmail(v); setFieldErrors((prev) => prev.filter((f) => f !== "email")); setEmailTouched(true); }}
+                    onFocus={() => { setFocusedField("email"); setFieldErrors((prev) => prev.filter((f) => f !== "email")); }}
                     placeholder="you@example.com"
+                    tone={
+                      fieldErrors.includes("email") ? "error"
+                      : emailTouched && email.length > 0 && !emailValid ? "error"
+                      : emailTouched && email.length > 0 && emailValid && focusedField === "email" ? "success"
+                      : "default"
+                    }
                     value={email}
                   />
 
@@ -789,10 +939,19 @@ export default function AuthExperience({
                     icon="lock-outline"
                     label={mode === "login" ? "Password" : "Create password"}
                     onBlur={() => setFocusedField(null)}
-                    onChangeText={setPassword}
-                    onFocus={() => setFocusedField("password")}
+                    onChangeText={(v) => { setPassword(v); setFieldErrors((prev) => prev.filter((f) => f !== "password")); setPasswordTouched(true); }}
+                    onFocus={() => { setFocusedField("password"); setFieldErrors((prev) => prev.filter((f) => f !== "password")); }}
                     placeholder="Enter your password"
                     secureTextEntry={!showPassword}
+                    tone={
+                      mode === "register"
+                        ? fieldErrors.includes("password") ? "error"
+                        : passwordTouched && !passwordValid ? "error"
+                        : passwordTouched && passwordValid ? "success"
+                        : "default"
+                        : fieldErrors.includes("password") ? "error"
+                        : "default"
+                    }
                     trailing={
                       <Pressable onPress={() => setShowPassword((value) => !value)}>
                         <MaterialCommunityIcons
@@ -806,26 +965,35 @@ export default function AuthExperience({
                   />
 
                   {mode === "register" ? (
-                    <AuthField
-                      focused={focusedField === "confirm_password"}
-                      icon="shield-check-outline"
-                      label="Confirm password"
-                      onBlur={() => setFocusedField(null)}
-                      onChangeText={setConfirmPassword}
-                      onFocus={() => setFocusedField("confirm_password")}
-                      placeholder="Repeat your password"
-                      secureTextEntry={!showConfirmPassword}
-                      trailing={
-                        <Pressable onPress={() => setShowConfirmPassword((value) => !value)}>
-                          <MaterialCommunityIcons
-                            color={palette.subtle}
-                            name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
-                            size={18}
-                          />
-                        </Pressable>
-                      }
-                      value={confirmPassword}
-                    />
+                    <>
+                      {passwordTouched ? <PasswordRules checks={passwordChecks} /> : null}
+                      <AuthField
+                        focused={focusedField === "confirm_password"}
+                        icon="shield-check-outline"
+                        label="Confirm password"
+                        onBlur={() => setFocusedField(null)}
+                        onChangeText={(v) => { setConfirmPassword(v); setFieldErrors((prev) => prev.filter((f) => f !== "confirm_password")); setConfirmTouched(true); }}
+                        onFocus={() => { setFocusedField("confirm_password"); setFieldErrors((prev) => prev.filter((f) => f !== "confirm_password")); }}
+                        placeholder="Repeat your password"
+                        secureTextEntry={!showConfirmPassword}
+                        tone={
+                          fieldErrors.includes("confirm_password") ? "error"
+                          : confirmTouched && !confirmValid ? "error"
+                          : confirmTouched && confirmValid ? "success"
+                          : "default"
+                        }
+                        trailing={
+                          <Pressable onPress={() => setShowConfirmPassword((value) => !value)}>
+                            <MaterialCommunityIcons
+                              color={palette.subtle}
+                              name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                              size={18}
+                            />
+                          </Pressable>
+                        }
+                        value={confirmPassword}
+                      />
+                    </>
                   ) : null}
                 </View>
 
@@ -841,7 +1009,7 @@ export default function AuthExperience({
 
                 <View className="gap-4">
                   <AuthButton
-                    disabled={isBusy || isGoogleBusy}
+                    disabled={isBusy || isGoogleBusy || (mode === "login" ? !isLoginValid : !isRegisterValid)}
                     label={mode === "login" ? "Sign in" : "Create account"}
                     loading={isBusy}
                     onPress={mode === "login" ? handleLogin : handleRegister}
