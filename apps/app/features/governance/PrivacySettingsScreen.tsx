@@ -391,6 +391,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         accessToken={accessToken}
         onDeletionRequested={(req) => { setDeletionRequest(req); setSubPage("deletion-requested"); }}
         onBack={() => setSubPage(null)}
+        onGoToExport={() => setSubPage("export")}
       />
     );
   }
