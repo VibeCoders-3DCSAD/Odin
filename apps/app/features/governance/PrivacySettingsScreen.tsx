@@ -292,7 +292,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: INK, marginBottom: 16 }}>
           Export data
         </Text>
-        <UserProfileScreen accessToken={accessToken} />
+        <UserProfileScreen accessToken={accessToken} onDone={() => setSubPage(null)} />
       </View>
     );
   }
