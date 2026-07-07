@@ -13,14 +13,15 @@ import {
   User,
 } from "phosphor-react-native";
 import { getConsents, getPrivacySettings, updatePrivacySettings } from "./api";
-import type { AccountDeletionRequest, ConsentRecord, PrivacySettings } from "./types";
+import type { ConsentRecord, PrivacySettings } from "./types";
 import { ERRORS } from "./constants";
 import UserProfileScreen from "./UserProfileScreen";
 import AccountOffboardingScreen from "./AccountOffboardingScreen";
-import DeletionRequestedScreen from "./DeletionRequestedScreen";
 
 type PrivacySettingsScreenProps = {
   accessToken: string;
+  userEmail?: string;
+  onBackToLogin?: () => void;
 };
 
 const MUTED = "#6B7A6F";
@@ -248,7 +249,7 @@ function SettingsSkeleton() {
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, userEmail, onBackToLogin }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -257,7 +258,6 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
   const [subPage, setSubPage] = useState<string | null>(null);
   const [exported, setExported] = useState(false);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
-  const [deletionRequest, setDeletionRequest] = useState<AccountDeletionRequest | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetched = useRef(false);
 
@@ -389,20 +389,10 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
     return (
       <AccountOffboardingScreen
         accessToken={accessToken}
-        onDeletionRequested={(req) => { setDeletionRequest(req); setSubPage("deletion-requested"); }}
         onBack={() => setSubPage(null)}
         onGoToExport={() => setSubPage("export")}
-      />
-    );
-  }
-
-  if (subPage === "deletion-requested" && deletionRequest) {
-    return (
-      <DeletionRequestedScreen
-        accessToken={accessToken}
-        deletionRequest={deletionRequest}
-        onCancelled={() => setDeletionRequest(null)}
-        onBack={() => { setDeletionRequest(null); setSubPage(null); }}
+        onBackToLogin={onBackToLogin}
+        email={userEmail}
       />
     );
   }

@@ -170,7 +170,7 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
     if (currentPage === "settings") {
       return (
         <View className="gap-6">
-          <PrivacySettingsScreen accessToken={accessToken} />
+          <PrivacySettingsScreen accessToken={accessToken} onBackToLogin={handleLogout} />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Log out"

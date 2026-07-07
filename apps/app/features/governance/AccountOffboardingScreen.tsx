@@ -10,6 +10,7 @@ import {
   Brain,
   ChartPieSlice,
   Check,
+  CheckCircle,
   DownloadSimple,
   Receipt,
   Warning,
@@ -21,9 +22,10 @@ import { getErrorMessage } from "./helpers";
 
 type AccountOffboardingScreenProps = {
   accessToken: string;
-  onDeletionRequested: (request: AccountDeletionRequest) => void;
   onBack: () => void;
   onGoToExport?: () => void;
+  onBackToLogin?: () => void;
+  email?: string;
 };
 
 const MUTED = "#6B7A6F";
@@ -34,6 +36,7 @@ const INK2 = "#414942";
 const AQUA50 = "#EFFEF7";
 const AQUA600 = "#08B16A";
 const AQUA700 = "#0B8A55";
+const AQUA950 = "#013220";
 const AQUA100 = "#D9FFEE";
 const AQUA800 = "#0E6D46";
 const MONZA50 = "#FFF0F2";
@@ -41,9 +44,18 @@ const MONZA500 = "#E53935";
 const MONZA600 = "#D9001F";
 const MONZA300 = "#FFCDD2";
 
-export default function AccountOffboardingScreen({ accessToken, onDeletionRequested, onBack, onGoToExport }: AccountOffboardingScreenProps) {
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+}
+
+export default function AccountOffboardingScreen({ accessToken, onBack, onGoToExport, onBackToLogin, email }: AccountOffboardingScreenProps) {
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit = checked && !submitting;
@@ -76,11 +88,59 @@ export default function AccountOffboardingScreen({ accessToken, onDeletionReques
         return;
       }
       const confirmed = (confirmBody as { payload?: { request: AccountDeletionRequest } }).payload?.request;
-      onDeletionRequested(confirmed ?? { ...delRequest, status: "processing" });
+      setScheduledDate(confirmed?.scheduled_delete_at ?? delRequest.scheduled_delete_at ?? "");
+      setDeleted(true);
     } catch (err) {
       setError(getErrorMessage(err));
       setSubmitting(false);
     }
+  }
+
+  if (deleted) {
+    return (
+      <View style={{ paddingHorizontal: 30, paddingVertical: 40, alignItems: "center" }}>
+        <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: AQUA50, justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
+          <CheckCircle size={56} color={AQUA600} weight="fill" />
+        </View>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: INK }}>
+          Deletion requested
+        </Text>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 14, lineHeight: 22.4, color: MUTED, marginTop: 10, textAlign: "center", maxWidth: 270 }}>
+          Your account is scheduled for deletion. You have{" "}
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: INK2 }}>30 days</Text>
+          {" "}to cancel by logging back in. After that, all data is permanently erased.
+        </Text>
+        <View style={{ width: "100%", marginTop: 26, padding: 16, borderRadius: 14, backgroundColor: CANVAS, borderWidth: 1, borderColor: LINE }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12.5, color: MUTED }}>
+              Scheduled deletion
+            </Text>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: INK }}>
+              {scheduledDate ? formatDate(scheduledDate) : "N/A"}
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={onBackToLogin}
+          accessibilityRole="button"
+          accessibilityLabel="Back to login"
+          style={{
+            width: "100%", marginTop: 26, height: 52, borderRadius: 14,
+            backgroundColor: AQUA950,
+            justifyContent: "center", alignItems: "center",
+          }}
+        >
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14.5, color: "#FFFFFF" }}>
+            Back to login
+          </Text>
+        </Pressable>
+        {email ? (
+          <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 12, lineHeight: 18, color: MUTED, marginTop: 16, textAlign: "center", maxWidth: 260 }}>
+            A confirmation has been sent to {email}
+          </Text>
+        ) : null}
+      </View>
+    );
   }
 
   return (
