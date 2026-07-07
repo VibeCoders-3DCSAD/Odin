@@ -177,7 +177,7 @@ export default function DeletionRequestedScreen({ accessToken, deletionRequest, 
         }}
       >
         {cancelling ? (
-          <ActivityIndicator color={MONZA600} />
+          <ActivityIndicator color={MONZA600} accessibilityLabel="Cancelling deletion request" />
         ) : (
           <>
             <XCircle size={20} color={MONZA600} />
