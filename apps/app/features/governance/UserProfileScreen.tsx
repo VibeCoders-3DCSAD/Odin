@@ -106,7 +106,7 @@ export default function UserProfileScreen({ accessToken, onDone }: UserProfileSc
                 Export requested
               </Text>
               <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 11, color: AQUA700, marginTop: 1 }}>
-                We'll notify you when your data is ready to download.
+                Your export is being prepared. Check back later.
               </Text>
             </View>
           </View>
