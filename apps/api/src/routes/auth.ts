@@ -63,7 +63,7 @@ async function cancelActiveDeletionRequests(
 
     if (!error) return;
 
-    console.error("Failed to cancel active deletion requests", { user_id: userId, attempt, error: error.message });
+    console.error("Failed to cancel active deletion requests", { user_id: userId, attempt, timestamp: new Date().toISOString(), code: error.code, message: error.message });
 
     if (attempt < MAX_CANCEL_RETRIES) {
       await new Promise((resolve) => setTimeout(resolve, CANCEL_RETRY_DELAY_MS));
