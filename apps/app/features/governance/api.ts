@@ -1,5 +1,5 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
-import type { ConsentRecord, DataExportRequest, PrivacySettings } from "./types";
+import type { AccountDeletionRequest, ConsentRecord, DataExportRequest, PrivacySettings } from "./types";
 
 export async function getPrivacySettings(accessToken: string) {
   const controller = new AbortController();
@@ -99,5 +99,23 @@ export function getDataExports(accessToken: string) {
 export function requestDataExport(accessToken: string) {
   return apiFetch<{ payload?: DataExportRequest; error?: string; message?: string }>(
     accessToken, "/odin/api/data-export-requests", { method: "POST", body: { payload: {} } },
+  );
+}
+
+export function requestAccountDeletion(accessToken: string) {
+  return apiFetch<{ payload?: { request: AccountDeletionRequest }; error?: string; message?: string }>(
+    accessToken, "/odin/api/account-deletion-requests", { method: "POST", body: { payload: {} } },
+  );
+}
+
+export function confirmAccountDeletion(accessToken: string, id: string) {
+  return apiFetch<{ payload?: { request: AccountDeletionRequest }; error?: string; message?: string }>(
+    accessToken, `/odin/api/account-deletion-requests/${id}/confirm`, { method: "POST", body: { payload: { confirmation: true } } },
+  );
+}
+
+export function cancelAccountDeletion(accessToken: string, id: string) {
+  return apiFetch<{ payload?: { request: AccountDeletionRequest }; error?: string; message?: string }>(
+    accessToken, `/odin/api/account-deletion-requests/${id}/cancel`, { method: "POST" },
   );
 }
