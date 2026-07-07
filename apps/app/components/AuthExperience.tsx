@@ -487,6 +487,7 @@ export default function AuthExperience({
       const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
       const hasGranted = existing?.some((c) => c.status === "granted");
       if (hasGranted) {
+        setAuthenticated(authState);
         onAuthenticated(authState);
         setPendingVerificationEmail(null);
       } else {
@@ -666,6 +667,7 @@ export default function AuthExperience({
       const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
       const hasGranted = existing?.some((c) => c.status === "granted");
       if (hasGranted) {
+        setAuthenticated(authState);
         onAuthenticated(authState);
         setPendingVerificationEmail(null);
       } else {
@@ -674,7 +676,7 @@ export default function AuthExperience({
       }
     } catch (error) {
       const msg = getErrorMessage(error);
-      setNotice({ tone: "error", message: /googleId|cancelled/i.test(msg) ? "Google login cancelled." : msg });
+      setNotice({ tone: "error", message: /Google sign-in was cancelled/i.test(msg) ? "Google login cancelled." : msg });
     } finally {
       setIsGoogleBusy(false);
     }
@@ -702,6 +704,7 @@ export default function AuthExperience({
       }
 
       setAuthenticated(null);
+      onLoggedOut();
 
       if (provider === "google" && google.signOut) {
         try {
@@ -739,6 +742,7 @@ export default function AuthExperience({
             <View className="items-center gap-5">
             <View className="w-[64px] h-[64px] rounded-[32px] border-[3px] border-aqua950 items-center justify-center">
               <Image
+                accessibilityLabel="Odin logo"
                 resizeMode="contain"
                 source={odinLogo}
                 className="w-[48px] h-[48px]"
@@ -843,7 +847,11 @@ export default function AuthExperience({
                       : "default"
                     }
                     trailing={
-                      <Pressable onPress={() => setShowPassword((value) => !value)}>
+                      <Pressable
+                        accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                        accessibilityState={{ selected: showPassword }}
+                        onPress={() => setShowPassword((value) => !value)}
+                      >
                         <MaterialCommunityIcons
                           color={palette.subtle}
                           name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -869,7 +877,11 @@ export default function AuthExperience({
                       : "default"
                     }
                     trailing={
-                      <Pressable onPress={() => setShowConfirmPassword((value) => !value)}>
+                      <Pressable
+                        accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
+                        accessibilityState={{ selected: showConfirmPassword }}
+                        onPress={() => setShowConfirmPassword((value) => !value)}
+                      >
                         <MaterialCommunityIcons
                           color={palette.subtle}
                           name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
@@ -950,7 +962,11 @@ export default function AuthExperience({
                         : "default"
                     }
                     trailing={
-                      <Pressable onPress={() => setShowPassword((value) => !value)}>
+                      <Pressable
+                        accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                        accessibilityState={{ selected: showPassword }}
+                        onPress={() => setShowPassword((value) => !value)}
+                      >
                         <MaterialCommunityIcons
                           color={palette.subtle}
                           name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -980,7 +996,11 @@ export default function AuthExperience({
                           : "default"
                         }
                         trailing={
-                          <Pressable onPress={() => setShowConfirmPassword((value) => !value)}>
+                          <Pressable
+                            accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
+                            accessibilityState={{ selected: showConfirmPassword }}
+                            onPress={() => setShowConfirmPassword((value) => !value)}
+                          >
                             <MaterialCommunityIcons
                               color={palette.subtle}
                               name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
@@ -1065,6 +1085,7 @@ export default function AuthExperience({
       accessToken={pendingAuthState.accessToken}
       onComplete={() => {
         setShowConsent(false);
+        setAuthenticated(pendingAuthState);
         onAuthenticated(pendingAuthState);
         setPendingAuthState(null);
       }}
