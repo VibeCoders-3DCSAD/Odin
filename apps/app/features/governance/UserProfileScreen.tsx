@@ -22,6 +22,7 @@ const CANVAS = "#F8EFDC";
 
 type UserProfileScreenProps = {
   accessToken: string;
+  onDone?: () => void;
 };
 
 function getErrorMessage(error: unknown) {
@@ -31,7 +32,7 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-export default function UserProfileScreen({ accessToken }: UserProfileScreenProps) {
+export default function UserProfileScreen({ accessToken, onDone }: UserProfileScreenProps) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,24 +91,41 @@ export default function UserProfileScreen({ accessToken }: UserProfileScreenProp
       <View style={{ height: 20 }} />
 
       {exported ? (
-        <View
-          style={{
-            flexDirection: "row", gap: 10, alignItems: "center",
-            padding: 14, borderRadius: 14,
-            backgroundColor: AQUA50, borderWidth: 1, borderColor: "#D9FFEE",
-            marginBottom: 16,
-          }}
-        >
-          <CheckCircle size={22} color={AQUA600} weight="fill" />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: "#0E6D46" }}>
-              Export requested
-            </Text>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 11, color: AQUA700, marginTop: 1 }}>
-              We'll notify you when your data is ready to download.
-            </Text>
+        <>
+          <View
+            style={{
+              flexDirection: "row", gap: 10, alignItems: "center",
+              padding: 14, borderRadius: 14,
+              backgroundColor: AQUA50, borderWidth: 1, borderColor: "#D9FFEE",
+              marginBottom: 16,
+            }}
+          >
+            <CheckCircle size={22} color={AQUA600} weight="fill" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: "#0E6D46" }}>
+                Export requested
+              </Text>
+              <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 11, color: AQUA700, marginTop: 1 }}>
+                We'll notify you when your data is ready to download.
+              </Text>
+            </View>
           </View>
-        </View>
+          <Pressable
+            onPress={onDone}
+            accessibilityRole="button"
+            accessibilityLabel="Back to settings"
+            style={{
+              height: 54, borderRadius: 14,
+              backgroundColor: AQUA950,
+              justifyContent: "center", alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
+              Back to Settings
+            </Text>
+          </Pressable>
+        </>
       ) : (
         <Pressable
           onPress={handleExport}
