@@ -64,11 +64,19 @@ router.post("/data-export-requests", requireAuth, async (request: AuthenticatedR
     metadata.reason = payload.reason;
   }
 
-  await authenticatedSupabase
+  const { error: cancelError } = await authenticatedSupabase
     .from("data_export_requests")
     .update({ status: "cancelled" })
     .eq("user_id", userId)
     .in("status", ACTIVE_STATUSES);
+
+  if (cancelError) {
+    response.status(500).json({
+      error: "Internal Server Error",
+      message: "Failed to cancel previous export request",
+    });
+    return;
+  }
 
   const { data, error } = await authenticatedSupabase
     .from("data_export_requests")
