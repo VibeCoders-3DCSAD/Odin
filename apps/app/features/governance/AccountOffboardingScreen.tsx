@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Pressable,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import {
@@ -12,7 +11,6 @@ import {
   ChartPieSlice,
   Check,
   DownloadSimple,
-  LockSimple,
   Receipt,
   Warning,
 } from "phosphor-react-native";
@@ -45,11 +43,10 @@ const MONZA300 = "#FFCDD2";
 
 export default function AccountOffboardingScreen({ accessToken, onDeletionRequested, onBack, onGoToExport }: AccountOffboardingScreenProps) {
   const [checked, setChecked] = useState(false);
-  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = checked && password.length > 0 && !submitting;
+  const canSubmit = checked && !submitting;
 
   async function handleDelete() {
     if (!canSubmit) return;
@@ -183,32 +180,7 @@ export default function AccountOffboardingScreen({ accessToken, onDeletionReques
           </Text>
         </Pressable>
 
-        <View
-          style={{
-            height: 50, paddingHorizontal: 16,
-            borderWidth: 1.5, borderColor: LINE, borderRadius: 13,
-            backgroundColor: CANVAS,
-            flexDirection: "row", alignItems: "center", gap: 10,
-            marginBottom: 18,
-          }}
-        >
-          <LockSimple size={17} color={MUTED} />
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            placeholderTextColor={MUTED}
-            secureTextEntry
-            editable={!submitting}
-            style={{
-              flex: 1, fontFamily: "Manrope", fontWeight: "500", fontSize: 14,
-              color: INK, letterSpacing: password.length > 0 ? 2 : 0,
-            }}
-            accessibilityLabel="Enter your password to confirm"
-          />
-        </View>
-
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: 10, marginTop: 6 }}>
           <Pressable
             onPress={handleDelete}
             disabled={!canSubmit}
