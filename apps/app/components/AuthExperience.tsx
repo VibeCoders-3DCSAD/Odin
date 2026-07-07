@@ -733,9 +733,9 @@ export default function AuthExperience({
   return (
     <View className="flex-1 bg-card">
       <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView contentContainerClassName="flex-grow px-7 py-10" keyboardShouldPersistTaps="handled">
-            <View className="w-full max-w-[420px] self-center flex-1 justify-center gap-8">
+            <View className="w-full max-w-[420px] self-center gap-8 pt-8">
             <View className="items-center gap-5">
             <View className="w-[64px] h-[64px] rounded-[32px] border-[3px] border-aqua950 items-center justify-center">
               <Image
