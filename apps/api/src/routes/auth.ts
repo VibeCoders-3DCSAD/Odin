@@ -44,6 +44,33 @@ async function ensurePrivacySettings(
   return privacy;
 }
 
+const MAX_CANCEL_RETRIES = 3;
+const CANCEL_RETRY_DELAY_MS = 500;
+
+async function cancelActiveDeletionRequests(
+  userId: string,
+): Promise<void> {
+  for (let attempt = 1; attempt <= MAX_CANCEL_RETRIES; attempt++) {
+    const { error } = await supabase
+      .from("account_deletion_requests")
+      .update({
+        status: "cancelled",
+        cancelled_at: new Date().toISOString(),
+        metadata: { cancelled_by: "reauthentication" },
+      })
+      .eq("user_id", userId)
+      .in("status", ["requested", "processing"]);
+
+    if (!error) return;
+
+    console.error("Failed to cancel active deletion requests", { user_id: userId, attempt, timestamp_utc: new Date().toISOString(), timestamp_ph: new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" }), code: error.code, message: error.message });
+
+    if (attempt < MAX_CANCEL_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, CANCEL_RETRY_DELAY_MS));
+    }
+  }
+}
+
 async function bootstrapAuthenticatedUser(
   userId: string,
   accessToken: string,
@@ -56,6 +83,8 @@ async function bootstrapAuthenticatedUser(
   const authenticatedSupabase = createAuthenticatedSupabaseClient(accessToken);
   const profile = await ensureProfile(userId, authenticatedSupabase);
   const privacy = await ensurePrivacySettings(userId, authenticatedSupabase);
+
+  await cancelActiveDeletionRequests(userId);
 
   const { data: onboarding, error: onboardingError } = await authenticatedSupabase
     .from("onboarding_sessions")
@@ -157,6 +186,7 @@ router.post("/register", async (request: Request, response: Response) => {
         typeof display_name === "string" && display_name.trim() !== ""
           ? { display_name: display_name.trim() }
           : undefined,
+      emailRedirectTo: "odin://auth/verify",
     },
   });
 

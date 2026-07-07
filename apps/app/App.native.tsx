@@ -1,10 +1,12 @@
+import { useState } from "react";
 import "./global.css";
 
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { Platform } from "react-native";
-import AuthExperience from "./components/AuthExperience";
+import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
+import MobileShell from "./components/MobileShell";
 import { useDeepLink } from "./hooks/useDeepLink";
 import { supabase } from "./lib/supabase";
 
@@ -50,6 +52,7 @@ async function getGoogleIdToken() {
 }
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
   const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
 
   useEffect(() => {
@@ -82,6 +85,19 @@ export default function App() {
     };
   }
 
+  if (authenticated) {
+    return (
+      <>
+        <MobileShell
+          accessToken={authenticated.accessToken}
+          onLoggedOut={() => setAuthenticated(null)}
+          signOut={async () => { await GoogleSignin.signOut(); }}
+        />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
+
   return (
     <>
       <AuthExperience
@@ -95,6 +111,8 @@ export default function App() {
         isResolvingRecoveryToken={isResolvingRecoveryToken}
         recoveryRefreshToken={recoveryRefreshToken ?? undefined}
         recoveryToken={recoveryToken ?? undefined}
+        onAuthenticated={(state) => setAuthenticated(state)}
+        onLoggedOut={() => setAuthenticated(null)}
       />
       <StatusBar style="dark" />
     </>
