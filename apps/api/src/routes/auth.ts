@@ -58,7 +58,7 @@ async function cancelActiveDeletionRequests(
     .in("status", ["requested", "processing"]);
 
   if (error) {
-    console.error("Failed to cancel active deletion requests", error);
+    throw new Error(`Failed to cancel active deletion requests: ${error.message}`);
   }
 }
 
