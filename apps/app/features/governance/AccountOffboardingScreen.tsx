@@ -94,12 +94,6 @@ export default function AccountOffboardingScreen({ accessToken, onDeletionReques
         </Text>
       </View>
 
-      <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 22, paddingTop: 14, marginBottom: 6 }}>
-        <View style={{ flex: 1, height: 5, borderRadius: 5, backgroundColor: MONZA500 }} />
-        <View style={{ flex: 1, height: 5, borderRadius: 5, backgroundColor: MONZA500 }} />
-        <View style={{ flex: 1, height: 5, borderRadius: 5, backgroundColor: MONZA500 }} />
-      </View>
-
       <View style={{ paddingHorizontal: 22, paddingVertical: 16 }}>
         <View style={{ alignItems: "center", marginBottom: 18 }}>
           <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: MONZA50, justifyContent: "center", alignItems: "center", marginBottom: 12 }}>
