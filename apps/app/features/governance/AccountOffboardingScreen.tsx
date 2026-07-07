@@ -208,7 +208,7 @@ export default function AccountOffboardingScreen({ accessToken, onDeletionReques
         </View>
       ) : phase === "submitting" ? (
         <View style={{ height: 54, justifyContent: "center", alignItems: "center", marginBottom: 16 }}>
-          <ActivityIndicator color={MONZA600} />
+          <ActivityIndicator color={MONZA600} accessibilityLabel="Processing deletion request" />
         </View>
       ) : (
         <Pressable
