@@ -7,6 +7,7 @@ import {
 } from "react-native";
 import { CheckCircle, DownloadSimple, FileText, ShieldCheck } from "phosphor-react-native";
 import { getDataExports, requestDataExport } from "./api";
+import { ERRORS } from "./constants";
 
 const MUTED = "#6B7A6F";
 const LINE = "#EAEAE6";
@@ -67,7 +68,7 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
     try {
       const { response } = await requestDataExport(accessToken);
       if (!response.ok) {
-        setError("Export service is unavailable. Please try again.");
+        setError(ERRORS.EXPORT_UNAVAILABLE_RETRY);
         setExporting(false);
         return;
       }
@@ -148,7 +149,7 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
                   try {
                     const { response } = await requestDataExport(accessToken);
                     if (!response.ok) {
-                      setError("Export service is unavailable.");
+                      setError(ERRORS.EXPORT_UNAVAILABLE);
                       setReRequesting(false);
                       return;
                     }

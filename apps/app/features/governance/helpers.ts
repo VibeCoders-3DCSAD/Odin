@@ -1,6 +1,8 @@
+import { ERRORS } from "./constants";
+
 export function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.name === "AbortError") {
-    return "The request timed out. Check your connection and try again.";
+    return ERRORS.TIMEOUT;
   }
-  return error instanceof Error ? error.message : "Something went wrong.";
+  return error instanceof Error ? error.message : ERRORS.GENERIC;
 }
