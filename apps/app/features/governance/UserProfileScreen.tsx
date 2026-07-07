@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -6,7 +6,7 @@ import {
   View,
 } from "react-native";
 import { CheckCircle, DownloadSimple, FileText, ShieldCheck } from "phosphor-react-native";
-import { requestDataExport } from "./api";
+import { getDataExports, requestDataExport } from "./api";
 
 const MUTED = "#6B7A6F";
 const LINE = "#EAEAE6";
@@ -37,7 +37,23 @@ function getErrorMessage(error: unknown) {
 export default function UserProfileScreen({ accessToken, alreadyExported, onExported, onDone }: UserProfileScreenProps) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(alreadyExported ?? false);
+  const [reRequesting, setReRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDataExports(accessToken)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.response.ok) return;
+        const requests = (res.body as { payload?: { requests?: { status: string }[] } }).payload?.requests;
+        if (requests?.some((r) => r.status === "requested" || r.status === "processing")) {
+          setExported(true);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
   async function handleExport() {
     setExporting(true);
@@ -109,22 +125,62 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
                 Export requested
               </Text>
               <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 11, color: AQUA700, marginTop: 1 }}>
-                Your export is being prepared. Check back later.
+                Your export is being prepared. Requesting again will cancel the previous one.
               </Text>
             </View>
           </View>
+          <Pressable
+            onPress={async () => {
+              setReRequesting(true);
+              setError(null);
+              try {
+                const { response } = await requestDataExport(accessToken);
+                if (!response.ok) {
+                  setError("Export service is unavailable.");
+                  setReRequesting(false);
+                  return;
+                }
+                setReRequesting(false);
+                onExported?.();
+              } catch (err) {
+                setError(getErrorMessage(err));
+                setReRequesting(false);
+              }
+            }}
+            disabled={reRequesting}
+            accessibilityRole="button"
+            accessibilityLabel="Request new export"
+            accessibilityState={{ disabled: reRequesting }}
+            style={{
+              height: 54, borderRadius: 14,
+              backgroundColor: AQUA950,
+              justifyContent: "center", alignItems: "center",
+              marginBottom: 12,
+              flexDirection: "row", gap: 8,
+              opacity: reRequesting ? 0.5 : 1,
+            }}
+          >
+            {reRequesting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <><DownloadSimple size={20} color="#FFFFFF" />
+              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
+                Request new export
+              </Text></>
+            )}
+          </Pressable>
           <Pressable
             onPress={onDone}
             accessibilityRole="button"
             accessibilityLabel="Back to settings"
             style={{
-              height: 54, borderRadius: 14,
-              backgroundColor: AQUA950,
+              height: 50, borderRadius: 14,
+              borderWidth: 1.5, borderColor: LINE,
               justifyContent: "center", alignItems: "center",
               marginBottom: 16,
             }}
           >
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: INK2 }}>
               Back to Settings
             </Text>
           </Pressable>
