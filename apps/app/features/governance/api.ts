@@ -90,6 +90,12 @@ export function submitConsent(
   );
 }
 
+export function getDataExports(accessToken: string) {
+  return apiFetch<{ payload?: { requests: { id: string; status: string; requested_at: string }[] }; error?: string; message?: string }>(
+    accessToken, "/odin/api/data-export-requests",
+  );
+}
+
 export function requestDataExport(accessToken: string) {
   return apiFetch<{ payload?: DataExportRequest; error?: string; message?: string }>(
     accessToken, "/odin/api/data-export-requests", { method: "POST", body: { payload: {} } },

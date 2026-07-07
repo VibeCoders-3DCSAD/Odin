@@ -6,6 +6,26 @@ import type { AuthenticatedRequest } from "../middleware/auth.js";
 const router = Router();
 
 const VALID_FORMATS = ["json", "csv"];
+const ACTIVE_STATUSES = ["requested", "processing"];
+
+router.get("/data-export-requests", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
+  const userId = request.userId!;
+  const authenticatedSupabase = request.supabase!;
+
+  const { data, error } = await authenticatedSupabase
+    .from("data_export_requests")
+    .select("id, status, requested_at")
+    .eq("user_id", userId)
+    .order("requested_at", { ascending: false })
+    .limit(10);
+
+  if (error) {
+    response.status(500).json({ error: "Internal Server Error", message: "Failed to fetch export requests" });
+    return;
+  }
+
+  response.status(200).json({ payload: { requests: data ?? [] } });
+});
 
 router.post("/data-export-requests", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   const userId = request.userId!;
@@ -43,6 +63,12 @@ router.post("/data-export-requests", requireAuth, async (request: AuthenticatedR
     }
     metadata.reason = payload.reason;
   }
+
+  await authenticatedSupabase
+    .from("data_export_requests")
+    .update({ status: "cancelled" })
+    .eq("user_id", userId)
+    .in("status", ACTIVE_STATUSES);
 
   const { data, error } = await authenticatedSupabase
     .from("data_export_requests")
