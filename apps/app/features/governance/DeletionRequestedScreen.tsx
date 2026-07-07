@@ -8,6 +8,7 @@ import {
 import { CalendarBlank, CaretRight, Clock, ShieldCheck, XCircle } from "phosphor-react-native";
 import { cancelAccountDeletion } from "./api";
 import type { AccountDeletionRequest } from "./types";
+import { getErrorMessage } from "./helpers";
 
 type DeletionRequestedScreenProps = {
   accessToken: string;
@@ -26,13 +27,6 @@ const AQUA700 = "#0B8A55";
 const CARD = "#FCF8F0";
 const MONZA50 = "#FFF0F2";
 const MONZA600 = "#D9001F";
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.name === "AbortError") {
-    return "The request timed out. Check your connection and try again.";
-  }
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -57,6 +51,7 @@ export default function DeletionRequestedScreen({ accessToken, deletionRequest, 
         return;
       }
       setCancelled(true);
+      onCancelled();
     } catch (err) {
       setError(getErrorMessage(err));
       setCancelling(false);
