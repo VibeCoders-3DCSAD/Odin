@@ -38,6 +38,7 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(alreadyExported ?? false);
   const [reRequesting, setReRequesting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchedExports = useRef(false);
@@ -134,46 +135,76 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
               </Text>
             </View>
           </View>
-          <Pressable
-            onPress={async () => {
-              setReRequesting(true);
-              setError(null);
-              try {
-                const { response } = await requestDataExport(accessToken);
-                if (!response.ok) {
-                  setError("Export service is unavailable.");
-                  setReRequesting(false);
-                  return;
-                }
-                setReRequesting(false);
-                onExported?.();
-              } catch (err) {
-                setError(getErrorMessage(err));
-                setReRequesting(false);
-              }
-            }}
-            disabled={reRequesting}
-            accessibilityRole="button"
-            accessibilityLabel="Request new export"
-            accessibilityState={{ disabled: reRequesting }}
-            style={{
-              height: 54, borderRadius: 14,
-              backgroundColor: AQUA950,
-              justifyContent: "center", alignItems: "center",
-              marginBottom: 12,
-              flexDirection: "row", gap: 8,
-              opacity: reRequesting ? 0.5 : 1,
-            }}
-          >
-            {reRequesting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <><DownloadSimple size={20} color="#FFFFFF" />
+          {confirming ? (
+            <View style={{ gap: 10, marginBottom: 12 }}>
+              <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: INK2, textAlign: "center" }}>
+                This will cancel your current export request and start a new one with the latest data.
+              </Text>
+              <Pressable
+                onPress={async () => {
+                  setReRequesting(true);
+                  setConfirming(false);
+                  setError(null);
+                  try {
+                    const { response } = await requestDataExport(accessToken);
+                    if (!response.ok) {
+                      setError("Export service is unavailable.");
+                      setReRequesting(false);
+                      return;
+                    }
+                    setReRequesting(false);
+                    onExported?.();
+                  } catch (err) {
+                    setError(getErrorMessage(err));
+                    setReRequesting(false);
+                  }
+                }}
+                disabled={reRequesting}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm new export"
+                style={{
+                  height: 54, borderRadius: 14,
+                  backgroundColor: AQUA950,
+                  justifyContent: "center", alignItems: "center",
+                  opacity: reRequesting ? 0.5 : 1,
+                }}
+              >
+                {reRequesting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
+                    Yes, request new export
+                  </Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => setConfirming(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+                style={{ height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: LINE, justifyContent: "center", alignItems: "center" }}
+              >
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: INK2 }}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => setConfirming(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Request new export"
+              style={{
+                height: 54, borderRadius: 14,
+                backgroundColor: AQUA950,
+                justifyContent: "center", alignItems: "center",
+                marginBottom: 12,
+                flexDirection: "row", gap: 8,
+              }}
+            >
+              <DownloadSimple size={20} color="#FFFFFF" />
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
                 Request new export
-              </Text></>
-            )}
-          </Pressable>
+              </Text>
+            </Pressable>
+          )}
           <Pressable
             onPress={onDone}
             accessibilityRole="button"

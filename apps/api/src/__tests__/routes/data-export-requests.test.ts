@@ -35,8 +35,8 @@ function mockInsertChain(result: object) {
   return jest.fn().mockReturnValue({ select: mockSelect });
 }
 
-function mockUpdateChain() {
-  const mockIn = jest.fn().mockReturnValue({});
+function mockUpdateChain(result?: object) {
+  const mockIn = jest.fn().mockReturnValue(result ?? {});
   const mockEq = jest.fn().mockReturnValue({ in: mockIn });
   return jest.fn().mockReturnValue({ eq: mockEq });
 }
@@ -133,6 +133,19 @@ describe("POST /odin/api/data-export-requests", () => {
       .send({ payload: {} });
 
     expect(response.status).toBe(201);
+  });
+
+  it("returns 500 when cancel update fails", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValue({ update: mockUpdateChain({ error: { message: "Cancel failed" } }) });
+
+    const response = await request(app)
+      .post("/odin/api/data-export-requests")
+      .set(authHeader())
+      .send({ payload: {} });
+
+    expect(response.status).toBe(500);
   });
 
   it("scopes creation by user_id", async () => {
