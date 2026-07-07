@@ -92,6 +92,6 @@ export function submitConsent(
 
 export function requestDataExport(accessToken: string) {
   return apiFetch<{ payload?: DataExportRequest; error?: string; message?: string }>(
-    accessToken, "/odin/api/data-export-requests", { method: "POST" },
+    accessToken, "/odin/api/data-export-requests", { method: "POST", body: { payload: {} } },
   );
 }
