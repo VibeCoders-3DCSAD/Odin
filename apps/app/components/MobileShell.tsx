@@ -1,6 +1,6 @@
 import React from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
+import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -113,6 +113,8 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [settingsSubPage, setSettingsSubPage] = useState(false);
+  const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
@@ -170,20 +172,22 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
     if (currentPage === "settings") {
       return (
         <View className="gap-6">
-          <PrivacySettingsScreen accessToken={accessToken} onBackToLogin={handleLogout} />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Log out"
-            disabled={isLoggingOut}
-            onPress={handleLogout}
-            className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
-          >
-            {isLoggingOut ? (
-              <ActivityIndicator color={palette.error} />
-            ) : (
-              <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
-            )}
-          </Pressable>
+          <PrivacySettingsScreen accessToken={accessToken} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
+          {!settingsSubPage ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Log out"
+              disabled={isLoggingOut}
+              onPress={handleLogout}
+              className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
+            >
+              {isLoggingOut ? (
+                <ActivityIndicator color={palette.error} />
+              ) : (
+                <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
+              )}
+            </Pressable>
+          ) : null}
         </View>
       );
     }
@@ -354,6 +358,46 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
             </Pressable>
           </View>
         </View>
+
+        {deletionSuccessDate ? (
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: palette.shell, paddingHorizontal: 30, justifyContent: "center", alignItems: "center" }}>
+            <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: "#EFFEF7", justifyContent: "center", alignItems: "center", marginBottom: 24 }}>
+              <CheckCircle size={56} color={palette.success} weight="fill" />
+            </View>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: palette.ink }}>
+              Deletion requested
+            </Text>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 14, lineHeight: 22.4, color: palette.mut, marginTop: 10, textAlign: "center", maxWidth: 270 }}>
+              Your account is scheduled for deletion. You have{" "}
+              <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink2 }}>30 days</Text>
+              {" "}to cancel by logging back in. After that, all data is permanently erased.
+            </Text>
+            <View style={{ width: "100%", marginTop: 26, padding: 16, borderRadius: 14, backgroundColor: "#F8EFDC", borderWidth: 1, borderColor: palette.line }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12.5, color: palette.mut }}>
+                  Scheduled deletion
+                </Text>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>
+                  {new Date(deletionSuccessDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={handleLogout}
+              accessibilityRole="button"
+              accessibilityLabel="Back to login"
+              style={{
+                width: "100%", marginTop: 26, height: 52, borderRadius: 14,
+                backgroundColor: palette.brand,
+                justifyContent: "center", alignItems: "center",
+              }}
+            >
+              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14.5, color: "#FFFFFF" }}>
+                Back to login
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </SafeAreaView>
 
       {/* Drawer overlay - rendered last to sit above everything */}

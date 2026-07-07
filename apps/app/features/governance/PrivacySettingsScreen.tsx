@@ -20,8 +20,9 @@ import AccountOffboardingScreen from "./AccountOffboardingScreen";
 
 type PrivacySettingsScreenProps = {
   accessToken: string;
-  userEmail?: string;
   onBackToLogin?: () => void;
+  onDeleted?: (scheduledDate: string) => void;
+  onSubPageChange?: (showingSubPage: boolean) => void;
 };
 
 const MUTED = "#6B7A6F";
@@ -249,7 +250,7 @@ function SettingsSkeleton() {
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken, userEmail, onBackToLogin }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, onBackToLogin, onDeleted, onSubPageChange }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -260,6 +261,10 @@ export default function PrivacySettingsScreen({ accessToken, userEmail, onBackTo
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetched = useRef(false);
+
+  useEffect(() => {
+    onSubPageChange?.(subPage !== null);
+  }, [subPage, onSubPageChange]);
 
   useEffect(() => {
     if (fetched.current) return;
@@ -391,8 +396,7 @@ export default function PrivacySettingsScreen({ accessToken, userEmail, onBackTo
         accessToken={accessToken}
         onBack={() => setSubPage(null)}
         onGoToExport={() => setSubPage("export")}
-        onBackToLogin={onBackToLogin}
-        email={userEmail}
+        onDeleted={onDeleted}
       />
     );
   }
