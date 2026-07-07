@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Check, ShieldCheck } from "phosphor-react-native";
 import { submitConsent } from "./api";
+import { ERRORS } from "./constants";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -82,7 +83,7 @@ export default function PrivacyConsentScreen({
         version: consentVersion,
       });
       if (!response.ok) {
-        setError("Consent service is unavailable. Please try again.");
+        setError(ERRORS.CONSENT_UNAVAILABLE);
         setSubmitting(false);
         return;
       }
