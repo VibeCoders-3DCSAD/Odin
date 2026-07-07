@@ -8,6 +8,7 @@ import {
 import { CaretRight, Check, WarningCircle } from "phosphor-react-native";
 import { confirmAccountDeletion, requestAccountDeletion } from "./api";
 import type { AccountDeletionRequest } from "./types";
+import { getErrorMessage } from "./helpers";
 
 type AccountOffboardingScreenProps = {
   accessToken: string;
@@ -25,13 +26,6 @@ const MONZA50 = "#FFF0F2";
 const MONZA200 = "#FFCDD2";
 const MONZA600 = "#D9001F";
 const MONZA700 = "#B71C1C";
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.name === "AbortError") {
-    return "The request timed out. Check your connection and try again.";
-  }
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
 
 export default function AccountOffboardingScreen({ accessToken, onDeletionRequested, onBack }: AccountOffboardingScreenProps) {
   const [phase, setPhase] = useState<"initial" | "confirming" | "submitting">("initial");
