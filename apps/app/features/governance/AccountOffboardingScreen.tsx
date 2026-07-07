@@ -8,6 +8,7 @@ import {
 import { CaretRight, Check, WarningCircle } from "phosphor-react-native";
 import { confirmAccountDeletion, requestAccountDeletion } from "./api";
 import type { AccountDeletionRequest } from "./types";
+import { ERRORS } from "./constants";
 import { getErrorMessage } from "./helpers";
 
 type AccountOffboardingScreenProps = {
@@ -40,7 +41,7 @@ export default function AccountOffboardingScreen({ accessToken, onDeletionReques
       const { response, body } = await requestAccountDeletion(accessToken);
       if (!response.ok) {
         if (body.message?.includes("active") || response.status === 409) {
-          setError("You already have an active deletion request.");
+          setError(ERRORS.ACTIVE_DELETION_REQUEST);
         } else {
           setError(body.message ?? "Failed to create deletion request.");
         }
@@ -49,7 +50,7 @@ export default function AccountOffboardingScreen({ accessToken, onDeletionReques
       }
       const delRequest = (body as { payload?: { request: AccountDeletionRequest } }).payload?.request;
       if (!delRequest) {
-        setError("Unexpected response. Please try again.");
+        setError(ERRORS.UNEXPECTED_RESPONSE);
         setPhase("initial");
         return;
       }

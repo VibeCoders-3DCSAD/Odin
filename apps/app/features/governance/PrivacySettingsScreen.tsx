@@ -14,6 +14,7 @@ import {
 } from "phosphor-react-native";
 import { getConsents, getPrivacySettings, updatePrivacySettings } from "./api";
 import type { AccountDeletionRequest, ConsentRecord, PrivacySettings } from "./types";
+import { ERRORS } from "./constants";
 import UserProfileScreen from "./UserProfileScreen";
 import AccountOffboardingScreen from "./AccountOffboardingScreen";
 import DeletionRequestedScreen from "./DeletionRequestedScreen";
@@ -276,7 +277,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         if (settingsRes.body.payload) {
           setSettings(settingsRes.body.payload);
         } else {
-          setError(settingsRes.body.message ?? "Failed to load privacy settings.");
+          setError(settingsRes.body.message ?? ERRORS.FAILED_LOAD_PRIVACY);
         }
         const mePayload = consentsRes.body as { payload?: { consents?: ConsentRecord[] } };
         if (mePayload.payload?.consents) {
@@ -300,7 +301,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
         const { response, body } = await updatePrivacySettings(accessToken, payload);
         if (!response.ok) {
           if (previous) setSettings(previous);
-          setError(body.message ?? "Failed to save.");
+          setError(body.message ?? ERRORS.FAILED_SAVE);
           return;
         }
         setSaved(true);
@@ -342,7 +343,7 @@ export default function PrivacySettingsScreen({ accessToken }: PrivacySettingsSc
             getPrivacySettings(accessToken)
               .then(({ body }) => {
                 if (body.payload) setSettings(body.payload);
-                else setError(body.message ?? "Failed to load.");
+                else setError(body.message ?? ERRORS.FAILED_LOAD);
               })
               .catch((err) => setError(getErrorMessage(err)))
               .finally(() => setLoading(false));
