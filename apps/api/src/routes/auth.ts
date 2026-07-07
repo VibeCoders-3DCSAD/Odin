@@ -44,6 +44,24 @@ async function ensurePrivacySettings(
   return privacy;
 }
 
+async function cancelActiveDeletionRequests(
+  userId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("account_deletion_requests")
+    .update({
+      status: "cancelled",
+      cancelled_at: new Date().toISOString(),
+      metadata: { cancelled_by: "reauthentication" },
+    })
+    .eq("user_id", userId)
+    .in("status", ["requested", "processing"]);
+
+  if (error) {
+    console.error("Failed to cancel active deletion requests", error);
+  }
+}
+
 async function bootstrapAuthenticatedUser(
   userId: string,
   accessToken: string,
@@ -56,6 +74,8 @@ async function bootstrapAuthenticatedUser(
   const authenticatedSupabase = createAuthenticatedSupabaseClient(accessToken);
   const profile = await ensureProfile(userId, authenticatedSupabase);
   const privacy = await ensurePrivacySettings(userId, authenticatedSupabase);
+
+  await cancelActiveDeletionRequests(userId);
 
   const { data: onboarding, error: onboardingError } = await authenticatedSupabase
     .from("onboarding_sessions")
