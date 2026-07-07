@@ -19,3 +19,12 @@ export type DataExportRequest = {
     status: "requested" | "processing" | "available" | "completed" | "failed" | "expired" | "cancelled";
   };
 };
+
+export type AccountDeletionRequest = {
+  id: string;
+  status: "requested" | "processing" | "cancelled" | "completed";
+  requested_at: string;
+  scheduled_delete_at?: string;
+  confirmed_at?: string;
+  cancelled_at?: string;
+};
