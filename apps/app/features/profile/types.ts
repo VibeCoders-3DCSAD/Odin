@@ -61,6 +61,32 @@ export type SelectProfilePayload = {
   profile_label: FinancialProfileLabel;
 };
 
+export type ConfirmAssignmentResult = {
+  success: boolean;
+  assignment_id: string;
+  status: string;
+};
+
+export type RejectAssignmentResult = {
+  success: boolean;
+  assignment_id: string;
+  status: string;
+};
+
+export type SelectProfileResult = {
+  success: boolean;
+  assignment_id: string;
+  profile_label: FinancialProfileLabel;
+  previous_deactivated: boolean;
+};
+
+export type ReassessResult = {
+  success: boolean;
+  assessment_id: string;
+  status: string;
+  assessment_method: string;
+};
+
 export type ReassessPayload = {
   reason?: string;
   use_recent_transactions?: boolean;

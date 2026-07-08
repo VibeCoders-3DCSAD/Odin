@@ -1,78 +1,16 @@
-import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
+import { apiFetch } from "../../lib/api";
 import type { AccountDeletionRequest, ConsentRecord, DataExportRequest, PrivacySettings } from "./types";
 
-export async function getPrivacySettings(accessToken: string) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: controller.signal,
-    });
-    let body = {};
-    try {
-      body = await response.json();
-    } catch {}
-    return { response, body } as {
-      response: Response;
-      body: { payload?: PrivacySettings; error?: string; message?: string };
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
+export function getPrivacySettings(accessToken: string) {
+  return apiFetch<{ payload?: PrivacySettings; error?: string; message?: string }>(
+    accessToken, "/odin/api/privacy/settings",
+  );
 }
 
-export async function updatePrivacySettings(
-  accessToken: string,
-  payload: Partial<PrivacySettings>,
-) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ payload }),
-      signal: controller.signal,
-    });
-    let body = {};
-    try {
-      body = await response.json();
-    } catch {}
-    return { response, body } as {
-      response: Response;
-      body: { payload?: { privacy_settings: { updated_at: string } }; error?: string; message?: string };
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-function apiFetch<T>(
-  accessToken: string,
-  path: string,
-  options?: { method?: string; body?: unknown },
-) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  return fetch(`${API_BASE_URL}${path}`, {
-    method: options?.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: options?.body ? JSON.stringify(options.body) : undefined,
-    signal: controller.signal,
-  })
-    .then(async (res) => {
-      let body = {};
-      try { body = await res.json(); } catch {}
-      return { response: res, body } as { response: Response; body: T };
-    })
-    .finally(() => clearTimeout(timeoutId));
+export function updatePrivacySettings(accessToken: string, payload: Partial<PrivacySettings>) {
+  return apiFetch<{ payload?: { privacy_settings: { updated_at: string } }; error?: string; message?: string }>(
+    accessToken, "/odin/api/privacy/settings", { method: "PATCH", body: { payload } },
+  );
 }
 
 export function getConsents(accessToken: string) {
