@@ -130,3 +130,15 @@ export const PROFILE_ASSESSMENT_METHODS = [
   "cold_start",
   "standard",
 ] as const;
+
+export const PROFILE_ERRORS = {
+  assignment_not_found: "Assignment not found.",
+  confirmation_required: "You must confirm before proceeding.",
+  select_failed: "Failed to select profile.",
+  confirm_failed: "Failed to confirm assignment.",
+  reject_failed: "Failed to reject assignment.",
+  reject_reason_required: "Override reason is required.",
+  fetch_failed: "Failed to fetch profile assignment.",
+  invalid_assignment_id: "Invalid assignment ID format.",
+  invalid_profile_label: "Invalid profile label. Must be one of: stable_flexible, stable_obligated, variable_flexible, variable_obligated.",
+} as const;
