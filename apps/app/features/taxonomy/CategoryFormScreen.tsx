@@ -46,8 +46,6 @@ export default function CategoryFormScreen({
   const [shortLabel, setShortLabel] = useState(category?.short_label ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(category?.category_group_id ?? "");
   const [isFilipinoContext, setIsFilipinoContext] = useState(category?.is_filipino_context ?? false);
-  const defaultSort = category?.sort_order ?? (groups ? groups.reduce((max, g) => Math.max(max, ...(g.categories?.map((c) => c.sort_order) ?? [0])), 0) + 1 : 0);
-  const [sortOrder, setSortOrder] = useState(String(defaultSort));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -67,7 +65,6 @@ export default function CategoryFormScreen({
       short_label: shortLabel.trim() || null,
       description: description.trim(),
       is_filipino_context: isFilipinoContext,
-      sort_order: parseInt(sortOrder, 10) || 0,
     };
 
     if (isCreate) {
@@ -219,28 +216,6 @@ export default function CategoryFormScreen({
                   backgroundColor: palette.card, minHeight: 80, textAlignVertical: "top",
                 }}
               />
-            </View>
-
-            <View>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>POSITION</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Pressable
-                  onPress={() => setSortOrder(String(Math.max(0, parseInt(sortOrder, 10) - 1)))}
-                  style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: palette.card, alignItems: "center", justifyContent: "center" }}
-                >
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: palette.ink }}>−</Text>
-                </Pressable>
-                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: palette.ink, minWidth: 30, textAlign: "center" }}>
-                  {sortOrder}
-                </Text>
-                <Pressable
-                  onPress={() => setSortOrder(String(parseInt(sortOrder, 10) + 1))}
-                  style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: palette.card, alignItems: "center", justifyContent: "center" }}
-                >
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: palette.ink }}>+</Text>
-                </Pressable>
-                <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, flex: 1 }}>Higher = appears first</Text>
-              </View>
             </View>
 
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
