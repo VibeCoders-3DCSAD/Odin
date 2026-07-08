@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
+import OnboardingScreen from "../features/onboarding/OnboardingScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -46,7 +47,8 @@ type Page =
   | "insurance"
   | "assistant"
   | "add-transaction"
-  | "settings";
+  | "settings"
+  | "onboarding";
 
 type MobileShellProps = {
   accessToken: string;
@@ -107,6 +109,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
   settings: { title: "Settings", subtitle: "Privacy & Account" },
+  onboarding: { title: "Onboarding", subtitle: "Set up your profile" },
 };
 
 export default function MobileShell({ accessToken, onLoggedOut, signOut }: MobileShellProps) {
@@ -190,6 +193,10 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
           ) : null}
         </View>
       );
+    }
+
+    if (currentPage === "onboarding") {
+      return <OnboardingScreen accessToken={accessToken} onComplete={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
