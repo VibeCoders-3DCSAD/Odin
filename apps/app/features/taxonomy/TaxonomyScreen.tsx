@@ -195,6 +195,13 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Header */}
+      <View style={{ paddingHorizontal: 22, paddingTop: 12 }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
+          Categories
+        </Text>
+      </View>
+
       {/* Search bar */}
       <View style={{ paddingHorizontal: 22, paddingTop: 16 }}>
         <View
