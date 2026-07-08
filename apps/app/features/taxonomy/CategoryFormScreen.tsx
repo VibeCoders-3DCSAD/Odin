@@ -60,11 +60,13 @@ export default function CategoryFormScreen({
     if (isCreate && !selectedGroupId) { setFormError("Category group is required"); return; }
 
     setSaving(true);
+    const maxSort = groups?.reduce((max, g) => Math.max(max, ...(g.categories?.map((c) => c.sort_order) ?? [0])), 0) ?? 0;
     const payload: Record<string, unknown> = {
       label: label.trim(),
       short_label: shortLabel.trim() || null,
       description: description.trim(),
       is_filipino_context: isFilipinoContext,
+      sort_order: maxSort + 1,
     };
 
     if (isCreate) {
