@@ -17,7 +17,7 @@ jest.mock("../../lib/supabase.js", () => {
 
 import app from "../../app.js";
 import { supabase } from "../../lib/supabase.js";
-import { createListQuery } from "../helpers/supabase.js";
+import { createMockQuery, createListQuery } from "../helpers/supabase.js";
 import type { MockQueryResult } from "../helpers/supabase.js";
 import { validUserId, authHeader } from "../helpers/fixtures.js";
 
@@ -71,9 +71,7 @@ describe("GET /odin/api/categories", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.payload.categories).toHaveLength(1);
-    expect(response.body.payload.categories[0]).toMatchObject({
-      user_id: validUserId,
-    });
+    expect(response.body.payload.categories[0]).toMatchObject({ user_id: validUserId });
   });
 
   it("returns 200 with inactive categories when is_active=false", async () => {
@@ -114,5 +112,361 @@ describe("GET /odin/api/categories", () => {
       .set(authHeader());
 
     expect(response.status).toBe(500);
+  });
+});
+
+describe("POST /odin/api/categories", () => {
+  function validCreatePayload(overrides: Record<string, unknown> = {}) {
+    return {
+      payload: {
+        category_group_id: "group-uuid-1",
+        slug: "my_category",
+        label: "My Category",
+        description: "A custom category",
+        ...overrides,
+      },
+    };
+  }
+
+  it("returns 201 with created category", async () => {
+    mockAuth();
+
+    const groupResult: MockQueryResult = { data: { id: "group-uuid-1" }, error: null };
+    const insertResult: MockQueryResult = {
+      data: { id: "cat-1", category_group_id: "group-uuid-1", user_id: validUserId, slug: "my_category", label: "My Category", description: "A custom category", is_system: false, is_active: true, sort_order: 0 },
+      error: null,
+    };
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery(groupResult))
+      .mockReturnValueOnce(createMockQuery(insertResult));
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send(validCreatePayload());
+
+    expect(response.status).toBe(201);
+    expect(response.body.payload.category).toMatchObject({ slug: "my_category", is_system: false });
+  });
+
+  it("returns 400 when payload is missing", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send({});
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when category_group_id is missing", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send({ payload: { slug: "test", label: "Test", description: "desc" } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when slug is missing", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send({ payload: { category_group_id: "g1", label: "Test", description: "desc" } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when label is missing", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send({ payload: { category_group_id: "g1", slug: "test", description: "desc" } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when description is missing", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send({ payload: { category_group_id: "g1", slug: "test", label: "Test" } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when category_group_id is invalid", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValue(createMockQuery({ data: null, error: null }));
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send(validCreatePayload({ category_group_id: "invalid-group" }));
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ message: expect.stringMatching(/category group/i) });
+  });
+
+  it("returns 409 when slug already exists", async () => {
+    mockAuth();
+
+    const groupResult: MockQueryResult = { data: { id: "group-uuid-1" }, error: null };
+    const conflictResult: MockQueryResult = {
+      data: null,
+      error: { code: "23505", message: "duplicate key value" },
+    };
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery(groupResult))
+      .mockReturnValueOnce(createMockQuery(conflictResult));
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send(validCreatePayload());
+
+    expect(response.status).toBe(409);
+  });
+
+  it("returns 401 when no authorization header", async () => {
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .send(validCreatePayload());
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 500 when insert fails", async () => {
+    mockAuth();
+
+    const groupResult: MockQueryResult = { data: { id: "group-uuid-1" }, error: null };
+    const insertResult: MockQueryResult = { data: null, error: { message: "Database error" } };
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery(groupResult))
+      .mockReturnValueOnce(createMockQuery(insertResult));
+
+    const response = await request(app)
+      .post("/odin/api/categories")
+      .set(authHeader())
+      .send(validCreatePayload());
+
+    expect(response.status).toBe(500);
+  });
+});
+
+describe("PATCH /odin/api/categories/:id", () => {
+  function mockExistingCategory(overrides: Record<string, unknown> = {}) {
+    return {
+      data: {
+        id: "cat-1",
+        category_group_id: "group-uuid-1",
+        user_id: validUserId,
+        slug: "my_category",
+        label: "My Category",
+        description: "A custom category",
+        is_system: false,
+        is_active: true,
+        sort_order: 0,
+        ...overrides,
+      },
+      error: null,
+    };
+  }
+
+  it("returns 200 with updated category", async () => {
+    mockAuth();
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery(mockExistingCategory()))
+      .mockReturnValueOnce(createMockQuery({
+        data: { ...mockExistingCategory().data, label: "Updated Label" },
+        error: null,
+      }));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .set(authHeader())
+      .send({ payload: { label: "Updated Label" } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload.category).toMatchObject({ label: "Updated Label" });
+  });
+
+  it("returns 400 when no valid fields to update", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory()));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .set(authHeader())
+      .send({ payload: {} });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 403 when updating a system category", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory({ is_system: true, user_id: null })));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .set(authHeader())
+      .send({ payload: { label: "Updated" } });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 403 when updating another user's category", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory({ user_id: "other-user-id" })));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .set(authHeader())
+      .send({ payload: { label: "Updated" } });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 when category not found", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: null, error: null }));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/non-existent")
+      .set(authHeader())
+      .send({ payload: { label: "Updated" } });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 400 when field value has wrong type", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory()));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .set(authHeader())
+      .send({ payload: { is_active: "not-a-boolean" } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when slug is not accepted (display/active-state only)", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory()));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .set(authHeader())
+      .send({ payload: { slug: "new_slug" } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 401 when no authorization header", async () => {
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .send({ payload: { label: "Updated" } });
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("DELETE /odin/api/categories/:id", () => {
+  function mockExistingCategory(overrides: Record<string, unknown> = {}) {
+    return {
+      data: {
+        id: "cat-1",
+        category_group_id: "group-uuid-1",
+        user_id: validUserId,
+        slug: "my_category",
+        label: "My Category",
+        description: "A custom category",
+        is_system: false,
+        is_active: true,
+        sort_order: 0,
+        ...overrides,
+      },
+      error: null,
+    };
+  }
+
+  it("returns 200 with soft-deleted category", async () => {
+    mockAuth();
+
+    mockFrom
+      .mockReturnValueOnce(createMockQuery(mockExistingCategory()))
+      .mockReturnValueOnce(createMockQuery({
+        data: { ...mockExistingCategory().data, is_active: false },
+        error: null,
+      }));
+
+    const response = await request(app)
+      .delete("/odin/api/categories/cat-1")
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload.category.is_active).toBe(false);
+  });
+
+  it("returns 403 when deleting a system category", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory({ is_system: true, user_id: null })));
+
+    const response = await request(app)
+      .delete("/odin/api/categories/cat-1")
+      .set(authHeader());
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 403 when deleting another user's category", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory({ user_id: "other-user-id" })));
+
+    const response = await request(app)
+      .delete("/odin/api/categories/cat-1")
+      .set(authHeader());
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 when category not found", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: null, error: null }));
+
+    const response = await request(app)
+      .delete("/odin/api/categories/non-existent")
+      .set(authHeader());
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 401 when no authorization header", async () => {
+    const response = await request(app).delete("/odin/api/categories/cat-1");
+    expect(response.status).toBe(401);
   });
 });
