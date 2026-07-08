@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
+import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -46,6 +47,7 @@ type Page =
   | "insurance"
   | "assistant"
   | "add-transaction"
+  | "categories"
   | "settings";
 
 type MobileShellProps = {
@@ -71,6 +73,7 @@ const drawerSections: DrawerSection[] = [
     label: "Overview",
     items: [
       { page: "dashboard", icon: "view-dashboard-outline", label: "Dashboard" },
+      { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
       { page: "history", icon: "clock-outline", label: "History" },
       { page: "settings", icon: "cog-outline", label: "Settings" },
@@ -106,6 +109,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
+  categories: { title: "Categories", subtitle: "Manage your categories" },
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
@@ -190,6 +194,10 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
           ) : null}
         </View>
       );
+    }
+
+    if (currentPage === "categories") {
+      return <TaxonomyScreen accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
