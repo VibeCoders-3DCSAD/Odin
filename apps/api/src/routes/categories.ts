@@ -18,7 +18,7 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
       .select("*")
       .order("sort_order", { ascending: true })
       .order("label", { ascending: true })
-      .limit(15);
+      .limit(100);
 
     if (includeSystem) {
       query = query.or(`user_id.is.null,user_id.eq.${userId}`);

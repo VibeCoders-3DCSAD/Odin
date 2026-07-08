@@ -16,7 +16,7 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
       .select("*")
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
-      .limit(15);
+      .limit(100);
 
     if (groupsError) {
       response.status(500).json({
@@ -40,7 +40,7 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
       .or(accessibleOr)
       .order("sort_order", { ascending: true })
       .order("label", { ascending: true })
-      .limit(15);
+      .limit(100);
 
     if (categoriesError) {
       response.status(500).json({
@@ -57,7 +57,7 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
       .or(accessibleOr)
       .order("sort_order", { ascending: true })
       .order("label", { ascending: true })
-      .limit(15);
+      .limit(100);
 
     if (subcategoriesError) {
       response.status(500).json({
