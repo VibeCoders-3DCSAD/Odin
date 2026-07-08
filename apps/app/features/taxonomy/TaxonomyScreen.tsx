@@ -260,13 +260,18 @@ export default function TaxonomyScreen({ accessToken }: TaxonomyScreenProps) {
           style: "destructive",
           onPress: async () => {
             setMutatingId(cat.id);
-            const { response, body } = await deleteCategory(accessToken, cat.id);
-            setMutatingId(null);
-            if (!response.ok) {
-              Alert.alert("Error", body.message || "Failed to delete category");
-              return;
+            try {
+              const { response, body } = await deleteCategory(accessToken, cat.id);
+              if (!response.ok) {
+                Alert.alert("Error", body.message || "Failed to delete category");
+                return;
+              }
+              fetchGroups();
+            } catch {
+              Alert.alert("Error", "Network error. Check your connection and try again.");
+            } finally {
+              setMutatingId(null);
             }
-            fetchGroups();
           },
         },
       ],

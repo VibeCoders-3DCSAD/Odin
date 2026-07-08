@@ -70,16 +70,21 @@ export default function CategoryFormScreen({
       Object.assign(payload, { category_group_id: selectedGroupId, slug: slug.trim() });
     }
 
-    const { response, body } = isCreate
-      ? await createCategory(accessToken, payload as Parameters<typeof createCategory>[1])
-      : await updateCategory(accessToken, category!.id, payload as Parameters<typeof updateCategory>[2]);
+    try {
+      const { response, body } = isCreate
+        ? await createCategory(accessToken, payload as Parameters<typeof createCategory>[1])
+        : await updateCategory(accessToken, category!.id, payload as Parameters<typeof updateCategory>[2]);
 
-    setSaving(false);
-    if (!response.ok) {
-      setFormError(body.message || "Failed to save category");
-      return;
+      if (!response.ok) {
+        setFormError(body.message || "Failed to save category");
+        return;
+      }
+      onSaved();
+    } catch {
+      setFormError("Network error. Check your connection and try again.");
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
@@ -104,6 +109,9 @@ export default function CategoryFormScreen({
                     {groups?.map((g) => (
                       <Pressable
                         key={g.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={g.label}
+                        accessibilityState={{ selected: selectedGroupId === g.id }}
                         onPress={() => setSelectedGroupId(g.id)}
                         style={{
                           padding: 12, borderRadius: 10, borderWidth: 1,
@@ -207,6 +215,9 @@ export default function CategoryFormScreen({
 
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Pressable
+                accessibilityRole="switch"
+                accessibilityLabel="Filipino context"
+                accessibilityState={{ checked: isFilipinoContext }}
                 onPress={() => setIsFilipinoContext(!isFilipinoContext)}
                 style={{
                   width: 44, height: 26, borderRadius: 100,
