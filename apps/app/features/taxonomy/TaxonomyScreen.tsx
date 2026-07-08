@@ -53,33 +53,6 @@ const GROUP_ICON_BG: Record<string, string> = {
   financial_allocation: palette.aqua50,
 };
 
-function Toggle({ active }: { active: boolean }) {
-  return (
-    <View
-      style={{
-        width: 44,
-        height: 26,
-        borderRadius: 100,
-        backgroundColor: active ? palette.aqua600 : palette.line,
-        position: "relative",
-      }}
-    >
-      <View
-        style={{
-          position: "absolute",
-          top: 3,
-          [active ? "right" : "left"]: 3,
-          width: 20,
-          height: 20,
-          borderRadius: 10,
-          backgroundColor: palette.card,
-          ...(active ? {} : { shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2 }),
-        }}
-      />
-    </View>
-  );
-}
-
 function CategoryRow({ category }: { category: Category }) {
   const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected_default) ?? false;
   const hasFilipinoContext = category.is_filipino_context;
@@ -128,7 +101,13 @@ function CategoryRow({ category }: { category: Category }) {
           </View>
         )}
       </View>
-      <Toggle active={hasProtectedDefault} />
+      {hasProtectedDefault && (
+        <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: palette.aqua50 }}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.aqua800 }}>
+            PROTECTED
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
