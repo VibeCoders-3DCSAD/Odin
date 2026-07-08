@@ -48,4 +48,202 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
   }
 });
 
+router.post("/", requireAuth, async (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
+  try {
+    const userId = request.userId!;
+    const supabase = request.supabase!;
+
+    const payload = request.body?.payload;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      response.status(400).json({
+        error: "Bad Request",
+        message: "Request body must have a payload object",
+      });
+      return;
+    }
+
+    const { category_group_id, slug, label, description, short_label, is_filipino_context, sort_order } = payload;
+
+    if (!category_group_id || typeof category_group_id !== "string") {
+      response.status(400).json({ error: "Bad Request", message: "category_group_id is required" });
+      return;
+    }
+
+    if (!slug || typeof slug !== "string") {
+      response.status(400).json({ error: "Bad Request", message: "slug is required" });
+      return;
+    }
+
+    if (!label || typeof label !== "string") {
+      response.status(400).json({ error: "Bad Request", message: "label is required" });
+      return;
+    }
+
+    if (!description || typeof description !== "string") {
+      response.status(400).json({ error: "Bad Request", message: "description is required" });
+      return;
+    }
+
+    const { data: group, error: groupError } = await supabase
+      .from("category_groups")
+      .select("id")
+      .eq("id", category_group_id)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (groupError) {
+      response.status(500).json({ error: "Internal Server Error", message: "Failed to verify category group" });
+      return;
+    }
+
+    if (!group) {
+      response.status(400).json({ error: "Bad Request", message: "category_group_id does not reference an active category group" });
+      return;
+    }
+
+    const { data: created, error: insertError } = await supabase
+      .from("categories")
+      .insert({
+        category_group_id,
+        user_id: userId,
+        slug,
+        label,
+        short_label: short_label || null,
+        description,
+        is_system: false,
+        is_filipino_context: is_filipino_context === true,
+        sort_order: typeof sort_order === "number" ? sort_order : 0,
+      })
+      .select("*")
+      .single();
+
+    if (insertError) {
+      if (insertError.code === "23505") {
+        response.status(409).json({ error: "Conflict", message: "A category with this slug already exists" });
+        return;
+      }
+      response.status(500).json({ error: "Internal Server Error", message: "Failed to create category" });
+      return;
+    }
+
+    response.status(201).json({ payload: { category: created } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/:id", requireAuth, async (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
+  try {
+    const userId = request.userId!;
+    const supabase = request.supabase!;
+    const categoryId = request.params.id;
+
+    const { data: existing, error: fetchError } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("id", categoryId)
+      .maybeSingle();
+
+    if (fetchError) {
+      response.status(500).json({ error: "Internal Server Error", message: "Failed to fetch category" });
+      return;
+    }
+
+    if (!existing) {
+      response.status(404).json({ error: "Not Found", message: "Category not found" });
+      return;
+    }
+
+    if (existing.is_system || existing.user_id !== userId) {
+      response.status(403).json({ error: "Forbidden", message: "You can only update your own non-system categories" });
+      return;
+    }
+
+    const payload = request.body?.payload;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      response.status(400).json({ error: "Bad Request", message: "Request body must have a payload object" });
+      return;
+    }
+
+    const allowedFields = ["slug", "label", "short_label", "description", "is_filipino_context", "sort_order", "is_active"];
+    const updates: Record<string, unknown> = {};
+
+    for (const field of allowedFields) {
+      if (payload[field] !== undefined) {
+        updates[field] = payload[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      response.status(400).json({ error: "Bad Request", message: "No valid fields to update" });
+      return;
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from("categories")
+      .update(updates)
+      .eq("id", categoryId)
+      .select("*")
+      .single();
+
+    if (updateError) {
+      if (updateError.code === "23505") {
+        response.status(409).json({ error: "Conflict", message: "A category with this slug already exists" });
+        return;
+      }
+      response.status(500).json({ error: "Internal Server Error", message: "Failed to update category" });
+      return;
+    }
+
+    response.status(200).json({ payload: { category: updated } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/:id", requireAuth, async (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
+  try {
+    const userId = request.userId!;
+    const supabase = request.supabase!;
+    const categoryId = request.params.id;
+
+    const { data: existing, error: fetchError } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("id", categoryId)
+      .maybeSingle();
+
+    if (fetchError) {
+      response.status(500).json({ error: "Internal Server Error", message: "Failed to fetch category" });
+      return;
+    }
+
+    if (!existing) {
+      response.status(404).json({ error: "Not Found", message: "Category not found" });
+      return;
+    }
+
+    if (existing.is_system || existing.user_id !== userId) {
+      response.status(403).json({ error: "Forbidden", message: "You can only delete your own non-system categories" });
+      return;
+    }
+
+    const { data: deleted, error: deleteError } = await supabase
+      .from("categories")
+      .update({ is_active: false })
+      .eq("id", categoryId)
+      .select("*")
+      .single();
+
+    if (deleteError) {
+      response.status(500).json({ error: "Internal Server Error", message: "Failed to soft-delete category" });
+      return;
+    }
+
+    response.status(200).json({ payload: { category: deleted } });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
