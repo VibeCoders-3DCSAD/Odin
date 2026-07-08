@@ -48,7 +48,6 @@ export default function CategoryFormScreen({
   const [shortLabel, setShortLabel] = useState(category?.short_label ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(category?.category_group_id ?? "");
   const [isFilipinoContext, setIsFilipinoContext] = useState(category?.is_filipino_context ?? false);
-  const [sortOrder, setSortOrder] = useState(String(category?.sort_order ?? 0));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -68,7 +67,6 @@ export default function CategoryFormScreen({
       short_label: shortLabel.trim() || null,
       description: description.trim(),
       is_filipino_context: isFilipinoContext,
-      sort_order: parseInt(sortOrder, 10) || 0,
     };
 
     if (isCreate) {
@@ -219,22 +217,6 @@ export default function CategoryFormScreen({
                   borderRadius: 12, borderWidth: 1, borderColor: palette.line,
                   paddingHorizontal: 14, paddingTop: 12, fontFamily: "Manrope", fontSize: 14, color: palette.ink,
                   backgroundColor: palette.card, minHeight: 80, textAlignVertical: "top",
-                }}
-              />
-            </View>
-
-            <View>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-                SORT ORDER
-              </Text>
-              <TextInput
-                value={sortOrder}
-                onChangeText={setSortOrder}
-                keyboardType="numeric"
-                style={{
-                  height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
-                  paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink,
-                  backgroundColor: palette.card,
                 }}
               />
             </View>
