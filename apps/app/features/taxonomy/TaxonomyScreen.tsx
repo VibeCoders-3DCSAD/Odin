@@ -102,9 +102,9 @@ function CategoryRow({ category }: { category: Category }) {
         )}
       </View>
       {hasProtectedDefault && (
-        <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: palette.aqua50 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.aqua800 }}>
-            PROTECTED
+        <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: "#FEF3C7" }}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: "#92400E" }}>
+            RESTRICTED
           </Text>
         </View>
       )}
