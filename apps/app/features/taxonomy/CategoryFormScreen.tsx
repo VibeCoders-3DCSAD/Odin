@@ -39,7 +39,6 @@ export default function CategoryFormScreen({
 }: CategoryFormScreenProps) {
   const isCreate = mode === "create";
   const [label, setLabel] = useState(category?.label ?? "");
-  const [slug, setSlug] = useState(category?.slug ?? "");
   const [description, setDescription] = useState(category?.description ?? "");
   const [shortLabel, setShortLabel] = useState(category?.short_label ?? "");
   const [selectedGroupId, setSelectedGroupId] = useState(category?.category_group_id ?? "");
@@ -48,14 +47,15 @@ export default function CategoryFormScreen({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  function autoSlug(label: string) {
+    return label.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  }
+
   async function handleSave() {
     setFormError(null);
     if (!label.trim()) { setFormError("Label is required"); return; }
     if (!description.trim()) { setFormError("Description is required"); return; }
-    if (isCreate) {
-      if (!selectedGroupId) { setFormError("Category group is required"); return; }
-      if (!slug.trim()) { setFormError("Slug is required"); return; }
-    }
+    if (isCreate && !selectedGroupId) { setFormError("Category group is required"); return; }
 
     setSaving(true);
     const payload: Record<string, unknown> = {
@@ -67,7 +67,7 @@ export default function CategoryFormScreen({
     };
 
     if (isCreate) {
-      Object.assign(payload, { category_group_id: selectedGroupId, slug: slug.trim() });
+      Object.assign(payload, { category_group_id: selectedGroupId, slug: autoSlug(label) });
     }
 
     try {
@@ -89,8 +89,9 @@ export default function CategoryFormScreen({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
-        <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%" }}>
+      <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }} onPress={onCancel}>
+        <Pressable onPress={() => {}}>
+          <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%" }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
           <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
@@ -125,21 +126,6 @@ export default function CategoryFormScreen({
                       </Pressable>
                     ))}
                   </View>
-                </View>
-
-                <View>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>SLUG</Text>
-                  <TextInput
-                    value={slug}
-                    onChangeText={setSlug}
-                    placeholder="e.g. my-category"
-                    placeholderTextColor={palette.mut}
-                    style={{
-                      height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
-                      paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink,
-                      backgroundColor: palette.card,
-                    }}
-                  />
                 </View>
               </>
             )}
@@ -268,7 +254,8 @@ export default function CategoryFormScreen({
             </View>
           </ScrollView>
         </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
