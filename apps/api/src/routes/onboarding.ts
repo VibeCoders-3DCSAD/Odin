@@ -3,6 +3,7 @@ import type { Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { ONBOARDING_ERRORS } from "../lib/constants.js";
+import { getServiceRoleClient } from "../lib/supabase.js";
 
 const router = Router();
 
@@ -211,6 +212,73 @@ router.post("/onboarding/sessions/:id/responses", requireAuth, async (request: A
   }
 
   response.status(200).json({ payload: { response: upserted } });
+});
+
+router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
+  const userId = request.userId!;
+  const authenticatedSupabase = request.supabase!;
+  const sessionId = request.params.id;
+  const { confirm_data_use } = request.body?.payload ?? {};
+
+  if (confirm_data_use !== true) {
+    response.status(400).json({
+      error: "Bad Request",
+      message: ONBOARDING_ERRORS.submit_not_confirmed,
+    });
+    return;
+  }
+
+  const { data: session, error: sessionError } = await authenticatedSupabase
+    .from("onboarding_sessions")
+    .select("id, status")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (sessionError) {
+    response.status(500).json({
+      error: "Internal Server Error",
+      message: ONBOARDING_ERRORS.session_fetch_failed,
+    });
+    return;
+  }
+
+  if (!session) {
+    response.status(404).json({
+      error: "Not Found",
+      message: ONBOARDING_ERRORS.session_not_found,
+    });
+    return;
+  }
+
+  if (session.status !== "in_progress") {
+    response.status(409).json({
+      error: "Conflict",
+      message: ONBOARDING_ERRORS.session_not_in_progress,
+    });
+    return;
+  }
+
+  const { data: result, error: rpcError } = await getServiceRoleClient()
+    .rpc("submit_onboarding_session", { p_session_id: sessionId, p_user_id: userId });
+
+  if (rpcError) {
+    response.status(500).json({
+      error: "Internal Server Error",
+      message: ONBOARDING_ERRORS.submit_failed,
+    });
+    return;
+  }
+
+  const rpcResult = result as { assessment_id: string; assignment_id: string; profile_label: string } | undefined;
+
+  response.status(200).json({
+    payload: {
+      session: { id: sessionId, status: "submitted" },
+      assessment: { id: rpcResult?.assessment_id, proposed_profile_label: rpcResult?.profile_label },
+      assignment: { id: rpcResult?.assignment_id, profile_label: rpcResult?.profile_label, confirmation_required: true },
+    },
+  });
 });
 
 router.get("/onboarding/sessions/current", requireAuth, async (request: AuthenticatedRequest, response: Response) => {

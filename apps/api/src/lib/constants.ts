@@ -83,6 +83,9 @@ export const ONBOARDING_ERRORS = {
   session_update_failed: "Failed to update onboarding session.",
   session_fetch_failed: "Failed to fetch onboarding sessions.",
   no_active_session: "No active onboarding session found.",
+  submit_failed: "Failed to submit onboarding session.",
+  submit_not_confirmed: "You must confirm data use before submitting.",
+  eligibility_incomplete: "Your eligibility profile must be complete before submitting.",
 } as const;
 
 export const ONBOARDING_STATUSES = [

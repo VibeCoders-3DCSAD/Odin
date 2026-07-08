@@ -10,6 +10,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+let serviceRoleClientInstance: SupabaseClient | null = null;
+
+export function getServiceRoleClient(): SupabaseClient {
+  if (!serviceRoleClientInstance) {
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!key) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for server-only operations");
+    }
+    serviceRoleClientInstance = createClient(supabaseUrl, key, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+  return serviceRoleClientInstance;
+}
+
 export function createAuthenticatedSupabaseClient(
   accessToken: string,
 ): SupabaseClient {
