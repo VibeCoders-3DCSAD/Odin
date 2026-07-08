@@ -106,13 +106,18 @@ router.put("/:categoryId", requireAuth, async (request: AuthenticatedRequest, re
       return;
     }
 
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("user_category_restrictions")
       .select("id")
       .eq("user_id", userId)
       .eq("category_id", categoryId)
       .is("effective_to", null)
       .maybeSingle();
+
+    if (existingError) {
+      response.status(500).json({ error: "Internal Server Error", message: "Failed to check existing restriction" });
+      return;
+    }
 
     const restrictionData = {
       user_id: userId,
@@ -130,6 +135,7 @@ router.put("/:categoryId", requireAuth, async (request: AuthenticatedRequest, re
         .from("user_category_restrictions")
         .update(restrictionData)
         .eq("id", existing.id)
+        .eq("user_id", userId)
         .select("*")
         .single();
     } else {
