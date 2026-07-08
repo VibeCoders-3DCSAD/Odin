@@ -171,23 +171,44 @@ If needed, remove `node_modules` and reinstall manually.
 Install the Android prerequisites:
 
 ```bash
-sudo pacman -S --needed jdk17-openjdk android-tools
+sudo pacman -S --needed jdk21-openjdk android-tools android-sdk-cmdline-tools-latest
 ```
 
-Install Android Studio from the official download, then keep the SDK in Android
-Studio's SDK Manager.
-
-Then install these SDK components in Android Studio:
-
-- Android SDK Platform 36
-- Android SDK Build-Tools
-- Android Emulator
-- Platform-Tools
-
-Make sure `adb` is on your PATH:
+After installation, relogin or source the profile to pick up the SDK paths:
 
 ```bash
-adb devices
+source /etc/profile  # or relogin
+```
+
+Fix permissions so the SDK manager can write to the SDK directory:
+
+```bash
+sudo chown -R $USER:$USER /opt/android-sdk
+```
+
+Install the SDK components that the AUR package doesn't cover:
+
+```bash
+/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;35.0.0" "platforms;android-35" --sdk_root=/opt/android-sdk
+```
+
+Accept Android SDK licenses:
+
+```bash
+/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=/opt/android-sdk
+```
+
+Pin the Gradle JDK to Java 21 (required — Java 26 breaks the Android build toolchain):
+
+```bash
+mkdir -p ~/.gradle
+echo "org.gradle.java.home=/usr/lib/jvm/java-21-openjdk" >> ~/.gradle/gradle.properties
+```
+
+Verify the SDK is visible:
+
+```bash
+/opt/android-sdk/platform-tools/adb devices
 ```
 
 From the repo root:
@@ -204,19 +225,32 @@ Install the Android prerequisites:
 
 ```bash
 sudo apt update
-sudo apt install openjdk-17-jdk
+sudo apt install openjdk-21-jdk android-sdk
 ```
 
-Install Android Studio from the official download, then use SDK Manager to add:
-
-- Android SDK Platform 36
-- Android SDK Build-Tools
-- Android Emulator
-- Platform-Tools
-
-Make sure `adb` works:
+Accept Android SDK licenses:
 
 ```bash
+sdkmanager --licenses
+```
+
+If `sdkmanager` is not on PATH, use the full path:
+
+```bash
+/usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+```
+
+Pin the Gradle JDK to Java 21 (required — Java 26 breaks the Android build toolchain):
+
+```bash
+mkdir -p ~/.gradle
+echo "org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-amd64" >> ~/.gradle/gradle.properties
+```
+
+Verify the SDK is visible:
+
+```bash
+export ANDROID_HOME=/usr/lib/android-sdk
 adb devices
 ```
 
@@ -230,7 +264,7 @@ pnpm install
 
 ### Windows
 
-Install Microsoft OpenJDK 17 and Android Studio.
+Install Microsoft OpenJDK 21 (not 17 or 26) and Android Studio.
 
 In Android Studio, install these SDK components:
 
@@ -239,7 +273,27 @@ In Android Studio, install these SDK components:
 - Android Emulator
 - Platform-Tools
 
-Add the Android platform-tools folder to `PATH`, then verify:
+Accept SDK licenses from Android Studio or via PowerShell:
+
+```powershell
+& "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat" --licenses
+```
+
+If `ANDROID_HOME` is not set, find it in Android Studio (Settings → Appearance & Behavior → System Settings → Android SDK) and set it:
+
+```powershell
+[Environment]::SetEnvironmentVariable("ANDROID_HOME", "$env:LOCALAPPDATA\Android\Sdk", "User")
+```
+
+Pin the Gradle JDK to Java 21. Create `$env:USERPROFILE\.gradle\gradle.properties` with:
+
+```properties
+org.gradle.java.home=C:\Program Files\Microsoft\jdk-21.0.11-hotspot
+```
+
+Adjust the path to match your installed JDK 21 location.
+
+Add platform-tools to `PATH`, then verify:
 
 ```powershell
 adb devices
