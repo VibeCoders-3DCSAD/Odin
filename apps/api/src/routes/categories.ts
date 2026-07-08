@@ -84,6 +84,21 @@ router.post("/", requireAuth, async (request: AuthenticatedRequest, response: Re
       return;
     }
 
+    if (short_label !== undefined && short_label !== null && typeof short_label !== "string") {
+      response.status(400).json({ error: "Bad Request", message: "short_label must be a string or null" });
+      return;
+    }
+
+    if (is_filipino_context !== undefined && typeof is_filipino_context !== "boolean") {
+      response.status(400).json({ error: "Bad Request", message: "is_filipino_context must be a boolean" });
+      return;
+    }
+
+    if (sort_order !== undefined && typeof sort_order !== "number") {
+      response.status(400).json({ error: "Bad Request", message: "sort_order must be a number" });
+      return;
+    }
+
     const { data: group, error: groupError } = await supabase
       .from("category_groups")
       .select("id")
@@ -165,11 +180,32 @@ router.patch("/:id", requireAuth, async (request: AuthenticatedRequest, response
       return;
     }
 
-    const allowedFields = ["slug", "label", "short_label", "description", "is_filipino_context", "sort_order", "is_active"];
+    const allowedFields = ["label", "short_label", "description", "is_filipino_context", "sort_order", "is_active"];
     const updates: Record<string, unknown> = {};
 
     for (const field of allowedFields) {
       if (payload[field] !== undefined) {
+        if (field === "label" || field === "description") {
+          if (typeof payload[field] !== "string") {
+            response.status(400).json({ error: "Bad Request", message: `${field} must be a string` });
+            return;
+          }
+        } else if (field === "short_label") {
+          if (payload[field] !== null && typeof payload[field] !== "string") {
+            response.status(400).json({ error: "Bad Request", message: "short_label must be a string or null" });
+            return;
+          }
+        } else if (field === "is_filipino_context" || field === "is_active") {
+          if (typeof payload[field] !== "boolean") {
+            response.status(400).json({ error: "Bad Request", message: `${field} must be a boolean` });
+            return;
+          }
+        } else if (field === "sort_order") {
+          if (typeof payload[field] !== "number") {
+            response.status(400).json({ error: "Bad Request", message: "sort_order must be a number" });
+            return;
+          }
+        }
         updates[field] = payload[field];
       }
     }
@@ -183,14 +219,11 @@ router.patch("/:id", requireAuth, async (request: AuthenticatedRequest, response
       .from("categories")
       .update(updates)
       .eq("id", categoryId)
+      .eq("user_id", userId)
       .select("*")
       .single();
 
     if (updateError) {
-      if (updateError.code === "23505") {
-        response.status(409).json({ error: "Conflict", message: "A category with this slug already exists" });
-        return;
-      }
       response.status(500).json({ error: "Internal Server Error", message: "Failed to update category" });
       return;
     }
@@ -232,6 +265,7 @@ router.delete("/:id", requireAuth, async (request: AuthenticatedRequest, respons
       .from("categories")
       .update({ is_active: false })
       .eq("id", categoryId)
+      .eq("user_id", userId)
       .select("*")
       .single();
 

@@ -357,22 +357,30 @@ describe("PATCH /odin/api/categories/:id", () => {
     expect(response.status).toBe(404);
   });
 
-  it("returns 409 on slug conflict", async () => {
+  it("returns 400 when field value has wrong type", async () => {
     mockAuth();
 
-    mockFrom
-      .mockReturnValueOnce(createMockQuery(mockExistingCategory()))
-      .mockReturnValueOnce(createMockQuery({
-        data: null,
-        error: { code: "23505", message: "duplicate key value" },
-      }));
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory()));
 
     const response = await request(app)
       .patch("/odin/api/categories/cat-1")
       .set(authHeader())
-      .send({ payload: { slug: "taken_slug" } });
+      .send({ payload: { is_active: "not-a-boolean" } });
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when slug is not accepted (display/active-state only)", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery(mockExistingCategory()));
+
+    const response = await request(app)
+      .patch("/odin/api/categories/cat-1")
+      .set(authHeader())
+      .send({ payload: { slug: "new_slug" } });
+
+    expect(response.status).toBe(400);
   });
 
   it("returns 401 when no authorization header", async () => {
