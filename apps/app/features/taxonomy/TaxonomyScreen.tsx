@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import {
@@ -80,7 +81,7 @@ function Toggle({ active }: { active: boolean }) {
 }
 
 function CategoryRow({ category }: { category: Category }) {
-  const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected_default);
+  const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected_default) ?? false;
   const hasFilipinoContext = category.is_filipino_context;
   const hasCustomLabel = !!category.short_label;
 
@@ -138,6 +139,9 @@ function GroupCard({ group }: { group: CategoryGroup }) {
   return (
     <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden" }}>
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${group.label}, ${group.categories?.length ?? 0} categories, ${expanded ? "expanded" : "collapsed"}`}
+        accessibilityState={{ expanded }}
         onPress={() => setExpanded(!expanded)}
         style={{
           flexDirection: "row",
@@ -192,14 +196,18 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
   const fetchGroups = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { response, body } = await getCategoryGroups(accessToken);
-    if (!response.ok) {
-      setError(body.message || "Failed to load categories");
+    try {
+      const { response, body } = await getCategoryGroups(accessToken);
+      if (!response.ok) {
+        setError(body.message || "Failed to load categories");
+        return;
+      }
+      setGroups(body.payload?.category_groups ?? []);
+    } catch {
+      setError("Network error. Check your connection and try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-    setGroups(body.payload?.category_groups ?? []);
-    setLoading(false);
   }, [accessToken]);
 
   useEffect(() => {
@@ -210,7 +218,12 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* App bar */}
       <View style={{ paddingHorizontal: 22, paddingTop: 12, flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Pressable onPress={onBack} hitSlop={8}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={onBack}
+          hitSlop={8}
+        >
           <Text style={{ fontSize: 21, color: palette.ink }}>←</Text>
         </Pressable>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
@@ -234,9 +247,12 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
           }}
         >
           <MagnifyingGlass size={17} color={palette.mut} />
-          <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 14, color: palette.mut }}>
-            Search categories
-          </Text>
+          <TextInput
+            placeholder="Search categories"
+            placeholderTextColor={palette.mut}
+            style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 14, color: palette.ink, flex: 1, height: 46 }}
+            editable={false}
+          />
         </View>
       </View>
 
