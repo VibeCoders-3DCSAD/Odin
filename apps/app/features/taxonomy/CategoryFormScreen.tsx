@@ -3,8 +3,10 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -130,6 +132,7 @@ export default function CategoryFormScreen({
             {...panResponder.panHandlers}
             style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }}
           />
+          <KeyboardAvoidingView behavior="height" keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}>
           <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
               {isCreate ? "New Category" : "Edit Category"}
@@ -290,6 +293,7 @@ export default function CategoryFormScreen({
               </Pressable>
             </View>
           </ScrollView>
+          </KeyboardAvoidingView>
         </Animated.View>
         </Pressable>
       </Pressable>
