@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Dimensions,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   Text,
@@ -87,12 +90,46 @@ export default function CategoryFormScreen({
     }
   }
 
+  const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+  const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.35;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) {
+          translateY.setValue(gs.dy);
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > SWIPE_THRESHOLD) {
+          onCancel();
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    }),
+  ).current;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }} onPress={onCancel}>
         <Pressable onPress={() => {}}>
-          <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%" }}>
-          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
+          <Animated.View
+            style={{
+              backgroundColor: palette.shell,
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              maxHeight: SCREEN_HEIGHT * 0.9,
+              transform: [{ translateY }],
+            }}
+          >
+          <View
+            {...panResponder.panHandlers}
+            style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }}
+          />
           <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
               {isCreate ? "New Category" : "Edit Category"}
@@ -253,7 +290,7 @@ export default function CategoryFormScreen({
               </Pressable>
             </View>
           </ScrollView>
-        </View>
+        </Animated.View>
         </Pressable>
       </Pressable>
     </Modal>
