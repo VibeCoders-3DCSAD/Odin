@@ -1,16 +1,6 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { ONBOARDING_STEPS, STEP_LABELS } from "../constants";
+import { Pressable, Text, View } from "react-native";
+import { COLORS } from "../constants";
 import type { OnboardingStepKey } from "../constants";
-
-const palette = {
-  brand: "#013220",
-  brandMedium: "#0E6D46",
-  ink: "#1B1C1A",
-  ink2: "#414942",
-  mut: "#6B7A6F",
-  line: "#EAEAE6",
-  card: "#F1F0EB",
-};
 
 function formatAnswer(key: string, value: unknown): string {
   if (value === undefined || value === null || value === "") return "Not provided";
@@ -50,7 +40,7 @@ export default function ReviewStep({ answers, onEditStep }: ReviewStepProps) {
       <View className="items-center py-8">
         <Text
           className="text-sm"
-          style={{ fontFamily: "Manrope", fontWeight: "400", color: palette.mut }}
+          style={{ fontFamily: "Manrope", fontWeight: "400", color: COLORS.mut }}
         >
           No answers yet. Go back and fill in your information.
         </Text>
@@ -62,13 +52,13 @@ export default function ReviewStep({ answers, onEditStep }: ReviewStepProps) {
     <View className="gap-4">
       <Text
         className="text-lg"
-        style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}
+        style={{ fontFamily: "Manrope", fontWeight: "700", color: COLORS.ink }}
       >
         Review your information
       </Text>
       <Text
         className="text-sm"
-        style={{ fontFamily: "Manrope", fontWeight: "400", color: palette.mut }}
+        style={{ fontFamily: "Manrope", fontWeight: "400", color: COLORS.mut }}
       >
         Check that everything looks right before submitting.
       </Text>
@@ -77,13 +67,13 @@ export default function ReviewStep({ answers, onEditStep }: ReviewStepProps) {
           <View
             key={key}
             className="rounded-[14px] p-4"
-            style={{ backgroundColor: palette.card, borderWidth: 1, borderColor: palette.line }}
+            style={{ backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line }}
           >
             <View className="flex-row justify-between items-center">
               <View className="flex-1">
                 <Text
                   className="text-xs mb-0.5"
-                  style={{ fontFamily: "Manrope", fontWeight: "500", color: palette.mut }}
+                  style={{ fontFamily: "Manrope", fontWeight: "500", color: COLORS.mut }}
                 >
                   {key === "income_type"
                     ? "Income Type"
@@ -97,7 +87,7 @@ export default function ReviewStep({ answers, onEditStep }: ReviewStepProps) {
                 </Text>
                 <Text
                   className="text-sm"
-                  style={{ fontFamily: "Manrope", fontWeight: "600", color: palette.ink }}
+                  style={{ fontFamily: "Manrope", fontWeight: "600", color: COLORS.ink }}
                 >
                   {formatAnswer(key, answers[key])}
                 </Text>
@@ -114,7 +104,7 @@ export default function ReviewStep({ answers, onEditStep }: ReviewStepProps) {
                   if (step) onEditStep(step);
                 }}
                 className="px-3 py-2 rounded-lg"
-                style={{ backgroundColor: palette.brand }}
+                style={{ backgroundColor: COLORS.brand }}
               >
                 <Text
                   className="text-xs font-bold"

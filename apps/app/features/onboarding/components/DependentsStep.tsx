@@ -1,12 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-
-const palette = {
-  brand: "#013220",
-  ink: "#1B1C1A",
-  mut: "#6B7A6F",
-  line: "#EAEAE6",
-  card: "#F1F0EB",
-};
+import { COLORS } from "../constants";
 
 type DependentsStepProps = {
   value?: boolean;
@@ -18,13 +11,13 @@ export default function DependentsStep({ value, onChange }: DependentsStepProps)
     <View className="gap-4">
       <Text
         className="text-lg"
-        style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}
+        style={{ fontFamily: "Manrope", fontWeight: "700", color: COLORS.ink }}
       >
         Do you have any dependents?
       </Text>
       <Text
         className="text-sm"
-        style={{ fontFamily: "Manrope", fontWeight: "400", color: palette.mut }}
+        style={{ fontFamily: "Manrope", fontWeight: "400", color: COLORS.mut }}
       >
         Dependents are people who rely on your income for their basic needs.
       </Text>
@@ -38,11 +31,13 @@ export default function DependentsStep({ value, onChange }: DependentsStepProps)
             <Pressable
               key={String(option.value)}
               onPress={() => onChange(option.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
               className="flex-1 min-h-[54px] rounded-[14px] items-center justify-center"
               style={{
-                backgroundColor: selected ? palette.brand : palette.card,
+                backgroundColor: selected ? COLORS.brand : COLORS.card,
                 borderWidth: 1,
-                borderColor: selected ? palette.brand : palette.line,
+                borderColor: selected ? COLORS.brand : COLORS.line,
               }}
             >
               <Text
@@ -50,7 +45,7 @@ export default function DependentsStep({ value, onChange }: DependentsStepProps)
                 style={{
                   fontFamily: "Manrope",
                   fontWeight: "600",
-                  color: selected ? "#FFFFFF" : palette.ink,
+                  color: selected ? "#FFFFFF" : COLORS.ink,
                 }}
               >
                 {option.label}

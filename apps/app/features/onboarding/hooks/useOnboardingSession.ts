@@ -42,7 +42,7 @@ export function useOnboardingSession(
       try {
         const { response, body } = await getCurrentOnboardingSession(accessToken);
 
-        if (!response.ok && !body.payload) {
+        if (!response.ok) {
           throw new Error(body.message ?? ONBOARDING_ERRORS.session_fetch_failed);
         }
 

@@ -8,6 +8,19 @@ export const ONBOARDING_ERRORS = {
   generic: "Something went wrong. Please try again.",
 } as const;
 
+export const COLORS = {
+  shell: "#fcf8f0",
+  brand: "#013220",
+  brandMedium: "#0E6D46",
+  ink: "#1B1C1A",
+  ink2: "#414942",
+  mut: "#6B7A6F",
+  line: "#EAEAE6",
+  card: "#F1F0EB",
+  error: "#D9001F",
+  success: "#08B16A",
+} as const;
+
 export const ONBOARDING_STEPS = [
   "income_type",
   "monthly_income",

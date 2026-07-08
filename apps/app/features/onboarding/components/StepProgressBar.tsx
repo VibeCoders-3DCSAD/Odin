@@ -1,14 +1,6 @@
 import { Text, View } from "react-native";
-import { ONBOARDING_STEPS, STEP_LABELS } from "../constants";
+import { COLORS, ONBOARDING_STEPS, STEP_LABELS } from "../constants";
 import type { OnboardingStepKey } from "../constants";
-
-const palette = {
-  brand: "#013220",
-  brandMedium: "#0E6D46",
-  mut: "#6B7A6F",
-  line: "#EAEAE6",
-  card: "#F1F0EB",
-};
 
 type StepProgressBarProps = {
   currentStep: OnboardingStepKey;
@@ -31,25 +23,25 @@ export default function StepProgressBar({ currentStep, completedSteps }: StepPro
                 <View
                   className="h-[3px] flex-1 rounded-full"
                   style={{
-                    backgroundColor: index <= currentIndex ? palette.brand : palette.line,
+                    backgroundColor: index <= currentIndex ? COLORS.brand : COLORS.line,
                   }}
                 />
                 <View
                   className="w-[20px] h-[20px] rounded-full items-center justify-center"
                   style={{
                     backgroundColor: isCompleted
-                      ? palette.brandMedium
+                      ? COLORS.brandMedium
                       : isCurrent
-                        ? palette.brand
-                        : palette.card,
+                        ? COLORS.brand
+                        : COLORS.card,
                     borderWidth: isCurrent ? 0 : 1,
-                    borderColor: isCompleted ? palette.brandMedium : palette.line,
+                    borderColor: isCompleted ? COLORS.brandMedium : COLORS.line,
                   }}
                 >
                   <Text
                     className="text-[10px] font-bold"
                     style={{
-                      color: isCompleted || isCurrent ? "#FFFFFF" : palette.mut,
+                      color: isCompleted || isCurrent ? "#FFFFFF" : COLORS.mut,
                     }}
                   >
                     {index + 1}
@@ -59,7 +51,7 @@ export default function StepProgressBar({ currentStep, completedSteps }: StepPro
                   <View
                     className="h-[3px] flex-1 rounded-full"
                     style={{
-                      backgroundColor: index < currentIndex ? palette.brand : palette.line,
+                      backgroundColor: index < currentIndex ? COLORS.brand : COLORS.line,
                     }}
                   />
                 )}
@@ -67,7 +59,7 @@ export default function StepProgressBar({ currentStep, completedSteps }: StepPro
               <Text
                 className="text-[10px] mt-1.5"
                 style={{
-                  color: isCurrent ? palette.brand : palette.mut,
+                  color: isCurrent ? COLORS.brand : COLORS.mut,
                   fontWeight: isCurrent ? "600" : "400",
                 }}
               >

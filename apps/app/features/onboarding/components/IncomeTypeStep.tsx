@@ -1,13 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-
-const palette = {
-  brand: "#013220",
-  shell: "#fcf8f0",
-  ink: "#1B1C1A",
-  mut: "#6B7A6F",
-  line: "#EAEAE6",
-  card: "#F1F0EB",
-};
+import { COLORS } from "../constants";
 
 const INCOME_OPTIONS = [
   { value: "salary", label: "Salary", description: "Regular employment income" },
@@ -28,13 +20,13 @@ export default function IncomeTypeStep({ value, onChange }: IncomeTypeStepProps)
     <View className="gap-2">
       <Text
         className="text-lg mb-1"
-        style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}
+        style={{ fontFamily: "Manrope", fontWeight: "700", color: COLORS.ink }}
       >
         What type of income do you have?
       </Text>
       <Text
         className="text-sm mb-2"
-        style={{ fontFamily: "Manrope", fontWeight: "400", color: palette.mut }}
+        style={{ fontFamily: "Manrope", fontWeight: "400", color: COLORS.mut }}
       >
         Select the option that best describes your primary income source.
       </Text>
@@ -44,11 +36,13 @@ export default function IncomeTypeStep({ value, onChange }: IncomeTypeStepProps)
           <Pressable
             key={option.value}
             onPress={() => onChange(option.value)}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
             className="min-h-[54px] rounded-[14px] px-4 flex-row items-center justify-between"
             style={{
-              backgroundColor: selected ? palette.brand : palette.card,
+              backgroundColor: selected ? COLORS.brand : COLORS.card,
               borderWidth: 1,
-              borderColor: selected ? palette.brand : palette.line,
+              borderColor: selected ? COLORS.brand : COLORS.line,
             }}
           >
             <View className="flex-1">
@@ -57,7 +51,7 @@ export default function IncomeTypeStep({ value, onChange }: IncomeTypeStepProps)
                 style={{
                   fontFamily: "Manrope",
                   fontWeight: "600",
-                  color: selected ? "#FFFFFF" : palette.ink,
+                  color: selected ? "#FFFFFF" : COLORS.ink,
                 }}
               >
                 {option.label}
@@ -67,7 +61,7 @@ export default function IncomeTypeStep({ value, onChange }: IncomeTypeStepProps)
                 style={{
                   fontFamily: "Manrope",
                   fontWeight: "400",
-                  color: selected ? "rgba(255,255,255,0.7)" : palette.mut,
+                  color: selected ? "rgba(255,255,255,0.7)" : COLORS.mut,
                 }}
               >
                 {option.description}
@@ -78,13 +72,13 @@ export default function IncomeTypeStep({ value, onChange }: IncomeTypeStepProps)
               style={{
                 backgroundColor: selected ? "#FFFFFF" : "transparent",
                 borderWidth: selected ? 0 : 2,
-                borderColor: palette.mut,
+                borderColor: COLORS.mut,
               }}
             >
               {selected && (
                 <View
                   className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: palette.brand }}
+                  style={{ backgroundColor: COLORS.brand }}
                 />
               )}
             </View>
