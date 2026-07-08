@@ -143,3 +143,15 @@ export const PROFILE_ERRORS = {
   invalid_profile_label: "Invalid profile label. Must be one of: stable_flexible, stable_obligated, variable_flexible, variable_obligated.",
   reassess_failed: "Failed to request reassessment.",
 } as const;
+
+export const VALID_SUBCATEGORY_KINDS = [
+  "income",
+  "expense",
+  "transfer_adjustment",
+];
+
+export const VALID_RESTRICTION_LEVELS = [
+  "free",
+  "protected",
+  "locked",
+];
