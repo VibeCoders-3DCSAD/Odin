@@ -141,4 +141,5 @@ export const PROFILE_ERRORS = {
   fetch_failed: "Failed to fetch profile assignment.",
   invalid_assignment_id: "Invalid assignment ID format.",
   invalid_profile_label: "Invalid profile label. Must be one of: stable_flexible, stable_obligated, variable_flexible, variable_obligated.",
+  reassess_failed: "Failed to request reassessment.",
 } as const;
