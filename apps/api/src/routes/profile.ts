@@ -3,7 +3,7 @@ import type { Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { getServiceRoleClient } from "../lib/supabase.js";
-import { PROFILE_ERRORS, FINANCIAL_PROFILE_LABELS } from "../lib/constants.js";
+import { PROFILE_ERRORS, FINANCIAL_PROFILE_LABELS, PROFILE_ASSESSMENT_METHODS } from "../lib/constants.js";
 
 const router = Router();
 
@@ -194,6 +194,32 @@ router.post("/profile/assignment/select", requireAuth, async (request: Authentic
 
   handleRpcResult(result as { success: boolean; code?: string } | null, rpcError, response, PROFILE_ERRORS.select_failed, () => {
     response.status(200).json({ payload: result });
+  });
+});
+
+router.post("/profile/reassess", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
+  const userId = request.userId!;
+  const { reason, use_recent_transactions, assessment_method } = request.body?.payload ?? {};
+
+  const method = typeof assessment_method === "string" && PROFILE_ASSESSMENT_METHODS.includes(assessment_method as typeof PROFILE_ASSESSMENT_METHODS[number])
+    ? assessment_method
+    : "standard";
+
+  const metadata: Record<string, unknown> = {};
+  if (typeof reason === "string" && reason.trim()) metadata.reason = reason.trim();
+  if (use_recent_transactions === true || use_recent_transactions === false) {
+    metadata.use_recent_transactions = use_recent_transactions;
+  }
+
+  const { data: result, error: rpcError } = await getServiceRoleClient()
+    .rpc("request_profile_reassessment", {
+      p_user_id: userId,
+      p_assessment_method: method,
+      p_metadata: metadata,
+    });
+
+  handleRpcResult(result as { success: boolean; code?: string } | null, rpcError, response, PROFILE_ERRORS.reassess_failed, () => {
+    response.status(201).json({ payload: result });
   });
 });
 

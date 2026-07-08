@@ -343,3 +343,114 @@ describe("POST /odin/api/profile/assignment/select", () => {
     expect(response.status).toBe(401);
   });
 });
+
+describe("POST /odin/api/profile/reassess", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns 201 with queued assessment", async () => {
+    mockAuth();
+    mockRpc.mockResolvedValue({
+      data: { success: true, assessment_id: "assess-1", status: "queued", assessment_method: "standard" },
+      error: null,
+    });
+
+    const response = await request(app)
+      .post(`${basePath}/reassess`)
+      .set(authHeader())
+      .send({ payload: { reason: "Income changed" } });
+
+    expect(response.status).toBe(201);
+    expect(response.body.payload.status).toBe("queued");
+  });
+
+  it("accepts custom assessment_method", async () => {
+    mockAuth();
+    mockRpc.mockResolvedValue({
+      data: { success: true, assessment_id: "assess-2", status: "queued", assessment_method: "questionnaire" },
+      error: null,
+    });
+
+    const response = await request(app)
+      .post(`${basePath}/reassess`)
+      .set(authHeader())
+      .send({ payload: { assessment_method: "questionnaire" } });
+
+    expect(response.status).toBe(201);
+  });
+
+  it("defaults to standard when assessment_method is omitted", async () => {
+    mockAuth();
+    mockRpc.mockResolvedValue({
+      data: { success: true, assessment_id: "assess-3", status: "queued", assessment_method: "standard" },
+      error: null,
+    });
+
+    await request(app)
+      .post(`${basePath}/reassess`)
+      .set(authHeader())
+      .send({ payload: {} });
+
+    expect(mockRpc).toHaveBeenCalledWith("request_profile_reassessment", expect.objectContaining({
+      p_assessment_method: "standard",
+    }));
+  });
+
+  it("defaults to standard when assessment_method is invalid", async () => {
+    mockAuth();
+    mockRpc.mockResolvedValue({
+      data: { success: true, assessment_id: "assess-4", status: "queued", assessment_method: "standard" },
+      error: null,
+    });
+
+    await request(app)
+      .post(`${basePath}/reassess`)
+      .set(authHeader())
+      .send({ payload: { assessment_method: "invalid" } });
+
+    expect(mockRpc).toHaveBeenCalledWith("request_profile_reassessment", expect.objectContaining({
+      p_assessment_method: "standard",
+    }));
+  });
+
+  it("stores reason and use_recent_transactions in metadata", async () => {
+    mockAuth();
+    mockRpc.mockResolvedValue({
+      data: { success: true, assessment_id: "assess-5", status: "queued", assessment_method: "standard" },
+      error: null,
+    });
+
+    await request(app)
+      .post(`${basePath}/reassess`)
+      .set(authHeader())
+      .send({ payload: { reason: "New job", use_recent_transactions: true } });
+
+    expect(mockRpc).toHaveBeenCalledWith("request_profile_reassessment", expect.objectContaining({
+      p_metadata: { reason: "New job", use_recent_transactions: true },
+    }));
+  });
+
+  it("returns 401 when no authorization header", async () => {
+    const response = await request(app)
+      .post(`${basePath}/reassess`)
+      .send({ payload: { reason: "test" } });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 500 when rpc fails", async () => {
+    mockAuth();
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: "RPC error" },
+    });
+
+    const response = await request(app)
+      .post(`${basePath}/reassess`)
+      .set(authHeader())
+      .send({ payload: { reason: "test" } });
+
+    expect(response.status).toBe(500);
+  });
+});
