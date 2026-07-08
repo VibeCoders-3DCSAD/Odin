@@ -195,21 +195,6 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* App bar */}
-      <View style={{ paddingHorizontal: 22, paddingTop: 12, flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={onBack}
-          hitSlop={8}
-        >
-          <Text style={{ fontSize: 21, color: palette.ink }}>←</Text>
-        </Pressable>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
-          Categories
-        </Text>
-      </View>
-
       {/* Search bar */}
       <View style={{ paddingHorizontal: 22, paddingTop: 16 }}>
         <View
