@@ -82,12 +82,8 @@ function CategoryRow({ category }: { category: Category }) {
             </View>
           )}
           {hasFilipinoContext && (
-            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: palette.sun50, maxWidth: 120 }}>
-              <Text
-                style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.sun700 }}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
+            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: palette.sun50 }}>
+              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.sun700 }}>
                 {category.slug.toUpperCase()}
               </Text>
             </View>
