@@ -72,3 +72,15 @@ export const PRIVACY_SETTINGS_DEFAULTS = {
   notifications_opt_in: false,
   data_retention_days: null,
 } as const;
+
+export const VALID_SUBCATEGORY_KINDS = [
+  "income",
+  "expense",
+  "transfer_adjustment",
+];
+
+export const VALID_RESTRICTION_LEVELS = [
+  "free",
+  "protected",
+  "locked",
+];
