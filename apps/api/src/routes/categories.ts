@@ -17,7 +17,8 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
       .from("categories")
       .select("*")
       .order("sort_order", { ascending: true })
-      .order("label", { ascending: true });
+      .order("label", { ascending: true })
+      .limit(15);
 
     if (includeSystem) {
       query = query.or(`user_id.is.null,user_id.eq.${userId}`);
