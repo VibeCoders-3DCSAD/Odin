@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -16,13 +17,15 @@ import {
   CaretDown,
   MagnifyingGlass,
   PencilSimple,
+  Plus,
+  TrashSimple,
 } from "phosphor-react-native";
-import { getCategoryGroups } from "./api";
+import { getCategoryGroups, deleteCategory } from "./api";
 import type { CategoryGroup, Category } from "./types";
+import CategoryFormScreen from "./CategoryFormScreen";
 
 type TaxonomyScreenProps = {
   accessToken: string;
-  onBack: () => void;
 };
 
 const palette = {
@@ -37,6 +40,8 @@ const palette = {
   aqua800: "#0B8A55",
   sun50: "#FFF8F0",
   sun700: "#C25E00",
+  brand: "#013220",
+  error: "#D9001F",
 } as const;
 
 const GROUP_ICONS: Record<string, React.ReactNode> = {
@@ -53,10 +58,19 @@ const GROUP_ICON_BG: Record<string, string> = {
   financial_allocation: palette.aqua50,
 };
 
-function CategoryRow({ category }: { category: Category }) {
+type CategoryRowProps = {
+  category: Category;
+  mutatingId: string | null;
+  onEdit: (cat: Category) => void;
+  onDelete: (cat: Category) => void;
+};
+
+function CategoryRow({ category, mutatingId, onEdit, onDelete }: CategoryRowProps) {
+  const isUserOwned = !category.is_system;
   const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected_default) ?? false;
   const hasFilipinoContext = category.is_filipino_context;
   const hasCustomLabel = !!category.short_label;
+  const isMutating = mutatingId === category.id;
 
   return (
     <View
@@ -101,11 +115,44 @@ function CategoryRow({ category }: { category: Category }) {
           </View>
         )}
       </View>
+      {isUserOwned && (
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${category.label}`}
+            onPress={() => onEdit(category)}
+            disabled={isMutating}
+            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
+          >
+            <PencilSimple size={14} color={palette.aqua700} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Delete ${category.label}`}
+            onPress={() => onDelete(category)}
+            disabled={isMutating}
+            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
+          >
+            {isMutating ? (
+              <ActivityIndicator size="small" color={palette.error} />
+            ) : (
+              <TrashSimple size={14} color={palette.error} />
+            )}
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
-function GroupCard({ group }: { group: CategoryGroup }) {
+type GroupCardProps = {
+  group: CategoryGroup;
+  mutatingId: string | null;
+  onEdit: (cat: Category) => void;
+  onDelete: (cat: Category) => void;
+};
+
+function GroupCard({ group, mutatingId, onEdit, onDelete }: GroupCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -152,7 +199,7 @@ function GroupCard({ group }: { group: CategoryGroup }) {
       {expanded && (
         <View style={{ paddingHorizontal: 14, paddingTop: 6, paddingBottom: 12 }}>
           {group.categories?.map((cat) => (
-            <CategoryRow key={cat.id} category={cat} />
+            <CategoryRow key={cat.id} category={cat} mutatingId={mutatingId} onEdit={onEdit} onDelete={onDelete} />
           ))}
         </View>
       )}
@@ -160,10 +207,14 @@ function GroupCard({ group }: { group: CategoryGroup }) {
   );
 }
 
-export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenProps) {
+export default function TaxonomyScreen({ accessToken }: TaxonomyScreenProps) {
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [formVisible, setFormVisible] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingCategory, setEditingCategory] = useState<Category | undefined>(undefined);
+  const [mutatingId, setMutatingId] = useState<string | null>(null);
 
   const fetchGroups = useCallback(async () => {
     setLoading(true);
@@ -186,13 +237,68 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
     fetchGroups();
   }, [fetchGroups]);
 
+  function openCreate() {
+    setFormMode("create");
+    setEditingCategory(undefined);
+    setFormVisible(true);
+  }
+
+  function openEdit(cat: Category) {
+    setFormMode("edit");
+    setEditingCategory(cat);
+    setFormVisible(true);
+  }
+
+  function handleDelete(cat: Category) {
+    Alert.alert(
+      `Delete "${cat.label}"?`,
+      "This category will be hidden. Existing transactions using it are not affected.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setMutatingId(cat.id);
+            const { response, body } = await deleteCategory(accessToken, cat.id);
+            setMutatingId(null);
+            if (!response.ok) {
+              Alert.alert("Error", body.message || "Failed to delete category");
+              return;
+            }
+            fetchGroups();
+          },
+        },
+      ],
+    );
+  }
+
+  function handleFormSaved() {
+    setFormVisible(false);
+    setEditingCategory(undefined);
+    fetchGroups();
+  }
+
+  function handleFormCancel() {
+    setFormVisible(false);
+    setEditingCategory(undefined);
+  }
+
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* Header */}
-      <View style={{ paddingHorizontal: 22, paddingTop: 12 }}>
+      <View style={{ paddingHorizontal: 22, paddingTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
           Categories
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create category"
+          onPress={openCreate}
+          style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}
+        >
+          <Plus size={18} color="#fff" weight="bold" />
+        </Pressable>
       </View>
 
       {/* Search bar */}
@@ -239,9 +345,28 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
             <Text style={{ fontFamily: "Manrope", color: palette.mut }}>No categories yet</Text>
           </View>
         ) : (
-          groups.map((group) => <GroupCard key={group.id} group={group} />)
+          groups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              mutatingId={mutatingId}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+            />
+          ))
         )}
       </View>
+
+      {/* Category form modal */}
+      <CategoryFormScreen
+        visible={formVisible}
+        mode={formMode}
+        category={editingCategory}
+        groups={groups}
+        accessToken={accessToken}
+        onSaved={handleFormSaved}
+        onCancel={handleFormCancel}
+      />
     </ScrollView>
   );
 }
