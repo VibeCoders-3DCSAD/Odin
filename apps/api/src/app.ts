@@ -9,6 +9,7 @@ import pushDeviceTokenRoutes from "./routes/push-device-tokens.js";
 import consentRoutes from "./routes/consents.js";
 import dataExportRoutes from "./routes/data-export-requests.js";
 import accountDeletionRoutes from "./routes/account-deletion-requests.js";
+import onboardingRoutes from "./routes/onboarding.js";
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/odin/api", pushDeviceTokenRoutes);
 app.use("/odin/api/consents", consentRoutes);
 app.use("/odin/api", dataExportRoutes);
 app.use("/odin/api", accountDeletionRoutes);
+app.use("/odin/api", onboardingRoutes);
 
 app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };

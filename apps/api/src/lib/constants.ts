@@ -72,3 +72,58 @@ export const PRIVACY_SETTINGS_DEFAULTS = {
   notifications_opt_in: false,
   data_retention_days: null,
 } as const;
+
+export const ONBOARDING_ERRORS = {
+  session_not_found: "Onboarding session not found.",
+  session_not_in_progress: "Session is not in progress.",
+  session_belongs_to_another_user: "Session does not belong to the authenticated user.",
+  session_already_submitted: "Session has already been submitted.",
+  response_create_failed: "Failed to save onboarding response.",
+  session_create_failed: "Failed to create onboarding session.",
+  session_update_failed: "Failed to update onboarding session.",
+  session_fetch_failed: "Failed to fetch onboarding sessions.",
+  no_active_session: "No active onboarding session found.",
+} as const;
+
+export const ONBOARDING_STATUSES = [
+  "not_started",
+  "in_progress",
+  "submitted",
+  "abandoned",
+  "superseded",
+] as const;
+
+export const FINANCIAL_PROFILE_LABELS = [
+  "stable_flexible",
+  "stable_obligated",
+  "variable_flexible",
+  "variable_obligated",
+] as const;
+
+export const PROFILE_ASSESSMENT_STATUSES = [
+  "queued",
+  "running",
+  "suggested",
+  "confirmed",
+  "rejected",
+  "failed",
+  "expired",
+] as const;
+
+export const PROFILE_EVENT_ACTIONS = [
+  "assessment_requested",
+  "assessment_generated",
+  "change_suggested",
+  "confirmed",
+  "rejected",
+  "manual_override",
+  "activated",
+  "deactivated",
+] as const;
+
+export const PROFILE_ASSESSMENT_METHODS = [
+  "manual",
+  "questionnaire",
+  "cold_start",
+  "standard",
+] as const;
