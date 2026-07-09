@@ -12,12 +12,18 @@ type Operation = {
 
 type ApplyResult = Record<string, unknown>;
 
+const SYNCED_ENTITIES = new Set(["category_groups", "categories", "subcategories"]);
+
 export async function applyOperation(
   supabase: SupabaseClient,
   userId: string,
   deviceId: string,
   op: Operation,
 ): Promise<ApplyResult> {
+  if (!SYNCED_ENTITIES.has(op.entity)) {
+    throw new Error(`entity '${op.entity}' is not in the sync allowlist`);
+  }
+
   switch (op.operation_type) {
     case "create":
       return applyCreate(supabase, userId, op);
@@ -73,24 +79,14 @@ async function applyUpdate(
     throw new Error("record not found");
   }
 
-  const currentRecord = current as Record<string, unknown>;
-
-  if ((currentRecord.deleted as boolean) === true) {
-    throw new Error("record is deleted");
-  }
-
-  const currentVersion = (currentRecord.version as number) ?? 0;
+  const currentVersion = (current as Record<string, unknown>).version as number ?? 0;
 
   if (
     op.base_version !== null &&
     op.base_version !== currentVersion
   ) {
-    return applyConflictingUpdate(
-      supabase,
-      userId,
-      op,
-      currentRecord,
-      currentVersion,
+    throw new Error(
+      `version mismatch: expected ${op.base_version}, current is ${currentVersion}`,
     );
   }
 
@@ -111,63 +107,6 @@ async function applyUpdate(
   }
 
   return { status: "applied", current_version: currentVersion + 1 };
-}
-
-async function applyConflictingUpdate(
-  supabase: SupabaseClient,
-  userId: string,
-  op: Operation,
-  current: Record<string, unknown>,
-  currentVersion: number,
-): Promise<ApplyResult> {
-  const nonConflictingFields: Record<string, unknown> = {};
-
-  for (const field of op.changed_fields) {
-    if (!(field in (op.payload as Record<string, unknown>))) continue;
-
-    if (field in current) {
-      await supabase.from("edit_history").insert({
-        user_id: userId,
-        operation_id: op.operation_id,
-        entity: op.entity,
-        record_id: op.record_id,
-        reason: `field '${field}' already modified by another device`,
-        payload: {
-          local_value: op.payload[field],
-          server_value: current[field],
-        },
-      });
-      continue;
-    }
-
-    nonConflictingFields[field] = op.payload[field];
-  }
-
-  if (Object.keys(nonConflictingFields).length === 0) {
-    return { status: "rejected", reason: "all fields conflicted", current_version: currentVersion };
-  }
-
-  const updates: Record<string, unknown> = {
-    version: currentVersion + 1,
-    updated_at: new Date().toISOString(),
-    ...nonConflictingFields,
-  };
-
-  const { error } = await supabase
-    .from(op.entity)
-    .update(updates)
-    .eq("id", op.record_id)
-    .eq("user_id", userId);
-
-  if (error) {
-    throw new Error(`conflicting update failed: ${error.message}`);
-  }
-
-  return {
-    status: "applied",
-    current_version: currentVersion + 1,
-    conflicted_fields: op.changed_fields.filter((f) => f in current),
-  };
 }
 
 async function applyDelete(
