@@ -39,17 +39,52 @@ export async function pushOperations(
   const results: PushResult[] = [];
 
   for (const op of operations) {
-    const { data: existing } = await supabase
+    const { data: existing, error: lookupError } = await supabase
       .from("applied_operations")
-      .select("operation_id")
+      .select("operation_id, result")
       .eq("operation_id", op.operation_id)
       .maybeSingle();
 
-    if (existing) {
+    if (lookupError) {
       results.push({
         operation_id: op.operation_id,
-        status: "duplicate",
-        reason: "Operation already applied",
+        status: "rejected",
+        reason: `applied_operations lookup failed: ${lookupError.message}`,
+      });
+      continue;
+    }
+
+    if (existing) {
+      const existingResult = existing.result as Record<string, unknown> | undefined;
+      if (existingResult?.status === "pending") {
+        await supabase.from("applied_operations").delete().eq("operation_id", op.operation_id);
+      } else {
+        results.push({
+          operation_id: op.operation_id,
+          status: "duplicate",
+          current_version: typeof existingResult?.current_version === "number"
+            ? existingResult.current_version as number
+            : undefined,
+        });
+        continue;
+      }
+    }
+
+    const { error: reserveError } = await supabase.from("applied_operations").insert({
+      operation_id: op.operation_id,
+      user_id: userId,
+      device_id: deviceId,
+      entity: op.entity,
+      record_id: op.record_id,
+      operation_type: op.operation_type,
+      result: { status: "pending" },
+    });
+
+    if (reserveError) {
+      results.push({
+        operation_id: op.operation_id,
+        status: "rejected",
+        reason: `reservation failed: ${reserveError.message}`,
       });
       continue;
     }
@@ -57,19 +92,10 @@ export async function pushOperations(
     try {
       const result = await applyOperation(supabase, userId, deviceId, op);
 
-      const { error: insertError } = await supabase.from("applied_operations").insert({
-        operation_id: op.operation_id,
-        user_id: userId,
-        device_id: deviceId,
-        entity: op.entity,
-        record_id: op.record_id,
-        operation_type: op.operation_type,
-        result: result,
-      });
-
-      if (insertError) {
-        throw new Error(`applied_operations insert failed: ${insertError.message}`);
-      }
+      await supabase
+        .from("applied_operations")
+        .update({ result })
+        .eq("operation_id", op.operation_id);
 
       results.push({
         operation_id: op.operation_id,
@@ -87,6 +113,11 @@ export async function pushOperations(
         reason: message,
         payload: op.payload,
       });
+
+      await supabase
+        .from("applied_operations")
+        .delete()
+        .eq("operation_id", op.operation_id);
 
       results.push({
         operation_id: op.operation_id,
