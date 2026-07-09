@@ -1,6 +1,16 @@
 import * as SQLite from "expo-sqlite";
 import type { EnqueueInput, SyncOperation } from "./types";
 
+export class LocalDbError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "LocalDbError";
+  }
+}
+
 function generateOperationId(): string {
   return crypto.randomUUID();
 }
