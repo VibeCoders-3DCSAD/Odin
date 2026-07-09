@@ -75,7 +75,7 @@ router.get(
       const userId = request.userId!;
       const supabase = request.supabase!;
 
-      let cursors: Record<string, string> = {};
+      let cursors: Record<string, { ts: string; id: string }> = {};
       const cursorsParam = request.query.cursors;
       if (typeof cursorsParam === "string") {
         try { cursors = JSON.parse(cursorsParam); } catch { /* keep empty */ }
