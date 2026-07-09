@@ -168,7 +168,7 @@ async function applyConflictingUpdate(
     .eq("entity", op.entity)
     .eq("record_id", op.record_id)
     .eq("reason", "applied")
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(100);
 
   const serverChangedFields = new Set<string>();
