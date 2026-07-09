@@ -74,9 +74,27 @@ router.get(
     try {
       const userId = request.userId!;
       const supabase = request.supabase!;
-      const cursor = typeof request.query.cursor === "string" ? request.query.cursor : null;
 
-      const result = await pullChanges(supabase, userId, cursor);
+      let cursors: Record<string, string> = {};
+      const cursorsParam = request.query.cursors;
+      if (typeof cursorsParam === "string") {
+        try {
+          cursors = JSON.parse(cursorsParam);
+        } catch {
+          cursors = {};
+        }
+      } else {
+        const legacyCursor = typeof request.query.cursor === "string" ? request.query.cursor : null;
+        if (legacyCursor) {
+          cursors = {
+            category_groups: legacyCursor,
+            categories: legacyCursor,
+            subcategories: legacyCursor,
+          };
+        }
+      }
+
+      const result = await pullChanges(supabase, userId, cursors);
 
       response.status(200).json({ payload: result });
     } catch (error) {
