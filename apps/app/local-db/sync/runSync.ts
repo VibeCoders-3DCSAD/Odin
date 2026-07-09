@@ -79,7 +79,9 @@ async function pushQueue(
   accessToken: string,
 ): Promise<{ pushed: number; errors: number }> {
   const rows = await db.getAllAsync<QueueRow>(
-    "SELECT * FROM sync_queue WHERE status = 'pending' ORDER BY created_at LIMIT 50",
+    "SELECT * FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending' ORDER BY created_at LIMIT 50",
+    userId,
+    deviceId,
   );
 
   if (rows.length === 0) return { pushed: 0, errors: 0 };
@@ -174,7 +176,8 @@ async function pullAndApply(
     if (!rows || rows.length === 0) continue;
 
     for (const row of rows) {
-      await applyPullRow(db, table, row as Record<string, unknown>);
+      const normalized = normalizePullRow(table, row as Record<string, unknown>, userId);
+      await applyPullRow(db, table, normalized);
       pulled++;
     }
   }
@@ -267,6 +270,16 @@ async function saveCursors(
   );
 }
 
+function normalizePullRow(
+  table: string,
+  row: Record<string, unknown>,
+  userId: string,
+): Record<string, unknown> {
+  if (table === "category_groups" && row.user_id === undefined) {
+    return { ...row, user_id: userId };
+  }
+  return row;
+}
 function fetchWithTimeout(
   url: string,
   options: RequestInit & { timeout?: number },
