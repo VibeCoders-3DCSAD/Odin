@@ -41,7 +41,7 @@ export async function pushOperations(
   for (const op of operations) {
     const { data: existing, error: lookupError } = await supabase
       .from("applied_operations")
-      .select("operation_id, result")
+      .select("operation_id, result, user_id, entity, record_id")
       .eq("operation_id", op.operation_id)
       .maybeSingle();
 
@@ -57,10 +57,22 @@ export async function pushOperations(
     if (existing) {
       const existingResult = existing.result as Record<string, unknown> | undefined;
       if (existingResult?.status === "pending") {
+        if ((existing as Record<string, unknown>).user_id !== userId) {
+          results.push({
+            operation_id: op.operation_id,
+            status: "rejected",
+            reason: "reservation does not belong to current user",
+          });
+          continue;
+        }
+
+        const reservedEntity = (existing as Record<string, unknown>).entity as string;
+        const reservedRecordId = (existing as Record<string, unknown>).record_id as string;
+
         const { data: currentRow } = await supabase
-          .from(op.entity)
+          .from(reservedEntity)
           .select("id, version")
-          .eq("id", op.record_id)
+          .eq("id", reservedRecordId)
           .maybeSingle();
 
         if (currentRow) {
@@ -172,10 +184,17 @@ export async function pullChanges(
     const query = supabase
       .from(table)
       .select("*")
-      .eq("user_id", userId)
       .order("updated_at", { ascending: true })
       .order("id", { ascending: true })
       .limit(500);
+
+    if (table === "category_groups") {
+      // category_groups has no user_id column — system-wide data
+    } else {
+      // categories and subcategories: include system rows (user_id IS NULL)
+      // and user-owned rows
+      query.or(`user_id.is.null,user_id.eq.${userId}`);
+    }
 
     const tableCursor = cursors[table];
     if (tableCursor) {
