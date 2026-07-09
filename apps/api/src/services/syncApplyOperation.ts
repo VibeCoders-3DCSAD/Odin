@@ -14,6 +14,26 @@ type ApplyResult = Record<string, unknown>;
 
 const SYNCED_ENTITIES = new Set(["category_groups", "categories", "subcategories"]);
 
+const SERVER_COLUMNS = new Set([
+  "id",
+  "user_id",
+  "version",
+  "deleted",
+  "created_at",
+  "updated_at",
+  "last_synced_at",
+]);
+
+function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (!SERVER_COLUMNS.has(key)) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 export async function applyOperation(
   supabase: SupabaseClient,
   userId: string,
@@ -41,13 +61,15 @@ async function applyCreate(
   userId: string,
   op: Operation,
 ): Promise<ApplyResult> {
+  const sanitized = sanitizePayload(op.payload);
+
   const row = {
+    ...sanitized,
     id: op.record_id,
     user_id: userId,
     version: 1,
     deleted: false,
     updated_at: new Date().toISOString(),
-    ...op.payload,
   };
 
   const { error } = await supabase.from(op.entity).insert(row);
@@ -79,21 +101,27 @@ async function applyUpdate(
     throw new Error("record not found");
   }
 
-  const currentVersion = (current as Record<string, unknown>).version as number ?? 0;
+  const currentRecord = current as Record<string, unknown>;
+  const currentVersion = (currentRecord.version as number) ?? 0;
 
-  if (
-    op.base_version !== null &&
-    op.base_version !== currentVersion
-  ) {
-    throw new Error(
-      `version mismatch: expected ${op.base_version}, current is ${currentVersion}`,
+  if (op.base_version !== null && op.base_version !== currentVersion) {
+    return applyConflictingUpdate(
+      supabase,
+      userId,
+      op,
+      currentRecord,
+      currentVersion,
     );
   }
 
+  const sanitized = sanitizePayload(
+    filterPayloadFields(op.payload, op.changed_fields),
+  );
+
   const updates: Record<string, unknown> = {
+    ...sanitized,
     version: currentVersion + 1,
     updated_at: new Date().toISOString(),
-    ...filterPayloadFields(op.payload, op.changed_fields),
   };
 
   const { error: updateError } = await supabase
@@ -106,7 +134,119 @@ async function applyUpdate(
     throw new Error(`update failed: ${updateError.message}`);
   }
 
+  await supabase.from("edit_history").insert({
+    user_id: userId,
+    operation_id: op.operation_id,
+    entity: op.entity,
+    record_id: op.record_id,
+    reason: "applied",
+    payload: { base_version: op.base_version, fields: op.changed_fields },
+  });
+
   return { status: "applied", current_version: currentVersion + 1 };
+}
+
+async function applyConflictingUpdate(
+  supabase: SupabaseClient,
+  userId: string,
+  op: Operation,
+  currentRecord: Record<string, unknown>,
+  currentVersion: number,
+): Promise<ApplyResult> {
+  const sanitized = sanitizePayload(
+    filterPayloadFields(op.payload, op.changed_fields),
+  );
+
+  const { data: edits } = await supabase
+    .from("edit_history")
+    .select("payload")
+    .eq("entity", op.entity)
+    .eq("record_id", op.record_id)
+    .eq("reason", "applied")
+    .order("created_at", { ascending: true })
+    .limit(100);
+
+  const serverChangedFields = new Set<string>();
+  if (edits) {
+    for (const edit of edits) {
+      const fields = (edit.payload as Record<string, unknown>)?.fields as string[] | undefined;
+      if (fields) {
+        for (const f of fields) {
+          serverChangedFields.add(f);
+        }
+      }
+    }
+  }
+
+  const conflicted: string[] = [];
+  const nonConflicting: Record<string, unknown> = {};
+
+  for (const field of op.changed_fields) {
+    if (!(field in sanitized)) continue;
+
+    if (serverChangedFields.has(field)) {
+      conflicted.push(field);
+    } else {
+      nonConflicting[field] = sanitized[field];
+    }
+  }
+
+  if (Object.keys(nonConflicting).length === 0) {
+    return {
+      status: "rejected",
+      reason: conflicted.length > 0
+        ? `all fields conflicted: ${conflicted.join(", ")}`
+        : "no fields to apply",
+      current_version: currentVersion,
+    };
+  }
+
+  const updates: Record<string, unknown> = {
+    ...nonConflicting,
+    version: currentVersion + 1,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from(op.entity)
+    .update(updates)
+    .eq("id", op.record_id)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(`conflicting update failed: ${error.message}`);
+  }
+
+  if (conflicted.length > 0) {
+    await supabase.from("edit_history").insert({
+      user_id: userId,
+      operation_id: op.operation_id,
+      entity: op.entity,
+      record_id: op.record_id,
+      reason: `conflicted fields dropped: ${conflicted.join(", ")}`,
+      payload: {
+        client_payload: sanitized,
+        server_values: Object.fromEntries(
+          conflicted.map((f) => [f, currentRecord[f]]),
+        ),
+      },
+    });
+  }
+
+  await supabase.from("edit_history").insert({
+    user_id: userId,
+    operation_id: op.operation_id,
+    entity: op.entity,
+    record_id: op.record_id,
+    reason: "partially_applied",
+    payload: { fields: Object.keys(nonConflicting) },
+  });
+
+  return {
+    status: "applied",
+    current_version: currentVersion + 1,
+    conflicted_fields: conflicted,
+  };
 }
 
 async function applyDelete(
