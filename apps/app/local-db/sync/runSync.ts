@@ -303,7 +303,7 @@ function normalizePullRow(
   row: Record<string, unknown>,
   userId: string,
 ): Record<string, unknown> {
-  if (table === "category_groups" && row.user_id === undefined) {
+  if (row.user_id == null) {
     return { ...row, user_id: userId };
   }
   return row;
