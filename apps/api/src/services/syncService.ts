@@ -20,6 +20,8 @@ type PushResult = {
 
 type PullChanges = Record<string, Record<string, unknown>[]>;
 
+type PullCursors = Record<string, string>;
+
 const SYNCED_TABLES = [
   "category_groups",
   "categories",
@@ -94,10 +96,11 @@ export async function pushOperations(
 export async function pullChanges(
   supabase: SupabaseClient,
   userId: string,
-  cursor: string | null,
-): Promise<{ cursor: string; changes: PullChanges }> {
+  cursors: PullCursors,
+): Promise<{ cursors: PullCursors; changes: PullChanges }> {
   const changes: PullChanges = {};
-  let maxUpdatedAt = cursor ?? new Date(0).toISOString();
+  const newCursors: PullCursors = {};
+  const now = new Date().toISOString();
 
   for (const table of SYNCED_TABLES) {
     const query = supabase
@@ -107,36 +110,30 @@ export async function pullChanges(
       .order("updated_at", { ascending: true })
       .limit(500);
 
-    if (cursor) {
-      query.gt("updated_at", cursor);
+    const tableCursor = cursors[table] ?? null;
+    if (tableCursor) {
+      query.gt("updated_at", tableCursor);
     }
 
     const { data, error } = await query;
 
     if (error) {
       console.error("sync pull error for table", table, error);
+      newCursors[table] = tableCursor ?? now;
       continue;
     }
 
     if (data && data.length > 0) {
       changes[table] = data;
 
-      // ponytail: cursor is max updated_at of returned rows.
-      // Rows with identical updated_at at a page boundary may be
-      // skipped. Acceptable until per-table cursors are warranted.
       const lastRow = data[data.length - 1] as Record<string, unknown>;
-      const lastUpdatedAt = lastRow.updated_at as string;
-      if (lastUpdatedAt > maxUpdatedAt) {
-        maxUpdatedAt = lastUpdatedAt;
-      }
+      newCursors[table] = (lastRow.updated_at as string) ?? tableCursor ?? now;
+    } else {
+      newCursors[table] = tableCursor ?? now;
     }
   }
 
-  if (Object.keys(changes).length === 0) {
-    maxUpdatedAt = new Date().toISOString();
-  }
-
-  return { cursor: maxUpdatedAt, changes };
+  return { cursors: newCursors, changes };
 }
 
 export async function registerDevice(
