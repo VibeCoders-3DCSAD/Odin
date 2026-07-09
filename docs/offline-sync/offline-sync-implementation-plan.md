@@ -200,7 +200,6 @@ user_devices (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   device_id text not null,
-  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   last_seen_at timestamptz,
   unique (user_id, device_id)
@@ -254,7 +253,7 @@ apps/api/src/services/syncApplyOperation.ts
 `/sync/push` should:
 
 1. Authenticate the user.
-2. Validate the device is active.
+2. Validate/register the `device_id` inside the authenticated user's boundary.
 3. Receive a bounded batch of queued operations.
 4. Check `applied_operations` first for idempotency.
 5. Apply new operations inside a DB transaction.
@@ -376,7 +375,7 @@ Auth remains internet-required:
 |---|---|
 | Register | Block with internet-required message |
 | Login | Block with internet-required message |
-| Logout | Require internet and block while the current user has pending sync queue rows |
+| Logout | Require internet and block while the current device has pending sync queue rows |
 | Forgot password | Block with internet-required message |
 | Password update | Block with internet-required message |
 
@@ -388,7 +387,7 @@ Logout policy for v1:
 
 ```text
 logout requested
-check sync_queue for pending or failed rows for the current user
+check sync_queue for pending or failed rows for the current user/device
 if queue is empty: call online logout
 if queue has rows and internet is available: runSync()
 if sync succeeds and queue is empty: call online logout
@@ -396,9 +395,10 @@ if queue still has rows: block logout and show a sync-required message
 if offline: block logout and show a sync-required message
 ```
 
-Do not allow local-only logout while financial mutations are still queued. That
-would leave user-owned offline data in an ambiguous state after the session is
-gone and complicate account switching, recovery, and queue ownership.
+Do not allow local-only logout while this device still has queued financial
+mutations. That would leave user-owned offline data in an ambiguous state after
+the session is gone and complicate account switching, recovery, and queue
+ownership.
 
 Suggested user-facing message:
 

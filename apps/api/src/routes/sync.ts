@@ -78,20 +78,7 @@ router.get(
       let cursors: Record<string, string> = {};
       const cursorsParam = request.query.cursors;
       if (typeof cursorsParam === "string") {
-        try {
-          cursors = JSON.parse(cursorsParam);
-        } catch {
-          cursors = {};
-        }
-      } else {
-        const legacyCursor = typeof request.query.cursor === "string" ? request.query.cursor : null;
-        if (legacyCursor) {
-          cursors = {
-            category_groups: legacyCursor,
-            categories: legacyCursor,
-            subcategories: legacyCursor,
-          };
-        }
+        try { cursors = JSON.parse(cursorsParam); } catch { /* keep empty */ }
       }
 
       const result = await pullChanges(supabase, userId, cursors);
