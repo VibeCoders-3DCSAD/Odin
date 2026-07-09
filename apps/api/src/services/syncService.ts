@@ -96,8 +96,8 @@ export async function pullChanges(
   userId: string,
   cursor: string | null,
 ): Promise<{ cursor: string; changes: PullChanges }> {
-  const newCursor = new Date().toISOString();
   const changes: PullChanges = {};
+  let maxUpdatedAt = cursor ?? new Date(0).toISOString();
 
   for (const table of SYNCED_TABLES) {
     const query = supabase
@@ -120,10 +120,23 @@ export async function pullChanges(
 
     if (data && data.length > 0) {
       changes[table] = data;
+
+      // ponytail: cursor is max updated_at of returned rows.
+      // Rows with identical updated_at at a page boundary may be
+      // skipped. Acceptable until per-table cursors are warranted.
+      const lastRow = data[data.length - 1] as Record<string, unknown>;
+      const lastUpdatedAt = lastRow.updated_at as string;
+      if (lastUpdatedAt > maxUpdatedAt) {
+        maxUpdatedAt = lastUpdatedAt;
+      }
     }
   }
 
-  return { cursor: newCursor, changes };
+  if (Object.keys(changes).length === 0) {
+    maxUpdatedAt = new Date().toISOString();
+  }
+
+  return { cursor: maxUpdatedAt, changes };
 }
 
 export async function registerDevice(
