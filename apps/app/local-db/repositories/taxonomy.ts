@@ -199,47 +199,53 @@ function now(): string {
   return new Date().toISOString();
 }
 
-export async function listCategoryGroups(): Promise<CategoryGroup[]> {
+export async function listCategoryGroups(userId: string): Promise<CategoryGroup[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<CategoryGroupRow>(
-    "SELECT * FROM category_groups WHERE deleted = 0 AND is_active = 1 ORDER BY sort_order",
+    "SELECT * FROM category_groups WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
+    userId,
   );
   return rows.map(mapCategoryGroup);
 }
 
 export async function listCategories(
+  userId: string,
   categoryGroupId?: string,
 ): Promise<Category[]> {
   const db = await getDb();
   if (categoryGroupId) {
     const rows = await db.getAllAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
+      "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
+      userId,
       categoryGroupId,
     );
     return rows.map(mapCategory);
   }
   const rows = await db.getAllAsync<CategoryRow>(
-    "SELECT * FROM categories WHERE deleted = 0 AND is_active = 1 ORDER BY sort_order",
+    "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
+    userId,
   );
   return rows.map(mapCategory);
 }
 
-export async function getCategory(id: string): Promise<Category | null> {
+export async function getCategory(userId: string, id: string): Promise<Category | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<CategoryRow>(
-    "SELECT * FROM categories WHERE id = ? AND deleted = 0",
+    "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+    userId,
     id,
   );
   return row ? mapCategory(row) : null;
 }
 
 export async function listSubcategories(
+  userId: string,
   categoryId?: string,
   kind?: "income" | "expense" | "transfer_adjustment",
 ): Promise<Subcategory[]> {
   const db = await getDb();
-  let sql = "SELECT * FROM subcategories WHERE deleted = 0 AND is_active = 1";
-  const params: SQLite.SQLiteBindValue[] = [];
+  let sql = "SELECT * FROM subcategories WHERE user_id = ? AND deleted = 0 AND is_active = 1";
+  const params: SQLite.SQLiteBindValue[] = [userId];
 
   if (categoryId) {
     sql += " AND category_id = ?";
@@ -255,10 +261,11 @@ export async function listSubcategories(
   return rows.map(mapSubcategory);
 }
 
-export async function getSubcategory(id: string): Promise<Subcategory | null> {
+export async function getSubcategory(userId: string, id: string): Promise<Subcategory | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<SubcategoryRow>(
-    "SELECT * FROM subcategories WHERE id = ? AND deleted = 0",
+    "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
+    userId,
     id,
   );
   return row ? mapSubcategory(row) : null;
@@ -281,6 +288,15 @@ export async function createCategory(
   let result: { category: Category; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
+    const groupRow = await db.getFirstAsync<CategoryGroupRow>(
+      "SELECT id FROM category_groups WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      input.category_group_id,
+    );
+    if (!groupRow) {
+      throw new LocalDbError("VALIDATION_ERROR", "category_group_id does not exist");
+    }
+
     await db.runAsync(
       `INSERT INTO categories
         (id, user_id, category_group_id, slug, label, short_label, description,
@@ -313,7 +329,8 @@ export async function createCategory(
     });
 
     const row = await db.getFirstAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE id = ?",
+      "SELECT * FROM categories WHERE user_id = ? AND id = ?",
+      userId,
       id,
     );
 
@@ -336,7 +353,8 @@ export async function updateCategory(
 
   await db.withTransactionAsync(async () => {
     const current = await db.getFirstAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE id = ? AND deleted = 0",
+      "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
@@ -363,7 +381,8 @@ export async function updateCategory(
       params.push(ts);
       updates.push("version = version + 1");
 
-      const sql = `UPDATE categories SET ${updates.join(", ")} WHERE id = ?`;
+      const sql = `UPDATE categories SET ${updates.join(", ")} WHERE user_id = ? AND id = ?`;
+      params.push(userId);
       params.push(id);
       await db.runAsync(sql, ...params);
     }
@@ -380,7 +399,8 @@ export async function updateCategory(
     });
 
     const row = await db.getFirstAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE id = ?",
+      "SELECT * FROM categories WHERE user_id = ? AND id = ?",
+      userId,
       id,
     );
 
@@ -402,14 +422,16 @@ export async function deleteCategory(
 
   await db.withTransactionAsync(async () => {
     const current = await db.getFirstAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE id = ? AND deleted = 0",
+      "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
 
     await db.runAsync(
-      "UPDATE categories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE id = ?",
+      "UPDATE categories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE user_id = ? AND id = ?",
       ts,
+      userId,
       id,
     );
 
@@ -425,7 +447,8 @@ export async function deleteCategory(
     });
 
     const row = await db.getFirstAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE id = ?",
+      "SELECT * FROM categories WHERE user_id = ? AND id = ?",
+      userId,
       id,
     );
 
@@ -456,6 +479,17 @@ export async function createSubcategory(
   let result: { subcategory: Subcategory; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
+    if (input.category_id) {
+      const catRow = await db.getFirstAsync<CategoryRow>(
+        "SELECT id FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+        userId,
+        input.category_id,
+      );
+      if (!catRow) {
+        throw new LocalDbError("VALIDATION_ERROR", "category_id does not exist");
+      }
+    }
+
     await db.runAsync(
       `INSERT INTO subcategories
         (id, user_id, category_id, slug, kind, label, short_label, description,
@@ -490,7 +524,8 @@ export async function createSubcategory(
     });
 
     const row = await db.getFirstAsync<SubcategoryRow>(
-      "SELECT * FROM subcategories WHERE id = ?",
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ?",
+      userId,
       id,
     );
 
@@ -513,7 +548,8 @@ export async function updateSubcategory(
 
   await db.withTransactionAsync(async () => {
     const current = await db.getFirstAsync<SubcategoryRow>(
-      "SELECT * FROM subcategories WHERE id = ? AND deleted = 0",
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
@@ -540,7 +576,8 @@ export async function updateSubcategory(
       params.push(ts);
       updates.push("version = version + 1");
 
-      const sql = `UPDATE subcategories SET ${updates.join(", ")} WHERE id = ?`;
+      const sql = `UPDATE subcategories SET ${updates.join(", ")} WHERE user_id = ? AND id = ?`;
+      params.push(userId);
       params.push(id);
       await db.runAsync(sql, ...params);
     }
@@ -557,7 +594,8 @@ export async function updateSubcategory(
     });
 
     const row = await db.getFirstAsync<SubcategoryRow>(
-      "SELECT * FROM subcategories WHERE id = ?",
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ?",
+      userId,
       id,
     );
 
@@ -579,14 +617,16 @@ export async function deleteSubcategory(
 
   await db.withTransactionAsync(async () => {
     const current = await db.getFirstAsync<SubcategoryRow>(
-      "SELECT * FROM subcategories WHERE id = ? AND deleted = 0",
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
 
     await db.runAsync(
-      "UPDATE subcategories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE id = ?",
+      "UPDATE subcategories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE user_id = ? AND id = ?",
       ts,
+      userId,
       id,
     );
 
@@ -602,7 +642,8 @@ export async function deleteSubcategory(
     });
 
     const row = await db.getFirstAsync<SubcategoryRow>(
-      "SELECT * FROM subcategories WHERE id = ?",
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ?",
+      userId,
       id,
     );
 
