@@ -57,6 +57,27 @@ export async function pushOperations(
     if (existing) {
       const existingResult = existing.result as Record<string, unknown> | undefined;
       if (existingResult?.status === "pending") {
+        const { data: currentRow } = await supabase
+          .from(op.entity)
+          .select("id, version")
+          .eq("id", op.record_id)
+          .maybeSingle();
+
+        if (currentRow) {
+          const version = (currentRow as Record<string, unknown>).version as number;
+          const result = { status: "applied", current_version: version };
+          await supabase
+            .from("applied_operations")
+            .update({ result })
+            .eq("operation_id", op.operation_id);
+          results.push({
+            operation_id: op.operation_id,
+            status: "applied",
+            current_version: version,
+          });
+          continue;
+        }
+
         await supabase.from("applied_operations").delete().eq("operation_id", op.operation_id);
       } else {
         results.push({
@@ -89,13 +110,20 @@ export async function pushOperations(
       continue;
     }
 
+    let mutationApplied = false;
+
     try {
       const result = await applyOperation(supabase, userId, deviceId, op);
+      mutationApplied = true;
 
-      await supabase
+      const { error: finalizeError } = await supabase
         .from("applied_operations")
         .update({ result })
         .eq("operation_id", op.operation_id);
+
+      if (finalizeError) {
+        throw new Error(`idempotency finalize failed: ${finalizeError.message}`);
+      }
 
       results.push({
         operation_id: op.operation_id,
@@ -114,10 +142,12 @@ export async function pushOperations(
         payload: op.payload,
       });
 
-      await supabase
-        .from("applied_operations")
-        .delete()
-        .eq("operation_id", op.operation_id);
+      if (!mutationApplied) {
+        await supabase
+          .from("applied_operations")
+          .delete()
+          .eq("operation_id", op.operation_id);
+      }
 
       results.push({
         operation_id: op.operation_id,
