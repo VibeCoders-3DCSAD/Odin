@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "2.57.4",
     "expo": "~55.0.26",
     "expo-linking": "8.0.12",
+    "expo-sqlite": "^57.0.0",
     "expo-status-bar": "~55.0.6",
     "nativewind": "^4.2.3",
     "phosphor-react-native": "^3.0.6",
