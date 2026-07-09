@@ -16,6 +16,7 @@ import categoryRoutes from "./routes/categories.js";
 import subcategoryRoutes from "./routes/subcategories.js";
 import categoryRestrictionRoutes from "./routes/category-restrictions.js";
 import subcategoryRestrictionRoutes from "./routes/subcategory-restrictions.js";
+import syncRoutes from "./routes/sync.js";
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use("/odin/api/categories", categoryRoutes);
 app.use("/odin/api/subcategories", subcategoryRoutes);
 app.use("/odin/api/category-restrictions", categoryRestrictionRoutes);
 app.use("/odin/api/subcategory-restrictions", subcategoryRestrictionRoutes);
+app.use("/odin/api/sync", syncRoutes);
 
 app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };
