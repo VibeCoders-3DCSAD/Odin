@@ -20,7 +20,9 @@ type PushResult = {
 
 type PullChanges = Record<string, Record<string, unknown>[]>;
 
-type PullCursors = Record<string, string>;
+type TableCursor = { ts: string; id: string };
+
+type PullCursors = Record<string, TableCursor>;
 
 const SYNCED_TABLES = [
   "category_groups",
@@ -55,7 +57,7 @@ export async function pushOperations(
     try {
       const result = await applyOperation(supabase, userId, deviceId, op);
 
-      await supabase.from("applied_operations").insert({
+      const { error: insertError } = await supabase.from("applied_operations").insert({
         operation_id: op.operation_id,
         user_id: userId,
         device_id: deviceId,
@@ -64,6 +66,10 @@ export async function pushOperations(
         operation_type: op.operation_type,
         result: result,
       });
+
+      if (insertError) {
+        throw new Error(`applied_operations insert failed: ${insertError.message}`);
+      }
 
       results.push({
         operation_id: op.operation_id,
@@ -100,7 +106,6 @@ export async function pullChanges(
 ): Promise<{ cursors: PullCursors; changes: PullChanges }> {
   const changes: PullChanges = {};
   const newCursors: PullCursors = {};
-  const now = new Date().toISOString();
 
   for (const table of SYNCED_TABLES) {
     const query = supabase
@@ -108,18 +113,21 @@ export async function pullChanges(
       .select("*")
       .eq("user_id", userId)
       .order("updated_at", { ascending: true })
+      .order("id", { ascending: true })
       .limit(500);
 
-    const tableCursor = cursors[table] ?? null;
+    const tableCursor = cursors[table];
     if (tableCursor) {
-      query.gt("updated_at", tableCursor);
+      query.or(
+        `updated_at.gt.${tableCursor.ts},and(updated_at.eq.${tableCursor.ts},id.gt.${tableCursor.id})`,
+      );
     }
 
     const { data, error } = await query;
 
     if (error) {
       console.error("sync pull error for table", table, error);
-      newCursors[table] = tableCursor ?? now;
+      newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
       continue;
     }
 
@@ -127,9 +135,12 @@ export async function pullChanges(
       changes[table] = data;
 
       const lastRow = data[data.length - 1] as Record<string, unknown>;
-      newCursors[table] = (lastRow.updated_at as string) ?? tableCursor ?? now;
+      newCursors[table] = {
+        ts: (lastRow.updated_at as string) ?? tableCursor?.ts ?? new Date(0).toISOString(),
+        id: lastRow.id as string,
+      };
     } else {
-      newCursors[table] = tableCursor ?? now;
+      newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
     }
   }
 

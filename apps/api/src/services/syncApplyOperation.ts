@@ -140,7 +140,11 @@ async function applyUpdate(
     entity: op.entity,
     record_id: op.record_id,
     reason: "applied",
-    payload: { base_version: op.base_version, fields: op.changed_fields },
+    payload: {
+      base_version: op.base_version,
+      new_version: currentVersion + 1,
+      fields: op.changed_fields,
+    },
   });
 
   return { status: "applied", current_version: currentVersion + 1 };
@@ -160,6 +164,7 @@ async function applyConflictingUpdate(
   const { data: edits } = await supabase
     .from("edit_history")
     .select("payload")
+    .eq("user_id", userId)
     .eq("entity", op.entity)
     .eq("record_id", op.record_id)
     .eq("reason", "applied")
@@ -169,9 +174,18 @@ async function applyConflictingUpdate(
   const serverChangedFields = new Set<string>();
   if (edits) {
     for (const edit of edits) {
-      const fields = (edit.payload as Record<string, unknown>)?.fields as string[] | undefined;
-      if (fields) {
-        for (const f of fields) {
+      const p = edit.payload as Record<string, unknown> | undefined;
+      if (!p) continue;
+
+      const editNewVersion = p.new_version as number | undefined;
+      const editFields = p.fields as string[] | undefined;
+
+      if (editNewVersion && op.base_version !== null && editNewVersion <= op.base_version) {
+        continue;
+      }
+
+      if (editFields) {
+        for (const f of editFields) {
           serverChangedFields.add(f);
         }
       }
@@ -239,7 +253,11 @@ async function applyConflictingUpdate(
     entity: op.entity,
     record_id: op.record_id,
     reason: "partially_applied",
-    payload: { fields: Object.keys(nonConflicting) },
+    payload: {
+      base_version: op.base_version,
+      new_version: currentVersion + 1,
+      fields: Object.keys(nonConflicting),
+    },
   });
 
   return {
