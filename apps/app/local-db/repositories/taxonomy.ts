@@ -269,6 +269,10 @@ export async function createCategory(
   deviceId: string,
   input: CreateCategoryInput,
 ): Promise<{ category: Category; operation: SyncOperation }> {
+  if (!input.category_group_id || !input.slug || !input.label || !input.description) {
+    throw new Error("category_group_id, slug, label, and description are required");
+  }
+
   const db = await getDb();
   const id = crypto.randomUUID();
   const ts = now();
@@ -404,7 +408,7 @@ export async function deleteCategory(
     if (!current) throw new Error("Category not found");
 
     await db.runAsync(
-      "UPDATE categories SET is_active = 0, deleted = 1, updated_at = ? WHERE id = ?",
+      "UPDATE categories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE id = ?",
       ts,
       id,
     );
@@ -436,6 +440,14 @@ export async function createSubcategory(
   deviceId: string,
   input: CreateSubcategoryInput,
 ): Promise<{ subcategory: Subcategory; operation: SyncOperation }> {
+  const VALID_KINDS = ["income", "expense", "transfer_adjustment"];
+  if (!input.slug || !input.label || !input.description || !input.kind) {
+    throw new Error("slug, label, description, and kind are required");
+  }
+  if (!VALID_KINDS.includes(input.kind)) {
+    throw new Error(`kind must be one of: ${VALID_KINDS.join(", ")}`);
+  }
+
   const db = await getDb();
   const id = crypto.randomUUID();
   const ts = now();
@@ -573,7 +585,7 @@ export async function deleteSubcategory(
     if (!current) throw new Error("Subcategory not found");
 
     await db.runAsync(
-      "UPDATE subcategories SET is_active = 0, deleted = 1, updated_at = ? WHERE id = ?",
+      "UPDATE subcategories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE id = ?",
       ts,
       id,
     );
