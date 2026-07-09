@@ -104,10 +104,11 @@ following core mechanics:
    optionally review or reverse a resolution after the fact (e.g. "restore
    this value," "recreate this transaction"). There is no blocking
    "pending review" state anywhere in the sync path.
-9. **Single active device session** (see Section 5) is adopted for the
-   initial release to eliminate the majority of the conflict surface area
-   described above, while retaining the versioning/idempotency schema so
-   multi-device support can be re-enabled later without a data migration.
+9. **Multiple active devices are allowed.** Each device has a stable
+   `device_id` for operation attribution, deterministic tiebreaking, and
+   audit trails, but registering a new device does not deactivate existing
+   devices. The conflict-resolution rules above are therefore part of the v1
+   operating model, not only future-proofing.
 
 ---
 
@@ -141,9 +142,12 @@ friction disproportionate to the actual risk. Manual resolution is reserved
 for the narrow set of cases where an automatic policy could plausibly be
 wrong in a way that matters financially.
 
-### 3.5 Full multi-device support from day one
-Considered and deferred, not rejected outright — see Section 5. Kept as a
-documented future path rather than a closed door.
+### 3.5 Single active device restriction
+Rejected. A single-device rule reduces the conflict surface, but it also makes
+normal phone + web or phone replacement flows feel like forced logout. Since the
+sync design already includes idempotency, tombstones, delete-wins, per-field
+LWW, and edit-history auditability, v1 will allow multiple active devices and
+keep the conflict path exercised rather than hiding it behind a session policy.
 
 ### 3.6 Manual/flagged review for high-stakes field conflicts (superseded)
 An earlier iteration of this ADR flagged same-field conflicts on financially
@@ -247,8 +251,8 @@ mandatory review.
 - No merge UI, review queue, or blocking "pending conflict" state needs to
   be designed, built, or tested — the entire manual-resolution surface
   area from the original design is eliminated.
-- Schema (`version`, `updated_at`, idempotency keys) is forward-compatible
-  with full multi-device support without a breaking migration.
+- Schema (`version`, `updated_at`, idempotency keys, `device_id`) supports
+  multi-device convergence from v1 without a later session-model migration.
 
 ### Negative / Accepted Tradeoffs
 - Added schema complexity relative to a naive "just PATCH the row" design
@@ -259,31 +263,28 @@ mandatory review.
 - Field-level auto-merge requires the backend to diff payloads per operation
   rather than doing a blind row overwrite — more logic in the sync function,
   but contained to one place (`sync_apply_operations`).
-- Single-device restriction (Section 5) is a real product limitation that
-  will need to be revisited if Odin PFM's scope requires simultaneous
-  phone + web usage.
+- Multi-device support means the conflict-resolution branch is real v1
+  behavior, not just a future compatibility path; it needs tests and clear
+  audit output before relying on it for financial data.
 
 ---
 
-## 5. Related Decision: Single Active Device (Scoped for v1)
+## 5. Related Decision: Multiple Active Devices (Scoped for v1)
 
-To reduce the conflict-resolution surface for the initial release, the app
-restricts each user to **one active device session** at a time:
+The app allows more than one active device session for the same user. Device
+registration records device identity for sync attribution and auditability, not
+for forced session migration:
 
-- `user_devices` table tracks `user_id`, `device_id`, `is_active`.
-- Login from a new device deactivates the previous session
-  (force-migration), rather than allowing concurrent active sessions.
-- This does not remove the versioning/conflict-policy design — it removes
-  the *frequency* with which conflicts can occur, since only one device can
-  hold pending queued writes at a time in practice.
-- The full conflict-resolution design in Section 2 remains implemented and
-  active, since a device can still go offline, re-sync late, and encounter
-  a conflict against changes made via the same account on the newly active
-  device in the interim.
+- `user_devices` table tracks `user_id`, `device_id`, and last-seen metadata.
+- Registering a new device does not deactivate existing devices.
+- `/sync/push` still authenticates the user and verifies the operation belongs
+  to that user's sync boundary.
+- The conflict-resolution design in Section 2 is active v1 behavior because two
+  devices can legitimately hold and later sync offline writes.
 
-This is recorded as a sub-decision rather than a separate ADR because it
-does not change the sync algorithm — it changes how often the algorithm's
-conflict branch is exercised.
+This keeps the product behavior closer to user expectations for phone + web or
+replacement-device usage, at the cost of requiring the sync conflict path to be
+correct and tested from the initial release.
 
 ---
 
