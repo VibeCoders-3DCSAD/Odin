@@ -55,6 +55,8 @@ export async function runSync(
 
     const cursors = await loadCursors(db, userId);
 
+    await ensureDeviceRegistered(db, userId, deviceId, accessToken);
+
     const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken);
 
     const { pulled, cursors: newCursors } = await pullAndApply(
@@ -268,6 +270,32 @@ async function saveCursors(
     JSON.stringify(cursors),
     new Date().toISOString(),
   );
+}
+
+async function ensureDeviceRegistered(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  accessToken: string,
+): Promise<void> {
+  const existing = await db.getFirstAsync<{ device_id: string }>(
+    "SELECT device_id FROM sync_state WHERE user_id = ?",
+    userId,
+  );
+  if (existing?.device_id === deviceId) return;
+
+  try {
+    await fetchWithTimeout(`${API_BASE}/odin/api/sync/register-device`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ payload: { device_id: deviceId } }),
+    });
+  } catch {
+    // Non-fatal: push will fail with a clear 400 if unregistered
+  }
 }
 
 function normalizePullRow(
