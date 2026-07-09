@@ -1,6 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
-import { enqueueOperation } from "../helpers";
+import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 
 type CategoryGroupRow = {
@@ -270,7 +270,7 @@ export async function createCategory(
   input: CreateCategoryInput,
 ): Promise<{ category: Category; operation: SyncOperation }> {
   if (!input.category_group_id || !input.slug || !input.label || !input.description) {
-    throw new Error("category_group_id, slug, label, and description are required");
+    throw new LocalDbError("VALIDATION_ERROR", "category_group_id, slug, label, and description are required");
   }
 
   const db = await getDb();
@@ -339,7 +339,7 @@ export async function updateCategory(
       "SELECT * FROM categories WHERE id = ? AND deleted = 0",
       id,
     );
-    if (!current) throw new Error("Category not found");
+    if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
 
     const updates: string[] = [];
     const params: SQLite.SQLiteBindValue[] = [];
@@ -405,7 +405,7 @@ export async function deleteCategory(
       "SELECT * FROM categories WHERE id = ? AND deleted = 0",
       id,
     );
-    if (!current) throw new Error("Category not found");
+    if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
 
     await db.runAsync(
       "UPDATE categories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE id = ?",
@@ -442,10 +442,10 @@ export async function createSubcategory(
 ): Promise<{ subcategory: Subcategory; operation: SyncOperation }> {
   const VALID_KINDS = ["income", "expense", "transfer_adjustment"];
   if (!input.slug || !input.label || !input.description || !input.kind) {
-    throw new Error("slug, label, description, and kind are required");
+    throw new LocalDbError("VALIDATION_ERROR", "slug, label, description, and kind are required");
   }
   if (!VALID_KINDS.includes(input.kind)) {
-    throw new Error(`kind must be one of: ${VALID_KINDS.join(", ")}`);
+    throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_KINDS.join(", ")}`);
   }
 
   const db = await getDb();
@@ -516,7 +516,7 @@ export async function updateSubcategory(
       "SELECT * FROM subcategories WHERE id = ? AND deleted = 0",
       id,
     );
-    if (!current) throw new Error("Subcategory not found");
+    if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
 
     const updates: string[] = [];
     const params: SQLite.SQLiteBindValue[] = [];
@@ -582,7 +582,7 @@ export async function deleteSubcategory(
       "SELECT * FROM subcategories WHERE id = ? AND deleted = 0",
       id,
     );
-    if (!current) throw new Error("Subcategory not found");
+    if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
 
     await db.runAsync(
       "UPDATE subcategories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE id = ?",
