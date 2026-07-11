@@ -18,6 +18,8 @@ import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import { runSync } from "../local-db/sync/runSync";
+import { initDatabase } from "../local-db/client";
+import { isOnline } from "../lib/network";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(300, SCREEN_WIDTH * 0.8);
@@ -117,6 +119,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [settingsSubPage, setSettingsSubPage] = useState(false);
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -165,7 +168,39 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
   async function handleLogout() {
     setIsLoggingOut(true);
+    setLogoutError(null);
+
     try {
+      const db = await initDatabase();
+      const pending = await db.getFirstAsync<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
+        userId,
+        deviceId,
+      );
+
+      if (pending && pending.cnt > 0) {
+        const online = await isOnline();
+        if (!online) {
+          setLogoutError("You have unsynced changes. Connect to the internet and sync before logging out so your data is not lost.");
+          setIsLoggingOut(false);
+          return;
+        }
+
+        await runSync(userId, deviceId, accessToken);
+
+        const stillPending = await db.getFirstAsync<{ cnt: number }>(
+          "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
+          userId,
+          deviceId,
+        );
+
+        if (stillPending && stillPending.cnt > 0) {
+          setLogoutError("Some changes could not be synced. Please try again before logging out.");
+          setIsLoggingOut(false);
+          return;
+        }
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       const response = await fetch(`${API_BASE_URL}/odin/api/auth/logout`, {
@@ -184,6 +219,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       onLoggedOut();
     } catch (error) {
       console.error("Logout request failed", error);
+      setLogoutError("Logout failed. Please check your connection and try again.");
       setIsLoggingOut(false);
     }
   }
@@ -196,19 +232,26 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         <View className="gap-6">
           <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
           {!settingsSubPage ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Log out"
-              disabled={isLoggingOut}
-              onPress={handleLogout}
-              className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
-            >
-              {isLoggingOut ? (
-                <ActivityIndicator color={palette.error} />
-              ) : (
+            <>
+              {logoutError ? (
+                <View style={{ backgroundColor: "#FFF0F2", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
+                </View>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Log out"
+                disabled={isLoggingOut}
+                onPress={handleLogout}
+                className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
+              >
+                {isLoggingOut ? (
+                  <ActivityIndicator color={palette.error} />
+                ) : (
                 <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
               )}
-            </Pressable>
+              </Pressable>
+            </>
           ) : null}
         </View>
       );

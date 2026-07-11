@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { getConsents } from "../features/governance/api";
 import PrivacyConsentScreen from "../features/governance/PrivacyConsentScreen";
+import { isOnline } from "../lib/network";
 
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const requestTimeoutMs = 10_000;
@@ -461,6 +462,12 @@ export default function AuthExperience({
       return;
     }
 
+    const online = await isOnline();
+    if (!online) {
+      setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      return;
+    }
+
     setIsBusy(true);
     setNotice({ tone: "default", message: "Signing you in..." });
 
@@ -522,6 +529,12 @@ export default function AuthExperience({
       return;
     }
 
+    const online = await isOnline();
+    if (!online) {
+      setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      return;
+    }
+
     setIsBusy(true);
     setNotice({ tone: "default", message: "Creating your Odin account..." });
 
@@ -569,6 +582,12 @@ export default function AuthExperience({
       return;
     }
 
+    const online = await isOnline();
+    if (!online) {
+      setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      return;
+    }
+
     setIsBusy(true);
     setNotice({ tone: "default", message: "Sending your reset link..." });
 
@@ -613,6 +632,12 @@ export default function AuthExperience({
       return;
     }
 
+    const online = await isOnline();
+    if (!online) {
+      setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      return;
+    }
+
     setIsBusy(true);
     setNotice({ tone: "default", message: "Updating your password..." });
 
@@ -647,6 +672,12 @@ export default function AuthExperience({
 
   async function handleGoogle() {
     if (!google.signIn) {
+      return;
+    }
+
+    const online = await isOnline();
+    if (!online) {
+      setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
       return;
     }
 
