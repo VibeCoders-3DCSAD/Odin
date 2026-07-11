@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import "./global.css";
 
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
@@ -54,6 +54,7 @@ async function getGoogleIdToken() {
 export default function App() {
   const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
   const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
+  const deviceId = useRef(crypto.randomUUID()).current;
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -90,6 +91,8 @@ export default function App() {
       <>
         <MobileShell
           accessToken={authenticated.accessToken}
+          userId={authenticated.userId ?? ""}
+          deviceId={deviceId}
           onLoggedOut={() => setAuthenticated(null)}
           signOut={async () => { await GoogleSignin.signOut(); }}
         />
