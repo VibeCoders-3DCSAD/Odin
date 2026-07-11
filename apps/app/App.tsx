@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import "./global.css";
 
 import { StatusBar } from "expo-status-bar";
@@ -12,12 +12,15 @@ export default function App() {
     isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken,
     verificationToken,
   } = useDeepLink();
+  const deviceId = useRef(crypto.randomUUID()).current;
 
   if (authenticated) {
     return (
       <>
         <MobileShell
           accessToken={authenticated.accessToken}
+          userId={authenticated.userId ?? ""}
+          deviceId={deviceId}
           onLoggedOut={() => setAuthenticated(null)}
         />
         <StatusBar style="dark" />

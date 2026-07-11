@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  AppState,
   Dimensions,
   Image,
   Pressable,
@@ -16,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
+import { runSync } from "../local-db/sync/runSync";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(300, SCREEN_WIDTH * 0.8);
@@ -50,6 +52,8 @@ type Page =
 
 type MobileShellProps = {
   accessToken: string;
+  userId: string;
+  deviceId: string;
   onLoggedOut: () => void;
   signOut?: () => Promise<void>;
 };
@@ -109,7 +113,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
-export default function MobileShell({ accessToken, onLoggedOut, signOut }: MobileShellProps) {
+export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -118,6 +122,24 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
+  const initialSyncDone = useRef(false);
+
+  useEffect(() => {
+    if (!userId || !deviceId || !accessToken) return;
+
+    const sync = () => { runSync(userId, deviceId, accessToken).catch(() => {}); };
+
+    if (!initialSyncDone.current) {
+      initialSyncDone.current = true;
+      sync();
+    }
+
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") sync();
+    });
+
+    return () => sub.remove();
+  }, [userId, deviceId, accessToken]);
 
   function openDrawer() {
     setDrawerOpen(true);
@@ -172,7 +194,7 @@ export default function MobileShell({ accessToken, onLoggedOut, signOut }: Mobil
     if (currentPage === "settings") {
       return (
         <View className="gap-6">
-          <PrivacySettingsScreen accessToken={accessToken} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
           {!settingsSubPage ? (
             <Pressable
               accessibilityRole="button"
