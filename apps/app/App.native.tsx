@@ -1,13 +1,13 @@
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import "./global.css";
 
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
 import { Platform } from "react-native";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
 import { useDeepLink } from "./hooks/useDeepLink";
+import { getOrCreateDeviceId } from "./local-db/deviceId";
 import { supabase } from "./lib/supabase";
 
 const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -54,7 +54,9 @@ async function getGoogleIdToken() {
 export default function App() {
   const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
   const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
-  const deviceId = useRef(crypto.randomUUID()).current;
+  const [deviceId, setDeviceId] = useState("");
+
+  useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
 
   useEffect(() => {
     GoogleSignin.configure({

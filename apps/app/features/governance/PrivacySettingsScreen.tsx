@@ -283,6 +283,13 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           if (cancelled) return;
           setSettings(local);
           setLoading(false);
+          getConsents(accessToken)
+            .then((res) => {
+              if (cancelled) return;
+              const body = res.body as { payload?: { consents?: ConsentRecord[] } };
+              if (body.payload?.consents) setConsents(body.payload.consents);
+            })
+            .catch(() => {});
           return;
         }
       }
