@@ -284,17 +284,17 @@ async function ensureDeviceRegistered(
   );
   if (existing?.device_id === deviceId) return;
 
-  try {
-    await fetchWithTimeout(`${API_BASE}/odin/api/sync/register-device`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ payload: { device_id: deviceId } }),
-    });
-  } catch {
-    // Non-fatal: push will fail with a clear 400 if unregistered
+  const response = await fetchWithTimeout(`${API_BASE}/odin/api/sync/register-device`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ payload: { device_id: deviceId } }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`device registration failed: ${response.status}`);
   }
 }
 
