@@ -17,9 +17,11 @@ import type { ConsentRecord, PrivacySettings } from "./types";
 import { ERRORS } from "./constants";
 import UserProfileScreen from "./UserProfileScreen";
 import AccountOffboardingScreen from "./AccountOffboardingScreen";
+import { getLocalPrivacySettings, cachePrivacySettings } from "../../local-db/repositories/privacySettings";
 
 type PrivacySettingsScreenProps = {
   accessToken: string;
+  userId: string;
   onBackToLogin?: () => void;
   onDeleted?: (scheduledDate: string) => void;
   onSubPageChange?: (showingSubPage: boolean) => void;
@@ -250,7 +252,7 @@ function SettingsSkeleton() {
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken, onBackToLogin, onDeleted, onSubPageChange }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -273,30 +275,49 @@ export default function PrivacySettingsScreen({ accessToken, onBackToLogin, onDe
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([
-      getPrivacySettings(accessToken),
-      getConsents(accessToken).catch(() => ({ body: {} })),
-    ])
-      .then(([settingsRes, consentsRes]) => {
-        if (cancelled) return;
-        if (settingsRes.body.payload) {
-          setSettings(settingsRes.body.payload);
-        } else {
-          setError(settingsRes.body.message ?? ERRORS.FAILED_LOAD_PRIVACY);
+
+    async function load() {
+      if (userId) {
+        const local = await getLocalPrivacySettings(userId);
+        if (local) {
+          if (cancelled) return;
+          setSettings(local);
+          setLoading(false);
+          return;
         }
-        const mePayload = consentsRes.body as { payload?: { consents?: ConsentRecord[] } };
-        if (mePayload.payload?.consents) {
-          setConsents(mePayload.payload.consents);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) setError(getErrorMessage(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      }
+
+      Promise.all([
+        getPrivacySettings(accessToken),
+        getConsents(accessToken).catch(() => ({ body: {} })),
+      ])
+        .then(async ([settingsRes, consentsRes]) => {
+          if (cancelled) return;
+          if (settingsRes.body.payload) {
+            const s = settingsRes.body.payload;
+            setSettings(s);
+            if (userId) {
+              cachePrivacySettings(userId, s).catch(() => {});
+            }
+          } else {
+            setError(settingsRes.body.message ?? ERRORS.FAILED_LOAD_PRIVACY);
+          }
+          const mePayload = consentsRes.body as { payload?: { consents?: ConsentRecord[] } };
+          if (mePayload.payload?.consents) {
+            setConsents(mePayload.payload.consents);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) setError(getErrorMessage(err));
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
+
+    load();
     return () => { cancelled = true; };
-  }, [accessToken]);
+  }, [accessToken, userId]);
 
   const save = useCallback(
     async (payload: Partial<PrivacySettings>, previous?: PrivacySettings) => {
@@ -312,6 +333,10 @@ export default function PrivacySettingsScreen({ accessToken, onBackToLogin, onDe
         setSaved(true);
         if (savedTimer.current) clearTimeout(savedTimer.current);
         savedTimer.current = setTimeout(() => setSaved(false), 2000);
+        if (userId && settings) {
+          const updated = { ...settings, ...payload };
+          cachePrivacySettings(userId, updated).catch(() => {});
+        }
       } catch (err) {
         if (previous) setSettings(previous);
         setError(getErrorMessage(err));
@@ -319,7 +344,7 @@ export default function PrivacySettingsScreen({ accessToken, onBackToLogin, onDe
         setSaving(false);
       }
     },
-    [accessToken],
+    [accessToken, userId, settings],
   );
 
   function toggle(key: keyof PrivacySettings) {
@@ -347,7 +372,10 @@ export default function PrivacySettingsScreen({ accessToken, onBackToLogin, onDe
             setError(null);
             getPrivacySettings(accessToken)
               .then(({ body }) => {
-                if (body.payload) setSettings(body.payload);
+                if (body.payload) {
+                  setSettings(body.payload);
+                  if (userId) cachePrivacySettings(userId, body.payload).catch(() => {});
+                }
                 else setError(body.message ?? ERRORS.FAILED_LOAD);
               })
               .catch((err) => setError(getErrorMessage(err)))
