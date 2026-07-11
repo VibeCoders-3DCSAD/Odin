@@ -462,13 +462,15 @@ export default function AuthExperience({
       return;
     }
 
+    setIsBusy(true);
+
     const online = await isOnline();
     if (!online) {
       setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      setIsBusy(false);
       return;
     }
 
-    setIsBusy(true);
     setNotice({ tone: "default", message: "Signing you in..." });
 
     try {
@@ -529,13 +531,15 @@ export default function AuthExperience({
       return;
     }
 
+    setIsBusy(true);
+
     const online = await isOnline();
     if (!online) {
       setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      setIsBusy(false);
       return;
     }
 
-    setIsBusy(true);
     setNotice({ tone: "default", message: "Creating your Odin account..." });
 
     try {
@@ -582,13 +586,15 @@ export default function AuthExperience({
       return;
     }
 
+    setIsBusy(true);
+
     const online = await isOnline();
     if (!online) {
       setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      setIsBusy(false);
       return;
     }
 
-    setIsBusy(true);
     setNotice({ tone: "default", message: "Sending your reset link..." });
 
     try {
@@ -632,13 +638,15 @@ export default function AuthExperience({
       return;
     }
 
+    setIsBusy(true);
+
     const online = await isOnline();
     if (!online) {
       setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      setIsBusy(false);
       return;
     }
 
-    setIsBusy(true);
     setNotice({ tone: "default", message: "Updating your password..." });
 
     try {
@@ -675,13 +683,15 @@ export default function AuthExperience({
       return;
     }
 
+    setIsGoogleBusy(true);
+
     const online = await isOnline();
     if (!online) {
       setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+      setIsGoogleBusy(false);
       return;
     }
 
-    setIsGoogleBusy(true);
     setNotice({ tone: "default", message: "Opening Google sign-in..." });
 
     try {

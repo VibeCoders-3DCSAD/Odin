@@ -173,7 +173,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     try {
       const db = await initDatabase();
       const pending = await db.getFirstAsync<{ cnt: number }>(
-        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
         userId,
         deviceId,
       );
@@ -189,7 +189,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         await runSync(userId, deviceId, accessToken);
 
         const stillPending = await db.getFirstAsync<{ cnt: number }>(
-          "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
+          "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
           userId,
           deviceId,
         );
