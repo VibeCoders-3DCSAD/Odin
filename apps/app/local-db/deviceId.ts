@@ -7,5 +7,9 @@ export async function getOrCreateDeviceId(): Promise<string> {
   );
   if (row?.device_id) return row.device_id;
   const id = crypto.randomUUID();
+  await db.runAsync(
+    "INSERT OR REPLACE INTO sync_state (user_id, device_id, pull_cursor, last_sync_at) VALUES (?, ?, ?, ?)",
+    "", id, "{}", new Date().toISOString(),
+  );
   return id;
 }
