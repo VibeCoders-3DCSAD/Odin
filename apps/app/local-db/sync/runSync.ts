@@ -39,6 +39,26 @@ type QueueRow = {
 
 const SYNCED_TABLES = ["category_groups", "categories", "subcategories"] as const;
 
+const LOCAL_COLUMNS: Record<string, Set<string>> = {
+  category_groups: new Set([
+    "id", "user_id", "slug", "label", "short_label", "description",
+    "sort_order", "is_active", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+  categories: new Set([
+    "id", "user_id", "category_group_id", "slug", "label", "short_label",
+    "description", "is_system", "is_filipino_context", "sort_order",
+    "is_active", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+  subcategories: new Set([
+    "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
+    "description", "is_system", "is_filipino_context", "is_protected",
+    "sort_order", "is_active", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+};
+
 export async function runSync(
   userId: string,
   deviceId: string,
@@ -216,6 +236,8 @@ async function applyPullRow(
     return;
   }
 
+  if (rowVersion <= existing.version) return;
+
   if (rowDeleted) {
     await db.runAsync(
       `UPDATE "${table}" SET deleted = 1, is_active = 0, version = ?,
@@ -227,16 +249,14 @@ async function applyPullRow(
     return;
   }
 
-  if (rowVersion > existing.version) {
-    const columns = Object.keys(row);
-    const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
+  const columns = Object.keys(row);
+  const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
 
-    await db.runAsync(
-      `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
-      ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
-      recordId,
-    );
-  }
+  await db.runAsync(
+    `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
+    ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
+    recordId,
+  );
 }
 
 async function loadCursors(
@@ -303,10 +323,28 @@ function normalizePullRow(
   row: Record<string, unknown>,
   userId: string,
 ): Record<string, unknown> {
-  if (row.user_id == null) {
-    return { ...row, user_id: userId };
+  const columns = LOCAL_COLUMNS[table];
+  if (!columns) return row;
+
+  const now = new Date().toISOString();
+  const normalized: Record<string, unknown> = {};
+
+  for (const col of columns) {
+    if (col === "user_id") {
+      normalized[col] = (row[col] as string | null) ?? userId;
+    } else if (col === "created_at") {
+      normalized[col] = (row[col] as string | undefined) ?? (row.updated_at as string) ?? now;
+    } else if (col === "last_synced_at") {
+      normalized[col] = (row[col] as string | undefined) ?? now;
+    } else if (col === "metadata") {
+      const val = row[col];
+      normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else {
+      normalized[col] = row[col];
+    }
   }
-  return row;
+
+  return normalized;
 }
 function fetchWithTimeout(
   url: string,
