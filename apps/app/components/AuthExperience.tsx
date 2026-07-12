@@ -47,6 +47,7 @@ type AuthResponse = {
 
 type AuthenticatedState = {
   accessToken: string;
+  refreshToken?: string;
   provider: AuthProvider;
   userId?: string;
   profileId?: string;
@@ -381,10 +382,12 @@ export default function AuthExperience({
 
   function buildAuthState(
     accessToken: string, provider: AuthProvider,
-    payload?: { user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } },
+    payload?: { session?: { refresh_token?: string }; user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } },
+    refreshToken?: string,
   ) {
     return {
       accessToken,
+      refreshToken: refreshToken ?? payload?.session?.refresh_token,
       provider,
       userId: payload?.user?.id,
       profileId: payload?.profile?.id,
@@ -561,7 +564,10 @@ export default function AuthExperience({
           ...bootstrappedBody.payload,
           user: { id: bootstrappedBody.payload?.user?.id ?? body.payload?.user?.id },
         };
-        const authState = buildAuthState(accessToken, "password", mergedPayload);
+        const authState = buildAuthState(accessToken, "password", {
+          ...mergedPayload,
+          session: body.payload?.session,
+        });
         setPendingAuthState(authState);
         setShowConsent(true);
         setNotice({ tone: "success", message: "Account created. One more step." });
@@ -699,7 +705,7 @@ export default function AuthExperience({
 
       const body = await bootstrapSession(session.accessToken);
 
-      const authState = buildAuthState(session.accessToken, "google", body.payload);
+      const authState = buildAuthState(session.accessToken, "google", body.payload, session.refreshToken);
 
       const consentsRes = await getConsents(session.accessToken);
       if (!consentsRes.response.ok) {

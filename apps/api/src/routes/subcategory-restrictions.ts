@@ -32,12 +32,18 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
 
 router.put("/:subcategoryId", requireAuth, async (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
   try {
+    const { subcategoryId } = request.params;
+    if (typeof subcategoryId !== "string") {
+      response.status(400).json({ error: "Bad Request", message: "subcategoryId is required" });
+      return;
+    }
+
     await handleRestrictionUpsert(request, response, {
       entityLabel: "subcategory",
       restrictionTable: "user_subcategory_restrictions",
       lookupTable: "subcategories",
       entityIdField: "subcategory_id",
-    }, request.params.subcategoryId);
+    }, subcategoryId);
   } catch (error) {
     next(error);
   }

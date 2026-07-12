@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Odin - Colors & Layout</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+  <script type="module" src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    :root {
+      --board: #2d2d2d;
+      --cream: #fcf8f0;
+      --cream-2: #f8efdc;
+      --porsche: #e8c589;
+      --green-900: #013220;
+      --green-700: #0b8a55;
+      --green-500: #12d583;
+      --green-300: #7cf9c4;
+      --green-100: #d9ffee;
+      --orange-700: #f5680b;
+      --orange-500: #fca138;
+      --orange-100: #fee6c7;
+      --red-700: #d9001f;
+      --red-500: #ff2141;
+      --red-300: #ff93a3;
+      --red-100: #ffdce1;
+      --pink: #ed4b9e;
+      --purple: #9747ff;
+      --white: #fff;
+      --shadow: 0 2px 5px var(--porsche);
+      --dash: 1px dashed var(--purple);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 1280px;
+      background: var(--board);
+      color: var(--white);
+      font-family: Manrope, sans-serif;
+      font-size: 16px;
+    }
+
+    .board {
+      position: relative;
+      width: 2776px;
+      height: 2784px;
+      background: var(--board);
+      overflow: hidden;
+    }
+
+    .top-card {
+      position: absolute;
+      top: 90px;
+      background: var(--cream);
+      color: #000;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .font-card { left: 604px; width: 428px; height: 244px; }
+    .layout-card { left: 1076px; width: 575px; height: 244px; }
+    .mode-note { position: absolute; top: 0; left: 1694px; width: 420px; font-size: 24px; font-weight: 700; line-height: 1.45; }
+    .mode-note p { margin: 34px 0; font-weight: 500; }
+
+    h1, h2, h3, p { margin: 0; }
+    h2 { font-size: 24px; line-height: 1; letter-spacing: .04em; }
+    h3 { margin-bottom: 14px; font-size: 24px; line-height: 1; }
+    b { font-weight: 800; }
+    small { font-size: 8px; }
+
+    .font-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+    .font-sizes { display: grid; gap: 6px; }
+    .font-weights { display: grid; gap: 9px; font-size: 12px; }
+    .font-sizes span:nth-child(2) { font-size: 24px; }
+    .font-sizes span:nth-child(3) { font-size: 20px; }
+    .font-sizes span:nth-child(4) { font-size: 16px; }
+    .font-sizes span:nth-child(5) { font-size: 12px; }
+    .font-sizes span:nth-child(6) { font-size: 8px; }
+
+    .layout-card h3 { margin: 16px 0 8px; }
+    .formula { display: grid; grid-template-columns: 185px 90px; gap: 10px; margin-top: 10px; font-size: 16px; line-height: 1.35; }
+    .effects { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 42px; font-size: 16px; line-height: 1.5; }
+
+    .palette { position: absolute; top: 392px; left: 408px; display: flex; gap: 35px; align-items: flex-start; }
+    .swatch { width: 160px; }
+    .swatch-main { position: relative; width: 160px; height: 80px; border-radius: 8px; box-shadow: inset 0 0 12px rgba(0,0,0,.05); color: var(--cream); }
+    .swatch-name { position: absolute; top: 16px; left: 16px; font-size: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .swatch-hex { position: absolute; bottom: 10px; left: 16px; font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+    .swatch-bar { display: grid; grid-template-columns: repeat(4, 1fr); width: 160px; height: 16px; margin-top: 8px; overflow: hidden; border-radius: 8px; background: #c4c4c4; }
+    .swatch-bar span { display: flex; align-items: center; justify-content: center; min-width: 0; font-size: 3px; font-weight: 700; letter-spacing: .03em; }
+
+    .section-title { position: absolute; left: 604px; display: flex; align-items: center; gap: 16px; width: 2172px; font-size: 24px; font-weight: 800; letter-spacing: .04em; }
+    .section-title::after { content: ""; flex: 1; height: 6px; background: var(--white); }
+    .navigation-title { top: 774px; }
+    .utilities-title { top: 1555px; }
+    .display-title { top: 2334px; }
+
+    .phone-preview { position: absolute; top: 973px; left: 0; width: 326px; height: 294px; background: #333; border: 4px solid #111; }
+    .phone-status { height: 28px; background: #111; color: #ddd; font-size: 11px; padding: 6px 8px; }
+    .phone-header { height: 58px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: var(--cream-2); box-shadow: var(--shadow); color: var(--green-900); }
+    .phone-logo { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--green-500), var(--orange-700)); }
+    .phone-bottom { position: absolute; left: 8px; right: 8px; bottom: 28px; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; height: 50px; padding: 0 4px; border-radius: 50px; background: var(--cream); box-shadow: var(--shadow); color: var(--green-900); }
+    .phone-bottom > * { display: flex; justify-content: center; align-items: center; }
+    .phone-active { min-width: 50px; height: 50px; display: flex; justify-content: center; align-items: center; border-radius: 16px; background: var(--green-700); color: var(--green-500); }
+
+    .component-set { border: var(--dash); border-radius: 5px; padding: 20px; }
+    .floating-navs { position: absolute; top: 889px; left: 604px; width: 340px; display: grid; gap: 20px; }
+    .floating-nav { display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; height: 50px; border-radius: 50px; background: var(--cream); color: var(--green-900); box-shadow: var(--shadow); }
+    .floating-nav > * { display: flex; justify-content: center; align-items: center; }
+    .nav-selected { width: 50px; height: 50px; border-radius: 8px; background: linear-gradient(180deg, var(--green-700), var(--green-900)); color: var(--green-500); justify-self: center; }
+
+    .page-titles { position: absolute; top: 889px; left: 963px; width: 301px; display: grid; gap: 22px; }
+    .title-bar { width: 253px; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 16px; background: var(--cream-2); color: #000; box-shadow: var(--shadow); font-size: 20px; font-weight: 700; }
+    .title-bar.center { justify-content: center; }
+    .title-bar.start { justify-content: flex-start; }
+    .title-logo { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, var(--green-500), var(--orange-700)); }
+    .step-title { font-size: 16px; font-weight: 300; }
+    .save { color: var(--green-700); font-size: 16px; font-weight: 500; }
+    .side-nav { position: absolute; top: 908px; left: 1294px; color: var(--white); font-size: 24px; font-weight: 800; line-height: 1.25; }
+    .side-nav-card { margin-top: 35px; width: 130px; height: 393px; padding: 12px 0 0 8px; background: var(--cream); color: #000; border-radius: 0 8px 8px 0; box-shadow: 2px 2px 4px #f1ddb7; font-size: 12px; font-weight: 400; }
+    .side-nav-card p { margin: 18px 0; }
+    .side-close { display: inline-flex; align-items: center; color: var(--green-900); }
+
+    .buttons { position: absolute; top: 1645px; left: 604px; display: grid; grid-template-columns: repeat(3, 88px); grid-auto-rows: 38px; gap: 16px; width: 337px; }
+    .button-notes { position: absolute; top: 1820px; left: 604px; display: grid; grid-template-columns: 130px 130px; gap: 30px; width: 290px; font-size: 12px; font-weight: 800; line-height: 1.2; }
+    .btn { display: grid; place-items: center; width: 88px; border-radius: 8px; background: linear-gradient(180deg, var(--green-700), var(--green-900)); color: var(--white); font-weight: 700; letter-spacing: .04em; }
+    .btn.disabled { background: linear-gradient(180deg, rgba(11,138,85,.7), rgba(1,50,32,.7)); color: rgba(255,255,255,.5); }
+    .btn.smaller { height: 26px; font-size: 8px; }
+    .btn.small { height: 32px; font-size: 12px; }
+    .btn.big { height: 38px; font-size: 16px; }
+
+    .text-buttons { position: absolute; top: 1645px; left: 980px; display: grid; gap: 18px; justify-items: center; width: 128px; }
+    .secondary { color: var(--green-500); font-size: 8px; font-weight: 700; letter-spacing: .04em; }
+    .fields { position: absolute; top: 1645px; left: 1148px; display: grid; gap: 20px; width: 143px; }
+    .field { display: flex; align-items: center; gap: 8px; width: 103px; padding: 8px 16px; border: 1.5px solid var(--porsche); border-radius: 8px; background: var(--white); color: rgba(0,0,0,.5); font-size: 8px; }
+    .field.danger { width: 112px; border-color: var(--red-500); color: rgba(0,0,0,.7); }
+    .field-notes { position: absolute; top: 1648px; left: 1353px; width: 130px; font-size: 12px; font-weight: 800; line-height: 1.2; }
+
+    .segmented-set { position: absolute; top: 1645px; left: 1527px; display: grid; gap: 28px; width: 248px; }
+    .segmented { display: flex; gap: 4px; width: max-content; padding: 4px; border-radius: 8px; background: var(--cream-2); }
+    .segment { min-width: 64px; padding: 8px; border-radius: 8px; color: rgba(0,0,0,.7); font-size: 8px; text-align: center; }
+    .segment.active { background: var(--white); color: #000; font-weight: 700; box-shadow: 0 2px 4px var(--porsche); }
+
+    .chips { position: absolute; top: 1645px; left: 1814px; display: grid; gap: 20px; width: 122px; }
+    .chip { display: grid; place-items: center; height: 26px; padding: 8px 16px; border-radius: 50px; font-size: 8px; font-weight: 700; letter-spacing: .04em; }
+    .chip.solid { background: var(--green-900); color: var(--white); }
+    .chip.normal { background: var(--green-100); border: 1px solid var(--green-700); color: var(--green-700); }
+    .chip.warning { background: var(--orange-100); border: 1px solid var(--orange-700); color: var(--orange-700); }
+    .chip.critical { background: var(--red-100); border: 1px solid var(--red-700); color: var(--red-700); }
+    .chip.misc { border: 1px solid var(--orange-500); color: #000; }
+
+    .notices { position: absolute; top: 1858px; left: 1148px; display: grid; gap: 20px; width: 146px; }
+    .notice { display: flex; align-items: center; gap: 8px; width: fit-content; padding: 8px 16px; border-radius: 8px; font-size: 8px; font-weight: 700; letter-spacing: .04em; }
+    .notice.critical { background: var(--red-100); border: 1.5px solid var(--red-700); color: var(--red-700); }
+    .notice.normal { background: var(--green-100); border: 1.5px solid var(--green-700); color: var(--green-700); }
+    .notice.warning { background: var(--orange-100); border: 1.5px solid var(--orange-700); color: var(--orange-700); }
+
+    .controls { position: absolute; top: 2041px; left: 604px; display: grid; grid-template-columns: 107px 107px 191px 107px; gap: 38px; align-items: start; }
+    .control-set { display: grid; gap: 24px; width: 107px; }
+    .control-row { display: flex; align-items: center; gap: 4px; color: var(--white); font-size: 8px; }
+    .radio, .toggle, .check { display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1.3px solid var(--green-500); flex-shrink: 0; }
+    .radio { border-radius: 50%; }
+    .radio.on::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--green-500); }
+    .toggle { width: 20px; border-radius: 50px; background: var(--green-500); border: 0; }
+    .check { border-radius: 1px; }
+    .check.on { background: var(--green-500); border: 0; }
+    .check.on ph-icon { color: var(--green-900); display: flex; }
+    .option-cards { display: grid; gap: 20px; width: 191px; }
+    .option { display: flex; align-items: center; gap: 8px; width: 151px; padding: 8px 16px; border-radius: 8px; background: var(--white); color: #000; font-size: 8px; letter-spacing: .04em; }
+    .option.selected { border: 1.5px solid var(--green-700); }
+    .option.idle { border: 1.5px solid var(--orange-500); color: rgba(0,0,0,.5); }
+    .option .pick { margin-left: auto; color: var(--green-500); display: flex; }
+
+    .display-cards { position: absolute; top: 2423px; left: 604px; display: grid; gap: 20px; width: 219px; }
+    .display-card { display: grid; gap: 8px; width: 179px; padding: 8px 16px; border-radius: 16px; color: var(--white); }
+    .display-card.normal { background: linear-gradient(90deg, var(--green-500), var(--green-700)); }
+    .display-card.warning { background: linear-gradient(90deg, var(--orange-500), var(--orange-700)); }
+    .display-card.critical { background: linear-gradient(90deg, var(--red-300), var(--red-500)); }
+    .balance { display: flex; align-items: flex-end; gap: 8px; font-size: 12px; }
+    .balance b { font-size: 16px; }
+    .trend { display: inline-flex; align-items: center; gap: 4px; width: fit-content; padding: 4px 8px; border-radius: 50px; background: rgba(0,0,0,.5); font-size: 8px; }
+
+    .stat-set-1 { position: absolute; top: 2423px; left: 860px; display: grid; gap: 20px; width: 167px; }
+    .stat-set-2 { position: absolute; top: 2423px; left: 1067px; display: grid; gap: 20px; width: 167px; }
+    .stat { display: grid; gap: 4px; width: 130px; padding: 8px 16px; border-radius: 16px; color: #000; }
+    .stat.bordered { background: var(--cream-2); border: 2px solid var(--porsche); }
+    .stat.income { background: var(--green-100); }
+    .stat.expense { background: var(--red-100); }
+    .stat-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 300; }
+    .stat-icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--green-500); color: var(--green-900); }
+    .stat.expense .stat-icon { background: var(--red-300); color: var(--red-700); }
+    .stat-value { display: flex; align-items: flex-end; gap: 4px; font-size: 8px; }
+    .stat-value b { font-size: 12px; }
+    .stat-change { color: var(--green-900); font-size: 8px; }
+    .stat.expense .stat-change { color: var(--red-700); }
+
+    .tiny-icons { position: absolute; top: 2423px; left: 1274px; display: grid; grid-template-columns: 24px 1fr; gap: 34px 88px; align-content: start; color: var(--green-500); font-size: 8px; }
+
+    @media (max-width: 1600px) {
+      .board { transform: scale(.58); transform-origin: top left; }
+      body { min-width: 1611px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="board" aria-label="Odin Colors and Layout design reference">
+
+    <!-- top tokens -->
+    <section class="top-card font-card">
+      <h2>FONT: Manrope</h2>
+      <div class="font-grid">
+        <div class="font-sizes">
+          <b>Font Sizes: x = y + 4</b>
+          <span>24px</span><span>20px</span><span>16px</span><span>12px</span><span>8px</span>
+        </div>
+        <div class="font-weights">
+          <b>Font Weights: x = y + 100</b>
+          <span style="font-weight:300">Light</span><span>Regular</span><span style="font-weight:500">Medium</span><span style="font-weight:700">Bold</span><span style="font-weight:800">Extra Bold</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="top-card layout-card">
+      <h2>Gaps, Margins, Paddings, Border Radius</h2>
+      <div class="formula"><p>Standards: 8, 16, 24<br><small>4 for tiny gaps (e.g. icons)</small></p><b>x = y + 8</b></div>
+      <h3>Icons &amp; Logos (including image margin)</h3>
+      <div class="formula"><p>Standards:<br>16x16, 20x20, 24x24</p><b>x = y + 4</b></div>
+      <h3>Effects</h3>
+      <div class="effects">
+        <p><b>Drop Shadow:</b> 2px</p><p><b>Six:</b> 7</p>
+        <p><b>Button Gradient:</b> 50/50 vertical</p><p><b>Card Gradient:</b> 75/25 vertical</p>
+        <p><b>Text Field Border:</b> 1.5px</p><p><b>Transparency:</b> 100% &gt; 70% &gt; 50%</p>
+      </div>
+    </section>
+
+    <aside class="mode-note">
+      <h2>LIGHT MODE / DARK MODE<br>SHOULD BE PUT LATER</h2>
+      <p>Prioritize components and layouts</p>
+    </aside>
+
+    <!-- palette -->
+    <section class="palette" aria-label="Color palette">
+      <div class="swatch"><div class="swatch-main" style="background:var(--pink)"><span class="swatch-name">Color Name</span><span class="swatch-hex">#ed4b9e</span></div><div class="swatch-bar"><span style="background:#e91d26">#e91d26</span><span style="background:#e91d26">#e91d26</span><span style="background:#e91d26">#e91d26</span><span style="background:#e91d26">#e91d26</span></div></div>
+      <div class="swatch"><div class="swatch-main" style="background:var(--green-900)"><span class="swatch-name">Aquamarine</span><span class="swatch-hex">#013220</span></div><div class="swatch-bar"><span style="background:var(--green-900);color:#fff">#013220</span><span style="background:var(--green-700)">#0b8a55</span><span style="background:var(--green-700)">#0b8a55</span><span style="background:var(--green-700)">#0b8a55</span></div></div>
+      <div class="swatch"><div class="swatch-main" style="background:var(--green-500)"><span class="swatch-name">Aquamarine</span><span class="swatch-hex">#12d583</span></div><div class="swatch-bar"><span style="background:var(--green-500)">#12d583</span><span style="background:var(--green-300)">#7cf9c4</span><span style="background:var(--green-300)">#7cf9c4</span><span style="background:var(--green-100);color:#000">#d9ffee</span></div></div>
+      <div class="swatch"><div class="swatch-main" style="background:var(--orange-700)"><span class="swatch-name">Sunshade</span><span class="swatch-hex">#f5680b</span></div><div class="swatch-bar"><span style="background:var(--orange-700);color:#fff">#f5680b</span><span style="background:#fb8e24">#fb8e24</span><span style="background:var(--orange-500);color:#000">#fca138</span><span style="background:var(--orange-100);color:#000">#fee6c7</span></div></div>
+      <div class="swatch"><div class="swatch-main" style="background:var(--red-700)"><span class="swatch-name">Monza</span><span class="swatch-hex">#f5680b</span></div><div class="swatch-bar"><span style="background:var(--red-700);color:#fff">#d9001f</span><span style="background:var(--red-500);color:#fff">#ff2141</span><span style="background:var(--red-300);color:#000">#ff93a3</span><span style="background:var(--red-100);color:#000">#ffdce1</span></div></div>
+      <div class="swatch"><div class="swatch-main" style="background:var(--porsche);color:#000"><span class="swatch-name">Porsche</span><span class="swatch-hex">#e8c589</span></div><div class="swatch-bar"><span style="background:var(--porsche);color:#000">#e8c589</span><span style="background:#f1ddb7;color:#000">#f1ddb7</span><span style="background:var(--cream-2);color:#000">#f8efdc</span><span style="background:var(--cream);color:#000">#fcf8f0</span></div></div>
+    </section>
+
+    <!-- navigation section -->
+    <div class="section-title navigation-title">NAVIGATION</div>
+
+    <!-- phone mockup -->
+    <div class="phone-preview">
+      <div class="phone-status">3:30</div>
+      <div class="phone-header">
+        <ph-list size="20"></ph-list>
+        <span class="phone-logo"></span>
+        <ph-bell size="20"></ph-bell>
+      </div>
+      <div class="phone-bottom">
+        <div class="phone-active"><ph-squares-four size="20" weight="fill"></ph-squares-four></div>
+        <ph-clock-counter-clockwise size="20"></ph-clock-counter-clockwise>
+        <ph-plus size="20"></ph-plus>
+        <ph-pulse size="20"></ph-pulse>
+        <ph-wallet size="20"></ph-wallet>
+      </div>
+    </div>
+
+    <!-- floating nav component set -->
+    <section class="component-set floating-navs">
+      <div class="floating-nav">
+        <ph-squares-four size="24"></ph-squares-four>
+        <ph-clock-counter-clockwise size="24"></ph-clock-counter-clockwise>
+        <ph-plus size="24"></ph-plus>
+        <ph-pulse size="24"></ph-pulse>
+        <ph-wallet size="24"></ph-wallet>
+      </div>
+      <div class="floating-nav">
+        <div class="nav-selected"><ph-squares-four size="24" weight="fill"></ph-squares-four></div>
+        <ph-clock-counter-clockwise size="24"></ph-clock-counter-clockwise>
+        <ph-plus size="24"></ph-plus>
+        <ph-pulse size="24"></ph-pulse>
+        <ph-wallet size="24"></ph-wallet>
+      </div>
+      <div class="floating-nav">
+        <ph-squares-four size="24"></ph-squares-four>
+        <div class="nav-selected"><ph-clock-counter-clockwise size="24" weight="fill"></ph-clock-counter-clockwise></div>
+        <ph-plus size="24"></ph-plus>
+        <ph-pulse size="24"></ph-pulse>
+        <ph-wallet size="24"></ph-wallet>
+      </div>
+      <div class="floating-nav">
+        <ph-squares-four size="24"></ph-squares-four>
+        <ph-clock-counter-clockwise size="24"></ph-clock-counter-clockwise>
+        <div class="nav-selected"><ph-plus size="24" weight="fill"></ph-plus></div>
+        <ph-pulse size="24"></ph-pulse>
+        <ph-wallet size="24"></ph-wallet>
+      </div>
+      <div class="floating-nav">
+        <ph-squares-four size="24"></ph-squares-four>
+        <ph-clock-counter-clockwise size="24"></ph-clock-counter-clockwise>
+        <ph-plus size="24"></ph-plus>
+        <div class="nav-selected"><ph-pulse size="24" weight="fill"></ph-pulse></div>
+        <ph-wallet size="24"></ph-wallet>
+      </div>
+      <div class="floating-nav">
+        <ph-squares-four size="24"></ph-squares-four>
+        <ph-clock-counter-clockwise size="24"></ph-clock-counter-clockwise>
+        <ph-plus size="24"></ph-plus>
+        <ph-pulse size="24"></ph-pulse>
+        <div class="nav-selected"><ph-wallet size="24" weight="fill"></ph-wallet></div>
+      </div>
+    </section>
+
+    <!-- page titles component set -->
+    <section class="component-set page-titles">
+      <div class="title-bar"><ph-list size="24"></ph-list><span class="title-logo"></span><ph-bell size="24"></ph-bell></div>
+      <div class="title-bar"><ph-arrow-left size="24"></ph-arrow-left><span>Page Title</span><span></span></div>
+      <div class="title-bar start"><span>Page Title</span></div>
+      <div class="title-bar"><ph-arrow-left size="24"></ph-arrow-left><span class="step-title">Step 1 of 7</span><span class="save">Save &amp; Exit</span></div>
+      <div class="title-bar center"><span>Page Title</span></div>
+      <div class="title-bar"><span>History</span><ph-arrow-up-right size="24"></ph-arrow-up-right></div>
+      <div class="title-bar"><ph-arrow-left size="24"></ph-arrow-left><span>Profile</span><ph-note-pencil size="24"></ph-note-pencil></div>
+    </section>
+
+    <!-- side nav -->
+    <section class="side-nav">
+      <p>INCOMPLETE<br>SIDE NAV</p>
+      <div class="side-nav-card">
+        <span class="side-close"><ph-x size="24"></ph-x></span>
+        <p>Dashboard</p><p>Dashboard</p><p>Dashboard</p><p>Dashboard</p>
+        <p>&#9679; &nbsp; ssdsd</p>
+      </div>
+    </section>
+
+    <!-- utilities section -->
+    <div class="section-title utilities-title">UTILITIES</div>
+
+    <section class="component-set buttons">
+      <div class="btn smaller">Button</div><div class="btn small">Button</div><div class="btn big">Button</div>
+      <div class="btn smaller disabled">Button</div><div class="btn small disabled">Button</div><div class="btn big disabled">Button</div>
+    </section>
+    <div class="button-notes">
+      <p>Color for buttons should be changeable as well depending on color to be used</p>
+      <p>Disabled buttons are NOT gray tone. They just use a layered gray color with 70% opacity</p>
+    </div>
+
+    <section class="component-set text-buttons">
+      <div><div class="btn small">Button</div><p class="secondary">Secondary Link</p></div>
+      <p class="secondary">Secondary Link</p>
+    </section>
+
+    <section class="component-set fields">
+      <div class="field"><ph-envelope size="16"></ph-envelope>Placeholder</div>
+      <div class="field"><ph-envelope size="16"></ph-envelope>Placeholder</div>
+    </section>
+
+    <div class="field-notes">
+      <p>Border color editable, as well as icon. Sample:</p>
+      <div class="field danger"><ph-warning-circle size="16"></ph-warning-circle>Placeholder</div>
+      <p>Be wary of differences in icons for those with same color. e.g: red warning/orange warning.</p>
+    </div>
+
+    <section class="component-set segmented-set">
+      <div class="segmented"><span class="segment active">Placeholder</span><span class="segment">Placeholder</span><span class="segment">Placeholder</span></div>
+      <div class="segmented"><span class="segment">Placeholder</span><span class="segment active">Placeholder</span><span class="segment">Placeholder</span></div>
+      <div class="segmented"><span class="segment">Placeholder</span><span class="segment">Placeholder</span><span class="segment active">Placeholder</span></div>
+      <div class="segmented"><span class="segment">Placeholder</span><span class="segment">Placeholder</span><span class="segment">Placeholder</span></div>
+    </section>
+
+    <section class="component-set chips">
+      <div class="chip solid">Placeholder</div>
+      <div class="chip normal">Placeholder</div>
+      <div class="chip warning">Placeholder</div>
+      <div class="chip critical">Placeholder</div>
+      <div class="chip misc"></div>
+    </section>
+
+    <section class="component-set notices">
+      <div class="notice critical"><ph-warning-circle size="16"></ph-warning-circle>Placeholder</div>
+      <div class="notice normal"><ph-check-circle size="16"></ph-check-circle>Placeholder</div>
+      <div class="notice warning"><ph-warning-circle size="16"></ph-warning-circle>Placeholder</div>
+    </section>
+
+    <section class="controls">
+      <div class="component-set control-set">
+        <div class="control-row"><span class="radio on"></span>Placeholder</div>
+        <div class="control-row"><span class="radio on"></span>Placeholder</div>
+      </div>
+      <div class="component-set control-set">
+        <div class="control-row"><span class="toggle"></span>Placeholder</div>
+        <div class="control-row"><span class="toggle"></span>Placeholder</div>
+      </div>
+      <div class="component-set option-cards">
+        <div class="option selected"><ph-briefcase size="16"></ph-briefcase>Placeholder <span class="pick"><ph-check-circle size="16"></ph-check-circle></span></div>
+        <div class="option idle"><ph-laptop size="16"></ph-laptop>Placeholder</div>
+      </div>
+      <div class="component-set control-set">
+        <div class="control-row"><span class="check"></span>Placeholder</div>
+        <div class="control-row"><span class="check on"><ph-check size="12" weight="bold"></ph-check></span>Placeholder</div>
+      </div>
+    </section>
+
+    <!-- display section -->
+    <div class="section-title display-title">DISPLAY</div>
+
+    <section class="component-set display-cards">
+      <div class="display-card normal">
+        <span>Available Balance</span>
+        <div class="balance"><span>PHP</span><b>1,000,000.00</b></div>
+        <span class="trend"><ph-trend-up size="10"></ph-trend-up>+12.4%</span>
+      </div>
+      <div class="display-card warning">
+        <span>Available Balance</span>
+        <div class="balance"><span>PHP</span><b>1,000,000.00</b></div>
+        <span class="trend"><ph-trend-up size="10"></ph-trend-up>+0.4%</span>
+      </div>
+      <div class="display-card critical">
+        <span>Available Balance</span>
+        <div class="balance"><span>PHP</span><b>1,000,000.00</b></div>
+        <span class="trend"><ph-trend-down size="10"></ph-trend-down>-12.4%</span>
+      </div>
+    </section>
+
+    <section class="component-set stat-set-1">
+      <div class="stat bordered">
+        <div class="stat-head"><span>Income</span><span class="stat-icon"><ph-arrow-down size="12"></ph-arrow-down></span></div>
+        <div class="stat-value"><span>PHP</span><b>100,000.00</b></div>
+        <span class="stat-change">+8.3%</span>
+      </div>
+      <div class="stat bordered expense">
+        <div class="stat-head"><span>Expenses</span><span class="stat-icon"><ph-arrow-up size="12"></ph-arrow-up></span></div>
+        <div class="stat-value"><span>PHP</span><b>100,000.00</b></div>
+        <span class="stat-change">+8.3%</span>
+      </div>
+    </section>
+
+    <section class="component-set stat-set-2">
+      <div class="stat income">
+        <div class="stat-head"><span>Income</span><span class="stat-icon"><ph-arrow-down size="12"></ph-arrow-down></span></div>
+        <div class="stat-value"><span>PHP</span><b>100,000.00</b></div>
+        <span class="stat-change">+8.3%</span>
+      </div>
+      <div class="stat expense">
+        <div class="stat-head"><span>Expenses</span><span class="stat-icon"><ph-arrow-up size="12"></ph-arrow-up></span></div>
+        <div class="stat-value"><span>PHP</span><b>100,000.00</b></div>
+        <span class="stat-change">+8.3%</span>
+      </div>
+    </section>
+
+    <section class="component-set tiny-icons">
+      <ph-minus size="24"></ph-minus><span style="color:var(--orange-700)">-PHP 292</span>
+      <ph-plus size="24"></ph-plus><span>+PHP 290</span>
+    </section>
+
+  </main>
+</body>
+</html>

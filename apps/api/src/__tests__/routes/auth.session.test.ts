@@ -48,10 +48,15 @@ describe("POST /odin/api/auth/session", () => {
       data: { status: "in_progress" },
       error: null,
     };
+    const deletionCancellationResult: MockQueryResult = {
+      data: null,
+      error: null,
+    };
 
     mockFrom
       .mockReturnValueOnce(createMockQuery(profileResult))
       .mockReturnValueOnce(createMockQuery(privacyResult))
+      .mockReturnValueOnce(createMockQuery(deletionCancellationResult))
       .mockReturnValueOnce(createMockQuery(onboardingResult));
   }
 
@@ -87,6 +92,7 @@ describe("POST /odin/api/auth/session", () => {
     mockFrom
       .mockReturnValueOnce(createMockQuery({ data: newProfileResult, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: privacyResult, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: onboardingResult, error: null }));
 
     const response = await request(app)
@@ -112,6 +118,7 @@ describe("POST /odin/api/auth/session", () => {
     mockFrom
       .mockReturnValueOnce(createMockQuery({ data: profileResult, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: newPrivacyResult, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: onboardingResult, error: null }));
 
     const response = await request(app)
@@ -132,6 +139,7 @@ describe("POST /odin/api/auth/session", () => {
     mockFrom
       .mockReturnValueOnce(createMockQuery({ data: { id: validProfileId }, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: { personalization_enabled: true }, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: null, error: null }));
 
     const response = await request(app)
@@ -152,6 +160,7 @@ describe("POST /odin/api/auth/session", () => {
     mockFrom
       .mockReturnValueOnce(createMockQuery({ data: { id: validProfileId }, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: { personalization_enabled: true }, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: null, error: { message: "DB error" } }));
 
     const response = await request(app)

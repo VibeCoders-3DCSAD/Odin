@@ -44,10 +44,15 @@ describe("POST /odin/api/auth/google", () => {
       data: { status: "in_progress" },
       error: null,
     };
+    const deletionCancellationResult: MockQueryResult = {
+      data: null,
+      error: null,
+    };
 
     mockFrom
       .mockReturnValueOnce(createMockQuery(profileResult))
       .mockReturnValueOnce(createMockQuery(privacyResult))
+      .mockReturnValueOnce(createMockQuery(deletionCancellationResult))
       .mockReturnValueOnce(createMockQuery(onboardingResult));
   }
 
@@ -194,6 +199,7 @@ describe("POST /odin/api/auth/google", () => {
       .mockReturnValueOnce(
         createMockQuery({ data: { personalization_enabled: true }, error: null }),
       )
+      .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(
         createMockQuery({ data: null, error: { message: "DB error" } }),
       );

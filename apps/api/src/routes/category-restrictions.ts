@@ -32,12 +32,18 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
 
 router.put("/:categoryId", requireAuth, async (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
   try {
+    const { categoryId } = request.params;
+    if (typeof categoryId !== "string") {
+      response.status(400).json({ error: "Bad Request", message: "categoryId is required" });
+      return;
+    }
+
     await handleRestrictionUpsert(request, response, {
       entityLabel: "category",
       restrictionTable: "user_category_restrictions",
       lookupTable: "categories",
       entityIdField: "category_id",
-    }, request.params.categoryId);
+    }, categoryId);
   } catch (error) {
     next(error);
   }
