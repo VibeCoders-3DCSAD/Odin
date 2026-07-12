@@ -47,6 +47,30 @@ CREATE TABLE IF NOT EXISTS edit_history (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE user_devices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY user_devices_owner_access
+  ON user_devices
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE applied_operations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY applied_operations_owner_access
+  ON applied_operations
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE edit_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY edit_history_owner_access
+  ON edit_history
+  FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
 -- Indexes for sync pull performance
 CREATE INDEX IF NOT EXISTS idx_categories_updated_at
   ON categories (updated_at) WHERE deleted = false;

@@ -11,15 +11,22 @@ const MIGRATIONS_TABLE = `CREATE TABLE IF NOT EXISTS _migrations (
 );`;
 
 let db: SQLite.SQLiteDatabase | null = null;
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export async function getDatabase(
   migrations: Migration[],
 ): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
-  db = await SQLite.openDatabaseAsync("odin.db");
-  await db.execAsync(MIGRATIONS_TABLE);
-  await runMigrations(db, migrations);
-  return db;
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const opened = await SQLite.openDatabaseAsync("odin.db");
+      await opened.execAsync(MIGRATIONS_TABLE);
+      await runMigrations(opened, migrations);
+      db = opened;
+      return opened;
+    })();
+  }
+  return dbPromise;
 }
 
 async function runMigrations(
@@ -54,5 +61,6 @@ export function closeDatabase(): Promise<void> {
   if (!db) return Promise.resolve();
   const d = db;
   db = null;
+  dbPromise = null;
   return d.closeAsync();
 }

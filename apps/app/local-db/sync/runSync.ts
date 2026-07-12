@@ -75,7 +75,11 @@ export async function runSync(
 
     const cursors = await loadCursors(db, userId);
 
-    await ensureDeviceRegistered(db, userId, deviceId, accessToken);
+    try {
+      await ensureDeviceRegistered(db, userId, deviceId, accessToken);
+    } catch {
+      return { pushed: 0, pulled: 0, errors: 0 };
+    }
 
     const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken);
 

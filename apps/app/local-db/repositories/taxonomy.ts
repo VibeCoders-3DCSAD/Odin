@@ -325,7 +325,7 @@ export async function createCategory(
       operationType: "create",
       baseVersion: null,
       changedFields: [],
-      payload: { ...input },
+      payload: { ...input, is_system: false },
     });
 
     const row = await db.getFirstAsync<CategoryRow>(
@@ -520,7 +520,7 @@ export async function createSubcategory(
       operationType: "create",
       baseVersion: null,
       changedFields: [],
-      payload: { ...input },
+      payload: { ...input, is_system: false },
     });
 
     const row = await db.getFirstAsync<SubcategoryRow>(

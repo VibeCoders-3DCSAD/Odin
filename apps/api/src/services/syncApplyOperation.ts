@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type Operation = {
+export type Operation = {
   operation_id: string;
   entity: string;
   record_id: string;
@@ -10,9 +10,9 @@ type Operation = {
   payload: Record<string, unknown>;
 };
 
-type ApplyResult = Record<string, unknown>;
+export type PreparedOperation = Operation;
 
-const SYNCED_ENTITIES = new Set(["category_groups", "categories", "subcategories"]);
+const SYNCED_ENTITIES = new Set(["categories", "subcategories"]);
 
 const SERVER_COLUMNS = new Set([
   "id",
@@ -22,289 +22,209 @@ const SERVER_COLUMNS = new Set([
   "created_at",
   "updated_at",
   "last_synced_at",
+  "is_system",
+  "is_protected_default",
 ]);
 
-function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(payload)) {
-    if (!SERVER_COLUMNS.has(key)) {
-      sanitized[key] = value;
-    }
-  }
-  return sanitized;
-}
+const CATEGORY_CREATE_FIELDS = new Set([
+  "category_group_id",
+  "slug",
+  "label",
+  "short_label",
+  "description",
+  "is_filipino_context",
+  "sort_order",
+]);
 
-export async function applyOperation(
+const CATEGORY_UPDATE_FIELDS = new Set([
+  "label",
+  "short_label",
+  "description",
+  "is_filipino_context",
+  "sort_order",
+  "is_active",
+]);
+
+const SUBCATEGORY_CREATE_FIELDS = new Set([
+  "category_id",
+  "slug",
+  "kind",
+  "label",
+  "short_label",
+  "description",
+  "is_filipino_context",
+  "is_protected",
+  "sort_order",
+]);
+
+const SUBCATEGORY_UPDATE_FIELDS = new Set([
+  "label",
+  "short_label",
+  "description",
+  "is_filipino_context",
+  "is_protected",
+  "is_active",
+]);
+
+export async function prepareOperation(
   supabase: SupabaseClient,
   userId: string,
-  deviceId: string,
   op: Operation,
-): Promise<ApplyResult> {
+): Promise<PreparedOperation> {
   if (!SYNCED_ENTITIES.has(op.entity)) {
     throw new Error(`entity '${op.entity}' is not in the sync allowlist`);
   }
 
   switch (op.operation_type) {
     case "create":
-      return applyCreate(supabase, userId, op);
+      return {
+        ...op,
+        payload: await validateCreatePayload(supabase, userId, op.entity, op.payload),
+      };
     case "update":
-      return applyUpdate(supabase, userId, op);
+      return {
+        ...op,
+        payload: validateUpdatePayload(op.entity, filterPayloadFields(op.payload, op.changed_fields)),
+      };
     case "delete":
-      return applyDelete(supabase, userId, op);
+      return op;
     default:
       throw new Error(`Unknown operation_type: ${op.operation_type}`);
   }
 }
 
-async function applyCreate(
-  supabase: SupabaseClient,
-  userId: string,
-  op: Operation,
-): Promise<ApplyResult> {
-  const sanitized = sanitizePayload(op.payload);
-
-  const row = {
-    ...sanitized,
-    id: op.record_id,
-    user_id: userId,
-    version: 1,
-    deleted: false,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error } = await supabase.from(op.entity).insert(row);
-
-  if (error) {
-    throw new Error(`create failed: ${error.message}`);
-  }
-
-  return { status: "applied", current_version: 1 };
-}
-
-async function applyUpdate(
-  supabase: SupabaseClient,
-  userId: string,
-  op: Operation,
-): Promise<ApplyResult> {
-  const { data: current, error: fetchError } = await supabase
-    .from(op.entity)
-    .select("*")
-    .eq("id", op.record_id)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (fetchError) {
-    throw new Error(`fetch failed: ${fetchError.message}`);
-  }
-
-  if (!current) {
-    throw new Error("record not found");
-  }
-
-  const currentRecord = current as Record<string, unknown>;
-  const currentVersion = (currentRecord.version as number) ?? 0;
-
-  if (op.base_version !== null && op.base_version !== currentVersion) {
-    return applyConflictingUpdate(
-      supabase,
-      userId,
-      op,
-      currentRecord,
-      currentVersion,
-    );
-  }
-
-  const sanitized = sanitizePayload(
-    filterPayloadFields(op.payload, op.changed_fields),
-  );
-
-  const updates: Record<string, unknown> = {
-    ...sanitized,
-    version: currentVersion + 1,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error: updateError } = await supabase
-    .from(op.entity)
-    .update(updates)
-    .eq("id", op.record_id)
-    .eq("user_id", userId);
-
-  if (updateError) {
-    throw new Error(`update failed: ${updateError.message}`);
-  }
-
-  await supabase.from("edit_history").insert({
-    user_id: userId,
-    operation_id: op.operation_id,
-    entity: op.entity,
-    record_id: op.record_id,
-    reason: "applied",
-    payload: {
-      base_version: op.base_version,
-      new_version: currentVersion + 1,
-      fields: op.changed_fields,
-    },
-  });
-
-  return { status: "applied", current_version: currentVersion + 1 };
-}
-
-async function applyConflictingUpdate(
-  supabase: SupabaseClient,
-  userId: string,
-  op: Operation,
-  currentRecord: Record<string, unknown>,
-  currentVersion: number,
-): Promise<ApplyResult> {
-  const sanitized = sanitizePayload(
-    filterPayloadFields(op.payload, op.changed_fields),
-  );
-
-  const { data: edits } = await supabase
-    .from("edit_history")
-    .select("payload")
-    .eq("user_id", userId)
-    .eq("entity", op.entity)
-    .eq("record_id", op.record_id)
-    .eq("reason", "applied")
-    .order("created_at", { ascending: false })
-    .limit(100);
-
-  const serverChangedFields = new Set<string>();
-  if (edits) {
-    for (const edit of edits) {
-      const p = edit.payload as Record<string, unknown> | undefined;
-      if (!p) continue;
-
-      const editNewVersion = p.new_version as number | undefined;
-      const editFields = p.fields as string[] | undefined;
-
-      if (editNewVersion && op.base_version !== null && editNewVersion <= op.base_version) {
-        continue;
-      }
-
-      if (editFields) {
-        for (const f of editFields) {
-          serverChangedFields.add(f);
-        }
-      }
+function sanitizePayload(
+  payload: Record<string, unknown>,
+  allowedFields: Set<string>,
+): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (!SERVER_COLUMNS.has(key) && allowedFields.has(key)) {
+      sanitized[key] = value;
     }
   }
-
-  const conflicted: string[] = [];
-  const nonConflicting: Record<string, unknown> = {};
-
-  for (const field of op.changed_fields) {
-    if (!(field in sanitized)) continue;
-
-    if (serverChangedFields.has(field)) {
-      conflicted.push(field);
-    } else {
-      nonConflicting[field] = sanitized[field];
-    }
-  }
-
-  if (Object.keys(nonConflicting).length === 0) {
-    return {
-      status: "rejected",
-      reason: conflicted.length > 0
-        ? `all fields conflicted: ${conflicted.join(", ")}`
-        : "no fields to apply",
-      current_version: currentVersion,
-    };
-  }
-
-  const updates: Record<string, unknown> = {
-    ...nonConflicting,
-    version: currentVersion + 1,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error } = await supabase
-    .from(op.entity)
-    .update(updates)
-    .eq("id", op.record_id)
-    .eq("user_id", userId);
-
-  if (error) {
-    throw new Error(`conflicting update failed: ${error.message}`);
-  }
-
-  if (conflicted.length > 0) {
-    await supabase.from("edit_history").insert({
-      user_id: userId,
-      operation_id: op.operation_id,
-      entity: op.entity,
-      record_id: op.record_id,
-      reason: `conflicted fields dropped: ${conflicted.join(", ")}`,
-      payload: {
-        client_payload: sanitized,
-        server_values: Object.fromEntries(
-          conflicted.map((f) => [f, currentRecord[f]]),
-        ),
-      },
-    });
-  }
-
-  await supabase.from("edit_history").insert({
-    user_id: userId,
-    operation_id: op.operation_id,
-    entity: op.entity,
-    record_id: op.record_id,
-    reason: "partially_applied",
-    payload: {
-      base_version: op.base_version,
-      new_version: currentVersion + 1,
-      fields: Object.keys(nonConflicting),
-    },
-  });
-
-  return {
-    status: "applied",
-    current_version: currentVersion + 1,
-    conflicted_fields: conflicted,
-  };
+  return sanitized;
 }
 
-async function applyDelete(
+async function validateCreatePayload(
   supabase: SupabaseClient,
   userId: string,
-  op: Operation,
-): Promise<ApplyResult> {
-  const { data: current, error: fetchError } = await supabase
-    .from(op.entity)
-    .select("id, version, deleted")
-    .eq("id", op.record_id)
-    .eq("user_id", userId)
-    .maybeSingle();
+  entity: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (entity === "categories") {
+    assertOnlyAllowed(payload, CATEGORY_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, CATEGORY_CREATE_FIELDS);
+    requireString(sanitized, "category_group_id");
+    requireString(sanitized, "slug");
+    requireString(sanitized, "label");
+    requireString(sanitized, "description");
+    optionalString(sanitized, "short_label");
+    optionalBoolean(sanitized, "is_filipino_context");
+    optionalNumber(sanitized, "sort_order");
 
-  if (fetchError) {
-    throw new Error(`fetch failed: ${fetchError.message}`);
+    const { data: group, error } = await supabase
+      .from("category_groups")
+      .select("id")
+      .eq("id", sanitized.category_group_id as string)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error) throw new Error(`category_group_id validation failed: ${error.message}`);
+    if (!group) throw new Error("category_group_id does not reference an active category group");
+    return sanitized;
   }
 
-  if (!current) {
-    throw new Error("record not found");
+  assertOnlyAllowed(payload, SUBCATEGORY_CREATE_FIELDS);
+  const sanitized = sanitizePayload(payload, SUBCATEGORY_CREATE_FIELDS);
+  requireString(sanitized, "kind");
+  if (!["income", "expense", "transfer_adjustment"].includes(sanitized.kind as string)) {
+    throw new Error("kind must be income, expense, or transfer_adjustment");
+  }
+  requireString(sanitized, "slug");
+  requireString(sanitized, "label");
+  requireString(sanitized, "description");
+  optionalString(sanitized, "short_label");
+  optionalBoolean(sanitized, "is_filipino_context");
+  optionalBoolean(sanitized, "is_protected");
+  optionalNumber(sanitized, "sort_order");
+
+  if (sanitized.kind === "expense") {
+    requireString(sanitized, "category_id");
+    const { data: category, error } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("id", sanitized.category_id as string)
+      .eq("deleted", false)
+      .eq("is_active", true)
+      .or(`user_id.is.null,user_id.eq.${userId}`)
+      .maybeSingle();
+    if (error) throw new Error(`category_id validation failed: ${error.message}`);
+    if (!category) throw new Error("category_id does not reference an accessible active category");
+  } else if (sanitized.category_id !== undefined && sanitized.category_id !== null) {
+    throw new Error("category_id must not be set for non-expense subcategories");
   }
 
-  const currentVersion = (current as Record<string, unknown>).version as number;
+  sanitized.category_id = sanitized.kind === "expense" ? sanitized.category_id : null;
+  return sanitized;
+}
 
-  const { error: updateError } = await supabase
-    .from(op.entity)
-    .update({
-      deleted: true,
-      is_active: false,
-      version: currentVersion + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", op.record_id)
-    .eq("user_id", userId);
+function validateUpdatePayload(entity: string, payload: Record<string, unknown>): Record<string, unknown> {
+  const allowedFields = entity === "categories" ? CATEGORY_UPDATE_FIELDS : SUBCATEGORY_UPDATE_FIELDS;
+  assertOnlyAllowed(payload, allowedFields);
+  const sanitized = sanitizePayload(payload, allowedFields);
 
-  if (updateError) {
-    throw new Error(`delete failed: ${updateError.message}`);
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (key === "label" || key === "description") {
+      if (typeof value !== "string") throw new Error(`${key} must be a string`);
+      continue;
+    }
+
+    if (key === "short_label") {
+      if (value !== null && typeof value !== "string") {
+        throw new Error("short_label must be a string or null");
+      }
+      continue;
+    }
+
+    if (key === "sort_order") {
+      if (typeof value !== "number") throw new Error("sort_order must be a number");
+      continue;
+    }
+
+    if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
   }
 
-  return { status: "applied", current_version: currentVersion + 1 };
+  return sanitized;
+}
+
+function assertOnlyAllowed(payload: Record<string, unknown>, allowedFields: Set<string>): void {
+  for (const key of Object.keys(payload)) {
+    if (!SERVER_COLUMNS.has(key) && !allowedFields.has(key)) {
+      throw new Error(`${key} is not syncable`);
+    }
+  }
+}
+
+function requireString(payload: Record<string, unknown>, field: string): void {
+  if (!payload[field] || typeof payload[field] !== "string") throw new Error(`${field} is required`);
+}
+
+function optionalString(payload: Record<string, unknown>, field: string): void {
+  if (payload[field] !== undefined && payload[field] !== null && typeof payload[field] !== "string") {
+    throw new Error(`${field} must be a string or null`);
+  }
+}
+
+function optionalBoolean(payload: Record<string, unknown>, field: string): void {
+  if (payload[field] !== undefined && typeof payload[field] !== "boolean") {
+    throw new Error(`${field} must be a boolean`);
+  }
+}
+
+function optionalNumber(payload: Record<string, unknown>, field: string): void {
+  if (payload[field] !== undefined && typeof payload[field] !== "number") {
+    throw new Error(`${field} must be a number`);
+  }
 }
 
 function filterPayloadFields(

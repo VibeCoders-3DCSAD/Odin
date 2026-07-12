@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { applyOperation } from "./syncApplyOperation.js";
+import { prepareOperation } from "./syncApplyOperation.js";
 
 type PushOperation = {
   operation_id: string;
@@ -16,6 +16,13 @@ type PushResult = {
   status: "applied" | "rejected" | "duplicate";
   reason?: string;
   current_version?: number;
+};
+
+type RpcApplyResult = {
+  status: PushResult["status"];
+  reason: string | null;
+  current_version: number | null;
+  conflicted_fields: string[] | null;
 };
 
 type PullChanges = Record<string, Record<string, unknown>[]>;
@@ -39,107 +46,31 @@ export async function pushOperations(
   const results: PushResult[] = [];
 
   for (const op of operations) {
-    const { data: existing, error: lookupError } = await supabase
-      .from("applied_operations")
-      .select("operation_id, result, user_id, entity, record_id")
-      .eq("operation_id", op.operation_id)
-      .maybeSingle();
-
-    if (lookupError) {
-      results.push({
-        operation_id: op.operation_id,
-        status: "rejected",
-        reason: `applied_operations lookup failed: ${lookupError.message}`,
-      });
-      continue;
-    }
-
-    if (existing) {
-      const existingResult = existing.result as Record<string, unknown> | undefined;
-      if (existingResult?.status === "pending") {
-        if ((existing as Record<string, unknown>).user_id !== userId) {
-          results.push({
-            operation_id: op.operation_id,
-            status: "rejected",
-            reason: "reservation does not belong to current user",
-          });
-          continue;
-        }
-
-        const reservedEntity = (existing as Record<string, unknown>).entity as string;
-        const reservedRecordId = (existing as Record<string, unknown>).record_id as string;
-
-        const { data: currentRow } = await supabase
-          .from(reservedEntity)
-          .select("id, version")
-          .eq("id", reservedRecordId)
-          .maybeSingle();
-
-        if (currentRow) {
-          const version = (currentRow as Record<string, unknown>).version as number;
-          const result = { status: "applied", current_version: version };
-          await supabase
-            .from("applied_operations")
-            .update({ result })
-            .eq("operation_id", op.operation_id);
-          results.push({
-            operation_id: op.operation_id,
-            status: "applied",
-            current_version: version,
-          });
-          continue;
-        }
-
-        await supabase.from("applied_operations").delete().eq("operation_id", op.operation_id);
-      } else {
-        results.push({
-          operation_id: op.operation_id,
-          status: "duplicate",
-          current_version: typeof existingResult?.current_version === "number"
-            ? existingResult.current_version as number
-            : undefined,
-        });
-        continue;
-      }
-    }
-
-    const { error: reserveError } = await supabase.from("applied_operations").insert({
-      operation_id: op.operation_id,
-      user_id: userId,
-      device_id: deviceId,
-      entity: op.entity,
-      record_id: op.record_id,
-      operation_type: op.operation_type,
-      result: { status: "pending" },
-    });
-
-    if (reserveError) {
-      results.push({
-        operation_id: op.operation_id,
-        status: "rejected",
-        reason: `reservation failed: ${reserveError.message}`,
-      });
-      continue;
-    }
-
-    let mutationApplied = false;
-
     try {
-      const result = await applyOperation(supabase, userId, deviceId, op);
-      mutationApplied = true;
+      const prepared = await prepareOperation(supabase, userId, op);
+      const { data, error } = await supabase.rpc("apply_sync_operation", {
+        p_operation_id: prepared.operation_id,
+        p_device_id: deviceId,
+        p_entity: prepared.entity,
+        p_record_id: prepared.record_id,
+        p_operation_type: prepared.operation_type,
+        p_base_version: prepared.base_version,
+        p_changed_fields: prepared.changed_fields,
+        p_payload: prepared.payload,
+      });
 
-      const { error: finalizeError } = await supabase
-        .from("applied_operations")
-        .update({ result })
-        .eq("operation_id", op.operation_id);
-
-      if (finalizeError) {
-        throw new Error(`idempotency finalize failed: ${finalizeError.message}`);
+      if (error) {
+        throw new Error(`sync apply failed: ${error.message}`);
       }
+
+      const result = Array.isArray(data) ? data[0] as RpcApplyResult | undefined : undefined;
+
+      if (!result) throw new Error("sync apply returned no result");
 
       results.push({
         operation_id: op.operation_id,
-        status: "applied",
+        status: result.status,
+        reason: result.reason ?? undefined,
         current_version: typeof result.current_version === "number" ? result.current_version : undefined,
       });
     } catch (error) {
@@ -153,13 +84,6 @@ export async function pushOperations(
         reason: message,
         payload: op.payload,
       });
-
-      if (!mutationApplied) {
-        await supabase
-          .from("applied_operations")
-          .delete()
-          .eq("operation_id", op.operation_id);
-      }
 
       results.push({
         operation_id: op.operation_id,
