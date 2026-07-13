@@ -51,6 +51,7 @@ router.post(
 
       const active = await isDeviceActive(supabase, userId, device_id);
       if (!active) {
+        console.warn("[sync/push] device inactive", { userId, device_id });
         response.status(400).json({
           error: "Bad Request",
           message: "Device is not registered or has been deactivated",
@@ -58,7 +59,14 @@ router.post(
         return;
       }
 
+      console.log("[sync/push] start", { userId, device_id, opCount: operations.length });
+
       const results = await pushOperations(supabase, userId, device_id, operations as never[]);
+
+      const summary = { applied: 0, rejected: 0, duplicate: 0 };
+      for (const r of results) summary[r.status]++;
+
+      console.log("[sync/push] done", { userId, device_id, ...summary });
 
       response.status(200).json({ payload: { results } });
     } catch (error) {
@@ -81,7 +89,16 @@ router.get(
         try { cursors = JSON.parse(cursorsParam); } catch { /* keep empty */ }
       }
 
+      console.log("[sync/pull] start", { userId, cursorTables: Object.keys(cursors) });
+
       const result = await pullChanges(supabase, userId, cursors);
+
+      const changeSummary: Record<string, number> = {};
+      for (const [table, rows] of Object.entries(result.changes)) {
+        changeSummary[table] = rows.length;
+      }
+
+      console.log("[sync/pull] done", { userId, ...changeSummary });
 
       response.status(200).json({ payload: result });
     } catch (error) {
