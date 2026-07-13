@@ -159,6 +159,27 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     return () => sub.remove();
   }, [userId, deviceId, accessToken]);
 
+  useEffect(() => {
+    if (!userId || !deviceId || !accessToken) return;
+
+    const autoSync = async () => {
+      const online = await isOnline();
+      if (!online) return;
+      const db = await initDatabase();
+      const row = await db.getFirstAsync<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+        userId,
+        deviceId,
+      );
+      if (row && row.cnt > 0) {
+        runSync(userId, deviceId, accessToken).catch(() => {});
+      }
+    };
+
+    const interval = setInterval(autoSync, 30000);
+    return () => clearInterval(interval);
+  }, [userId, deviceId, accessToken]);
+
   function openDrawer() {
     setDrawerOpen(true);
     Animated.parallel([
@@ -312,7 +333,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
