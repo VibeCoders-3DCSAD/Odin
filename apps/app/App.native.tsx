@@ -7,6 +7,8 @@ import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, Platform, View } from "react-native";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
+import { ToastProvider } from "./components/Toast";
+import { startConnectivityPolling } from "./services/connectivity";
 import { useDeepLink } from "./hooks/useDeepLink";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "./lib/api";
 import { getOrCreateDeviceId } from "./local-db/deviceId";
@@ -103,6 +105,7 @@ export default function App() {
   const [isRestoringSession, setIsRestoringSession] = useState(true);
 
   useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
+  useEffect(() => { startConnectivityPolling(); }, []);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -196,47 +199,43 @@ export default function App() {
     };
   }
 
-  if (authenticated) {
-    return (
-      <>
-        <MobileShell
-          accessToken={authenticated.accessToken}
-          userId={authenticated.userId ?? ""}
-          deviceId={deviceId}
-          onLoggedOut={handleLoggedOut}
-          signOut={async () => { await GoogleSignin.signOut(); }}
-        />
-        <StatusBar style="dark" />
-      </>
-    );
-  }
-
-  if (isRestoringSession) {
-    return (
-      <View className="flex-1 items-center justify-center bg-card">
-        <ActivityIndicator color="#013220" />
-        <StatusBar style="dark" />
-      </View>
-    );
-  }
-
   return (
-    <>
-      <AuthExperience
-        google={{
-          signIn: startGoogleSignIn,
-          signOut: async () => {
-            await GoogleSignin.signOut();
-          },
-        }}
-        isPasswordRecovery={isPasswordRecovery}
-        isResolvingRecoveryToken={isResolvingRecoveryToken}
-        recoveryRefreshToken={recoveryRefreshToken ?? undefined}
-        recoveryToken={recoveryToken ?? undefined}
-        onAuthenticated={handleAuthenticated}
-        onLoggedOut={handleLoggedOut}
-      />
-      <StatusBar style="dark" />
-    </>
+    <ToastProvider>
+      {authenticated ? (
+        <>
+          <MobileShell
+            accessToken={authenticated.accessToken}
+            userId={authenticated.userId ?? ""}
+            deviceId={deviceId}
+            onLoggedOut={handleLoggedOut}
+            signOut={async () => { await GoogleSignin.signOut(); }}
+          />
+          <StatusBar style="dark" />
+        </>
+      ) : isRestoringSession ? (
+        <View className="flex-1 items-center justify-center bg-card">
+          <ActivityIndicator color="#013220" />
+          <StatusBar style="dark" />
+        </View>
+      ) : (
+        <>
+          <AuthExperience
+            google={{
+              signIn: startGoogleSignIn,
+              signOut: async () => {
+                await GoogleSignin.signOut();
+              },
+            }}
+            isPasswordRecovery={isPasswordRecovery}
+            isResolvingRecoveryToken={isResolvingRecoveryToken}
+            recoveryRefreshToken={recoveryRefreshToken ?? undefined}
+            recoveryToken={recoveryToken ?? undefined}
+            onAuthenticated={handleAuthenticated}
+            onLoggedOut={handleLoggedOut}
+          />
+          <StatusBar style="dark" />
+        </>
+      )}
+    </ToastProvider>
   );
 }
