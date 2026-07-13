@@ -1,5 +1,5 @@
 export const ERRORS = {
-  TIMEOUT: "The request timed out. Check your connection and try again.",
+  TIMEOUT: "Connection timed out.",
   GENERIC: "Something went wrong.",
   EXPORT_UNAVAILABLE: "Export service is unavailable.",
   EXPORT_UNAVAILABLE_RETRY: "Export service is unavailable. Please try again.",

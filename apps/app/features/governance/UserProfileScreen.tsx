@@ -7,7 +7,8 @@ import {
 } from "react-native";
 import { CheckCircle, DownloadSimple, FileText, ShieldCheck } from "phosphor-react-native";
 import { getDataExports, requestDataExport } from "./api";
-import { ERRORS } from "./constants";
+import { useConnectivityStore } from "../../services/connectivity";
+import { useToast } from "../../components/Toast";
 
 const MUTED = "#6B7A6F";
 const LINE = "#EAEAE6";
@@ -28,19 +29,12 @@ type UserProfileScreenProps = {
   onDone?: () => void;
 };
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.name === "AbortError") {
-    return "The request timed out. Check your connection and try again.";
-  }
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
-
 export default function UserProfileScreen({ accessToken, alreadyExported, onExported, onDone }: UserProfileScreenProps) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(alreadyExported ?? false);
   const [reRequesting, setReRequesting] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const online = useConnectivityStore(state => state.online);
+  const { showToast } = useToast();
 
   const fetchedExports = useRef(false);
 
@@ -63,19 +57,23 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
   }, [accessToken]);
 
   async function handleExport() {
+    if (!online) {
+      showToast("This action can only be done while online");
+      return;
+    }
     setExporting(true);
-    setError(null);
     try {
       const { response } = await requestDataExport(accessToken);
       if (!response.ok) {
-        setError(ERRORS.EXPORT_UNAVAILABLE_RETRY);
+        showToast("Export service is unavailable. Please try again.");
         setExporting(false);
         return;
       }
       setExported(true);
       onExported?.();
-    } catch (err) {
-      setError(getErrorMessage(err));
+      showToast("Export requested", "success");
+    } catch {
+      showToast("Couldn't complete request.");
     } finally {
       setExporting(false);
     }
@@ -136,76 +134,48 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
               </Text>
             </View>
           </View>
-          {confirming ? (
-            <View style={{ gap: 10, marginBottom: 12 }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: INK2, textAlign: "center" }}>
-                This will cancel your current export request and start a new one with the latest data.
-              </Text>
-              <Pressable
-                onPress={async () => {
-                  setReRequesting(true);
-                  setConfirming(false);
-                  setError(null);
-                  try {
-                    const { response } = await requestDataExport(accessToken);
-                    if (!response.ok) {
-                      setError(ERRORS.EXPORT_UNAVAILABLE);
-                      setReRequesting(false);
-                      return;
-                    }
-                    setReRequesting(false);
-                    onExported?.();
-                  } catch (err) {
-                    setError(getErrorMessage(err));
-                    setReRequesting(false);
-                  }
-                }}
-                disabled={reRequesting}
-                accessibilityRole="button"
-                accessibilityLabel="Confirm new export"
-                style={{
-                  height: 54, borderRadius: 14,
-                  backgroundColor: AQUA950,
-                  justifyContent: "center", alignItems: "center",
-                  opacity: reRequesting ? 0.5 : 1,
-                }}
-              >
-                {reRequesting ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
-                    Yes, request new export
-                  </Text>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={() => setConfirming(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel"
-                style={{ height: 50, borderRadius: 14, borderWidth: 1.5, borderColor: LINE, justifyContent: "center", alignItems: "center" }}
-              >
-                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: INK2 }}>Cancel</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable
-              onPress={() => setConfirming(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Request new export"
-              style={{
-                height: 54, borderRadius: 14,
-                backgroundColor: AQUA950,
-                justifyContent: "center", alignItems: "center",
-                marginBottom: 12,
-                flexDirection: "row", gap: 8,
-              }}
-            >
-              <DownloadSimple size={20} color="#FFFFFF" />
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
-                Request new export
-              </Text>
-            </Pressable>
-          )}
+          <Pressable
+            onPress={async () => {
+              if (!online) { showToast("This action can only be done while online"); return; }
+              setReRequesting(true);
+              try {
+                const { response } = await requestDataExport(accessToken);
+                if (!response.ok) {
+                  showToast("Export service is unavailable. Please try again.");
+                  setReRequesting(false);
+                  return;
+                }
+                setReRequesting(false);
+                onExported?.();
+                showToast("Export requested", "success");
+              } catch {
+                showToast("Couldn't complete request.");
+                setReRequesting(false);
+              }
+            }}
+            disabled={reRequesting}
+            accessibilityRole="button"
+            accessibilityLabel="Request new export"
+            style={{
+              height: 54, borderRadius: 14,
+              backgroundColor: AQUA950,
+              justifyContent: "center", alignItems: "center",
+              marginBottom: 12,
+              flexDirection: "row", gap: 8,
+              opacity: reRequesting || !online ? 0.45 : 1,
+            }}
+          >
+            {reRequesting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <DownloadSimple size={20} color="#FFFFFF" />
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
+                  Request new export
+                </Text>
+              </>
+            )}
+          </Pressable>
           <Pressable
             onPress={onDone}
             accessibilityRole="button"
@@ -234,7 +204,7 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
             backgroundColor: AQUA950,
             justifyContent: "center", alignItems: "center",
             flexDirection: "row", gap: 8,
-            opacity: exporting ? 0.5 : 1,
+            opacity: !online || exporting ? 0.45 : 1,
             shadowColor: AQUA950,
             shadowOffset: { width: 0, height: 8 },
             shadowOpacity: 0.28,
@@ -288,17 +258,6 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
           </View>
         ))}
       </View>
-
-      {error ? (
-        <Text
-          style={{
-            fontFamily: "Manrope", fontWeight: "500", fontSize: 11.5,
-            color: "#D9001F", textAlign: "center", marginTop: 14,
-          }}
-        >
-          {error}
-        </Text>
-      ) : null}
     </View>
   );
 }
