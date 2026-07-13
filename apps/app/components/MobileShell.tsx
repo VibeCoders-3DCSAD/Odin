@@ -130,6 +130,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const { showToast } = useToast();
   const [settingsSubPage, setSettingsSubPage] = useState(false);
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
@@ -177,6 +179,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   function navigate(page: Page) {
     setCurrentPage(page);
     closeDrawer();
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const result = await runSync(userId, deviceId, accessToken);
+      setSyncMessage(`Synced: ${result.pushed} pushed, ${result.pulled} pulled${result.errors > 0 ? `, ${result.errors} errors` : ""}`);
+      setTimeout(() => setSyncMessage(null), 4000);
+    } catch {
+      setSyncMessage("Sync failed. Check your connection.");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function handleLogout() {
@@ -255,6 +271,27 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
                 </View>
               ) : null}
+              {syncMessage ? (
+                <View style={{ backgroundColor: "#EFFEF7", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#0B8A55" }}>{syncMessage}</Text>
+                </View>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Sync now"
+                disabled={syncing}
+                onPress={handleSync}
+                className={`min-h-[54px] rounded-[14px] border border-[#08B16A] bg-[#EFFEF7] items-center justify-center mb-3 ${syncing ? "opacity-50" : "active:opacity-90"}`}
+              >
+                {syncing ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <ActivityIndicator color={palette.success} />
+                    <Text className="text-[#0B8A55] text-base font-bold">Syncing...</Text>
+                  </View>
+                ) : (
+                  <Text className="text-[#0B8A55] text-base font-bold">Sync now</Text>
+                )}
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
@@ -275,7 +312,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
