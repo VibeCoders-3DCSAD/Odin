@@ -17,11 +17,21 @@ import {
   MagnifyingGlass,
   PencilSimple,
 } from "phosphor-react-native";
-import { getCategoryGroups } from "./api";
-import type { CategoryGroup, Category } from "./types";
+import {
+  listCategoryGroups,
+  listCategories,
+  listSubcategories,
+  type Category as RepoCategory,
+  type Subcategory as RepoSubcategory,
+} from "../../local-db/repositories/taxonomy";
+import type { CategoryGroup } from "./types";
+
+interface CategoryWithSubs extends RepoCategory {
+  subcategories?: RepoSubcategory[];
+}
 
 type TaxonomyScreenProps = {
-  accessToken: string;
+  userId: string;
   onBack: () => void;
 };
 
@@ -53,8 +63,8 @@ const GROUP_ICON_BG: Record<string, string> = {
   financial_allocation: palette.aqua50,
 };
 
-function CategoryRow({ category }: { category: Category }) {
-  const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected_default) ?? false;
+function CategoryRow({ category }: { category: CategoryWithSubs }) {
+  const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected) ?? false;
   const hasFilipinoContext = category.is_filipino_context;
   const hasCustomLabel = !!category.short_label;
 
@@ -167,42 +177,60 @@ function GroupCard({ group }: { group: CategoryGroup }) {
   );
 }
 
-export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenProps) {
+export default function TaxonomyScreen({ userId, onBack }: TaxonomyScreenProps) {
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchGroups = useCallback(async () => {
+  const loadTaxonomy = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
     setError(null);
     try {
-      const { response, body } = await getCategoryGroups(accessToken);
-      if (!response.ok) {
-        setError(body.message || "Failed to load categories");
-        return;
+      const [categoryGroups, categories, subcategories] = await Promise.all([
+        listCategoryGroups(userId),
+        listCategories(userId),
+        listSubcategories(userId),
+      ]);
+
+      const catMap = new Map<string, CategoryWithSubs>(
+        categories.map((c) => [c.id, { ...c, subcategories: undefined }]),
+      );
+      for (const sub of subcategories) {
+        if (sub.category_id) {
+          const cat = catMap.get(sub.category_id);
+          if (cat) {
+            if (!cat.subcategories) cat.subcategories = [];
+            cat.subcategories.push(sub);
+          }
+        }
       }
-      setGroups(body.payload?.category_groups ?? []);
-    } catch {
-      setError("Network error. Check your connection and try again.");
+
+      const nested: CategoryGroup[] = categoryGroups.map((g) => ({
+        ...g,
+        categories: [...catMap.values()].filter((c) => c.category_group_id === g.id),
+      }));
+
+      setGroups(nested);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load categories");
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [userId]);
 
   useEffect(() => {
-    fetchGroups();
-  }, [fetchGroups]);
+    loadTaxonomy();
+  }, [loadTaxonomy]);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* Header */}
       <View style={{ paddingHorizontal: 22, paddingTop: 12 }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
           Categories
         </Text>
       </View>
 
-      {/* Search bar */}
       <View style={{ paddingHorizontal: 22, paddingTop: 16 }}>
         <View
           style={{
@@ -227,7 +255,6 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
         </View>
       </View>
 
-      {/* Content */}
       <View style={{ paddingHorizontal: 22, paddingTop: 16, gap: 12 }}>
         {loading ? (
           <ActivityIndicator color={palette.aqua600} style={{ marginTop: 40 }} />
@@ -235,7 +262,7 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
           <View style={{ alignItems: "center", marginTop: 40, gap: 8 }}>
             <Text style={{ fontFamily: "Manrope", color: palette.mut, textAlign: "center" }}>{error}</Text>
             <Pressable
-              onPress={fetchGroups}
+              onPress={loadTaxonomy}
               style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: palette.aqua600 }}
             >
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#fff" }}>Retry</Text>

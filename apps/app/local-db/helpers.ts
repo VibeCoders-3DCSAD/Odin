@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 import type { EnqueueInput, SyncOperation } from "./types";
 
@@ -12,7 +13,7 @@ export class LocalDbError extends Error {
 }
 
 function generateOperationId(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 export async function enqueueOperation(

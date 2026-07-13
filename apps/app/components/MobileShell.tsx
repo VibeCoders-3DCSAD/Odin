@@ -136,17 +136,22 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const initialSyncDone = useRef(false);
 
   useEffect(() => {
+    console.log("[sync] MobileShell — userId:", !!userId, "deviceId:", !!deviceId, "accessToken:", !!accessToken);
     if (!userId || !deviceId || !accessToken) return;
 
     const sync = () => { runSync(userId, deviceId, accessToken).catch(() => {}); };
 
     if (!initialSyncDone.current) {
       initialSyncDone.current = true;
+      console.log("[sync] MobileShell — initial sync trigger");
       sync();
     }
 
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") sync();
+      if (state === "active") {
+        console.log("[sync] MobileShell — app back to foreground, syncing");
+        sync();
+      }
     });
 
     return () => sub.remove();
@@ -270,7 +275,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen userId={userId} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
