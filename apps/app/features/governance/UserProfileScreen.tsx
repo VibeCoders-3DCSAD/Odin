@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   Text,
   View,
@@ -135,23 +136,36 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
             </View>
           </View>
           <Pressable
-            onPress={async () => {
+            onPress={() => {
               if (!online) { showToast("This action can only be done while online"); return; }
-              setReRequesting(true);
-              try {
-                const { response } = await requestDataExport(accessToken);
-                if (!response.ok) {
-                  showToast("Export service is unavailable. Please try again.");
-                  setReRequesting(false);
-                  return;
-                }
-                setReRequesting(false);
-                onExported?.();
-                showToast("Export requested", "success");
-              } catch {
-                showToast("Couldn't complete request.");
-                setReRequesting(false);
-              }
+              Alert.alert(
+                "Request new export",
+                "This will cancel your current export request and start a new one with the latest data.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Request",
+                    style: "destructive",
+                    onPress: async () => {
+                      setReRequesting(true);
+                      try {
+                        const { response } = await requestDataExport(accessToken);
+                        if (!response.ok) {
+                          showToast("Export service is unavailable. Please try again.");
+                          setReRequesting(false);
+                          return;
+                        }
+                        setReRequesting(false);
+                        onExported?.();
+                        showToast("Export requested", "success");
+                      } catch {
+                        showToast("Couldn't complete request.");
+                        setReRequesting(false);
+                      }
+                    },
+                  },
+                ],
+              );
             }}
             disabled={reRequesting}
             accessibilityRole="button"

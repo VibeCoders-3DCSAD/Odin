@@ -47,7 +47,7 @@ export default function AccountOffboardingScreen({ accessToken, onBack, onGoToEx
   const online = useConnectivityStore(state => state.online);
   const { showToast } = useToast();
 
-  const canSubmit = checked && !submitting && online;
+  const canSubmit = checked && !submitting;
 
   async function handleDelete() {
     if (!canSubmit) return;
@@ -195,7 +195,7 @@ export default function AccountOffboardingScreen({ accessToken, onBack, onGoToEx
               height: 52, borderRadius: 14,
               backgroundColor: MONZA600,
               justifyContent: "center", alignItems: "center",
-              opacity: canSubmit ? 1 : 0.4,
+              opacity: canSubmit && online ? 1 : 0.4,
             }}
           >
             {submitting ? (

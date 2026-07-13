@@ -37,12 +37,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [color, setColor] = useState<ToastColor>("danger");
   const [position, setPosition] = useState<ToastPosition>("down");
   const [size, setSize] = useState<"sm" | "md" | "lg">("md");
+  const [visible, setVisible] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const autoDismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dismiss = useCallback(() => {
     if (autoDismiss.current) clearTimeout(autoDismiss.current);
-    Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setVisible(false);
+    });
   }, [opacity]);
 
   const showToast = useCallback(
@@ -54,6 +57,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       setColor(resolved.color ?? "danger");
       setPosition(resolved.position ?? "down");
       setSize(resolved.size ?? "md");
+      setVisible(true);
       if (autoDismiss.current) clearTimeout(autoDismiss.current);
       opacity.setValue(0);
       Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
@@ -69,57 +73,59 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast }}>
       <View style={{ flex: 1 }}>
         {children}
-        <Animated.View
-          pointerEvents="box-none"
-          style={{
-            position: "absolute",
-            [isTop ? "top" : "bottom"]: isTop ? 60 : 100,
-            left: 20,
-            right: 20,
-            opacity,
-            flexDirection: "row",
-            alignItems: "center",
-            backgroundColor: COLORS[color],
-            borderRadius: 12,
-            paddingLeft: s.paddingH,
-            paddingRight: 4,
-            paddingVertical: s.paddingV,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 8,
-            elevation: 6,
-          }}
-        >
-          <Text
+        {visible ? (
+          <Animated.View
+            pointerEvents="box-none"
             style={{
-              flex: 1,
-              color: "#FFFFFF",
-              fontSize: s.fontSize,
-              fontWeight: "600",
-              textAlign: "center",
-            }}
-          >
-            {message}
-          </Text>
-          <Pressable
-            onPress={dismiss}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
+              position: "absolute",
+              [isTop ? "top" : "bottom"]: isTop ? 60 : 100,
+              left: 20,
+              right: 20,
+              opacity,
+              flexDirection: "row",
               alignItems: "center",
-              justifyContent: "center",
+              backgroundColor: COLORS[color],
+              borderRadius: 12,
+              paddingLeft: s.paddingH,
+              paddingRight: 4,
+              paddingVertical: s.paddingV,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+              elevation: 6,
             }}
           >
-            <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700", lineHeight: 18 }}>
-              ✕
+            <Text
+              style={{
+                flex: 1,
+                color: "#FFFFFF",
+                fontSize: s.fontSize,
+                fontWeight: "600",
+                textAlign: "center",
+              }}
+            >
+              {message}
             </Text>
-          </Pressable>
-        </Animated.View>
+            <Pressable
+              onPress={dismiss}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700", lineHeight: 18 }}>
+                ✕
+              </Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
       </View>
     </ToastContext.Provider>
   );
