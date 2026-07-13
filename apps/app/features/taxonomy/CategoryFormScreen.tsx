@@ -48,7 +48,7 @@ const palette = {
   card: "#F1F0EB",
 };
 
-function makeInitialState(category?: CategoryFormScreenProps["category"], isCreate?: boolean) {
+function makeInitialState(category?: CategoryFormScreenProps["category"]) {
   return {
     label: category?.label ?? "",
     slug: category?.slug ?? "",
@@ -56,7 +56,6 @@ function makeInitialState(category?: CategoryFormScreenProps["category"], isCrea
     shortLabel: category?.short_label ?? "",
     selectedGroupId: category?.category_group_id ?? "",
     isFilipinoContext: category?.is_filipino_context ?? false,
-    sortOrder: String(category?.sort_order ?? 0),
   };
 }
 
@@ -71,19 +70,17 @@ export default function CategoryFormScreen({
   const [shortLabel, setShortLabel] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [isFilipinoContext, setIsFilipinoContext] = useState(false);
-  const [sortOrder, setSortOrder] = useState("0");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    const initial = makeInitialState(category, isCreate);
+    const initial = makeInitialState(category);
     setLabel(initial.label);
     setSlug(initial.slug);
     setDescription(initial.description);
     setShortLabel(initial.shortLabel);
     setSelectedGroupId(initial.selectedGroupId);
     setIsFilipinoContext(initial.isFilipinoContext);
-    setSortOrder(initial.sortOrder);
     setFormError(null);
   }, [mode, category?.id]);
 
@@ -106,7 +103,6 @@ export default function CategoryFormScreen({
           description: description.trim(),
           short_label: shortLabel.trim() || null,
           is_filipino_context: isFilipinoContext,
-          sort_order: parseInt(sortOrder, 10) || 0,
         });
       } else {
         await updateCategory(userId, deviceId, category!.id, {
@@ -114,7 +110,6 @@ export default function CategoryFormScreen({
           short_label: shortLabel.trim() || null,
           description: description.trim(),
           is_filipino_context: isFilipinoContext,
-          sort_order: parseInt(sortOrder, 10) || 0,
         });
       }
       onSaved();
@@ -134,7 +129,7 @@ export default function CategoryFormScreen({
             enabled={Platform.OS === "ios"}
           >
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%" }}>
+              <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
                 <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
                 <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled">
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
@@ -240,22 +235,6 @@ export default function CategoryFormScreen({
                         borderRadius: 12, borderWidth: 1, borderColor: palette.line,
                         paddingHorizontal: 14, paddingTop: 12, fontFamily: "Manrope", fontSize: 14, color: palette.ink,
                         backgroundColor: palette.card, minHeight: 80, textAlignVertical: "top",
-                      }}
-                    />
-                  </View>
-
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-                      SORT ORDER
-                    </Text>
-                    <TextInput
-                      value={sortOrder}
-                      onChangeText={setSortOrder}
-                      keyboardType="numeric"
-                      style={{
-                        height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
-                        paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink,
-                        backgroundColor: palette.card,
                       }}
                     />
                   </View>
