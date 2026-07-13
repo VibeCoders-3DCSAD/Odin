@@ -14,7 +14,7 @@ let unsubscribe: (() => void) | null = null;
 export function startConnectivityPolling() {
   if (unsubscribe) return;
   unsubscribe = NetInfo.addEventListener(state => {
-    useConnectivityStore.setState({ online: !!state.isConnected && !!state.isInternetReachable });
+    useConnectivityStore.setState({ online: state.isConnected !== false && state.isInternetReachable !== false });
   });
 }
 
