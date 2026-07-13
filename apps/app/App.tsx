@@ -4,6 +4,8 @@ import "./global.css";
 import { StatusBar } from "expo-status-bar";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
+import { ToastProvider } from "./components/Toast";
+import { startConnectivityPolling } from "./services/connectivity";
 import { useDeepLink } from "./hooks/useDeepLink";
 import { getOrCreateDeviceId } from "./local-db/deviceId";
 
@@ -16,34 +18,35 @@ export default function App() {
   const [deviceId, setDeviceId] = useState("");
 
   useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
-
-  if (authenticated) {
-    return (
-      <>
-        <MobileShell
-          accessToken={authenticated.accessToken}
-          userId={authenticated.userId ?? ""}
-          deviceId={deviceId}
-          onLoggedOut={() => setAuthenticated(null)}
-        />
-        <StatusBar style="dark" />
-      </>
-    );
-  }
+  useEffect(() => { startConnectivityPolling(); }, []);
 
   return (
-    <>
-      <AuthExperience
-        google={{}}
-        isPasswordRecovery={isPasswordRecovery}
-        isResolvingRecoveryToken={isResolvingRecoveryToken}
-        recoveryRefreshToken={recoveryRefreshToken ?? undefined}
-        recoveryToken={recoveryToken ?? undefined}
-        verificationToken={verificationToken ?? undefined}
-        onAuthenticated={(state) => setAuthenticated(state)}
-        onLoggedOut={() => setAuthenticated(null)}
-      />
-      <StatusBar style="dark" />
-    </>
+    <ToastProvider>
+      {authenticated ? (
+        <>
+          <MobileShell
+            accessToken={authenticated.accessToken}
+            userId={authenticated.userId ?? ""}
+            deviceId={deviceId}
+            onLoggedOut={() => setAuthenticated(null)}
+          />
+          <StatusBar style="dark" />
+        </>
+      ) : (
+        <>
+          <AuthExperience
+            google={{}}
+            isPasswordRecovery={isPasswordRecovery}
+            isResolvingRecoveryToken={isResolvingRecoveryToken}
+            recoveryRefreshToken={recoveryRefreshToken ?? undefined}
+            recoveryToken={recoveryToken ?? undefined}
+            verificationToken={verificationToken ?? undefined}
+            onAuthenticated={(state) => setAuthenticated(state)}
+            onLoggedOut={() => setAuthenticated(null)}
+          />
+          <StatusBar style="dark" />
+        </>
+      )}
+    </ToastProvider>
   );
 }
