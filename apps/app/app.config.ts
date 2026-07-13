@@ -19,8 +19,8 @@ if (requiresIosGoogleConfig && !googleIosUrlScheme) {
 }
 
 const plugins = googleIosUrlScheme
-  ? [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }]]
-  : [];
+  ? [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }], "expo-secure-store"]
+  : ["expo-secure-store"];
 
 const config = {
   name: "app",
