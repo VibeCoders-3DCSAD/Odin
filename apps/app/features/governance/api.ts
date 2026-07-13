@@ -25,9 +25,10 @@ export async function getPrivacySettings(accessToken: string) {
 export async function updatePrivacySettings(
   accessToken: string,
   payload: Partial<PrivacySettings>,
+  timeoutMs?: number,
 ) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? 4_000);
   try {
     const response = await fetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
       method: "PATCH",

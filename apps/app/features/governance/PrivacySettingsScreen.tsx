@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Pressable, Text, TextStyle, View } from "react-native";
+import { Animated, Pressable, Text, TextStyle, View } from "react-native";
 import {
   Bell,
   Brain,
@@ -12,9 +12,12 @@ import {
   Trash,
   User,
 } from "phosphor-react-native";
+import { useConnectivityStore } from "../../services/connectivity";
 import { getConsents, getPrivacySettings, updatePrivacySettings } from "./api";
 import type { ConsentRecord, PrivacySettings } from "./types";
 import { ERRORS } from "./constants";
+import { getErrorMessage } from "./helpers";
+import { useToast } from "../../components/Toast";
 import UserProfileScreen from "./UserProfileScreen";
 import AccountOffboardingScreen from "./AccountOffboardingScreen";
 import { getLocalPrivacySettings, cachePrivacySettings } from "../../local-db/repositories/privacySettings";
@@ -39,29 +42,24 @@ const MONZA600 = "#D9001F";
 const MONZA700 = "#B71C1C";
 const MONZA500 = "#E53935";
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.name === "AbortError") {
-    return "The request timed out. Check the API and try again.";
-  }
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
-
 function SettingsToggle({
   value,
   onToggle,
   accessibilityLabel,
+  disabled,
 }: {
   value: boolean;
   onToggle: () => void;
   accessibilityLabel: string;
+  disabled?: boolean;
 }) {
   return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: value }}
-      accessibilityLabel={accessibilityLabel}
-    >
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: value, disabled }}
+        accessibilityLabel={accessibilityLabel}
+      >
       <View
         style={{
           width: 44,
@@ -70,6 +68,7 @@ function SettingsToggle({
           backgroundColor: value ? AQUA600 : LINE,
           justifyContent: "center",
           paddingHorizontal: 3,
+          opacity: disabled ? 0.45 : 1,
         }}
       >
         <View
@@ -131,6 +130,7 @@ function NavRow({
   iconColor = MUTED,
   labelColor = INK,
   labelWeight = "600",
+  disabled,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -140,6 +140,7 @@ function NavRow({
   iconColor?: string;
   labelColor?: string;
   labelWeight?: TextStyle["fontWeight"];
+  disabled?: boolean;
 }) {
   const Wrapper = onPress ? Pressable : View;
   return (
@@ -151,6 +152,7 @@ function NavRow({
         gap: 12,
         paddingHorizontal: 15,
         paddingVertical: 14,
+        opacity: disabled ? 0.45 : 1,
       }}
     >
       {icon}
@@ -255,14 +257,13 @@ function SettingsSkeleton() {
 export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [subPage, setSubPage] = useState<string | null>(null);
   const [exported, setExported] = useState(false);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetched = useRef(false);
+  const online = useConnectivityStore(state => state.online);
+  const { showToast } = useToast();
 
   useEffect(() => {
     onSubPageChange?.(subPage !== null);
@@ -318,39 +319,47 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
     return () => { cancelled = true; };
   }, [accessToken, userId]);
 
+  function revertFields(payload: Partial<PrivacySettings>, previous: PrivacySettings) {
+    setSettings(current => {
+      if (!current) return current;
+      const next = { ...current };
+      for (const k of Object.keys(payload))
+        (next as Record<string, unknown>)[k] = previous[k as keyof PrivacySettings];
+      return next;
+    });
+  }
+
   const save = useCallback(
     async (payload: Partial<PrivacySettings>, previous?: PrivacySettings) => {
-      setSaving(true);
-      setError(null);
       try {
         const { response, body } = await updatePrivacySettings(accessToken, payload);
         if (!response.ok) {
-          if (previous) setSettings(previous);
-          setError(body.message ?? ERRORS.FAILED_SAVE);
+          if (previous) revertFields(payload, previous);
+          showToast(body.message ?? ERRORS.FAILED_SAVE);
           return;
         }
-        setSaved(true);
-        if (savedTimer.current) clearTimeout(savedTimer.current);
-        savedTimer.current = setTimeout(() => setSaved(false), 2000);
+        showToast("Settings saved", "success");
         if (userId && settings) {
           const updated = { ...settings, ...payload };
           cachePrivacySettings(userId, updated).catch(() => {});
         }
-      } catch (err) {
-        if (previous) setSettings(previous);
-        setError(getErrorMessage(err));
-      } finally {
-        setSaving(false);
+      } catch {
+        if (previous) revertFields(payload, previous);
+        showToast("Can't save while offline");
       }
     },
-    [accessToken, userId, settings],
+    [accessToken, userId, settings, showToast],
   );
 
   function toggle(key: keyof PrivacySettings) {
     if (!settings) return;
+    if (!online) {
+      showToast("Can't save while offline");
+      return;
+    }
     const current = settings[key];
     if (typeof current !== "boolean") return;
-    const previous = settings;
+    const previous = { ...settings };
     setSettings({ ...settings, [key]: !current });
     save({ [key]: !current }, previous);
   }
@@ -445,11 +454,13 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           icon={<Brain size={18} color={MUTED} />}
           label="Personalization"
           subtitle={settings?.personalization_enabled ? "Enabled" : "Disabled"}
+          disabled={!online}
           trailing={
             <SettingsToggle
               value={settings?.personalization_enabled ?? false}
               onToggle={() => toggle("personalization_enabled")}
               accessibilityLabel="Personalization"
+              disabled={!online}
             />
           }
         />
@@ -458,11 +469,13 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           icon={<Flask size={18} color={MUTED} />}
           label="Model Training"
           subtitle={settings?.model_training_opt_in ? "Enabled" : "Disabled"}
+          disabled={!online}
           trailing={
             <SettingsToggle
               value={settings?.model_training_opt_in ?? false}
               onToggle={() => toggle("model_training_opt_in")}
               accessibilityLabel="Model Training"
+              disabled={!online}
             />
           }
         />
@@ -471,11 +484,13 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           icon={<ShieldCheck size={18} color={AQUA700} />}
           label="Research Evaluation"
           subtitle={settings?.research_evaluation_opt_in ? "Enabled" : "Disabled"}
+          disabled={!online}
           trailing={
             <SettingsToggle
               value={settings?.research_evaluation_opt_in ?? false}
               onToggle={() => toggle("research_evaluation_opt_in")}
               accessibilityLabel="Research Evaluation"
+              disabled={!online}
             />
           }
         />
@@ -491,7 +506,11 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
         <NavRow
           icon={<DownloadSimple size={18} color={MUTED} />}
           label="Export data"
-          onPress={() => setSubPage("export")}
+          disabled={!online}
+          onPress={() => {
+            if (!online) { showToast("This action can only be done while online"); return; }
+            setSubPage("export");
+          }}
         />
       </BorderedGroup>
 
@@ -502,11 +521,13 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
         <NavRow
           icon={<Bell size={18} color={MUTED} />}
           label="Budget & anomaly alerts"
+          disabled={!online}
           trailing={
           <SettingsToggle
             value={settings?.notifications_opt_in ?? false}
             onToggle={() => toggle("notifications_opt_in")}
             accessibilityLabel="Budget and anomaly alerts"
+            disabled={!online}
           />
           }
         />
@@ -526,7 +547,10 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
       <View style={{ height: 20 }} />
 
       <Pressable
-        onPress={() => setSubPage("delete-account")}
+        onPress={() => {
+          if (!online) { showToast("This action can only be done while online"); return; }
+          setSubPage("delete-account");
+        }}
         accessibilityRole="button"
         accessibilityLabel="Delete account"
         style={{
@@ -538,6 +562,7 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           borderWidth: 1.5,
           borderColor: MONZA200,
           backgroundColor: MONZA50,
+          opacity: online ? 1 : 0.45,
         }}
       >
         <Trash size={18} color={MONZA600} />
@@ -546,21 +571,6 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
         </Text>
         <CaretRight size={15} color={MONZA500} weight="bold" />
       </Pressable>
-
-      <View style={{ alignItems: "center", justifyContent: "center", marginTop: 14 }}>
-        {saving ? (
-          <ActivityIndicator color={MUTED} size="small" />
-        ) : saved ? (
-          <Text style={{ fontSize: 10.5, color: AQUA600, fontWeight: "600" }}>
-            Settings saved
-          </Text>
-        ) : null}
-        {error ? (
-          <Text style={{ fontSize: 10.5, color: MONZA600, textAlign: "center" }}>
-            {error}
-          </Text>
-        ) : null}
-      </View>
 
       <Text
         style={{

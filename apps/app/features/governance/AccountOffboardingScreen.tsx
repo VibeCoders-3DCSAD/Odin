@@ -6,8 +6,8 @@ import {
   View,
 } from "react-native";
 import {
-  ArrowLeft,
   Brain,
+  CaretRight,
   ChartPieSlice,
   Check,
   DownloadSimple,
@@ -16,8 +16,8 @@ import {
 } from "phosphor-react-native";
 import { confirmAccountDeletion, requestAccountDeletion } from "./api";
 import type { AccountDeletionRequest } from "./types";
-import { ERRORS } from "./constants";
-import { getErrorMessage } from "./helpers";
+import { useConnectivityStore } from "../../services/connectivity";
+import { useToast } from "../../components/Toast";
 
 type AccountOffboardingScreenProps = {
   accessToken: string;
@@ -44,55 +44,65 @@ const MONZA300 = "#FFCDD2";
 export default function AccountOffboardingScreen({ accessToken, onBack, onGoToExport, onDeleted }: AccountOffboardingScreenProps) {
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const online = useConnectivityStore(state => state.online);
+  const { showToast } = useToast();
 
-  const canSubmit = checked && !submitting;
+  const canSubmit = checked && !submitting && online;
 
   async function handleDelete() {
     if (!canSubmit) return;
+    if (!online) {
+      showToast("This action can only be done while online");
+      return;
+    }
     setSubmitting(true);
-    setError(null);
     try {
       const { response, body } = await requestAccountDeletion(accessToken);
       if (!response.ok) {
         if (response.status === 409 || body.message?.includes("active")) {
-          setError(ERRORS.ACTIVE_DELETION_REQUEST);
+          showToast("You already have an active deletion request.");
         } else {
-          setError(body.message ?? "Failed to create deletion request.");
+          showToast(body.message ?? "Failed to create deletion request.");
         }
         setSubmitting(false);
         return;
       }
       const delRequest = (body as { payload?: { request: AccountDeletionRequest } }).payload?.request;
       if (!delRequest) {
-        setError(ERRORS.UNEXPECTED_RESPONSE);
+        showToast("Unexpected response. Please try again.");
         setSubmitting(false);
         return;
       }
       const { response: confirmRes, body: confirmBody } = await confirmAccountDeletion(accessToken, delRequest.id);
       if (!confirmRes.ok) {
-        setError(confirmBody.message ?? "Failed to confirm deletion.");
+        showToast(confirmBody.message ?? "Failed to confirm deletion.");
         setSubmitting(false);
         return;
       }
       const confirmed = (confirmBody as { payload?: { request: AccountDeletionRequest } }).payload?.request;
       onDeleted?.(confirmed?.scheduled_delete_at ?? delRequest.scheduled_delete_at ?? "");
-    } catch (err) {
-      setError(getErrorMessage(err));
+    } catch {
+      showToast("Couldn't complete request.");
       setSubmitting(false);
     }
   }
 
   return (
     <View>
-      <View style={{ paddingHorizontal: 22, paddingTop: 12, flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back">
-          <ArrowLeft size={21} color={INK} />
-        </Pressable>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: INK }}>
-          Delete account
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Back to settings"
+        style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}
+      >
+        <CaretRight size={18} color={MUTED} weight="bold" style={{ transform: [{ rotate: "180deg" }] }} />
+        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: MUTED }}>
+          Settings
         </Text>
-      </View>
+      </Pressable>
+      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: INK, marginBottom: 16 }}>
+        Delete account
+      </Text>
 
       <View style={{ paddingHorizontal: 22, paddingVertical: 16 }}>
         <View style={{ alignItems: "center", marginBottom: 18 }}>
@@ -189,7 +199,7 @@ export default function AccountOffboardingScreen({ accessToken, onBack, onGoToEx
             }}
           >
             {submitting ? (
-              <ActivityIndicator color="#FFFFFF" accessibilityLabel="Processing deletion request" />
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: "#FFFFFF" }}>
                 Delete my account
@@ -213,17 +223,6 @@ export default function AccountOffboardingScreen({ accessToken, onBack, onGoToEx
             </Text>
           </Pressable>
         </View>
-
-        {error ? (
-          <Text
-            style={{
-              fontFamily: "Manrope", fontWeight: "500", fontSize: 11.5,
-              color: MONZA600, textAlign: "center", marginTop: 12,
-            }}
-          >
-            {error}
-          </Text>
-        ) : null}
       </View>
     </View>
   );

@@ -17,6 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
+import { useConnectivityStore } from "../services/connectivity";
+import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
 import { initDatabase } from "../local-db/client";
 import { isOnline } from "../lib/network";
@@ -120,6 +122,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const online = useConnectivityStore(state => state.online);
+  const { showToast } = useToast();
   const [settingsSubPage, setSettingsSubPage] = useState(false);
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -167,6 +171,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   async function handleLogout() {
+    if (!online) {
+      showToast("This action can only be done while online");
+      return;
+    }
     setIsLoggingOut(true);
     setLogoutError(null);
 
@@ -243,7 +251,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 accessibilityLabel="Log out"
                 disabled={isLoggingOut}
                 onPress={handleLogout}
-                className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${isLoggingOut ? "opacity-50" : "active:opacity-90"}`}
+                className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${(!online || isLoggingOut) ? "opacity-50" : "active:opacity-90"}`}
               >
                 {isLoggingOut ? (
                   <ActivityIndicator color={palette.error} />
