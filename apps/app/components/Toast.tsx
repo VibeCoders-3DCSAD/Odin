@@ -40,16 +40,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [visible, setVisible] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const autoDismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastGen = useRef(0);
 
   const dismiss = useCallback(() => {
     if (autoDismiss.current) clearTimeout(autoDismiss.current);
+    const gen = toastGen.current;
     Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
-      setVisible(false);
+      if (gen === toastGen.current) setVisible(false);
     });
   }, [opacity]);
 
   const showToast = useCallback(
     (msg: string, options?: ToastOptions | ToastColor) => {
+      toastGen.current += 1;
       const resolved = typeof options === "string"
         ? { color: options === "success" ? "success" as const : "danger" as const }
         : options ?? {};
