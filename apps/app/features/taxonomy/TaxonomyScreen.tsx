@@ -28,6 +28,7 @@ import {
   type Category as RepoCategory,
   type Subcategory as RepoSubcategory,
 } from "../../local-db/repositories/taxonomy";
+import { runSync } from "../../local-db/sync/runSync";
 import type { CategoryGroup } from "./types";
 import CategoryFormScreen from "./CategoryFormScreen";
 
@@ -38,6 +39,7 @@ interface CategoryWithSubs extends RepoCategory {
 type TaxonomyScreenProps = {
   userId: string;
   deviceId: string;
+  accessToken: string;
   onBack: () => void;
 };
 
@@ -220,7 +222,7 @@ function GroupCard({ group, mutatingId, onEdit, onDelete }: GroupCardProps) {
   );
 }
 
-export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScreenProps) {
+export default function TaxonomyScreen({ userId, deviceId, accessToken, onBack }: TaxonomyScreenProps) {
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -296,6 +298,7 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
             try {
               await deleteCategory(userId, deviceId, cat.id);
               loadTaxonomy();
+              runSync(userId, deviceId, accessToken).catch(() => {});
             } catch (e) {
               Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete category");
             } finally {
@@ -311,6 +314,7 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
     setFormVisible(false);
     setEditingCategory(undefined);
     loadTaxonomy();
+    runSync(userId, deviceId, accessToken).catch(() => {});
   }
 
   function handleFormCancel() {
