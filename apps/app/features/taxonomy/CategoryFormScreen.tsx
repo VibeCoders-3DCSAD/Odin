@@ -125,8 +125,7 @@ export default function CategoryFormScreen({
       <Pressable onPress={onCancel} style={{ flex: 1 }}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            enabled={Platform.OS === "ios"}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
             <Pressable onPress={() => {}}>
               <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
