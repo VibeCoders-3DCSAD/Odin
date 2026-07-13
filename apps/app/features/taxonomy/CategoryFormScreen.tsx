@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -66,6 +66,11 @@ export default function CategoryFormScreen({
   const isCreate = mode === "create";
   const [label, setLabel] = useState("");
   const [slug, setSlug] = useState("");
+  const [labelDirty, setLabelDirty] = useState(false);
+
+  const generateSlug = useCallback((text: string) => {
+    return text.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  }, []);
   const [description, setDescription] = useState("");
   const [shortLabel, setShortLabel] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState("");
@@ -82,7 +87,14 @@ export default function CategoryFormScreen({
     setSelectedGroupId(initial.selectedGroupId);
     setIsFilipinoContext(initial.isFilipinoContext);
     setFormError(null);
+    setLabelDirty(false);
   }, [mode, category?.id]);
+
+  useEffect(() => {
+    if (isCreate && label.trim() && !labelDirty) {
+      setSlug(generateSlug(label));
+    }
+  }, [label, isCreate, labelDirty, generateSlug]);
 
   async function handleSave() {
     setFormError(null);
@@ -125,7 +137,7 @@ export default function CategoryFormScreen({
       <Pressable onPress={onCancel} style={{ flex: 1 }}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            behavior={Platform.OS === "ios" ? "padding" : "padding"}
           >
             <Pressable onPress={() => {}}>
               <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>

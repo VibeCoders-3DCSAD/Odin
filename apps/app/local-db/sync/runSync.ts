@@ -165,6 +165,7 @@ async function pushQueue(
   let errors = 0;
 
   for (const result of results) {
+    console.log(`[sync] push result — ${result.operation_id.slice(0,8)}: ${result.status}${result.reason ? ` (${result.reason})` : ""}`);
     if (result.status === "applied" || result.status === "duplicate") {
       await db.runAsync(
         "UPDATE sync_queue SET status = 'synced' WHERE operation_id = ?",
