@@ -11,11 +11,6 @@ import dataExportRoutes from "./routes/data-export-requests.js";
 import accountDeletionRoutes from "./routes/account-deletion-requests.js";
 import onboardingRoutes from "./routes/onboarding.js";
 import profileRoutes from "./routes/profile.js";
-import categoryGroupRoutes from "./routes/category-groups.js";
-import categoryRoutes from "./routes/categories.js";
-import subcategoryRoutes from "./routes/subcategories.js";
-import categoryRestrictionRoutes from "./routes/category-restrictions.js";
-import subcategoryRestrictionRoutes from "./routes/subcategory-restrictions.js";
 import syncRoutes from "./routes/sync.js";
 
 const app = express();
@@ -57,11 +52,6 @@ app.use("/odin/api", dataExportRoutes);
 app.use("/odin/api", accountDeletionRoutes);
 app.use("/odin/api", onboardingRoutes);
 app.use("/odin/api", profileRoutes);
-app.use("/odin/api/category-groups", categoryGroupRoutes);
-app.use("/odin/api/categories", categoryRoutes);
-app.use("/odin/api/subcategories", subcategoryRoutes);
-app.use("/odin/api/category-restrictions", categoryRestrictionRoutes);
-app.use("/odin/api/subcategory-restrictions", subcategoryRestrictionRoutes);
 app.use("/odin/api/sync", syncRoutes);
 
 app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {

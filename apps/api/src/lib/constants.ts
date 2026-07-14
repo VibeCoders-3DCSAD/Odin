@@ -144,14 +144,4 @@ export const PROFILE_ERRORS = {
   reassess_failed: "Failed to request reassessment.",
 } as const;
 
-export const VALID_SUBCATEGORY_KINDS = [
-  "income",
-  "expense",
-  "transfer_adjustment",
-];
 
-export const VALID_RESTRICTION_LEVELS = [
-  "free",
-  "protected",
-  "locked",
-];
