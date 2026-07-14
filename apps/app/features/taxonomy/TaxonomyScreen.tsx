@@ -17,7 +17,6 @@ import {
   MagnifyingGlass,
   PencilSimple,
 } from "phosphor-react-native";
-import { getCategoryGroups } from "./api";
 import {
   listCategoryGroups,
   listCategories,
@@ -65,7 +64,6 @@ type CategoryGroup = {
 };
 
 type TaxonomyScreenProps = {
-  accessToken: string;
   userId: string;
   onBack: () => void;
 };
@@ -235,7 +233,7 @@ function assembleNested(
   return localGroups.map((g) => ({ ...g, categories: catsByGroup.get(g.id) }));
 }
 
-export default function TaxonomyScreen({ accessToken, userId, onBack }: TaxonomyScreenProps) {
+export default function TaxonomyScreen({ userId, onBack }: TaxonomyScreenProps) {
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -243,30 +241,19 @@ export default function TaxonomyScreen({ accessToken, userId, onBack }: Taxonomy
 
   const load = useCallback(async () => {
     setError(null);
-
-    const localGroups = await listCategoryGroups(userId);
-    if (localGroups.length > 0) {
-      const [localCats, localSubs] = await Promise.all([
+    try {
+      const [localGroups, localCats, localSubs] = await Promise.all([
+        listCategoryGroups(userId),
         listCategories(userId),
         listSubcategories(userId),
       ]);
       setGroups(assembleNested(localGroups, localCats, localSubs));
-      setLoading(false);
-    }
-
-    try {
-      const { response, body } = await getCategoryGroups(accessToken);
-      if (!response.ok) {
-        if (localGroups.length === 0) setError(body.message || "Failed to load categories");
-        return;
-      }
-      setGroups(body.payload?.category_groups ?? []);
     } catch {
-      if (localGroups.length === 0) setError("Network error. Check your connection and try again.");
+      setError("Failed to load categories.");
     } finally {
       setLoading(false);
     }
-  }, [accessToken, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (fetched.current) return;
