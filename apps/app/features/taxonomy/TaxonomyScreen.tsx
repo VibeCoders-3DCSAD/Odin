@@ -22,6 +22,7 @@ import {
   Plus,
   TrashSimple,
   ArrowLeft,
+  Star,
 } from "phosphor-react-native";
 import {
   listCategoryGroups,
@@ -130,11 +131,7 @@ function CategoryRow({
             </View>
           )}
           {hasFilipinoContext && (
-            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: palette.sun50 }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.sun700 }}>
-                FILIPINO CONTEXT
-              </Text>
-            </View>
+            <Star size={10} weight="fill" color={palette.sun700} />
           )}
         </View>
         <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
@@ -296,18 +293,7 @@ function SubcategoryRow({
             </View>
           )}
           {hasFilipinoContext && (
-            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: palette.sun50 }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.sun700 }}>
-                FILIPINO CONTEXT
-              </Text>
-            </View>
-          )}
-          {isSystem && (
-            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: "#FEF3C7" }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: "#92400E" }}>
-                SYSTEM
-              </Text>
-            </View>
+            <Star size={10} weight="fill" color={palette.sun700} />
           )}
         </View>
         <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
