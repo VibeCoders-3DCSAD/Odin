@@ -28,6 +28,7 @@ type PrivacySettingsScreenProps = {
   onBackToLogin?: () => void;
   onDeleted?: (scheduledDate: string) => void;
   onSubPageChange?: (showingSubPage: boolean) => void;
+  subPage?: string | null;
 };
 
 const MUTED = "#6B7A6F";
@@ -254,20 +255,25 @@ function SettingsSkeleton() {
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange, subPage: controlledSubPage }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [subPage, setSubPage] = useState<string | null>(null);
+  const [internalSubPage, setInternalSubPage] = useState<string | null>(null);
+  const subPage = controlledSubPage !== undefined ? controlledSubPage : internalSubPage;
+  const setSubPage = (next: string | null) => {
+    if (controlledSubPage !== undefined) {
+      onSubPageChange?.(next !== null);
+    } else {
+      setInternalSubPage(next);
+      onSubPageChange?.(next !== null);
+    }
+  };
   const [exported, setExported] = useState(false);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const fetched = useRef(false);
   const online = useConnectivityStore(state => state.online);
   const { showToast } = useToast();
-
-  useEffect(() => {
-    onSubPageChange?.(subPage !== null);
-  }, [subPage, onSubPageChange]);
 
   useEffect(() => {
     if (fetched.current) return;

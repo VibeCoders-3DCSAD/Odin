@@ -135,6 +135,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [queueCount, setQueueCount] = useState(0);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [privacySubPage, setPrivacySubPage] = useState<string | null>(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
@@ -338,12 +339,12 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             <AccountOffboardingScreen
               accessToken={accessToken}
               onBack={() => setShowDeleteAccount(false)}
-              onGoToExport={() => {}}
+              onGoToExport={() => { setShowDeleteAccount(false); setPrivacySubPage("export"); }}
               onDeleted={(date) => { setDeletionSuccessDate(date); setShowDeleteAccount(false); }}
             />
           ) : (
             <>
-          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={(showing) => { setSettingsSubPage(showing); if (!showing) setPrivacySubPage(null); }} subPage={privacySubPage} onDeleted={setDeletionSuccessDate} />
           {!settingsSubPage ? (
             <View>
               <Text
