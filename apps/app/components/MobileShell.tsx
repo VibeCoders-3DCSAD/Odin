@@ -228,12 +228,27 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     setSyncing(true);
     setSyncMessage(null);
     try {
+      const online = await isOnline();
+      if (!online) {
+        setSyncMessage("No internet connection");
+        setTimeout(() => setSyncMessage(null), 4000);
+        return;
+      }
       const result = await runSync(userId, deviceId, accessToken);
-      setSyncMessage(`Synced: ${result.pushed} pushed, ${result.pulled} pulled${result.errors > 0 ? `, ${result.errors} errors` : ""}`);
-      setTimeout(() => setSyncMessage(null), 4000);
-      setQueueCount(0);
+      if (result.errors > 0) {
+        setSyncMessage(`${result.errors} item(s) could not be synced`);
+        setTimeout(() => setSyncMessage(null), 4000);
+      }
+      const db = await initDatabase();
+      const row = await db.getFirstAsync<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+        userId,
+        deviceId,
+      );
+      setQueueCount(row?.cnt ?? 0);
     } catch {
-      setSyncMessage("Sync failed. Check your connection.");
+      setSyncMessage("Sync failed");
+      setTimeout(() => setSyncMessage(null), 4000);
     } finally {
       setSyncing(false);
     }
@@ -313,11 +328,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               {logoutError ? (
                 <View style={{ backgroundColor: "#FFF0F2", borderRadius: 14, padding: 14, marginBottom: 12 }}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
-                </View>
-              ) : null}
-              {syncMessage ? (
-                <View style={{ backgroundColor: "#EFFEF7", borderRadius: 14, padding: 14, marginBottom: 12 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#0B8A55" }}>{syncMessage}</Text>
                 </View>
               ) : null}
               <Pressable
