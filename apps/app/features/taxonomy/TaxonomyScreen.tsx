@@ -89,14 +89,12 @@ function CategoryRow({
   mutatingId,
   onEdit,
   onDelete,
-  onAddSubcategory,
   onNavigate,
 }: {
   category: Category;
   mutatingId: string | null;
   onEdit: (cat: Category) => void;
   onDelete: (cat: Category) => void;
-  onAddSubcategory: (cat: Category) => void;
   onNavigate: (cat: Category) => void;
 }) {
   const isSystem = category.is_system;
@@ -150,17 +148,7 @@ function CategoryRow({
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        {isSystem ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Add subcategory to ${category.label}`}
-            onPress={(e) => { onAddSubcategory(category); }}
-            hitSlop={8}
-            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
-          >
-            <Plus size={14} color={palette.aqua700} />
-          </Pressable>
-        ) : (
+        {!isSystem && (
           <>
             <Pressable
               accessibilityRole="button"
@@ -186,15 +174,6 @@ function CategoryRow({
                 <TrashSimple size={14} color={palette.error} />
               )}
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Add subcategory to ${category.label}`}
-              onPress={(e) => { onAddSubcategory(category); }}
-              hitSlop={8}
-              style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
-            >
-              <Plus size={14} color={palette.aqua700} />
-            </Pressable>
           </>
         )}
         <CaretRight size={14} weight="bold" color={palette.mut} style={{ marginLeft: 2 }} />
@@ -208,14 +187,12 @@ function GroupCard({
   mutatingId,
   onEdit,
   onDelete,
-  onAddSubcategory,
   onNavigate,
 }: {
   group: Group;
   mutatingId: string | null;
   onEdit: (cat: Category) => void;
   onDelete: (cat: Category) => void;
-  onAddSubcategory: (cat: Category) => void;
   onNavigate: (cat: Category) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -270,7 +247,6 @@ function GroupCard({
               mutatingId={mutatingId}
               onEdit={onEdit}
               onDelete={onDelete}
-              onAddSubcategory={onAddSubcategory}
               onNavigate={onNavigate}
             />
           ))}
@@ -490,14 +466,6 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
     );
   }
 
-  function openAddSubcategory(cat: Category) {
-    setSubcategoryFormMode("create");
-    setEditingSubcategory(undefined);
-    setViewingCategoryId(cat.id);
-    setViewingCategoryLabel(cat.label);
-    setSubcategoryFormVisible(true);
-  }
-
   function openSubcategoryEdit(sub: Subcategory) {
     setSubcategoryFormMode("edit");
     setEditingSubcategory(sub);
@@ -698,7 +666,6 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
               mutatingId={mutatingId}
               onEdit={openCategoryEdit}
               onDelete={handleCategoryDelete}
-              onAddSubcategory={openAddSubcategory}
               onNavigate={navigateToSubcategories}
             />
           ))
