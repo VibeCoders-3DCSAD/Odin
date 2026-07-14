@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 import type { EnqueueInput, SyncOperation } from "./types";
 
@@ -11,8 +12,14 @@ export class LocalDbError extends Error {
   }
 }
 
+let syncTrigger: (() => void) | null = null;
+
+export function setSyncTrigger(fn: (() => void) | null) {
+  syncTrigger = fn;
+}
+
 function generateOperationId(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 export async function enqueueOperation(
@@ -41,6 +48,10 @@ export async function enqueueOperation(
     createdAt,
   );
 
+  triggerSync(() => {
+    if (syncTrigger) syncTrigger();
+  });
+
   return {
     operation_id: operationId,
     user_id: input.userId,
@@ -57,3 +68,13 @@ export async function enqueueOperation(
     created_at: createdAt,
   };
 }
+
+function debounced(ms: number) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return (fn: () => void) => {
+    if (timer) return;
+    timer = setTimeout(() => { timer = null; fn(); }, ms);
+  };
+}
+
+const triggerSync = debounced(2000);

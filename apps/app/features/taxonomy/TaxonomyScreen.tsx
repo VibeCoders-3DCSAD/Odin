@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -16,11 +17,14 @@ import {
   CaretDown,
   MagnifyingGlass,
   PencilSimple,
+  Plus,
+  TrashSimple,
 } from "phosphor-react-native";
 import {
   listCategoryGroups,
   listCategories,
   listSubcategories,
+<<<<<<< HEAD
 } from "../../local-db/repositories/taxonomy";
 
 type Subcategory = {
@@ -65,6 +69,22 @@ type CategoryGroup = {
 
 type TaxonomyScreenProps = {
   userId: string;
+=======
+  deleteCategory,
+  type Category as RepoCategory,
+  type Subcategory as RepoSubcategory,
+} from "../../local-db/repositories/taxonomy";
+import type { CategoryGroup } from "./types";
+import CategoryFormScreen from "./CategoryFormScreen";
+
+interface CategoryWithSubs extends RepoCategory {
+  subcategories?: RepoSubcategory[];
+}
+
+type TaxonomyScreenProps = {
+  userId: string;
+  deviceId: string;
+>>>>>>> feat/vib-96-taxonomy-crud
   onBack: () => void;
 };
 
@@ -80,6 +100,8 @@ const palette = {
   aqua800: "#0B8A55",
   sun50: "#FFF8F0",
   sun700: "#C25E00",
+  brand: "#013220",
+  error: "#D9001F",
 } as const;
 
 const GROUP_ICONS: Record<string, React.ReactNode> = {
@@ -96,10 +118,19 @@ const GROUP_ICON_BG: Record<string, string> = {
   financial_allocation: palette.aqua50,
 };
 
-function CategoryRow({ category }: { category: Category }) {
-  const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected_default) ?? false;
+type CategoryRowProps = {
+  category: CategoryWithSubs;
+  mutatingId: string | null;
+  onEdit: (cat: CategoryWithSubs) => void;
+  onDelete: (cat: CategoryWithSubs) => void;
+};
+
+function CategoryRow({ category, mutatingId, onEdit, onDelete }: CategoryRowProps) {
+  const isUserOwned = !category.is_system;
+  const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected) ?? false;
   const hasFilipinoContext = category.is_filipino_context;
   const hasCustomLabel = !!category.short_label;
+  const isMutating = mutatingId === category.id;
 
   return (
     <View
@@ -144,18 +175,44 @@ function CategoryRow({ category }: { category: Category }) {
           </View>
         )}
       </View>
-      {hasProtectedDefault && (
-        <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: "#FEF3C7" }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: "#92400E" }}>
-            RESTRICTED
-          </Text>
+      {isUserOwned && (
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${category.label}`}
+            onPress={() => onEdit(category)}
+            disabled={isMutating}
+            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
+          >
+            <PencilSimple size={14} color={palette.aqua700} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Delete ${category.label}`}
+            onPress={() => onDelete(category)}
+            disabled={isMutating}
+            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
+          >
+            {isMutating ? (
+              <ActivityIndicator size="small" color={palette.error} />
+            ) : (
+              <TrashSimple size={14} color={palette.error} />
+            )}
+          </Pressable>
         </View>
       )}
     </View>
   );
 }
 
-function GroupCard({ group }: { group: CategoryGroup }) {
+type GroupCardProps = {
+  group: CategoryGroup;
+  mutatingId: string | null;
+  onEdit: (cat: CategoryWithSubs) => void;
+  onDelete: (cat: CategoryWithSubs) => void;
+};
+
+function GroupCard({ group, mutatingId, onEdit, onDelete }: GroupCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -202,7 +259,7 @@ function GroupCard({ group }: { group: CategoryGroup }) {
       {expanded && (
         <View style={{ paddingHorizontal: 14, paddingTop: 6, paddingBottom: 12 }}>
           {group.categories?.map((cat) => (
-            <CategoryRow key={cat.id} category={cat} />
+            <CategoryRow key={cat.id} category={cat} mutatingId={mutatingId} onEdit={onEdit} onDelete={onDelete} />
           ))}
         </View>
       )}
@@ -210,6 +267,7 @@ function GroupCard({ group }: { group: CategoryGroup }) {
   );
 }
 
+<<<<<<< HEAD
 function assembleNested(
   localGroups: { id: string; slug: string; label: string; short_label: string | null; description: string; sort_order: number; is_active: boolean }[],
   localCategories: { id: string; category_group_id: string; slug: string; label: string; short_label: string | null; description: string; is_system: boolean; is_filipino_context: boolean; sort_order: number; is_active: boolean }[],
@@ -243,34 +301,135 @@ export default function TaxonomyScreen({ userId, onBack }: TaxonomyScreenProps) 
     setError(null);
     try {
       const [localGroups, localCats, localSubs] = await Promise.all([
+=======
+export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScreenProps) {
+  const [groups, setGroups] = useState<CategoryGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [formVisible, setFormVisible] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingCategory, setEditingCategory] = useState<CategoryWithSubs | undefined>(undefined);
+  const [mutatingId, setMutatingId] = useState<string | null>(null);
+
+  const loadTaxonomy = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [categoryGroups, categories, subcategories] = await Promise.all([
+>>>>>>> feat/vib-96-taxonomy-crud
         listCategoryGroups(userId),
         listCategories(userId),
         listSubcategories(userId),
       ]);
+<<<<<<< HEAD
       setGroups(assembleNested(localGroups, localCats, localSubs));
     } catch {
       setError("Failed to load categories.");
+=======
+
+      const catMap = new Map<string, CategoryWithSubs>(
+        categories.map((c) => [c.id, { ...c, subcategories: undefined }]),
+      );
+      for (const sub of subcategories) {
+        if (sub.category_id) {
+          const cat = catMap.get(sub.category_id);
+          if (cat) {
+            if (!cat.subcategories) cat.subcategories = [];
+            cat.subcategories.push(sub);
+          }
+        }
+      }
+
+      const nested: CategoryGroup[] = categoryGroups.map((g) => ({
+        ...g,
+        categories: [...catMap.values()].filter((c) => c.category_group_id === g.id),
+      }));
+
+      setGroups(nested);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load categories");
+>>>>>>> feat/vib-96-taxonomy-crud
     } finally {
       setLoading(false);
     }
   }, [userId]);
 
   useEffect(() => {
+<<<<<<< HEAD
     if (fetched.current) return;
     fetched.current = true;
     load();
   }, [load]);
+=======
+    loadTaxonomy();
+  }, [loadTaxonomy]);
+
+  function openCreate() {
+    setFormMode("create");
+    setEditingCategory(undefined);
+    setFormVisible(true);
+  }
+
+  function openEdit(cat: CategoryWithSubs) {
+    setFormMode("edit");
+    setEditingCategory(cat);
+    setFormVisible(true);
+  }
+
+  function handleDelete(cat: CategoryWithSubs) {
+    Alert.alert(
+      `Delete "${cat.label}"?`,
+      "This category will be hidden. Existing transactions using it are not affected.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setMutatingId(cat.id);
+            try {
+              await deleteCategory(userId, deviceId, cat.id);
+              loadTaxonomy();
+            } catch (e) {
+              Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete category");
+            } finally {
+              setMutatingId(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleFormSaved() {
+    setFormVisible(false);
+    setEditingCategory(undefined);
+    loadTaxonomy();
+  }
+
+  function handleFormCancel() {
+    setFormVisible(false);
+    setEditingCategory(undefined);
+  }
+>>>>>>> feat/vib-96-taxonomy-crud
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* Header */}
-      <View style={{ paddingHorizontal: 22, paddingTop: 12 }}>
+      <View style={{ paddingHorizontal: 22, paddingTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
           Categories
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create category"
+          onPress={openCreate}
+          style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}
+        >
+          <Plus size={18} color="#fff" weight="bold" />
+        </Pressable>
       </View>
 
-      {/* Search bar */}
       <View style={{ paddingHorizontal: 22, paddingTop: 16 }}>
         <View
           style={{
@@ -295,7 +454,6 @@ export default function TaxonomyScreen({ userId, onBack }: TaxonomyScreenProps) 
         </View>
       </View>
 
-      {/* Content */}
       <View style={{ paddingHorizontal: 22, paddingTop: 16, gap: 12 }}>
         {loading ? (
           <ActivityIndicator color={palette.aqua600} style={{ marginTop: 40 }} />
@@ -303,7 +461,11 @@ export default function TaxonomyScreen({ userId, onBack }: TaxonomyScreenProps) 
           <View style={{ alignItems: "center", marginTop: 40, gap: 8 }}>
             <Text style={{ fontFamily: "Manrope", color: palette.mut, textAlign: "center" }}>{error}</Text>
             <Pressable
+<<<<<<< HEAD
               onPress={() => { fetched.current = false; load(); }}
+=======
+              onPress={loadTaxonomy}
+>>>>>>> feat/vib-96-taxonomy-crud
               style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: palette.aqua600 }}
             >
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#fff" }}>Retry</Text>
@@ -314,9 +476,28 @@ export default function TaxonomyScreen({ userId, onBack }: TaxonomyScreenProps) 
             <Text style={{ fontFamily: "Manrope", color: palette.mut }}>No categories yet</Text>
           </View>
         ) : (
-          groups.map((group) => <GroupCard key={group.id} group={group} />)
+          groups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              mutatingId={mutatingId}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+            />
+          ))
         )}
       </View>
+
+      <CategoryFormScreen
+        visible={formVisible}
+        mode={formMode}
+        category={editingCategory}
+        groups={groups}
+        userId={userId}
+        deviceId={deviceId}
+        onSaved={handleFormSaved}
+        onCancel={handleFormCancel}
+      />
     </ScrollView>
   );
 }

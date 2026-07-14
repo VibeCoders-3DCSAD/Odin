@@ -67,7 +67,9 @@ export async function runSync(
   if (!userId || !accessToken || !deviceId) {
     return { pushed: 0, pulled: 0, errors: 0 };
   }
-  if (syncRunning) return { pushed: 0, pulled: 0, errors: 0 };
+  if (syncRunning) {
+    return { pushed: 0, pulled: 0, errors: 0 };
+  }
 
   syncRunning = true;
   try {
@@ -77,7 +79,7 @@ export async function runSync(
 
     try {
       await ensureDeviceRegistered(db, userId, deviceId, accessToken);
-    } catch {
+    } catch (err) {
       return { pushed: 0, pulled: 0, errors: 0 };
     }
 
@@ -110,7 +112,10 @@ async function pushQueue(
     deviceId,
   );
 
-  if (rows.length === 0) return { pushed: 0, errors: 0 };
+  if (rows.length === 0) {
+    return { pushed: 0, errors: 0 };
+  }
+
 
   const operations = rows.map((r) => ({
     operation_id: r.operation_id,
@@ -181,11 +186,13 @@ async function pullAndApply(
         headers: { Authorization: `Bearer ${accessToken}` },
       },
     );
-  } catch {
+  } catch (err) {
     return { pulled: 0, cursors };
   }
 
-  if (!response.ok) return { pulled: 0, cursors };
+  if (!response.ok) {
+    return { pulled: 0, cursors };
+  }
 
   const body = await response.json();
   const payload = body?.payload as {
@@ -193,7 +200,9 @@ async function pullAndApply(
     changes: Record<string, Record<string, unknown>[]>;
   } | null;
 
-  if (!payload?.changes) return { pulled: 0, cursors: payload?.cursors ?? cursors };
+  if (!payload?.changes) {
+    return { pulled: 0, cursors: payload?.cursors ?? cursors };
+  }
 
   let pulled = 0;
 
@@ -306,7 +315,9 @@ async function ensureDeviceRegistered(
     "SELECT device_id FROM sync_state WHERE user_id = ?",
     userId,
   );
-  if (existing?.device_id === deviceId) return;
+  if (existing?.device_id === deviceId) {
+    return;
+  }
 
   const response = await fetchWithTimeout(`${API_BASE}/odin/api/sync/register-device`, {
     method: "POST",

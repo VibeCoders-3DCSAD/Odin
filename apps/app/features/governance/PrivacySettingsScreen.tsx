@@ -27,7 +27,8 @@ type PrivacySettingsScreenProps = {
   userId: string;
   onBackToLogin?: () => void;
   onDeleted?: (scheduledDate: string) => void;
-  onSubPageChange?: (showingSubPage: boolean) => void;
+  onSubPageChange?: (next: string | null) => void;
+  subPage?: string | null;
 };
 
 const MUTED = "#6B7A6F";
@@ -254,20 +255,25 @@ function SettingsSkeleton() {
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange, subPage: controlledSubPage }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [subPage, setSubPage] = useState<string | null>(null);
+  const [internalSubPage, setInternalSubPage] = useState<string | null>(null);
+  const subPage = controlledSubPage !== undefined ? controlledSubPage : internalSubPage;
+  const setSubPage = (next: string | null) => {
+    if (controlledSubPage !== undefined) {
+      onSubPageChange?.(next);
+    } else {
+      setInternalSubPage(next);
+      onSubPageChange?.(next);
+    }
+  };
   const [exported, setExported] = useState(false);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const fetched = useRef(false);
   const online = useConnectivityStore(state => state.online);
   const { showToast } = useToast();
-
-  useEffect(() => {
-    onSubPageChange?.(subPage !== null);
-  }, [subPage, onSubPageChange]);
 
   useEffect(() => {
     if (fetched.current) return;
@@ -427,14 +433,7 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
   }
 
   if (subPage === "delete-account") {
-    return (
-      <AccountOffboardingScreen
-        accessToken={accessToken}
-        onBack={() => setSubPage(null)}
-        onGoToExport={() => setSubPage("export")}
-        onDeleted={onDeleted}
-      />
-    );
+    return null;
   }
 
   return (
@@ -544,46 +543,6 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
         />
       </BorderedGroup>
 
-      <View style={{ height: 20 }} />
-
-      <Pressable
-        onPress={() => {
-          if (!online) { showToast("This action can only be done while online"); return; }
-          setSubPage("delete-account");
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Delete account"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          padding: 15,
-          borderRadius: 14,
-          borderWidth: 1.5,
-          borderColor: MONZA200,
-          backgroundColor: MONZA50,
-          opacity: online ? 1 : 0.45,
-        }}
-      >
-        <Trash size={18} color={MONZA600} />
-        <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "700", color: MONZA700 }}>
-          Delete account
-        </Text>
-        <CaretRight size={15} color={MONZA500} weight="bold" />
-      </Pressable>
-
-      <Text
-        style={{
-          fontSize: 10.5,
-          lineHeight: 15.75,
-          color: MUTED,
-          textAlign: "center",
-          marginTop: 14,
-          marginBottom: 8,
-        }}
-      >
-        Odin provides budgeting tools, not professional financial advice. Decisions are your own.
-      </Text>
     </View>
   );
 }

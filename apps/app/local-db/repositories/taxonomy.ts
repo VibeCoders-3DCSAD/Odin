@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
@@ -281,13 +282,22 @@ export async function createCategory(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const metadata = "{}";
 
   let result: { category: Category; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
+    const duplicate = await db.getFirstAsync<CategoryRow>(
+      "SELECT id FROM categories WHERE user_id = ? AND label = ? AND deleted = 0",
+      userId,
+      input.label,
+    );
+    if (duplicate) {
+      throw new LocalDbError("VALIDATION_ERROR", "A category with this label already exists");
+    }
+
     const groupRow = await db.getFirstAsync<CategoryGroupRow>(
       "SELECT id FROM category_groups WHERE user_id = ? AND id = ? AND deleted = 0",
       userId,
@@ -358,6 +368,16 @@ export async function updateCategory(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
+
+    if (input.label !== undefined && input.label !== current.label) {
+      const dup = await db.getFirstAsync<CategoryRow>(
+        "SELECT id FROM categories WHERE user_id = ? AND label = ? AND id != ? AND deleted = 0",
+        userId,
+        input.label,
+        id,
+      );
+      if (dup) throw new LocalDbError("VALIDATION_ERROR", "A category with this label already exists");
+    }
 
     const updates: string[] = [];
     const params: SQLite.SQLiteBindValue[] = [];
@@ -472,7 +492,7 @@ export async function createSubcategory(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const metadata = "{}";
 
