@@ -126,7 +126,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
   const online = useConnectivityStore(state => state.online);
   const { showToast } = useToast();
   const [settingsSubPage, setSettingsSubPage] = useState(false);
@@ -272,7 +271,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       return;
     }
     setIsLoggingOut(true);
-    setLogoutError(null);
 
     try {
       const db = await initDatabase();
@@ -285,7 +283,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       if (pending && pending.cnt > 0) {
         const online = await isOnline();
         if (!online) {
-          setLogoutError("You have unsynced changes. Connect to the internet and sync before logging out so your data is not lost.");
+          showToast("You have unsynced changes. Connect to the internet and sync before logging out.");
           setIsLoggingOut(false);
           return;
         }
@@ -299,7 +297,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         );
 
         if (stillPending && stillPending.cnt > 0) {
-          setLogoutError("Some changes could not be synced. Please try again before logging out.");
+          showToast("Some changes could not be synced. Please try again before logging out.");
           setIsLoggingOut(false);
           return;
         }
@@ -323,7 +321,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       onLoggedOut();
     } catch (error) {
       console.error("Logout request failed", error);
-      setLogoutError("Logout failed. Please check your connection and try again.");
+      showToast("Logout failed. Please check your connection and try again.");
       setIsLoggingOut(false);
     }
   }
@@ -337,13 +335,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
           {!settingsSubPage ? (
             <>
-              {logoutError ? (
-                <View style={{ backgroundColor: "#FFF0F2", borderRadius: 14, padding: 14, marginBottom: 12 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
-                </View>
-              ) : null}
-
-              <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9, marginTop: 12 }}>
+              <Text
+                style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9, marginTop: 12 }}>
                 Sync
               </Text>
               <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 24 }}>
