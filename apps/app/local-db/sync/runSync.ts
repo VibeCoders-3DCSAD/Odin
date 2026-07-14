@@ -173,19 +173,10 @@ async function pushQueue(
       );
       pushed++;
     } else {
-      const row = await db.getFirstAsync<{ entity: string; record_id: string; operation_type: string }>(
-        "SELECT entity, record_id, operation_type FROM sync_queue WHERE operation_id = ?",
-        result.operation_id,
-      );
-      if (row?.operation_type === "create" && row?.entity && row?.record_id) {
-        await db.runAsync(
-          `UPDATE "${row.entity}" SET deleted = 1, is_active = 0, updated_at = ? WHERE id = ?`,
-          new Date().toISOString(),
-          row.record_id,
-        );
-      }
       await db.runAsync(
-        "DELETE FROM sync_queue WHERE operation_id = ?",
+        `UPDATE sync_queue SET status = 'failed', attempts = attempts + 1,
+         last_error = ? WHERE operation_id = ?`,
+        result.reason ?? "unknown error",
         result.operation_id,
       );
       errors++;
