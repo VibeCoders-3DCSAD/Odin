@@ -345,7 +345,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             <>
           <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
           {!settingsSubPage ? (
-            <>
+            <View>
               <Text
                 style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
                 Sync
@@ -431,7 +431,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
               )}
               </Pressable>
-            </>
+            </View>
           ) : null}
           </>
         )}
