@@ -347,10 +347,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           {!settingsSubPage ? (
             <>
               <Text
-                style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9, marginTop: 12 }}>
+                style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
                 Sync
               </Text>
-              <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 24 }}>
+              <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 20 }}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={queueCount > 0 ? "Sync pending changes" : "Synced"}
