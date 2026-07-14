@@ -163,7 +163,25 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   useEffect(() => {
     if (!userId || !deviceId || !accessToken) return;
 
-    const checkAndSync = async () => {
+    const refreshQueueCount = async () => {
+      const db = await initDatabase();
+      const row = await db.getFirstAsync<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+        userId,
+        deviceId,
+      );
+      setQueueCount(row?.cnt ?? 0);
+    };
+
+    refreshQueueCount();
+    const poll = setInterval(refreshQueueCount, 5000);
+    return () => clearInterval(poll);
+  }, [userId, deviceId, accessToken]);
+
+  useEffect(() => {
+    if (!userId || !deviceId || !accessToken) return;
+
+    const autoSync = async () => {
       const online = await isOnline();
       if (!online) return;
       const db = await initDatabase();
@@ -179,8 +197,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       }
     };
 
-    checkAndSync();
-    const interval = setInterval(checkAndSync, 30000);
+    autoSync();
+    const interval = setInterval(autoSync, 30000);
     return () => clearInterval(interval);
   }, [userId, deviceId, accessToken]);
 
