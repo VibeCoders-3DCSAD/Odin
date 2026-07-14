@@ -340,6 +340,10 @@ function normalizePullRow(
       normalized[col] = (row[col] as string | undefined) ?? (row.updated_at as string) ?? now;
     } else if (col === "last_synced_at") {
       normalized[col] = (row[col] as string | undefined) ?? now;
+    } else if (col === "is_protected") {
+      const isProtectedDefault = (row.is_protected_default as boolean) === true;
+      const isProtected = (row.is_protected as boolean) === true;
+      normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
     } else if (col === "metadata") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
