@@ -141,7 +141,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const wasOnline = useRef(false);
 
   useEffect(() => {
-    console.log("[sync] MobileShell — userId:", !!userId, "deviceId:", !!deviceId, "accessToken:", !!accessToken);
     if (!userId || !deviceId || !accessToken) return;
 
     const sync = () => { runSync(userId, deviceId, accessToken).catch(() => {}); };
@@ -150,13 +149,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (!initialSyncDone.current) {
       initialSyncDone.current = true;
-      console.log("[sync] MobileShell — initial sync trigger");
       sync();
     }
 
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        console.log("[sync] MobileShell — app back to foreground, syncing");
         sync();
       }
     });
@@ -377,6 +374,19 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <CaretRight size={15} color={palette.mut} weight="bold" />
                 </Pressable>
               </View>
+
+              <Text
+                style={{
+                  fontSize: 10.5,
+                  lineHeight: 15.75,
+                  color: palette.mut,
+                  textAlign: "center",
+                  marginBottom: 16,
+                }}
+              >
+                Odin provides budgeting tools, not professional financial advice. Decisions are your own.
+              </Text>
+
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
