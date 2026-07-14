@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet, Cloud, ArrowsClockwise } from "phosphor-react-native";
+import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet, Cloud, ArrowsClockwise, CaretRight } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -339,14 +339,18 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
                 </View>
               ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={queueCount > 0 ? "Sync pending changes" : "Synced"}
-                disabled={syncing}
-                onPress={handleSync}
-                style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 16, marginBottom: 12 }}
-              >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+
+              <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
+                Sync
+              </Text>
+              <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 24 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={queueCount > 0 ? "Sync pending changes" : "Synced"}
+                  disabled={syncing}
+                  onPress={handleSync}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}
+                >
                   {syncing ? (
                     <ActivityIndicator size="small" color={palette.mut} />
                   ) : queueCount > 0 ? (
@@ -354,19 +358,19 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   ) : (
                     <Cloud size={18} color="#0B8A55" weight="bold" />
                   )}
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.ink }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13.5, fontWeight: "600", color: palette.ink }}>
                       {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} pending` : "Synced"}
                     </Text>
                     {syncMessage ? (
-                      <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 1 }}>
+                      <Text style={{ fontSize: 10.5, color: palette.mut, marginTop: 1 }}>
                         {syncMessage}
                       </Text>
                     ) : null}
                   </View>
-                </View>
-                <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
-              </Pressable>
+                  <CaretRight size={15} color={palette.mut} weight="bold" />
+                </Pressable>
+              </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
