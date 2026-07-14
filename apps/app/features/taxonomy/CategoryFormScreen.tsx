@@ -153,10 +153,6 @@ export default function CategoryFormScreen({
                     </Text>
                   )}
 
-                  {formError && (
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error }}>{formError}</Text>
-                  )}
-
                   {isCreate && (
                     <>
                       <View>
@@ -269,6 +265,10 @@ export default function CategoryFormScreen({
                       Filipino context (localized spending tags)
                     </Text>
                   </View>
+
+                  {formError && (
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error }}>{formError}</Text>
+                  )}
 
                   <View style={{ flexDirection: "row", gap: 10, paddingTop: 8 }}>
                     <Pressable
