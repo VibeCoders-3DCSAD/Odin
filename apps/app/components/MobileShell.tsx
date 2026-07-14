@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
+import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet, Cloud, ArrowsClockwise, CaretRight, Trash } from "phosphor-react-native";
+import AccountOffboardingScreen from "../features/governance/AccountOffboardingScreen";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,6 +22,7 @@ import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
+import { setSyncTrigger } from "../local-db/helpers";
 import { initDatabase } from "../local-db/client";
 import { isOnline } from "../lib/network";
 
@@ -125,36 +127,93 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
   const online = useConnectivityStore(state => state.online);
   const { showToast } = useToast();
   const [settingsSubPage, setSettingsSubPage] = useState(false);
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [privacySubPage, setPrivacySubPage] = useState<string | null>(null);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
   const initialSyncDone = useRef(false);
+  const wasOnline = useRef(false);
 
   useEffect(() => {
-    console.log("[sync] MobileShell — userId:", !!userId, "deviceId:", !!deviceId, "accessToken:", !!accessToken);
     if (!userId || !deviceId || !accessToken) return;
 
     const sync = () => { runSync(userId, deviceId, accessToken).catch(() => {}); };
 
+    setSyncTrigger(sync);
+
     if (!initialSyncDone.current) {
       initialSyncDone.current = true;
-      console.log("[sync] MobileShell — initial sync trigger");
       sync();
     }
 
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        console.log("[sync] MobileShell — app back to foreground, syncing");
         sync();
       }
     });
 
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      setSyncTrigger(null);
+    };
+  }, [userId, deviceId, accessToken]);
+
+  useEffect(() => {
+    if (!userId || !deviceId || !accessToken) return;
+
+    const refreshQueueCount = async () => {
+      const db = await initDatabase();
+      const row = await db.getFirstAsync<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+        userId,
+        deviceId,
+      );
+      setQueueCount(row?.cnt ?? 0);
+    };
+
+    const poll = async () => {
+      await refreshQueueCount();
+      const online = await isOnline();
+      if (online && !wasOnline.current) {
+        runSync(userId, deviceId, accessToken).catch(() => {});
+      }
+      wasOnline.current = online;
+    };
+
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, [userId, deviceId, accessToken]);
+
+  useEffect(() => {
+    if (!userId || !deviceId || !accessToken) return;
+
+    const autoSync = async () => {
+      const online = await isOnline();
+      if (!online) return;
+      const db = await initDatabase();
+      const row = await db.getFirstAsync<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+        userId,
+        deviceId,
+      );
+      const cnt = row?.cnt ?? 0;
+      setQueueCount(cnt);
+      if (cnt > 0) {
+        runSync(userId, deviceId, accessToken).catch(() => {});
+      }
+    };
+
+    const interval = setInterval(autoSync, 30000);
+    return () => clearInterval(interval);
   }, [userId, deviceId, accessToken]);
 
   function openDrawer() {
@@ -179,13 +238,42 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     closeDrawer();
   }
 
+  async function handleSync() {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const online = await isOnline();
+      if (!online) {
+        setSyncMessage("No internet connection");
+        setTimeout(() => setSyncMessage(null), 4000);
+        return;
+      }
+      const result = await runSync(userId, deviceId, accessToken);
+      if (result.errors > 0) {
+        setSyncMessage(`${result.errors} item(s) could not be synced`);
+        setTimeout(() => setSyncMessage(null), 4000);
+      }
+      const db = await initDatabase();
+      const row = await db.getFirstAsync<{ cnt: number }>(
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+        userId,
+        deviceId,
+      );
+      setQueueCount(row?.cnt ?? 0);
+    } catch {
+      setSyncMessage("Sync failed");
+      setTimeout(() => setSyncMessage(null), 4000);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function handleLogout() {
     if (!online) {
       showToast("This action can only be done while online");
       return;
     }
     setIsLoggingOut(true);
-    setLogoutError(null);
 
     try {
       const db = await initDatabase();
@@ -198,7 +286,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       if (pending && pending.cnt > 0) {
         const online = await isOnline();
         if (!online) {
-          setLogoutError("You have unsynced changes. Connect to the internet and sync before logging out so your data is not lost.");
+          showToast("You have unsynced changes. Connect to the internet and sync before logging out.");
           setIsLoggingOut(false);
           return;
         }
@@ -212,7 +300,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         );
 
         if (stillPending && stillPending.cnt > 0) {
-          setLogoutError("Some changes could not be synced. Please try again before logging out.");
+          showToast("Some changes could not be synced. Please try again before logging out.");
           setIsLoggingOut(false);
           return;
         }
@@ -236,7 +324,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       onLoggedOut();
     } catch (error) {
       console.error("Logout request failed", error);
-      setLogoutError("Logout failed. Please check your connection and try again.");
+      showToast("Logout failed. Please check your connection and try again.");
       setIsLoggingOut(false);
     }
   }
@@ -247,14 +335,90 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     if (currentPage === "settings") {
       return (
         <View className="gap-6">
-          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
-          {!settingsSubPage ? (
+          {showDeleteAccount ? (
+            <AccountOffboardingScreen
+              accessToken={accessToken}
+              onBack={() => setShowDeleteAccount(false)}
+              onGoToExport={() => { setShowDeleteAccount(false); setPrivacySubPage("export"); }}
+              onDeleted={(date) => { setDeletionSuccessDate(date); setShowDeleteAccount(false); }}
+            />
+          ) : (
             <>
-              {logoutError ? (
-                <View style={{ backgroundColor: "#FFF0F2", borderRadius: 14, padding: 14, marginBottom: 12 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
-                </View>
-              ) : null}
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={(next) => { setSettingsSubPage(next !== null); setPrivacySubPage(next); }} subPage={privacySubPage} onDeleted={setDeletionSuccessDate} />
+          {!settingsSubPage ? (
+            <View>
+              <Text
+                style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
+                Sync
+              </Text>
+              <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 20 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={queueCount > 0 ? "Sync pending changes" : "Synced"}
+                  disabled={syncing}
+                  onPress={handleSync}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}
+                >
+                  {syncing ? (
+                    <ActivityIndicator size="small" color={palette.mut} />
+                  ) : queueCount > 0 ? (
+                    <ArrowsClockwise size={18} color="#C25E00" weight="bold" />
+                  ) : (
+                    <Cloud size={18} color="#0B8A55" weight="bold" />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13.5, fontWeight: "600", color: palette.ink }}>
+                      {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} pending` : "Synced"}
+                    </Text>
+                    {syncMessage ? (
+                      <Text style={{ fontSize: 10.5, color: palette.mut, marginTop: 1 }}>
+                        {syncMessage}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <CaretRight size={15} color={palette.mut} weight="bold" />
+                </Pressable>
+              </View>
+
+              <Text
+                style={{
+                  fontSize: 10.5,
+                  lineHeight: 15.75,
+                  color: palette.mut,
+                  textAlign: "center",
+                  marginBottom: 16,
+                }}
+              >
+                Odin provides budgeting tools, not professional financial advice. Decisions are your own.
+              </Text>
+
+              <Pressable
+                onPress={() => {
+                  if (!online) { showToast("This action can only be done while online"); return; }
+                  setShowDeleteAccount(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Delete account"
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: 15,
+                  borderRadius: 14,
+                  borderWidth: 1.5,
+                  borderColor: "#FFCDD2",
+                  backgroundColor: "#FFF0F2",
+                  opacity: online ? 1 : 0.45,
+                  marginBottom: 16,
+                }}
+              >
+                <Trash size={18} color="#D9001F" />
+                <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "700", color: "#B71C1C" }}>
+                  Delete account
+                </Text>
+                <CaretRight size={15} color="#E53935" weight="bold" />
+              </Pressable>
+
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
@@ -268,14 +432,16 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
               )}
               </Pressable>
-            </>
+            </View>
           ) : null}
+          </>
+        )}
         </View>
       );
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
@@ -329,6 +495,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           </View>
           <View className="flex-row items-center gap-3">
             <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={queueCount > 0 ? `${queueCount} unsynced changes` : "Synced"}
+              onPress={handleSync}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <ActivityIndicator size="small" color={palette.mut} />
+              ) : queueCount > 0 ? (
+                <ArrowsClockwise size={20} color="#C25E00" weight="bold" />
+              ) : (
+                <Cloud size={20} color="#0B8A55" weight="bold" />
+              )}
+            </Pressable>
             <View className="relative">
               <MaterialCommunityIcons color={palette.ink2} name="bell-outline" size={20} />
               <View className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#ba1a1a] rounded-full" />

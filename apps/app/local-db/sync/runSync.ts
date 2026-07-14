@@ -65,32 +65,25 @@ export async function runSync(
   accessToken: string,
 ): Promise<SyncResult> {
   if (!userId || !accessToken || !deviceId) {
-    console.log("[sync] skipped — missing userId, accessToken, or deviceId");
     return { pushed: 0, pulled: 0, errors: 0 };
   }
   if (syncRunning) {
-    console.log("[sync] skipped — sync already running");
     return { pushed: 0, pulled: 0, errors: 0 };
   }
 
   syncRunning = true;
-  console.log("[sync] starting, userId:", userId, "deviceId:", deviceId.slice(0, 8));
   try {
     const db = await initDatabase();
 
     const cursors = await loadCursors(db, userId);
-    console.log("[sync] cursors loaded:", Object.keys(cursors).length, "tables tracked");
 
     try {
       await ensureDeviceRegistered(db, userId, deviceId, accessToken);
-      console.log("[sync] device registered");
     } catch (err) {
-      console.log("[sync] FAILED — device registration error:", err);
       return { pushed: 0, pulled: 0, errors: 0 };
     }
 
     const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken);
-    console.log("[sync] push done, pushed:", pushed, "errors:", errors);
 
     const { pulled, cursors: newCursors } = await pullAndApply(
       db,
@@ -98,10 +91,8 @@ export async function runSync(
       accessToken,
       cursors,
     );
-    console.log("[sync] pull done, pulled:", pulled);
 
     await saveCursors(db, userId, deviceId, newCursors);
-    console.log("[sync] complete:", { pushed, pulled, errors });
 
     return { pushed, pulled, errors };
   } finally {
@@ -122,11 +113,9 @@ async function pushQueue(
   );
 
   if (rows.length === 0) {
-    console.log("[sync] push — queue empty, skipping");
     return { pushed: 0, errors: 0 };
   }
 
-  console.log("[sync] push — queue has", rows.length, "pending ops");
 
   const operations = rows.map((r) => ({
     operation_id: r.operation_id,
@@ -149,12 +138,10 @@ async function pushQueue(
       body: JSON.stringify({ payload: { device_id: deviceId, operations } }),
     });
   } catch {
-    console.log("[sync] push — fetch failed (network/timeout)");
     return { pushed: 0, errors: rows.length };
   }
 
   if (!response.ok) {
-    console.log("[sync] push — server returned", response.status);
     return { pushed: 0, errors: rows.length };
   }
 
@@ -165,7 +152,6 @@ async function pushQueue(
   let errors = 0;
 
   for (const result of results) {
-    console.log(`[sync] push result — ${result.operation_id.slice(0,8)}: ${result.status}${result.reason ? ` (${result.reason})` : ""}`);
     if (result.status === "applied" || result.status === "duplicate") {
       await db.runAsync(
         "UPDATE sync_queue SET status = 'synced' WHERE operation_id = ?",
@@ -192,7 +178,6 @@ async function pullAndApply(
   accessToken: string,
   cursors: Record<string, TableCursor>,
 ): Promise<{ pulled: number; cursors: Record<string, TableCursor> }> {
-  console.log("[sync] pull — requesting with", Object.keys(cursors).length, "cursors");
   let response: Response;
   try {
     response = await fetchWithTimeout(
@@ -202,12 +187,10 @@ async function pullAndApply(
       },
     );
   } catch (err) {
-    console.log("[sync] pull — fetch failed (network/timeout):", err);
     return { pulled: 0, cursors };
   }
 
   if (!response.ok) {
-    console.log("[sync] pull — server returned", response.status);
     return { pulled: 0, cursors };
   }
 
@@ -218,7 +201,6 @@ async function pullAndApply(
   } | null;
 
   if (!payload?.changes) {
-    console.log("[sync] pull — server returned no changes payload");
     return { pulled: 0, cursors: payload?.cursors ?? cursors };
   }
 
@@ -227,7 +209,6 @@ async function pullAndApply(
   for (const table of SYNCED_TABLES) {
     const rows = payload.changes[table];
     if (!rows || rows.length === 0) continue;
-    console.log(`[sync] pull — ${table}: ${rows.length} rows`);
 
     for (const row of rows) {
       const normalized = normalizePullRow(table, row as Record<string, unknown>, userId);
@@ -335,11 +316,9 @@ async function ensureDeviceRegistered(
     userId,
   );
   if (existing?.device_id === deviceId) {
-    console.log("[sync] device already registered");
     return;
   }
 
-  console.log("[sync] registering device:", deviceId.slice(0, 8));
   const response = await fetchWithTimeout(`${API_BASE}/odin/api/sync/register-device`, {
     method: "POST",
     headers: {
@@ -350,10 +329,8 @@ async function ensureDeviceRegistered(
   });
 
   if (!response.ok) {
-    console.log("[sync] device registration FAILED — status:", response.status);
     throw new Error(`device registration failed: ${response.status}`);
   }
-  console.log("[sync] device registered successfully");
 }
 
 function normalizePullRow(

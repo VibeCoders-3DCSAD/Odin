@@ -96,9 +96,22 @@ export default function CategoryFormScreen({
 
   async function handleSave() {
     setFormError(null);
+<<<<<<< HEAD
     if (!label.trim()) { setFormError("Label is required"); return; }
     if (!description.trim()) { setFormError("Description is required"); return; }
     if (isCreate && !selectedGroupId) { setFormError("Category group is required"); return; }
+=======
+    if (!label.trim() || !description.trim()) {
+      setFormError("All fields with (*) are required");
+      return;
+    }
+    if (isCreate) {
+      if (!selectedGroupId || !slug.trim()) {
+        setFormError("All fields with (*) are required");
+        return;
+      }
+    }
+>>>>>>> origin/feat/vib-96-taxonomy-sync
 
     setSaving(true);
     try {
@@ -148,14 +161,10 @@ export default function CategoryFormScreen({
                     </Text>
                   )}
 
-                  {formError && (
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error }}>{formError}</Text>
-                  )}
-
                   {isCreate && (
                     <>
                       <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>CATEGORY GROUP</Text>
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>CATEGORY GROUP <Text style={{color: palette.error}}>*</Text></Text>
                         <View style={{ gap: 6 }}>
                           {groups?.map((g) => (
                             <Pressable
@@ -177,12 +186,30 @@ export default function CategoryFormScreen({
                           ))}
                         </View>
                       </View>
+<<<<<<< HEAD
+=======
+
+                      <View>
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>SLUG <Text style={{color: palette.error}}>*</Text></Text>
+                        <TextInput
+                          value={slug}
+                          onChangeText={setSlug}
+                          placeholder="e.g. my-category"
+                          placeholderTextColor={palette.mut}
+                          style={{
+                            height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
+                            paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink,
+                            backgroundColor: palette.card,
+                          }}
+                        />
+                      </View>
+>>>>>>> origin/feat/vib-96-taxonomy-sync
                     </>
                   )}
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-                      LABEL
+                      LABEL <Text style={{color: palette.error}}>*</Text>
                     </Text>
                     <TextInput
                       value={label}
@@ -216,7 +243,7 @@ export default function CategoryFormScreen({
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-                      DESCRIPTION
+                      DESCRIPTION <Text style={{color: palette.error}}>*</Text>
                     </Text>
                     <TextInput
                       value={description}
@@ -255,6 +282,10 @@ export default function CategoryFormScreen({
                       Filipino context (localized spending tags)
                     </Text>
                   </View>
+
+                  {formError && (
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error }}>{formError}</Text>
+                  )}
 
                   <View style={{ flexDirection: "row", gap: 10, paddingTop: 8 }}>
                     <Pressable

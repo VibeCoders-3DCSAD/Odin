@@ -1,4 +1,4 @@
-import NetInfo from "@react-native-community/netinfo";
+import * as Network from "expo-network";
 import { create } from "zustand";
 
 interface ConnectivityState {
@@ -9,16 +9,16 @@ export const useConnectivityStore = create<ConnectivityState>(() => ({
   online: true,
 }));
 
-let unsubscribe: (() => void) | null = null;
+let subscription: ReturnType<typeof Network.addNetworkStateListener> | null = null;
 
 export function startConnectivityPolling() {
-  if (unsubscribe) return;
-  unsubscribe = NetInfo.addEventListener(state => {
-    useConnectivityStore.setState({ online: state.isConnected !== false && state.isInternetReachable !== false });
+  if (subscription) return;
+  subscription = Network.addNetworkStateListener(({ isConnected, isInternetReachable }) => {
+    useConnectivityStore.setState({ online: isConnected !== false && isInternetReachable !== false });
   });
 }
 
 export function stopConnectivityPolling() {
-  unsubscribe?.();
-  unsubscribe = null;
+  subscription?.remove();
+  subscription = null;
 }
