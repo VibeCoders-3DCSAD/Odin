@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet, Cloud, ArrowsClockwise, CaretRight } from "phosphor-react-native";
+import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet, Cloud, ArrowsClockwise, CaretRight, Trash } from "phosphor-react-native";
+import AccountOffboardingScreen from "../features/governance/AccountOffboardingScreen";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -133,6 +134,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [queueCount, setQueueCount] = useState(0);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
@@ -332,6 +334,15 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     if (currentPage === "settings") {
       return (
         <View className="gap-6">
+          {showDeleteAccount ? (
+            <AccountOffboardingScreen
+              accessToken={accessToken}
+              onBack={() => setShowDeleteAccount(false)}
+              onGoToExport={() => {}}
+              onDeleted={(date) => { setDeletionSuccessDate(date); setShowDeleteAccount(false); }}
+            />
+          ) : (
+            <>
           <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
           {!settingsSubPage ? (
             <>
@@ -381,6 +392,33 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               </Text>
 
               <Pressable
+                onPress={() => {
+                  if (!online) { showToast("This action can only be done while online"); return; }
+                  setShowDeleteAccount(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Delete account"
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: 15,
+                  borderRadius: 14,
+                  borderWidth: 1.5,
+                  borderColor: "#FFCDD2",
+                  backgroundColor: "#FFF0F2",
+                  opacity: online ? 1 : 0.45,
+                  marginBottom: 16,
+                }}
+              >
+                <Trash size={18} color="#D9001F" />
+                <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "700", color: "#B71C1C" }}>
+                  Delete account
+                </Text>
+                <CaretRight size={15} color="#E53935" weight="bold" />
+              </Pressable>
+
+              <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
                 disabled={isLoggingOut}
@@ -395,6 +433,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               </Pressable>
             </>
           ) : null}
+          </>
+        )}
         </View>
       );
     }

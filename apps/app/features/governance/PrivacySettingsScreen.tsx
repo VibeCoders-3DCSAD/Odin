@@ -427,14 +427,7 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
   }
 
   if (subPage === "delete-account") {
-    return (
-      <AccountOffboardingScreen
-        accessToken={accessToken}
-        onBack={() => setSubPage(null)}
-        onGoToExport={() => setSubPage("export")}
-        onDeleted={onDeleted}
-      />
-    );
+    return null;
   }
 
   return (
@@ -543,34 +536,6 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           }
         />
       </BorderedGroup>
-
-      <View style={{ height: 20 }} />
-
-      <Pressable
-        onPress={() => {
-          if (!online) { showToast("This action can only be done while online"); return; }
-          setSubPage("delete-account");
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Delete account"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          padding: 15,
-          borderRadius: 14,
-          borderWidth: 1.5,
-          borderColor: MONZA200,
-          backgroundColor: MONZA50,
-          opacity: online ? 1 : 0.45,
-        }}
-      >
-        <Trash size={18} color={MONZA600} />
-        <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "700", color: MONZA700 }}>
-          Delete account
-        </Text>
-        <CaretRight size={15} color={MONZA500} weight="bold" />
-      </Pressable>
 
     </View>
   );
