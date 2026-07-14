@@ -137,6 +137,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
   const initialSyncDone = useRef(false);
+  const wasOnline = useRef(false);
 
   useEffect(() => {
     console.log("[sync] MobileShell — userId:", !!userId, "deviceId:", !!deviceId, "accessToken:", !!accessToken);
@@ -173,9 +174,18 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       setQueueCount(row?.cnt ?? 0);
     };
 
-    refreshQueueCount();
-    const poll = setInterval(refreshQueueCount, 5000);
-    return () => clearInterval(poll);
+    const poll = async () => {
+      await refreshQueueCount();
+      const online = await isOnline();
+      if (online && !wasOnline.current) {
+        runSync(userId, deviceId, accessToken).catch(() => {});
+      }
+      wasOnline.current = online;
+    };
+
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
   }, [userId, deviceId, accessToken]);
 
   useEffect(() => {
@@ -197,7 +207,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       }
     };
 
-    autoSync();
     const interval = setInterval(autoSync, 30000);
     return () => clearInterval(interval);
   }, [userId, deviceId, accessToken]);
