@@ -27,7 +27,7 @@ type PrivacySettingsScreenProps = {
   userId: string;
   onBackToLogin?: () => void;
   onDeleted?: (scheduledDate: string) => void;
-  onSubPageChange?: (showingSubPage: boolean) => void;
+  onSubPageChange?: (next: string | null) => void;
   subPage?: string | null;
 };
 
@@ -263,10 +263,10 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
   const subPage = controlledSubPage !== undefined ? controlledSubPage : internalSubPage;
   const setSubPage = (next: string | null) => {
     if (controlledSubPage !== undefined) {
-      onSubPageChange?.(next !== null);
+      onSubPageChange?.(next);
     } else {
       setInternalSubPage(next);
-      onSubPageChange?.(next !== null);
+      onSubPageChange?.(next);
     }
   };
   const [exported, setExported] = useState(false);

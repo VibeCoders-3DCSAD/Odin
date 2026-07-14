@@ -344,7 +344,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             />
           ) : (
             <>
-          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={(showing) => { setSettingsSubPage(showing); if (!showing) setPrivacySubPage(null); }} subPage={privacySubPage} onDeleted={setDeletionSuccessDate} />
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={(next) => { setSettingsSubPage(next !== null); setPrivacySubPage(next); }} subPage={privacySubPage} onDeleted={setDeletionSuccessDate} />
           {!settingsSubPage ? (
             <View>
               <Text
