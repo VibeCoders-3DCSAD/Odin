@@ -21,6 +21,7 @@ import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
+import { setSyncTrigger } from "../local-db/helpers";
 import { initDatabase } from "../local-db/client";
 import { isOnline } from "../lib/network";
 
@@ -145,6 +146,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     const sync = () => { runSync(userId, deviceId, accessToken).catch(() => {}); };
 
+    setSyncTrigger(sync);
+
     if (!initialSyncDone.current) {
       initialSyncDone.current = true;
       console.log("[sync] MobileShell — initial sync trigger");
@@ -158,7 +161,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       }
     });
 
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      setSyncTrigger(null);
+    };
   }, [userId, deviceId, accessToken]);
 
   useEffect(() => {
@@ -340,7 +346,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 </View>
               ) : null}
 
-              <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
+              <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9, marginTop: 12 }}>
                 Sync
               </Text>
               <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 24 }}>
