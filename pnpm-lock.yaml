@@ -87,6 +87,9 @@ importers:
       expo-linking:
         specifier: 8.0.12
         version: 8.0.12(expo@55.0.26)(react-native@0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0))(react@19.2.0)
+      expo-network:
+        specifier: ~55.0.15
+        version: 55.0.15(expo@55.0.26)(react@19.2.0)
       expo-secure-store:
         specifier: ^55.0.15
         version: 55.0.15(expo@55.0.26)
@@ -3015,6 +3018,12 @@ packages:
     peerDependenciesMeta:
       react-native-worklets:
         optional: true
+
+  expo-network@55.0.15:
+    resolution: {integrity: sha512-7uo0r34bWwJ9M+YzImYM95G8yFEvXZx51MAaTV/F8u7dbEA/Q9Z4cFvdNnr9IVK9vQncXbK0u1tr1hMIBtNU0A==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
 
   expo-router@6.0.23:
     resolution: {integrity: sha512-qCxVAiCrCyu0npky6azEZ6dJDMt77OmCzEbpF6RbUTlfkaCA417LvY14SBkk0xyGruSxy/7pvJOI6tuThaUVCA==}
@@ -8957,6 +8966,11 @@ snapshots:
       react-native: 0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0)
     optionalDependencies:
       react-native-worklets: 0.9.2(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(react-native@0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0))(react@19.2.0)
+
+  expo-network@55.0.15(expo@55.0.26)(react@19.2.0):
+    dependencies:
+      expo: 55.0.26(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-dom@19.2.0(react@19.2.0))(react-native-worklets@0.9.2(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(react-native@0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0))(react@19.2.0)(typescript@5.9.2)
+      react: 19.2.0
 
   expo-router@6.0.23(055e15a078ec3feb1cebe4abdf2eb4db):
     dependencies:

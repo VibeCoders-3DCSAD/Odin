@@ -133,6 +133,7 @@ export type CreateSubcategoryInput = {
 
 export type UpdateSubcategoryInput = {
   label?: string;
+  slug?: string;
   short_label?: string | null;
   description?: string;
   is_filipino_context?: boolean;
