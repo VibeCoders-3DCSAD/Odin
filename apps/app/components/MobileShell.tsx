@@ -270,7 +270,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen accessToken={accessToken} userId={userId} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];

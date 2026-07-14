@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -18,10 +18,55 @@ import {
   PencilSimple,
 } from "phosphor-react-native";
 import { getCategoryGroups } from "./api";
-import type { CategoryGroup, Category } from "./types";
+import {
+  listCategoryGroups,
+  listCategories,
+  listSubcategories,
+} from "../../local-db/repositories/taxonomy";
+
+type Subcategory = {
+  id: string;
+  category_id: string | null;
+  slug: string;
+  kind: "income" | "expense" | "transfer_adjustment";
+  label: string;
+  short_label: string | null;
+  description: string;
+  is_system: boolean;
+  is_filipino_context: boolean;
+  is_protected_default: boolean;
+  sort_order: number;
+  is_active: boolean;
+};
+
+type Category = {
+  id: string;
+  category_group_id: string;
+  slug: string;
+  label: string;
+  short_label: string | null;
+  description: string;
+  is_system: boolean;
+  is_filipino_context: boolean;
+  sort_order: number;
+  is_active: boolean;
+  subcategories?: Subcategory[];
+};
+
+type CategoryGroup = {
+  id: string;
+  slug: string;
+  label: string;
+  short_label: string | null;
+  description: string;
+  sort_order: number;
+  is_active: boolean;
+  categories?: Category[];
+};
 
 type TaxonomyScreenProps = {
   accessToken: string;
+  userId: string;
   onBack: () => void;
 };
 
@@ -167,31 +212,67 @@ function GroupCard({ group }: { group: CategoryGroup }) {
   );
 }
 
-export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenProps) {
+function assembleNested(
+  localGroups: { id: string; slug: string; label: string; short_label: string | null; description: string; sort_order: number; is_active: boolean }[],
+  localCategories: { id: string; category_group_id: string; slug: string; label: string; short_label: string | null; description: string; is_system: boolean; is_filipino_context: boolean; sort_order: number; is_active: boolean }[],
+  localSubcategories: { id: string; category_id: string | null; slug: string; kind: "income" | "expense" | "transfer_adjustment"; label: string; short_label: string | null; description: string; is_system: boolean; is_filipino_context: boolean; is_protected: boolean; sort_order: number; is_active: boolean }[],
+): CategoryGroup[] {
+  const subsByCat = new Map<string, Subcategory[]>();
+  for (const s of localSubcategories) {
+    if (!s.category_id) continue;
+    const arr = subsByCat.get(s.category_id) ?? [];
+    arr.push({ ...s, is_protected_default: s.is_protected });
+    subsByCat.set(s.category_id, arr);
+  }
+
+  const catsByGroup = new Map<string, Category[]>();
+  for (const c of localCategories) {
+    const arr = catsByGroup.get(c.category_group_id) ?? [];
+    arr.push({ ...c, subcategories: subsByCat.get(c.id) });
+    catsByGroup.set(c.category_group_id, arr);
+  }
+
+  return localGroups.map((g) => ({ ...g, categories: catsByGroup.get(g.id) }));
+}
+
+export default function TaxonomyScreen({ accessToken, userId, onBack }: TaxonomyScreenProps) {
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetched = useRef(false);
 
-  const fetchGroups = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
     setError(null);
+
+    const localGroups = await listCategoryGroups(userId);
+    if (localGroups.length > 0) {
+      const [localCats, localSubs] = await Promise.all([
+        listCategories(userId),
+        listSubcategories(userId),
+      ]);
+      setGroups(assembleNested(localGroups, localCats, localSubs));
+      setLoading(false);
+    }
+
     try {
       const { response, body } = await getCategoryGroups(accessToken);
       if (!response.ok) {
-        setError(body.message || "Failed to load categories");
+        if (localGroups.length === 0) setError(body.message || "Failed to load categories");
         return;
       }
       setGroups(body.payload?.category_groups ?? []);
     } catch {
-      setError("Network error. Check your connection and try again.");
+      if (localGroups.length === 0) setError("Network error. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, userId]);
 
   useEffect(() => {
-    fetchGroups();
-  }, [fetchGroups]);
+    if (fetched.current) return;
+    fetched.current = true;
+    load();
+  }, [load]);
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -235,7 +316,7 @@ export default function TaxonomyScreen({ accessToken, onBack }: TaxonomyScreenPr
           <View style={{ alignItems: "center", marginTop: 40, gap: 8 }}>
             <Text style={{ fontFamily: "Manrope", color: palette.mut, textAlign: "center" }}>{error}</Text>
             <Pressable
-              onPress={fetchGroups}
+              onPress={() => { fetched.current = false; load(); }}
               style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: palette.aqua600 }}
             >
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#fff" }}>Retry</Text>
