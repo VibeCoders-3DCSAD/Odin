@@ -98,11 +98,15 @@ export default function CategoryFormScreen({
 
   async function handleSave() {
     setFormError(null);
-    if (!label.trim()) { setFormError("Label is required"); return; }
-    if (!description.trim()) { setFormError("Description is required"); return; }
+    if (!label.trim() || !description.trim()) {
+      setFormError("All fields with (*) are required");
+      return;
+    }
     if (isCreate) {
-      if (!selectedGroupId) { setFormError("Category group is required"); return; }
-      if (!slug.trim()) { setFormError("Slug is required"); return; }
+      if (!selectedGroupId || !slug.trim()) {
+        setFormError("All fields with (*) are required");
+        return;
+      }
     }
 
     setSaving(true);
