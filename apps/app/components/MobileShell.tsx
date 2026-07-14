@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
+import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet, Cloud, ArrowsClockwise } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -132,6 +132,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
@@ -162,7 +163,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   useEffect(() => {
     if (!userId || !deviceId || !accessToken) return;
 
-    const autoSync = async () => {
+    const checkAndSync = async () => {
       const online = await isOnline();
       if (!online) return;
       const db = await initDatabase();
@@ -171,12 +172,15 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         userId,
         deviceId,
       );
-      if (row && row.cnt > 0) {
+      const cnt = row?.cnt ?? 0;
+      setQueueCount(cnt);
+      if (cnt > 0) {
         runSync(userId, deviceId, accessToken).catch(() => {});
       }
     };
 
-    const interval = setInterval(autoSync, 30000);
+    checkAndSync();
+    const interval = setInterval(checkAndSync, 30000);
     return () => clearInterval(interval);
   }, [userId, deviceId, accessToken]);
 
@@ -209,6 +213,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       const result = await runSync(userId, deviceId, accessToken);
       setSyncMessage(`Synced: ${result.pushed} pushed, ${result.pulled} pulled${result.errors > 0 ? `, ${result.errors} errors` : ""}`);
       setTimeout(() => setSyncMessage(null), 4000);
+      setQueueCount(0);
     } catch {
       setSyncMessage("Sync failed. Check your connection.");
     } finally {
@@ -299,19 +304,31 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               ) : null}
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Sync now"
+                accessibilityLabel={queueCount > 0 ? "Sync pending changes" : "Synced"}
                 disabled={syncing}
                 onPress={handleSync}
-                className={`min-h-[54px] rounded-[14px] border border-[#08B16A] bg-[#EFFEF7] items-center justify-center mb-3 ${syncing ? "opacity-50" : "active:opacity-90"}`}
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 16, marginBottom: 12 }}
               >
-                {syncing ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <ActivityIndicator color={palette.success} />
-                    <Text className="text-[#0B8A55] text-base font-bold">Syncing...</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  {syncing ? (
+                    <ActivityIndicator size="small" color={palette.mut} />
+                  ) : queueCount > 0 ? (
+                    <ArrowsClockwise size={18} color="#C25E00" weight="bold" />
+                  ) : (
+                    <Cloud size={18} color="#0B8A55" weight="bold" />
+                  )}
+                  <View>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.ink }}>
+                      {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} pending` : "Synced"}
+                    </Text>
+                    {syncMessage ? (
+                      <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 1 }}>
+                        {syncMessage}
+                      </Text>
+                    ) : null}
                   </View>
-                ) : (
-                  <Text className="text-[#0B8A55] text-base font-bold">Sync now</Text>
-                )}
+                </View>
+                <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -333,7 +350,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
@@ -387,6 +404,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           </View>
           <View className="flex-row items-center gap-3">
             <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={queueCount > 0 ? `${queueCount} unsynced changes` : "Synced"}
+              onPress={handleSync}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <ActivityIndicator size="small" color={palette.mut} />
+              ) : queueCount > 0 ? (
+                <ArrowsClockwise size={20} color="#C25E00" weight="bold" />
+              ) : (
+                <Cloud size={20} color="#0B8A55" weight="bold" />
+              )}
+            </Pressable>
             <View className="relative">
               <MaterialCommunityIcons color={palette.ink2} name="bell-outline" size={20} />
               <View className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#ba1a1a] rounded-full" />

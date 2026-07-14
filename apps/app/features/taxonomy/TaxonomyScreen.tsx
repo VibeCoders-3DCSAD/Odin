@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,8 +19,6 @@ import {
   PencilSimple,
   Plus,
   TrashSimple,
-  Cloud,
-  ArrowsClockwise,
 } from "phosphor-react-native";
 import {
   listCategoryGroups,
@@ -30,8 +28,6 @@ import {
   type Category as RepoCategory,
   type Subcategory as RepoSubcategory,
 } from "../../local-db/repositories/taxonomy";
-import { runSync } from "../../local-db/sync/runSync";
-import { initDatabase } from "../../local-db/client";
 import type { CategoryGroup } from "./types";
 import CategoryFormScreen from "./CategoryFormScreen";
 
@@ -42,7 +38,6 @@ interface CategoryWithSubs extends RepoCategory {
 type TaxonomyScreenProps = {
   userId: string;
   deviceId: string;
-  accessToken: string;
   onBack: () => void;
 };
 
@@ -225,7 +220,7 @@ function GroupCard({ group, mutatingId, onEdit, onDelete }: GroupCardProps) {
   );
 }
 
-export default function TaxonomyScreen({ userId, deviceId, accessToken, onBack }: TaxonomyScreenProps) {
+export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScreenProps) {
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -233,27 +228,6 @@ export default function TaxonomyScreen({ userId, deviceId, accessToken, onBack }
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingCategory, setEditingCategory] = useState<CategoryWithSubs | undefined>(undefined);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
-  const [queueCount, setQueueCount] = useState(0);
-  const [syncing, setSyncing] = useState(false);
-  const queueTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const checkQueue = useCallback(async () => {
-    try {
-      const db = await initDatabase();
-      const row = await db.getFirstAsync<{ cnt: number }>(
-        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
-        userId,
-        deviceId,
-      );
-      setQueueCount(row?.cnt ?? 0);
-    } catch {}
-  }, [userId, deviceId]);
-
-  useEffect(() => {
-    checkQueue();
-    queueTimer.current = setInterval(checkQueue, 5000);
-    return () => { if (queueTimer.current) clearInterval(queueTimer.current); };
-  }, [checkQueue]);
 
   const loadTaxonomy = useCallback(async () => {
     if (!userId) return;
@@ -294,17 +268,7 @@ export default function TaxonomyScreen({ userId, deviceId, accessToken, onBack }
 
   useEffect(() => {
     loadTaxonomy();
-    checkQueue();
-  }, [loadTaxonomy, checkQueue]);
-
-  async function handleSync() {
-    setSyncing(true);
-    try {
-      await runSync(userId, deviceId, accessToken);
-      checkQueue();
-    } catch {}
-    setSyncing(false);
-  }
+  }, [loadTaxonomy]);
 
   function openCreate() {
     setFormMode("create");
@@ -332,7 +296,6 @@ export default function TaxonomyScreen({ userId, deviceId, accessToken, onBack }
             try {
               await deleteCategory(userId, deviceId, cat.id);
               loadTaxonomy();
-              checkQueue();
             } catch (e) {
               Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete category");
             } finally {
@@ -348,7 +311,6 @@ export default function TaxonomyScreen({ userId, deviceId, accessToken, onBack }
     setFormVisible(false);
     setEditingCategory(undefined);
     loadTaxonomy();
-    checkQueue();
   }
 
   function handleFormCancel() {
@@ -362,31 +324,14 @@ export default function TaxonomyScreen({ userId, deviceId, accessToken, onBack }
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
           Categories
         </Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={queueCount > 0 ? `${queueCount} unsynced changes` : "Synced"}
-            onPress={handleSync}
-            disabled={syncing}
-            style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: queueCount > 0 ? palette.sun50 : palette.aqua50, alignItems: "center", justifyContent: "center" }}
-          >
-            {syncing ? (
-              <ActivityIndicator size="small" color={palette.mut} />
-            ) : queueCount > 0 ? (
-              <ArrowsClockwise size={18} color={palette.sun700} weight="bold" />
-            ) : (
-              <Cloud size={18} color={palette.aqua700} weight="bold" />
-            )}
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Create category"
-            onPress={openCreate}
-            style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}
-          >
-            <Plus size={18} color="#fff" weight="bold" />
-          </Pressable>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create category"
+          onPress={openCreate}
+          style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}
+        >
+          <Plus size={18} color="#fff" weight="bold" />
+        </Pressable>
       </View>
 
       <View style={{ paddingHorizontal: 22, paddingTop: 16 }}>
