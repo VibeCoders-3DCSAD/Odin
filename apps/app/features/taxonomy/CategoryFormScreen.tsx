@@ -156,7 +156,7 @@ export default function CategoryFormScreen({
                   {isCreate && (
                     <>
                       <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>CATEGORY GROUP</Text>
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>CATEGORY GROUP <Text style={{color: palette.error}}>*</Text></Text>
                         <View style={{ gap: 6 }}>
                           {groups?.map((g) => (
                             <Pressable
@@ -177,7 +177,7 @@ export default function CategoryFormScreen({
                       </View>
 
                       <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>SLUG</Text>
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>SLUG <Text style={{color: palette.error}}>*</Text></Text>
                         <TextInput
                           value={slug}
                           onChangeText={setSlug}
@@ -195,7 +195,7 @@ export default function CategoryFormScreen({
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-                      LABEL
+                      LABEL <Text style={{color: palette.error}}>*</Text>
                     </Text>
                     <TextInput
                       value={label}
@@ -229,7 +229,7 @@ export default function CategoryFormScreen({
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-                      DESCRIPTION
+                      DESCRIPTION <Text style={{color: palette.error}}>*</Text>
                     </Text>
                     <TextInput
                       value={description}
