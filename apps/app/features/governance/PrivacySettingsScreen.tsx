@@ -572,21 +572,6 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
         <CaretRight size={15} color={MONZA500} weight="bold" />
       </Pressable>
 
-      <View style={{ alignItems: "center", justifyContent: "center", marginTop: 14 }}>
-        {saving ? (
-          <ActivityIndicator color={MUTED} size="small" />
-        ) : saved ? (
-          <Text style={{ fontSize: 10.5, color: AQUA600, fontWeight: "600" }}>
-            Settings saved
-          </Text>
-        ) : null}
-        {error ? (
-          <Text style={{ fontSize: 10.5, color: MONZA600, textAlign: "center" }}>
-            {error}
-          </Text>
-        ) : null}
-      </View>
-
     </View>
   );
 }
