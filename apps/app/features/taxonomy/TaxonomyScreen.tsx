@@ -22,7 +22,6 @@ import {
   Plus,
   TrashSimple,
   ArrowLeft,
-  Star,
 } from "phosphor-react-native";
 import {
   listCategoryGroups,
@@ -85,6 +84,32 @@ const GROUP_ICON_BG: Record<string, string> = {
   financial_allocation: palette.aqua50,
 };
 
+function SalakotIcon({ size = 12, color = palette.sun700 }: { size?: number; color?: string }) {
+  const coneW = size;
+  const coneH = size * 0.7;
+  const brimW = size + 4;
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
+      <View style={{
+        width: 0, height: 0,
+        borderLeftWidth: coneW / 2,
+        borderRightWidth: coneW / 2,
+        borderBottomWidth: coneH,
+        borderLeftColor: "transparent",
+        borderRightColor: "transparent",
+        borderBottomColor: color,
+      }} />
+      <View style={{
+        width: brimW,
+        height: size * 0.13,
+        borderRadius: size * 0.07,
+        backgroundColor: color,
+        marginTop: -size * 0.03,
+      }} />
+    </View>
+  );
+}
+
 function CategoryRow({
   category,
   mutatingId,
@@ -131,7 +156,7 @@ function CategoryRow({
             </View>
           )}
           {hasFilipinoContext && (
-            <Star size={10} weight="fill" color={palette.sun700} />
+            <SalakotIcon size={10} color={palette.sun700} />
           )}
         </View>
         <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
@@ -293,7 +318,7 @@ function SubcategoryRow({
             </View>
           )}
           {hasFilipinoContext && (
-            <Star size={10} weight="fill" color={palette.sun700} />
+            <SalakotIcon size={10} color={palette.sun700} />
           )}
         </View>
         <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
