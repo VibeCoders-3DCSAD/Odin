@@ -1,0 +1,40 @@
+appId: com.anonymous.odin
+name: "SEC-003: Session Invalidation on Logout"
+tags:
+  - security
+  - smoke
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Login
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Navigate to settings and logout
+- runFlow:
+    file: ../subflows/navigate-to-settings.yaml
+
+- assertVisible: "Settings"
+
+- tapOn:
+    id: "Log out"
+
+# Should return to login screen
+- extendedWaitUntil:
+    visible: "Welcome back"
+    timeout: 10000
+
+- assertVisible: "Welcome back"
+
+# Verify we cannot access the app shell
+- assertNotVisible: "Dashboard"
+- takeScreenshot: security/SEC-003-session-invalidation-logout

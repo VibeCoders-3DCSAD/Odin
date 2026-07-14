@@ -1,0 +1,56 @@
+appId: com.anonymous.odin
+name: "NAV-002: Drawer Navigation"
+tags:
+  - navigation
+  - smoke
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Login
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Open drawer
+- tapOn:
+    id: "Open navigation menu"
+
+# Verify drawer sections
+- assertVisible: "Overview"
+- assertVisible: "Intelligence"
+- assertVisible: "Wealth"
+
+# Navigate to a drawer page
+- tapOn:
+    id: "Transactions"
+
+- assertVisible: "Transactions"
+- takeScreenshot: navigation/NAV-002-drawer-transactions
+
+# Open drawer again and navigate to another page
+- tapOn:
+    id: "Open navigation menu"
+- tapOn:
+    id: "Spending Forecast"
+
+- assertVisible: "Spending Forecast"
+- takeScreenshot: navigation/NAV-002-drawer-spending-forecast
+
+# Close drawer by tapping overlay
+- tapOn:
+    id: "Open navigation menu"
+
+# Verify drawer is visible
+- assertVisible: "Overview"
+
+# Tap the overlay area to close (outside drawer)
+- tapOn:
+    point: "90%,50%"

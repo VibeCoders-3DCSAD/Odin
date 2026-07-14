@@ -1,0 +1,45 @@
+appId: com.anonymous.odin
+name: "NAV-001: Bottom Tab Navigation"
+tags:
+  - navigation
+  - smoke
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Login
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Tap each tab and verify
+- tapOn:
+    id: "Home"
+- assertVisible: "Dashboard"
+- takeScreenshot: navigation/NAV-001-home-tab
+
+- tapOn:
+    id: "History"
+- assertVisible: "History"
+- takeScreenshot: navigation/NAV-001-history-tab
+
+- tapOn:
+    id: "Assistant"
+- assertVisible: "Assistant"
+- takeScreenshot: navigation/NAV-001-assistant-tab
+
+- tapOn:
+    id: "Savings"
+- assertVisible: "Savings"
+- takeScreenshot: navigation/NAV-001-savings-tab
+
+# Return to home
+- tapOn:
+    id: "Home"

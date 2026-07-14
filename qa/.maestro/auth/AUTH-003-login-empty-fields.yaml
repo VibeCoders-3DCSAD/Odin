@@ -1,0 +1,19 @@
+appId: com.anonymous.odin
+name: "AUTH-003: Login Empty Fields"
+tags:
+  - auth
+  - regression
+  - P0
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Welcome back"
+
+# Tap sign in with empty fields
+- tapOn:
+    text: "Sign in"
+
+# Expect inline error
+- assertVisible: "Enter your email"
+- takeScreenshot: auth/AUTH-003-login-empty-fields

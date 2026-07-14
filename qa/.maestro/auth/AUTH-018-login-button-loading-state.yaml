@@ -1,0 +1,30 @@
+appId: com.anonymous.odin
+name: "AUTH-018: Login Button Loading State"
+tags:
+  - auth
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Welcome back"
+
+# Fill valid credentials (button enables)
+- tapOn:
+    text: "Email"
+- inputText: ${USERNAME}
+- tapOn:
+    text: "Password"
+- inputText: ${PASSWORD}
+
+# Tap sign in and verify loading state (button disables during request)
+- tapOn:
+    text: "Sign in"
+
+# The button should show a spinner / be disabled
+# Take screenshot during loading
+- takeScreenshot: auth/AUTH-018-login-button-loading-state

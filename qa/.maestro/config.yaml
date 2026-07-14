@@ -1,0 +1,14 @@
+appId: com.anonymous.odin
+name: Odin E2E Tests
+testOutputDir: ../screenshots
+
+flows:
+  - auth/*
+  - consent/*
+  - settings/*
+  - navigation/*
+  - offline/*
+  - security/*
+
+excludeTags:
+  - util

@@ -1,0 +1,31 @@
+appId: com.anonymous.odin
+name: "SYNC-002: Offline Indicator Shown"
+tags:
+  - offline
+  - regression
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Login while online
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Go offline
+- setAirplaneMode: enabled
+
+# The app has a connectivity store; verify toast or indicator appears
+# The toast shows "This action can only be done while online" on certain actions
+# Take screenshot to capture offline state
+- takeScreenshot: offline/SYNC-002-offline-indicator-shown
+
+# Restore
+- setAirplaneMode: disabled

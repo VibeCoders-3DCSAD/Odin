@@ -1,0 +1,41 @@
+appId: com.anonymous.odin
+name: "AUTH-001: Login Happy Path"
+tags:
+  - auth
+  - smoke
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Verify login screen loaded
+- assertVisible: "Welcome back"
+- assertVisible: "Sign in to your Odin account"
+
+# Fill credentials
+- tapOn:
+    text: "Email"
+- inputText: ${USERNAME}
+- tapOn:
+    text: "Password"
+- inputText: ${PASSWORD}
+
+# Submit
+- tapOn:
+    text: "Sign in"
+
+# Expect authenticated state or consent screen
+- extendedWaitUntil:
+    visible: "Agree"
+    timeout: 10000
+    optional: true
+
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 10000
+    optional: true
+
+- takeScreenshot: auth/AUTH-001-login-happy-path

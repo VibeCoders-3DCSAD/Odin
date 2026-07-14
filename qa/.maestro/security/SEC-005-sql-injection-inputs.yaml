@@ -1,0 +1,31 @@
+appId: com.anonymous.odin
+name: "SEC-005: SQL Injection in Inputs"
+tags:
+  - security
+  - regression
+  - P1
+env:
+  SQL_PAYLOAD: "' OR 1=1 --"
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Welcome back"
+
+# Try SQL injection in email field
+- tapOn:
+    text: "Email"
+- inputText: ${SQL_PAYLOAD}
+
+# Try SQL injection in password field
+- tapOn:
+    text: "Password"
+- inputText: ${SQL_PAYLOAD}
+
+- tapOn:
+    text: "Sign in"
+
+# Should show error, not grant access
+- assertVisible: "Sign in failed"
+- assertVisible: "Welcome back"
+- takeScreenshot: security/SEC-005-sql-injection-inputs

@@ -1,0 +1,46 @@
+appId: com.anonymous.odin
+name: "SET-002: Data Export Happy Path"
+tags:
+  - settings
+  - regression
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Login
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Navigate to settings
+- runFlow:
+    file: ../subflows/navigate-to-settings.yaml
+
+- assertVisible: "Settings"
+
+# Find and tap Export data
+- scrollUntilVisible:
+    element:
+      id: "Export your data"
+    direction: DOWN
+
+- tapOn:
+    id: "Export your data"
+
+# Request export
+- extendedWaitUntil:
+    visible: "Export my data"
+    timeout: 5000
+    optional: true
+
+- tapOn:
+    id: "Export my data"
+
+- takeScreenshot: settings/SET-002-data-export-happy-path

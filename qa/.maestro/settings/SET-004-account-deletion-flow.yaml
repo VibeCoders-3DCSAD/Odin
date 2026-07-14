@@ -1,0 +1,58 @@
+appId: com.anonymous.odin
+name: "SET-004: Account Deletion Flow"
+tags:
+  - settings
+  - regression
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Login
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Navigate to settings
+- runFlow:
+    file: ../subflows/navigate-to-settings.yaml
+
+- assertVisible: "Settings"
+
+# Scroll to Delete account
+- scrollUntilVisible:
+    element:
+      id: "Delete account"
+    direction: DOWN
+
+- tapOn:
+    id: "Delete account"
+
+# Verify deletion warning screen
+- extendedWaitUntil:
+    visible: "Back to settings"
+    timeout: 5000
+
+- assertVisible: "I understand"
+
+# Check the confirmation checkbox
+- tapOn:
+    id: "I understand this permanently deletes my account and all data."
+
+# Tap delete
+- tapOn:
+    id: "Delete my account"
+
+# Expect deletion success screen
+- extendedWaitUntil:
+    visible: "Deletion requested"
+    timeout: 10000
+    optional: true
+
+- takeScreenshot: settings/SET-004-account-deletion-flow

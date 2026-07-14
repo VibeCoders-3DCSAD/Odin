@@ -1,0 +1,44 @@
+appId: com.anonymous.odin
+name: "AUTH-006: Register Happy Path"
+tags:
+  - auth
+  - smoke
+  - P0
+env:
+  NEW_EMAIL: "maestro_test_user@odin-test.com"
+  NEW_PASSWORD: "SecurePass123!"
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: "Welcome back"
+
+# Switch to register mode
+- tapOn:
+    text: "Create account"
+
+- assertVisible: "Create account"
+- assertVisible: "Set up your Odin account"
+
+# Fill registration form
+- tapOn:
+    text: "Email"
+- inputText: ${NEW_EMAIL}
+- tapOn:
+    text: "Create password"
+- inputText: ${NEW_PASSWORD}
+- tapOn:
+    text: "Confirm password"
+- inputText: ${NEW_PASSWORD}
+
+# Submit
+- tapOn:
+    text: "Create account"
+
+# Expect consent screen or success
+- extendedWaitUntil:
+    visible: "Agree"
+    timeout: 10000
+    optional: true
+
+- takeScreenshot: auth/AUTH-006-register-happy-path

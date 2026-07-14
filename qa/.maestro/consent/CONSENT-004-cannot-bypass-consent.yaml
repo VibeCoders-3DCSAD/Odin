@@ -1,0 +1,40 @@
+appId: com.anonymous.odin
+name: "CONSENT-004: Cannot Bypass Consent"
+tags:
+  - consent
+  - regression
+  - P0
+env:
+  USERNAME: "consent_bypass@odin-test.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Register to trigger consent
+- tapOn:
+    text: "Create account"
+- tapOn:
+    text: "Email"
+- inputText: ${USERNAME}
+- tapOn:
+    text: "Create password"
+- inputText: ${PASSWORD}
+- tapOn:
+    text: "Confirm password"
+- inputText: ${PASSWORD}
+- tapOn:
+    text: "Create account"
+
+# Wait for consent screen
+- extendedWaitUntil:
+    visible: "Agree & continue"
+    timeout: 15000
+
+# Try to dismiss by tapping backdrop (should dismiss and logout, not bypass)
+- tapOn:
+    id: "Dismiss consent"
+
+# Should return to login, not enter the app
+- assertVisible: "Welcome back"
+- takeScreenshot: consent/CONSENT-004-cannot-bypass-consent

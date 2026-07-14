@@ -1,0 +1,6 @@
+# Subflow: Open drawer and navigate to Settings
+---
+- tapOn:
+    id: "Open navigation menu"
+- tapOn:
+    id: "Settings"

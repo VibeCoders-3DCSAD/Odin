@@ -1,0 +1,6 @@
+# Subflow: Logout from settings
+---
+- runFlow:
+    file: navigate-to-settings.yaml
+- tapOn:
+    id: "Log out"

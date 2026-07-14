@@ -1,0 +1,36 @@
+appId: com.anonymous.odin
+name: "CONSENT-001: First Launch Consent Shown"
+tags:
+  - consent
+  - smoke
+  - P0
+env:
+  USERNAME: "new_user@odin-test.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Register a new user (triggers consent screen)
+- tapOn:
+    text: "Create account"
+- tapOn:
+    text: "Email"
+- inputText: ${USERNAME}
+- tapOn:
+    text: "Create password"
+- inputText: ${PASSWORD}
+- tapOn:
+    text: "Confirm password"
+- inputText: ${PASSWORD}
+- tapOn:
+    text: "Create account"
+
+# Consent screen should appear
+- extendedWaitUntil:
+    visible: "Privacy & consent"
+    timeout: 15000
+
+- assertVisible: "Privacy & consent"
+- assertVisible: "Agree & continue"
+- takeScreenshot: consent/CONSENT-001-first-launch-consent-shown

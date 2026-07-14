@@ -1,0 +1,11 @@
+# Subflow: Login
+# Requires env vars: USERNAME, PASSWORD
+---
+- tapOn:
+    text: "Email"
+- inputText: ${USERNAME}
+- tapOn:
+    text: "Password"
+- inputText: ${PASSWORD}
+- tapOn:
+    text: "Sign in"

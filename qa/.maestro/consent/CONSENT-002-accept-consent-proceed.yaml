@@ -1,0 +1,44 @@
+appId: com.anonymous.odin
+name: "CONSENT-002: Accept Consent Proceed"
+tags:
+  - consent
+  - smoke
+  - P0
+env:
+  USERNAME: "consent_accept@odin-test.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Register to trigger consent
+- tapOn:
+    text: "Create account"
+- tapOn:
+    text: "Email"
+- inputText: ${USERNAME}
+- tapOn:
+    text: "Create password"
+- inputText: ${PASSWORD}
+- tapOn:
+    text: "Confirm password"
+- inputText: ${PASSWORD}
+- tapOn:
+    text: "Create account"
+
+# Wait for consent screen
+- extendedWaitUntil:
+    visible: "Agree & continue"
+    timeout: 15000
+
+# Accept consent
+- tapOn:
+    id: "Agree and continue"
+
+# Should proceed to authenticated shell
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 10000
+    optional: true
+
+- takeScreenshot: consent/CONSENT-002-accept-consent-proceed
