@@ -59,6 +59,7 @@ const SUBCATEGORY_CREATE_FIELDS = new Set([
 
 const SUBCATEGORY_UPDATE_FIELDS = new Set([
   "label",
+  "slug",
   "short_label",
   "description",
   "is_filipino_context",

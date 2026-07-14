@@ -17,6 +17,7 @@ type SubcategoryFormScreenProps = {
   mode: "create" | "edit";
   subcategory?: {
     id: string;
+    slug: string;
     label: string;
     description: string;
     is_filipino_context: boolean;
@@ -96,6 +97,7 @@ export default function SubcategoryFormScreen({
       } else {
         await updateSubcategory(userId, deviceId, subcategory!.id, {
           label: label.trim(),
+          slug: slug.trim() || generateSlug(label.trim()),
           description: description.trim(),
           is_protected: isProtected,
           is_filipino_context: isFilipinoContext,

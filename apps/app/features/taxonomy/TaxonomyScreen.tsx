@@ -90,12 +90,14 @@ function CategoryRow({
   mutatingId,
   onEdit,
   onDelete,
+  onAddSubcategory,
   onNavigate,
 }: {
   category: Category;
   mutatingId: string | null;
   onEdit: (cat: Category) => void;
   onDelete: (cat: Category) => void;
+  onAddSubcategory: (cat: Category) => void;
   onNavigate: (cat: Category) => void;
 }) {
   const isSystem = category.is_system;
@@ -105,77 +107,88 @@ function CategoryRow({
   const isMutating = mutatingId === category.id;
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${category.label}, ${subCount} subcategories`}
-      onPress={() => onNavigate(category)}
+    <View
       style={{
         flexDirection: "row",
         alignItems: "center",
-        gap: 11,
+        gap: 4,
         paddingVertical: 11,
         borderBottomWidth: 1,
         borderBottomColor: palette.line2,
       }}
     >
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink, flexShrink: 1 }}>
-            {category.label}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${category.label}, ${subCount} subcategories`}
+        onPress={() => onNavigate(category)}
+        style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}
+      >
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink, flexShrink: 1 }}>
+              {category.label}
+            </Text>
+            {hasProtectedDefault && (
+              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: palette.aqua50 }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.aqua800 }}>
+                  DEFAULT PROTECTED
+                </Text>
+              </View>
+            )}
+            {hasFilipinoContext && (
+              <Globe size={10} weight="fill" color={palette.sun700} />
+            )}
+          </View>
+          <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
+            {category.description}
           </Text>
-          {hasProtectedDefault && (
-            <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: palette.aqua50 }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: palette.aqua800 }}>
-                DEFAULT PROTECTED
-              </Text>
-            </View>
-          )}
-          {hasFilipinoContext && (
-            <Globe size={10} weight="fill" color={palette.sun700} />
+          {subCount > 0 && (
+            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 11, color: palette.aqua700, marginTop: 2 }}>
+              {subCount} subcategor{subCount === 1 ? "y" : "ies"}
+            </Text>
           )}
         </View>
-        <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
-          {category.description}
-        </Text>
-        {subCount > 0 && (
-          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 11, color: palette.aqua700, marginTop: 2 }}>
-            {subCount} subcategor{subCount === 1 ? "y" : "ies"}
-          </Text>
-        )}
-      </View>
+        <CaretRight size={14} weight="bold" color={palette.mut} />
+      </Pressable>
 
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        {!isSystem && (
-          <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${category.label}`}
-              onPress={(e) => { onEdit(category); }}
-              hitSlop={8}
-              disabled={isMutating}
-              style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
-            >
-              <PencilSimple size={14} color={palette.aqua700} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Delete ${category.label}`}
-              onPress={(e) => { onDelete(category); }}
-              hitSlop={8}
-              disabled={isMutating}
-              style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
-            >
-              {isMutating ? (
-                <ActivityIndicator size="small" color={palette.error} />
-              ) : (
-                <TrashSimple size={14} color={palette.error} />
-              )}
-            </Pressable>
-          </>
-        )}
-        <CaretRight size={14} weight="bold" color={palette.mut} style={{ marginLeft: 2 }} />
-      </View>
-    </Pressable>
+      {!isSystem && (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${category.label}`}
+            onPress={() => { onEdit(category); }}
+            hitSlop={8}
+            disabled={isMutating}
+            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
+          >
+            <PencilSimple size={14} color={palette.aqua700} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Delete ${category.label}`}
+            onPress={() => { onDelete(category); }}
+            hitSlop={8}
+            disabled={isMutating}
+            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
+          >
+            {isMutating ? (
+              <ActivityIndicator size="small" color={palette.error} />
+            ) : (
+              <TrashSimple size={14} color={palette.error} />
+            )}
+          </Pressable>
+        </>
+      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Add subcategory to ${category.label}`}
+        onPress={() => { onAddSubcategory(category); }}
+        hitSlop={8}
+        style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
+      >
+        <Plus size={14} color={palette.aqua700} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -184,12 +197,14 @@ function GroupCard({
   mutatingId,
   onEdit,
   onDelete,
+  onAddSubcategory,
   onNavigate,
 }: {
   group: Group;
   mutatingId: string | null;
   onEdit: (cat: Category) => void;
   onDelete: (cat: Category) => void;
+  onAddSubcategory: (cat: Category) => void;
   onNavigate: (cat: Category) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -244,6 +259,7 @@ function GroupCard({
               mutatingId={mutatingId}
               onEdit={onEdit}
               onDelete={onDelete}
+              onAddSubcategory={onAddSubcategory}
               onNavigate={onNavigate}
             />
           ))}
@@ -452,6 +468,14 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
     );
   }
 
+  function openAddSubcategory(cat: Category) {
+    setSubcategoryFormMode("create");
+    setEditingSubcategory(undefined);
+    setViewingCategoryId(cat.id);
+    setViewingCategoryLabel(cat.label);
+    setSubcategoryFormVisible(true);
+  }
+
   function openSubcategoryEdit(sub: Subcategory) {
     setSubcategoryFormMode("edit");
     setEditingSubcategory(sub);
@@ -652,6 +676,7 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
               mutatingId={mutatingId}
               onEdit={openCategoryEdit}
               onDelete={handleCategoryDelete}
+              onAddSubcategory={openAddSubcategory}
               onNavigate={navigateToSubcategories}
             />
           ))
