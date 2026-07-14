@@ -66,7 +66,6 @@ export default function CategoryFormScreen({
   const isCreate = mode === "create";
   const [label, setLabel] = useState("");
   const [slug, setSlug] = useState("");
-  const [labelDirty, setLabelDirty] = useState(false);
 
   const generateSlug = useCallback((text: string) => {
     return text.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -87,23 +86,19 @@ export default function CategoryFormScreen({
     setSelectedGroupId(initial.selectedGroupId);
     setIsFilipinoContext(initial.isFilipinoContext);
     setFormError(null);
-    setLabelDirty(false);
   }, [mode, category?.id]);
 
   useEffect(() => {
-    if (isCreate && label.trim() && !labelDirty) {
+    if (isCreate && label.trim()) {
       setSlug(generateSlug(label));
     }
-  }, [label, isCreate, labelDirty, generateSlug]);
+  }, [label, isCreate, generateSlug]);
 
   async function handleSave() {
     setFormError(null);
     if (!label.trim()) { setFormError("Label is required"); return; }
     if (!description.trim()) { setFormError("Description is required"); return; }
-    if (isCreate) {
-      if (!selectedGroupId) { setFormError("Category group is required"); return; }
-      if (!slug.trim()) { setFormError("Slug is required"); return; }
-    }
+    if (isCreate && !selectedGroupId) { setFormError("Category group is required"); return; }
 
     setSaving(true);
     try {
@@ -166,6 +161,9 @@ export default function CategoryFormScreen({
                             <Pressable
                               key={g.id}
                               onPress={() => setSelectedGroupId(g.id)}
+                              accessibilityRole="radio"
+                              accessibilityLabel={g.label}
+                              accessibilityState={{ checked: selectedGroupId === g.id }}
                               style={{
                                 padding: 12, borderRadius: 10, borderWidth: 1,
                                 borderColor: selectedGroupId === g.id ? palette.brand : palette.line,
@@ -178,21 +176,6 @@ export default function CategoryFormScreen({
                             </Pressable>
                           ))}
                         </View>
-                      </View>
-
-                      <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>SLUG</Text>
-                        <TextInput
-                          value={slug}
-                          onChangeText={setSlug}
-                          placeholder="e.g. my-category"
-                          placeholderTextColor={palette.mut}
-                          style={{
-                            height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
-                            paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink,
-                            backgroundColor: palette.card,
-                          }}
-                        />
                       </View>
                     </>
                   )}
@@ -253,6 +236,9 @@ export default function CategoryFormScreen({
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <Pressable
                       onPress={() => setIsFilipinoContext(!isFilipinoContext)}
+                      accessibilityRole="switch"
+                      accessibilityLabel="Filipino context"
+                      accessibilityState={{ checked: isFilipinoContext }}
                       style={{
                         width: 44, height: 26, borderRadius: 100,
                         backgroundColor: isFilipinoContext ? palette.aqua600 : palette.line,
