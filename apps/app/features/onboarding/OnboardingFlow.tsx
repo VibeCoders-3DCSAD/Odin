@@ -297,6 +297,22 @@ export default function OnboardingFlow({
   const step = STEPS[stepIndex];
   if (!step) return null;
 
+  const isCurrentStepComplete = (() => {
+    const val = answers[step.questionKey];
+    if (step.kind === "input") return incomeText !== "";
+    if (step.kind === "card_multi_select") return Array.isArray(val) && val.length > 0;
+    if (step.kind === "review") {
+      const required = STEPS.filter((s) => s.kind !== "review" && s.kind !== "result");
+      return required.every((s) => {
+        const v = answers[s.questionKey];
+        if (s.kind === "input") return answers[s.questionKey] !== "" && answers[s.questionKey] !== undefined;
+        if (s.kind === "card_multi_select") return Array.isArray(v) && v.length > 0;
+        return typeof v === "string" && v !== "";
+      }) && obligationAmount !== "";
+    }
+    return typeof val === "string" && val !== "";
+  })();
+
   return (
     <View className="flex-1 bg-card">
       {/* Progress bar */}
@@ -515,7 +531,7 @@ export default function OnboardingFlow({
         {step.kind === "review" ? (
           <Pressable
             onPress={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !isCurrentStepComplete}
             accessibilityRole="button"
             accessibilityLabel="Submit assessment"
             style={{
@@ -526,7 +542,7 @@ export default function OnboardingFlow({
               alignItems: "center",
               flexDirection: "row",
               gap: 8,
-              opacity: submitting ? 0.45 : 1,
+              opacity: submitting || !isCurrentStepComplete ? 0.45 : 1,
               shadowColor: AQUA950,
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.28,
@@ -552,6 +568,7 @@ export default function OnboardingFlow({
         ) : (
           <Pressable
             onPress={goNext}
+            disabled={!isCurrentStepComplete}
             accessibilityRole="button"
             accessibilityLabel="Continue"
             style={{
@@ -562,6 +579,7 @@ export default function OnboardingFlow({
               alignItems: "center",
               flexDirection: "row",
               gap: 8,
+              opacity: !isCurrentStepComplete ? 0.45 : 1,
               shadowColor: AQUA950,
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.28,
