@@ -1,0 +1,54 @@
+appId: com.anonymous.odin
+name: "TAX-008: Category Form Validation"
+tags:
+  - categories
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Open create category modal
+- tapOn:
+    id: "Create category"
+
+- assertVisible: "New Category"
+
+# Try to save without filling anything
+- tapOn:
+    text: "Save"
+
+# Should show validation error
+- assertVisible: "Label is required"
+- takeScreenshot: categories/TAX-008-form-validation
+
+# Fill label only, try save again
+- tapOn:
+    text: "LABEL"
+- inputText: "Test"
+
+- tapOn:
+    text: "Save"
+
+# Should show description required error
+- assertVisible: "Description is required"
+
+# Cancel the form
+- tapOn:
+    text: "Cancel"
+
+# Should be back on categories screen
+- assertVisible: "Essentials"

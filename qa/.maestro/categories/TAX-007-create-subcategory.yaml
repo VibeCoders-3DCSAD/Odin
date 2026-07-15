@@ -1,0 +1,57 @@
+appId: com.anonymous.odin
+name: "TAX-007: Create Subcategory"
+tags:
+  - categories
+  - regression
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+  SUB_LABEL: "Maestro Subcategory"
+  SUB_DESCRIPTION: "Automated test subcategory"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Expand Essentials group
+- tapOn:
+    text: "Essentials"
+
+# Tap add subcategory on a category
+- tapOn:
+    id: "Add subcategory to Essentials"
+
+# Modal should appear
+- assertVisible: "New Subcategory"
+- assertVisible: "Under: Essentials"
+
+# Fill label
+- tapOn:
+    text: "LABEL"
+- inputText: ${SUB_LABEL}
+
+# Fill description
+- tapOn:
+    text: "DESCRIPTION"
+- inputText: ${SUB_DESCRIPTION}
+
+# Save
+- tapOn:
+    text: "Save"
+
+# Verify we're back on the categories screen
+- extendedWaitUntil:
+    visible: "Essentials"
+    timeout: 10000
+
+- takeScreenshot: categories/TAX-007-create-subcategory

@@ -1,0 +1,30 @@
+appId: com.anonymous.odin
+name: "TAX-001: View Category Groups"
+tags:
+  - categories
+  - smoke
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Navigate to Categories
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Verify category groups are visible
+- assertVisible: "Essentials"
+- assertVisible: "Obligatory"
+- assertVisible: "Discretionary"
+- assertVisible: "Financial Allocation"
+- takeScreenshot: categories/TAX-001-view-category-groups

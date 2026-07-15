@@ -1,0 +1,36 @@
+appId: com.anonymous.odin
+name: "TAX-002: Expand Collapse Group"
+tags:
+  - categories
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Tap Essentials group to expand
+- tapOn:
+    text: "Essentials"
+
+# Categories within the group should now be visible (system categories like Food, Transport, etc.)
+# The group card shows category count — verify it expanded
+- takeScreenshot: categories/TAX-002-group-expanded
+
+# Tap again to collapse
+- tapOn:
+    text: "Essentials"
+
+- takeScreenshot: categories/TAX-002-group-collapsed

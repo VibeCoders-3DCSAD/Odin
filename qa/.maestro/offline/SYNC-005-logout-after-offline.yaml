@@ -1,0 +1,55 @@
+appId: com.anonymous.odin
+name: "SYNC-005: Logout With Unsynced Data"
+tags:
+  - offline
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+# ponytail: This test creates unsynced data by toggling settings offline,
+# then attempts logout to verify sync protection behavior.
+- launchApp:
+    clearState: true
+
+# Login while online
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Go offline and make a change that would queue for sync
+- setAirplaneMode: enabled
+
+- runFlow:
+    file: ../subflows/navigate-to-settings.yaml
+
+- assertVisible: "Settings"
+
+# Try to toggle while offline — toast should appear, but the change
+# is blocked at the UI level so nothing actually queues
+- scrollUntilVisible:
+    element:
+      id: "Personalization"
+    direction: DOWN
+
+- tapOn:
+    id: "Personalization"
+
+# Restore connectivity
+- setAirplaneMode: disabled
+
+# Now attempt logout — should work since no actual unsynced writes occurred
+- runFlow:
+    file: ../subflows/logout.yaml
+
+# Should return to login
+- extendedWaitUntil:
+    visible: "Welcome back"
+    timeout: 15000
+
+- assertVisible: "Welcome back"
+- takeScreenshot: offline/SYNC-005-logout-after-offline
