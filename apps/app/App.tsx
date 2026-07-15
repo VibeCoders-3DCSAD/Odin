@@ -4,6 +4,7 @@ import "./global.css";
 import { StatusBar } from "expo-status-bar";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
+import OnboardingFlow from "./features/onboarding/OnboardingFlow";
 import { ToastProvider } from "./components/Toast";
 import { startConnectivityPolling } from "./services/connectivity";
 import { useDeepLink } from "./hooks/useDeepLink";
@@ -20,18 +21,35 @@ export default function App() {
   useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
   useEffect(() => { startConnectivityPolling(); }, []);
 
+  const handleOnboardingComplete = () => {
+    setAuthenticated((prev) =>
+      prev ? { ...prev, onboardingStatus: "submitted" } : prev,
+    );
+  };
+
   return (
     <ToastProvider>
       {authenticated ? (
-        <>
-          <MobileShell
-            accessToken={authenticated.accessToken}
-            userId={authenticated.userId ?? ""}
-            deviceId={deviceId}
-            onLoggedOut={() => setAuthenticated(null)}
-          />
-          <StatusBar style="dark" />
-        </>
+        authenticated.onboardingStatus === "submitted" ? (
+          <>
+            <MobileShell
+              accessToken={authenticated.accessToken}
+              userId={authenticated.userId ?? ""}
+              deviceId={deviceId}
+              onLoggedOut={() => setAuthenticated(null)}
+            />
+            <StatusBar style="dark" />
+          </>
+        ) : (
+          <>
+            <OnboardingFlow
+              accessToken={authenticated.accessToken}
+              userId={authenticated.userId ?? ""}
+              onComplete={handleOnboardingComplete}
+            />
+            <StatusBar style="dark" />
+          </>
+        )
       ) : (
         <>
           <AuthExperience
