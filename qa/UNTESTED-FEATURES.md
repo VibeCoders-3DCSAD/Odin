@@ -1,7 +1,7 @@
 ---
 metadata:
   last_modified: "2026-07-15"
-  version: "1.0.0"
+  version: "1.1.0"
   author: "Odin QA"
   status: "draft"
   description: "Gap analysis: app features without corresponding Maestro test cases"
@@ -9,24 +9,24 @@ metadata:
 
 # Untested Features — Gap Analysis
 
-Cross-referenced against `TEST-CASES.md` (23 automated cases) and the current app codebase.
+Cross-referenced against `TEST-CASES.md` (31 automated + 4 manual = 37 total) and the current app codebase.
 
 ---
 
 ## High Priority — Real functionality, no test coverage
 
-| # | Feature | File | What users can do |
-|---|---------|------|-------------------|
-| 1 | Categories / Taxonomy CRUD | `features/taxonomy/TaxonomyScreen.tsx`, `CategoryFormScreen.tsx`, `SubcategoryFormScreen.tsx` | Browse category groups, expand/collapse, create/edit/delete categories and subcategories, form validation, protected toggle, Filipino context toggle, delete confirmation dialogs |
-| 2 | Password reset complete flow | `components/AuthExperience.tsx` (lines 868-957) | Set new password after clicking email link, password rules validation, show/hide toggle, token resolution, success switch to login |
-| 3 | Toast notification system | `components/Toast.tsx` | Appear, auto-dismiss (2.5s), manual dismiss, color variants (danger/success/warning), position (top/bottom) |
-| 4 | Consent screen dismiss → logout | `features/governance/PrivacyConsentScreen.tsx` | Tap backdrop to dismiss consent, user returned to login, not entered without consent |
-| 5 | Google Sign-In (native) | `App.native.tsx` (lines 75-99, 169-200) | Google OAuth flow, Play Services check, fallback token extraction, cancellation handling |
-| 6 | Session restore on launch | `App.native.tsx` (lines 117-167) | SecureStore read, Supabase session restore, loading spinner during restore, silent clear on failure |
-| 7 | Email verification deep link | `components/AuthExperience.tsx` (lines 431-436) | Handle `auth/verify` URL, extract tokens, show "Email verified!" notice, switch to login mode |
-| 8 | Logout unsynced data protection | `components/MobileShell.tsx` (lines 177-236) | Check sync queue before logout, attempt sync if pending, show inline error if still unsynced |
-| 9 | Account deletion success screen | `components/MobileShell.tsx` (lines 443-481) | "Deletion requested" overlay, 30-day grace period message, scheduled date card, "Back to login" button |
-| 10 | Settings error + retry | `features/governance/PrivacySettingsScreen.tsx` (lines 371-405) | Error message with Retry button, re-fetches settings from API |
+| # | Feature | File | What users can do | Test Case |
+|---|---------|------|-------------------|-----------|
+| 1 | Categories / Taxonomy CRUD | `features/taxonomy/TaxonomyScreen.tsx`, `CategoryFormScreen.tsx`, `SubcategoryFormScreen.tsx` | Browse category groups, expand/collapse, create/edit/delete categories and subcategories, form validation, protected toggle, Filipino context toggle, delete confirmation dialogs | TAX-001 through TAX-008 (automated) |
+| 2 | Password reset complete flow | `components/AuthExperience.tsx` (lines 868-957) | Set new password after clicking email link, password rules validation, show/hide toggle, token resolution, success switch to login | AUTH-021 (manual — requires email deep link) |
+| 3 | Toast notification system | `components/Toast.tsx` | Appear, auto-dismiss (2.5s), manual dismiss, color variants (danger/success/warning), position (top/bottom) | Partially covered by SYNC-002, SET-002, SET-004; full coverage needs dedicated tests |
+| 4 | Consent screen dismiss → logout | `features/governance/PrivacyConsentScreen.tsx` | Tap backdrop to dismiss consent, user returned to login, not entered without consent | CONSENT-004 (automated) |
+| 5 | Google Sign-In (native) | `App.native.tsx` (lines 75-99, 169-200) | Google OAuth flow, Play Services check, fallback token extraction, cancellation handling | AUTH-022 (manual — requires OS-level Google account) |
+| 6 | Session restore on launch | `App.native.tsx` (lines 117-167) | SecureStore read, Supabase session restore, loading spinner during restore, silent clear on failure | AUTH-020 (automated) |
+| 7 | Email verification deep link | `components/AuthExperience.tsx` (lines 431-436) | Handle `auth/verify` URL, extract tokens, show "Email verified!" notice, switch to login mode | AUTH-023 (manual — requires email client) |
+| 8 | Logout unsynced data protection | `components/MobileShell.tsx` (lines 177-236) | Check sync queue before logout, attempt sync if pending, show inline error if still unsynced | SYNC-005 (automated) |
+| 9 | Account deletion success screen | `components/MobileShell.tsx` (lines 443-481) | "Deletion requested" overlay, 30-day grace period message, scheduled date card, "Back to login" button | SET-004 (automated — `optional: true` assertion) |
+| 10 | Settings error + retry | `features/governance/PrivacySettingsScreen.tsx` (lines 371-405) | Error message with Retry button, re-fetches settings from API | SET-006 (manual — requires API failure simulation) |
 
 ---
 
