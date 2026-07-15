@@ -70,7 +70,7 @@ export const STEPS: StepConfig[] = [
     title: "Income Stability",
     subtitle: "How stable is your primary source of income?",
     kind: "card_select",
-    questionKey: "income_type",
+    questionKey: "income_stability",
     options: [
       { key: "very_stable", label: "Very Stable", description: "Fixed salary, government or tenured position" },
       { key: "stable", label: "Stable", description: "Regular salary with predictable earnings" },

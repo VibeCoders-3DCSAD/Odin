@@ -54,6 +54,7 @@ export default function OnboardingFlow({
   const { showToast } = useToast();
 
   const [initializing, setInitializing] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
@@ -97,10 +98,12 @@ export default function OnboardingFlow({
           if (cancelled) return;
           if (cr.ok && cb.payload?.session) {
             setSessionId(cb.payload.session.id);
+          } else {
+            if (!cancelled) setInitError(cb?.message ?? "Failed to create onboarding session.");
           }
         }
       } catch {
-        if (!cancelled) showToast("Failed to load onboarding session", "danger");
+        if (!cancelled) setInitError("Failed to load onboarding session. Please check your connection and try again.");
       }
       if (!cancelled) setInitializing(false);
     }
@@ -149,9 +152,9 @@ export default function OnboardingFlow({
   const handleIncomeStabilitySelect = useCallback(
     (val: string) => {
       const mapped = val === "very_stable" || val === "stable" ? "stable" : "variable";
-      saveAnswer("income_type", mapped);
+      setAnswers((prev) => ({ ...prev, income_stability: val, income_type: mapped }));
     },
-    [saveAnswer],
+    [],
   );
 
   const handleProtectedCategoriesToggle = useCallback(
@@ -182,10 +185,15 @@ export default function OnboardingFlow({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await updateSession(accessToken, sid, {
+      const { response: updateRes, body: updateBody } = await updateSession(accessToken, sid, {
         current_step_key: "review",
         raw_answers: answersRef.current,
       });
+      if (!updateRes.ok) {
+        setSubmitError(updateBody?.message ?? "Failed to save answers.");
+        setSubmitting(false);
+        return;
+      }
       const { response, body } = await submitSession(accessToken, sid);
       if (response.ok && body.payload) {
         setSubmitResult({
@@ -214,6 +222,37 @@ export default function OnboardingFlow({
     return (
       <View className="flex-1 items-center justify-center bg-card">
         <ActivityIndicator color={AQUA950} />
+      </View>
+    );
+  }
+
+  // ── Init error ──
+  if (initError) {
+    return (
+      <View className="flex-1 items-center justify-center bg-card px-6">
+        <Text
+          style={{
+            fontFamily: "Manrope",
+            fontWeight: "700",
+            fontSize: 18,
+            color: INK,
+            textAlign: "center",
+            marginBottom: 12,
+          }}
+        >
+          Unable to Start
+        </Text>
+        <Text
+          style={{
+            fontFamily: "Manrope",
+            fontWeight: "400",
+            fontSize: 14,
+            color: MUTED,
+            textAlign: "center",
+          }}
+        >
+          {initError}
+        </Text>
       </View>
     );
   }
@@ -815,9 +854,8 @@ function ReviewStep({
   const empLabel = EMP_STEP.options?.find((o) => o.key === answers.employment_status);
   if (empLabel) rows.push({ label: "Employment", value: empLabel.label, stepIndex: 0 });
 
-  const incomeType = answers.income_type as string;
-  const stabDisplay = incomeType === "stable" ? "Stable" : incomeType === "variable" ? "Variable" : null;
-  if (stabDisplay) rows.push({ label: "Income Stability", value: stabDisplay, stepIndex: 1 });
+  const stabLabel = STEPS[1]!.options?.find((o) => o.key === answers.income_stability);
+  if (stabLabel) rows.push({ label: "Income Stability", value: stabLabel.label, stepIndex: 1 });
 
   const freqLabel = FREQ_STEP.options?.find((o) => o.key === answers.pay_frequency);
   if (freqLabel) rows.push({ label: "Pay Frequency", value: freqLabel.label, stepIndex: 2 });
@@ -922,7 +960,7 @@ function ResultScreen({
   onContinue: () => void;
 }) {
   const label = result.assignment.profile_label
-    .replace(/_/g, " ")
+    .replace(/_/g, "-")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
