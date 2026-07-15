@@ -28,7 +28,6 @@ async function cleanupUser(uid: string) {
   await serviceRole.from("financial_profile_assignments").delete().eq("user_id", uid);
   await serviceRole.from("financial_profile_assessments").delete().eq("user_id", uid);
   await serviceRole.from("onboarding_sessions").delete().eq("user_id", uid);
-  await serviceRole.from("user_eligibility_profiles").delete().eq("user_id", uid);
   await serviceRole.from("profiles").delete().eq("user_id", uid);
 }
 
@@ -45,16 +44,6 @@ async function setupUser(): Promise<string> {
   const uid = user.user.id;
 
   await serviceRole.from("profiles").upsert({ user_id: uid });
-
-  await serviceRole.from("user_eligibility_profiles").upsert({
-    user_id: uid,
-    date_of_birth: "2000-01-01",
-    is_filipino: true,
-    metro_manila_presence: "lives_in_metro_manila",
-    metro_manila_locality_code: "manila",
-    primary_employment_classification: "full_time_employee",
-    eligibility_confirmed_at: new Date().toISOString(),
-  });
 
   return uid;
 }
@@ -115,35 +104,35 @@ describe("submit_onboarding_session (integration)", () => {
     return;
   }
 
-  it("returns stable_obligated for stable income with low obligations", async () => {
+  it("returns stable_flexible for stable income with low obligations", async () => {
     const result = await submitWithAnswers({
       income_type: "stable",
       monthly_income: 50000,
       monthly_obligations: 5000,
     });
-    expect(result.profile_label).toBe("stable_obligated");
+    expect(result.profile_label).toBe("stable_flexible");
   }, 15000);
 
-  it("returns stable_obligated for variable income with high obligations", async () => {
+  it("returns variable_obligated for variable income with high obligations", async () => {
     const result = await submitWithAnswers({
       income_type: "variable",
       monthly_income: 30000,
       monthly_obligations: 12000,
     });
-    expect(result.profile_label).toBe("stable_obligated");
+    expect(result.profile_label).toBe("variable_obligated");
   }, 15000);
 
-  it("returns stable_obligated for no income with dependents", async () => {
+  it("returns variable_flexible for no income with dependents", async () => {
     const result = await submitWithAnswers({
       income_type: "variable",
       monthly_income: 0,
       monthly_obligations: 0,
       has_dependents: true,
     });
-    expect(result.profile_label).toBe("stable_obligated");
+    expect(result.profile_label).toBe("variable_flexible");
   }, 15000);
 
-  it("persists assessment with deterministic_placeholder_v1 model_kind and rule", async () => {
+  it("persists assessment with heuristic_v1 model_kind and rule", async () => {
     const result = await submitWithAnswers({
       income_type: "stable",
       monthly_income: 40000,
@@ -157,12 +146,12 @@ describe("submit_onboarding_session (integration)", () => {
       .single();
 
     expect(error).toBeNull();
-    expect(assessment!.model_kind).toBe("deterministic_placeholder_v1");
+    expect(assessment!.model_kind).toBe("heuristic_v1");
     expect(assessment!.assessment_method).toBe("questionnaire");
-    expect(assessment!.proposed_profile_label).toBe("stable_obligated");
+    expect(assessment!.proposed_profile_label).toBe("stable_flexible");
     expect(assessment!.output_snapshot).toMatchObject({
-      profile_label: "stable_obligated",
-      rule: "deterministic_placeholder_v1",
+      profile_label: "stable_flexible",
+      rule: "deterministic_heuristic_v1",
     });
   }, 15000);
 });
