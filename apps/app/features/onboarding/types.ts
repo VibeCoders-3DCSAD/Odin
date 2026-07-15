@@ -57,7 +57,7 @@ export const STEPS: StepConfig[] = [
   {
     key: "date_of_birth",
     title: "Date of Birth",
-    subtitle: "Enter your date of birth to confirm eligibility.",
+    subtitle: "Odin is tuned for ages 20–40 living in Metro Manila. You can still use the app if you're outside this range, but some assessments may not apply as accurately.",
     kind: "input",
     questionKey: "date_of_birth",
     inputLabel: "Date of Birth (YYYY-MM-DD)",
@@ -76,7 +76,7 @@ export const STEPS: StepConfig[] = [
   {
     key: "metro_manila",
     title: "Metro Manila Presence",
-    subtitle: "Do you live or work in Metro Manila?",
+    subtitle: "Odin is tuned for ages 20–40 living in Metro Manila. You can still use the app if you're outside this range, but some assessments may not apply as accurately.",
     kind: "card_select",
     questionKey: "metro_manila_presence",
     options: [

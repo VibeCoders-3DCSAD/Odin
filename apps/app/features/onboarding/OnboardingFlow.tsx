@@ -7,6 +7,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import KeyboardAvoider from "../../components/KeyboardAvoider";
 import {
   CaretLeft,
@@ -64,6 +65,9 @@ export default function OnboardingFlow({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [obligationAmount, setObligationAmount] = useState("");
   const [incomeText, setIncomeText] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const dateOfBirth = (answers.date_of_birth as string) ?? "";
 
   const sessionRef = useRef(sessionId);
   sessionRef.current = sessionId;
@@ -213,7 +217,6 @@ export default function OnboardingFlow({
             confirmation_required: body.payload.assignment.confirmation_required,
           },
         });
-        showToast("Assessment submitted", "success");
       } else {
         setSubmitError(body.message ?? "Submission failed.");
       }
@@ -444,7 +447,23 @@ export default function OnboardingFlow({
           />
         )}
 
-        {step.kind === "input" && (
+        {step.kind === "input" && step.key === "date_of_birth" ? (
+          <DateStep
+            step={step}
+            value={dateOfBirth}
+            showPicker={showDatePicker}
+            onPress={() => setShowDatePicker(true)}
+            onChange={(_event: DateTimePickerEvent, selectedDate?: Date) => {
+              setShowDatePicker(false);
+              if (selectedDate) {
+                const yyyy = selectedDate.getFullYear();
+                const mm = String(selectedDate.getMonth() + 1).padStart(2, "0");
+                const dd = String(selectedDate.getDate()).padStart(2, "0");
+                saveAnswer("date_of_birth", `${yyyy}-${mm}-${dd}`);
+              }
+            }}
+          />
+        ) : step.kind === "input" && (
           <InputStep
             step={step}
             value={step.key === "monthly_income" ? incomeText : (answers[step.questionKey] as string) ?? ""}
@@ -797,6 +816,75 @@ function DropdownStep({
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+function DateStep({
+  step,
+  value,
+  showPicker,
+  onPress,
+  onChange,
+}: {
+  step: StepConfig;
+  value: string;
+  showPicker: boolean;
+  onPress: () => void;
+  onChange: (event: DateTimePickerEvent, date?: Date) => void;
+}) {
+  const parsed = value ? new Date(value + "T00:00:00") : new Date();
+  const display = value
+    ? new Date(value + "T00:00:00").toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "";
+
+  return (
+    <View>
+      {step.inputLabel ? (
+        <Text
+          style={{
+            fontFamily: "Manrope",
+            fontWeight: "600",
+            fontSize: 14,
+            color: INK2,
+            marginBottom: 10,
+          }}
+        >
+          {step.inputLabel}
+        </Text>
+      ) : null}
+      <Pressable
+        onPress={onPress}
+        style={{
+          borderWidth: 1.5,
+          borderColor: LINE,
+          borderRadius: 14,
+          backgroundColor: CARD,
+          padding: 16,
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: "Manrope",
+            fontWeight: "700",
+            fontSize: 20,
+            color: value ? INK : MUTED,
+          }}
+        >
+          {value ? display : "Select date"}
+        </Text>
+      </Pressable>
+      {showPicker && (
+        <DateTimePicker
+          value={parsed}
+          mode="date"
+          onChange={onChange}
+        />
+      )}
     </View>
   );
 }
