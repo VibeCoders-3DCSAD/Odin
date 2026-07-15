@@ -134,7 +134,7 @@ BEGIN
     'profile_label', v_profile_label,
     'confidence_score', v_confidence_score,
     'obligation_threshold_bps', 3000,
-    'rule', 'deterministic_heuristic_v1'
+    'rule', 'deterministic_placeholder_v1'
   );
 
   v_explanation_summary := 'Profile assessed as ' || v_profile_label
