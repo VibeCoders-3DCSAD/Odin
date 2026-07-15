@@ -48,6 +48,11 @@ function mockInProgressSession() {
       id: "session-1",
       status: "in_progress",
       raw_answers: {
+        display_name: "Juan",
+        date_of_birth: "1995-06-15",
+        is_filipino: "true",
+        metro_manila_presence: "lives_in_metro_manila",
+        primary_employment_classification: "full_time_employee",
         employment_status: "employed_full_time",
         income_type: "stable",
         pay_frequency: "monthly",
@@ -227,6 +232,11 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
         id: "session-1",
         status: "in_progress",
         raw_answers: {
+          display_name: "Juan",
+          date_of_birth: "1995-06-15",
+          is_filipino: "true",
+          metro_manila_presence: "lives_in_metro_manila",
+          primary_employment_classification: "full_time_employee",
           employment_status: "employed_full_time",
           income_type: "stable",
           // pay_frequency missing
