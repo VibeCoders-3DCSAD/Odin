@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
-import { ONBOARDING_ERRORS } from "../lib/constants.js";
+import { ONBOARDING_ERRORS, VALID_EMPLOYMENT_CLASSIFICATIONS, VALID_METRO_MANILA_PRESENCE } from "../lib/constants.js";
 import { getServiceRoleClient } from "../lib/supabase.js";
 
 const router = Router();
@@ -290,15 +290,32 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     return;
   }
 
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (typeof rawAnswers.date_of_birth === "string" && !dateRegex.test(rawAnswers.date_of_birth)) {
+    response.status(400).json({ error: "Bad Request", message: "date_of_birth must be in YYYY-MM-DD format." });
+    return;
+  }
+  if (typeof rawAnswers.is_filipino === "string" && !["true", "false"].includes(rawAnswers.is_filipino)) {
+    response.status(400).json({ error: "Bad Request", message: "is_filipino must be 'true' or 'false'." });
+    return;
+  }
+  if (typeof rawAnswers.metro_manila_presence === "string" && !VALID_METRO_MANILA_PRESENCE.includes(rawAnswers.metro_manila_presence)) {
+    response.status(400).json({ error: "Bad Request", message: `Invalid metro_manila_presence. Must be one of: ${VALID_METRO_MANILA_PRESENCE.join(", ")}.` });
+    return;
+  }
+  if (typeof rawAnswers.primary_employment_classification === "string" && !VALID_EMPLOYMENT_CLASSIFICATIONS.includes(rawAnswers.primary_employment_classification)) {
+    response.status(400).json({ error: "Bad Request", message: `Invalid primary_employment_classification. Must be one of: ${VALID_EMPLOYMENT_CLASSIFICATIONS.join(", ")}.` });
+    return;
+  }
+
   const { data: result, error: rpcError } = await getServiceRoleClient()
     .rpc("submit_onboarding_session", { p_session_id: sessionId, p_user_id: userId });
 
   if (rpcError) {
     console.error("submit_onboarding_session RPC error:", rpcError);
-    const message = (rpcError as { message?: string }).message ?? ONBOARDING_ERRORS.submit_failed;
     response.status(500).json({
       error: "Internal Server Error",
-      message,
+      message: ONBOARDING_ERRORS.submit_failed,
     });
     return;
   }
