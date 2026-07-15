@@ -304,7 +304,10 @@ export default function OnboardingFlow({
   const isCurrentStepComplete = (() => {
     const val = answers[step.questionKey];
     if (step.kind === "input") return incomeText !== "";
-    if (step.kind === "card_multi_select") return Array.isArray(val) && val.length > 0;
+    if (step.kind === "card_multi_select") {
+      if (step.key === "fixed_obligations") return Array.isArray(val) && val.length > 0 && obligationAmount !== "";
+      return Array.isArray(val) && val.length > 0;
+    }
     if (step.kind === "review") {
       const required = STEPS.filter((s) => s.kind !== "review" && s.kind !== "result");
       return required.every((s) => {
