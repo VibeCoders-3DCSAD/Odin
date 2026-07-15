@@ -13,18 +13,19 @@ env:
 
 - assertVisible: "Welcome back"
 
-# Fill valid credentials (button enables)
+# Fill valid credentials
 - tapOn:
     text: "Email"
 - inputText: ${USERNAME}
+
 - tapOn:
     text: "Password"
 - inputText: ${PASSWORD}
 
-# Tap sign in and verify loading state (button disables during request)
+# Tap sign in and verify loading notice appears
 - tapOn:
     text: "Sign in"
 
-# The button should show a spinner / be disabled
-# Take screenshot during loading
+# The app shows "Signing you in..." notice during the request
+- assertVisible: "Signing you in..."
 - takeScreenshot: auth/AUTH-018-login-button-loading-state

@@ -44,11 +44,11 @@ metadata:
 | AUTH-001 | Login happy path | 1. Launch app 2. Verify "Welcome back" screen 3. Enter valid email 4. Enter valid password 5. Tap "Sign in" | email: test@example.com, password: Test1234! | Dashboard loads or consent screen appears; user is authenticated | — | — | auth/AUTH-001-login-happy-path |
 | AUTH-002 | Login with invalid password | 1. Launch app 2. Enter valid email 3. Enter wrong password 4. Tap "Sign in" | email: test@example.com, password: WrongPassword1! | Error notice "Sign in failed" displayed; email field retained, password cleared | — | — | auth/AUTH-002-login-invalid-password |
 | AUTH-003 | Login with empty fields | 1. Launch app 2. Tap "Sign in" without entering any data | (none) | Inline error "Enter your email" shown; form does not submit | — | — | auth/AUTH-003-login-empty-fields |
-| AUTH-006 | Registration happy path | 1. Launch app 2. Tap "Create account" 3. Enter valid email 4. Enter valid password 5. Enter matching confirm password 6. Tap "Create account" | email: maestro_test_user@odin-test.com, password: SecurePass123! | Account created; consent screen appears or verification email notice shown | — | — | auth/AUTH-006-register-happy-path |
-| AUTH-008 | Registration with weak password | 1. Launch app 2. Tap "Create account" 3. Enter valid email 4. Enter weak password (123) 5. Observe password rules | email: weakpass@odin-test.com, password: 123 | Password rules shown with failing indicators; "Create account" button remains disabled | — | — | auth/AUTH-008-register-weak-password |
+| AUTH-006 | Registration happy path | 1. Launch app 2. Tap "Create account" 3. Enter full name 4. Enter valid email 5. Enter valid password 6. Enter matching confirm password 7. Tap "Create account" | name: Maestro Test, email: maestro_test_user@odin-test.com, password: SecurePass123! | Account created; consent screen appears or verification email notice shown | — | — | auth/AUTH-006-register-happy-path |
+| AUTH-008 | Registration with weak password | 1. Launch app 2. Tap "Create account" 3. Enter valid email 4. Enter weak password (123) 5. Observe password rules 6. Tap "Create account" | email: weakpass@odin-test.com, password: 123 | Password rules shown with failing indicators; tapping "Create account" has no effect; form does not submit | — | — | auth/AUTH-008-register-weak-password |
 | AUTH-009 | Password reset flow | 1. Launch app 2. Tap "Forgot password?" 3. Enter email 4. Tap "Send reset link" | email: test@example.com | Success message "If that email exists, a reset link is on the way now." displayed; no user enumeration | — | — | auth/AUTH-009-password-reset-flow |
 | AUTH-016 | Password field toggle visibility | 1. Launch app 2. Enter password 3. Tap "Show password" 4. Tap "Hide password" | password: MySecret123! | Password toggles between masked and visible text; toggle icon changes | — | — | auth/AUTH-016-password-toggle-visibility |
-| AUTH-018 | Login button loading state | 1. Launch app 2. Enter valid credentials 3. Tap "Sign in" 4. Observe button state during request | email: test@example.com, password: Test1234! | Button shows loading spinner and is disabled during request; prevents double-submit | — | — | auth/AUTH-018-login-button-loading-state |
+| AUTH-018 | Login button loading state | 1. Launch app 2. Enter valid credentials 3. Tap "Sign in" 4. Observe notice during request | email: test@example.com, password: Test1234! | "Signing you in..." notice displayed during request; button shows loading spinner and is disabled; prevents double-submit | — | — | auth/AUTH-018-login-button-loading-state |
 
 ---
 
@@ -89,7 +89,7 @@ metadata:
 | SET-001 | Toggle privacy setting | 1. Login 2. Navigate to Settings 3. Scroll to Personalization toggle 4. Tap toggle | (standard login credentials) | Toggle switches state; setting persisted via API | — | — | settings/SET-001-toggle-privacy-setting |
 | SET-002 | Data export happy path | 1. Login 2. Navigate to Settings 3. Scroll to "Export your data" 4. Tap 5. Tap "Export my data" | (standard login credentials) | Export request submitted; status message shown | — | — | settings/SET-002-data-export-happy-path |
 | SET-004 | Account deletion flow | 1. Login 2. Navigate to Settings 3. Scroll to "Delete account" 4. Tap 5. Check confirmation checkbox 6. Tap "Delete my account" | (standard login credentials) | Deletion requested screen shown with 30-day grace period message | — | — | settings/SET-004-account-deletion-flow |
-| SET-005 | Account deletion cancel | 1. Login 2. Navigate to Settings 3. Scroll to "Delete account" 4. Tap 5. Tap "Back to settings" | (standard login credentials) | Returned to settings; account remains active | — | — | settings/SET-005-account-deletion-cancel |
+| SET-005 | Account deletion cancel | 1. Login 2. Navigate to Settings 3. Scroll to "Delete account" 4. Tap 5. Tap "Cancel" | (standard login credentials) | Returned to settings; account remains active | — | — | settings/SET-005-account-deletion-cancel |
 
 ---
 
@@ -128,7 +128,7 @@ metadata:
 | Test No. | Test Case | Test Steps | Test Data | Expected Result | Actual Result | Remarks | Screenshot Name |
 |---|---|---|---|---|---|---|---|
 | SYNC-001 | App usable in airplane mode | 1. Login 2. Enable airplane mode 3. Verify Dashboard visible 4. Navigate tabs 5. Disable airplane mode | (standard login credentials) | App remains functional with cached data; no crash; navigation works offline | — | — | offline/SYNC-001-app-usable-offline |
-| SYNC-002 | Offline indicator shown | 1. Login 2. Enable airplane mode 3. Observe UI for offline state 4. Disable airplane mode | (standard login credentials) | Offline state reflected in UI (toast or indicator) | — | — | offline/SYNC-002-offline-indicator-shown |
+| SYNC-002 | Offline blocks settings change | 1. Login 2. Enable airplane mode 3. Navigate to Settings 4. Tap Personalization toggle 5. Disable airplane mode | (standard login credentials) | Toast "Can't save while offline" shown; toggle does not persist; settings remain unchanged | — | — | offline/SYNC-002-offline-indicator-shown |
 | SYNC-004 | Sync on reconnect | 1. Login 2. Enable airplane mode 3. Wait 4. Disable airplane mode 5. Wait for sync | (standard login credentials) | App syncs automatically on reconnect; data fresh; no errors | — | — | offline/SYNC-004-sync-on-reconnect |
 
 ---
