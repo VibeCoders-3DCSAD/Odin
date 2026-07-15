@@ -1,0 +1,40 @@
+appId: com.anonymous.odin
+name: "TAX-006: Navigate to Subcategories"
+tags:
+  - categories
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Expand Essentials group
+- tapOn:
+    text: "Essentials"
+
+# Tap on a system category (e.g. Food if it exists, or any category row)
+# The category row has accessibilityLabel like "Food, 0 subcategories"
+- tapOn:
+    id: "Essentials.*subcategories"
+
+# Should show subcategory view with breadcrumb
+- assertVisible: "Categories"
+- takeScreenshot: categories/TAX-006-subcategory-view
+
+# Press back to return to main categories list
+- back
+
+- assertVisible: "Essentials"

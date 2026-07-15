@@ -1,0 +1,73 @@
+appId: com.anonymous.odin
+name: "TAX-004: Edit Category"
+tags:
+  - categories
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Edit Target"
+  CATEGORY_DESCRIPTION: "Original description"
+  UPDATED_LABEL: "Maestro Edit Target Renamed"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# First create a category to edit
+- tapOn:
+    id: "Create category"
+- assertVisible: "New Category"
+- tapOn:
+    id: "Essentials"
+- tapOn:
+    text: "LABEL"
+- inputText: ${CATEGORY_LABEL}
+- tapOn:
+    text: "DESCRIPTION"
+- inputText: ${CATEGORY_DESCRIPTION}
+- tapOn:
+    text: "Save"
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 10000
+
+# Expand the group to find the category
+- tapOn:
+    text: "Essentials"
+
+# Tap edit on the created category
+- tapOn:
+    id: "Edit ${CATEGORY_LABEL}"
+
+# Modal should show "Edit Category"
+- assertVisible: "Edit Category"
+
+# Update the label
+- tapOn:
+    text: "LABEL"
+- tapOn:
+    text: ${CATEGORY_LABEL}
+- eraseText: 30
+- inputText: ${UPDATED_LABEL}
+
+# Save
+- tapOn:
+    text: "Save"
+
+# Verify the updated name appears
+- extendedWaitUntil:
+    visible: ${UPDATED_LABEL}
+    timeout: 10000
+
+- takeScreenshot: categories/TAX-004-edit-category

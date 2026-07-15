@@ -1,0 +1,65 @@
+appId: com.anonymous.odin
+name: "TAX-005: Delete Category"
+tags:
+  - categories
+  - regression
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Delete Target"
+  CATEGORY_DESCRIPTION: "To be deleted"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Create a category to delete
+- tapOn:
+    id: "Create category"
+- assertVisible: "New Category"
+- tapOn:
+    id: "Essentials"
+- tapOn:
+    text: "LABEL"
+- inputText: ${CATEGORY_LABEL}
+- tapOn:
+    text: "DESCRIPTION"
+- inputText: ${CATEGORY_DESCRIPTION}
+- tapOn:
+    text: "Save"
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 10000
+
+# Expand group to find it
+- tapOn:
+    text: "Essentials"
+
+# Tap delete
+- tapOn:
+    id: "Delete ${CATEGORY_LABEL}"
+
+# Confirm dialog should appear
+- assertVisible: "Delete"
+
+# Tap destructive Delete button in the alert
+- tapOn:
+    text: "Delete"
+
+# Category should be removed
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 5000
+    optional: true
+
+- takeScreenshot: categories/TAX-005-delete-category
