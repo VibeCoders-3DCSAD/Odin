@@ -4,10 +4,12 @@ import { ArrowsClockwise, CheckCircle, Cloud, SquaresFour, ClockCounterClockwise
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   AppState,
   Dimensions,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -65,6 +67,17 @@ type MobileShellProps = {
   deviceId: string;
   onLoggedOut: () => void;
   signOut?: () => Promise<void>;
+};
+
+type SyncQueueIssue = {
+  operation_id: string;
+  entity: string;
+  operation_type: string;
+  record_id: string;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
 };
 
 type DrawerItem = {
@@ -136,6 +149,9 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [queueCount, setQueueCount] = useState(0);
+  const [syncDetailsVisible, setSyncDetailsVisible] = useState(false);
+  const [syncIssues, setSyncIssues] = useState<SyncQueueIssue[]>([]);
+  const [allowDiscardLogout, setAllowDiscardLogout] = useState(false);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
@@ -173,6 +189,26 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       MAX_SYNC_ATTEMPTS,
     );
     return row?.cnt ?? 0;
+  }
+
+  async function loadSyncIssues() {
+    const db = await initDatabase();
+    const rows = await db.getAllAsync<SyncQueueIssue>(
+      `SELECT operation_id, entity, operation_type, record_id, status, attempts, last_error, created_at
+       FROM sync_queue
+       WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')
+       ORDER BY created_at LIMIT 50`,
+      userId,
+      deviceId,
+    );
+    setSyncIssues(rows);
+    return rows;
+  }
+
+  async function openSyncDetails(canDiscardForLogout = false) {
+    await loadSyncIssues();
+    setAllowDiscardLogout(canDiscardForLogout);
+    setSyncDetailsVisible(true);
   }
 
   async function syncNow(showMessage: boolean) {
@@ -278,7 +314,69 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   async function handleSync() {
+    if (queueCount > 0) {
+      await openSyncDetails(false);
+      return;
+    }
     await syncNow(true);
+  }
+
+  async function retryFromDetails() {
+    await syncNow(true);
+    await loadSyncIssues();
+  }
+
+  async function finishLogout() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const response = await fetch(`${API_BASE_URL}/odin/api/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
+
+    if (signOut) {
+      try { await signOut(); } catch {}
+    }
+
+    onLoggedOut();
+  }
+
+  async function discardUnsyncedAndLogout() {
+    Alert.alert(
+      "Discard failed changes?",
+      `This will discard ${syncIssues.length} failed local change${syncIssues.length === 1 ? "" : "s"}. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Discard and log out",
+          style: "destructive",
+          onPress: async () => {
+            setIsLoggingOut(true);
+            try {
+              const db = await initDatabase();
+              await db.runAsync(
+                "DELETE FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed'",
+                userId,
+                deviceId,
+              );
+              await refreshQueueCount();
+              setSyncDetailsVisible(false);
+              setSyncIssues([]);
+              setAllowDiscardLogout(false);
+              await finishLogout();
+            } catch (error) {
+              console.error("Discard and logout failed", error);
+              showToast("Logout failed. Please check your connection and try again.");
+              setIsLoggingOut(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   async function handleLogout() {
@@ -314,28 +412,19 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         );
 
         if (stillPending && stillPending.cnt > 0) {
-          setLogoutError("Some changes could not be synced. Please try again before logging out.");
+          const pendingRows = await db.getFirstAsync<{ cnt: number }>(
+            "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+            userId,
+            deviceId,
+          );
+          setLogoutError("Some changes could not be synced. Review them before logging out.");
+          await openSyncDetails((pendingRows?.cnt ?? 0) === 0);
           setIsLoggingOut(false);
           return;
         }
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      const response = await fetch(`${API_BASE_URL}/odin/api/auth/logout`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
-
-      if (signOut) {
-        try { await signOut(); } catch {}
-      }
-
-      onLoggedOut();
+      await finishLogout();
     } catch (error) {
       console.error("Logout request failed", error);
       setLogoutError("Logout failed. Please check your connection and try again.");
@@ -388,6 +477,18 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
                 </Pressable>
               </View>
+              {queueCount > 0 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Review unsynced changes"
+                  onPress={() => { openSyncDetails(false).catch(() => {}); }}
+                  style={{ marginTop: -10, marginBottom: 14, alignSelf: "center" }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: palette.brand }}>
+                    Review unsynced changes
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
@@ -631,6 +732,76 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             </Pressable>
           </View>
         ) : null}
+
+        <Modal visible={syncDetailsVisible} transparent animationType="slide" onRequestClose={() => setSyncDetailsVisible(false)}>
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
+            <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
+              <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginBottom: 18 }} />
+              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
+                Unsynced changes
+              </Text>
+              <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 6 }}>
+                These local changes have not reached the server yet. Retry sync before logging out. If only failed changes remain, you can explicitly discard them.
+              </Text>
+
+              <ScrollView style={{ marginTop: 16 }} contentContainerStyle={{ gap: 10 }}>
+                {syncIssues.length === 0 ? (
+                  <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut }}>
+                    No unsynced changes found.
+                  </Text>
+                ) : syncIssues.map((issue) => (
+                  <View key={issue.operation_id} style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.card, padding: 12 }}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }}>
+                      {issue.operation_type} {issue.entity.replace(/_/g, " ")}
+                    </Text>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>
+                      {issue.status === "failed" ? (issue.last_error ?? "Sync failed") : "Waiting to sync"}
+                    </Text>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: palette.mut, marginTop: 5 }}>
+                      Attempts: {issue.attempts} · ID: {issue.record_id.slice(0, 8)}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View style={{ gap: 10, marginTop: 18 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry sync"
+                  disabled={syncing}
+                  onPress={() => { retryFromDetails().catch(() => {}); }}
+                  style={{ minHeight: 50, borderRadius: 14, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}
+                >
+                  {syncing ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#fff" }}>Retry sync</Text>
+                  )}
+                </Pressable>
+                {allowDiscardLogout && syncIssues.length > 0 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Discard failed changes and log out"
+                    onPress={discardUnsyncedAndLogout}
+                    style={{ minHeight: 50, borderRadius: 14, borderWidth: 1.5, borderColor: "#FFCDD2", backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.error }}>
+                      Discard failed changes and log out
+                    </Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close sync details"
+                  onPress={() => setSyncDetailsVisible(false)}
+                  style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: palette.line, alignItems: "center", justifyContent: "center" }}
+                >
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>Close</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
 
       {/* Drawer overlay - rendered last to sit above everything */}
