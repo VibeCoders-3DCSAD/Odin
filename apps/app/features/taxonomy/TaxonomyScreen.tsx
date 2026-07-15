@@ -90,14 +90,12 @@ function CategoryRow({
   mutatingId,
   onEdit,
   onDelete,
-  onAddSubcategory,
   onNavigate,
 }: {
   category: Category;
   mutatingId: string | null;
   onEdit: (cat: Category) => void;
   onDelete: (cat: Category) => void;
-  onAddSubcategory: (cat: Category) => void;
   onNavigate: (cat: Category) => void;
 }) {
   const isSystem = category.is_system;
@@ -179,15 +177,6 @@ function CategoryRow({
           </Pressable>
         </>
       )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Add subcategory to ${category.label}`}
-        onPress={() => { onAddSubcategory(category); }}
-        hitSlop={8}
-        style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
-      >
-        <Plus size={14} color={palette.aqua700} />
-      </Pressable>
     </View>
   );
 }
@@ -197,14 +186,12 @@ function GroupCard({
   mutatingId,
   onEdit,
   onDelete,
-  onAddSubcategory,
   onNavigate,
 }: {
   group: Group;
   mutatingId: string | null;
   onEdit: (cat: Category) => void;
   onDelete: (cat: Category) => void;
-  onAddSubcategory: (cat: Category) => void;
   onNavigate: (cat: Category) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -259,7 +246,6 @@ function GroupCard({
               mutatingId={mutatingId}
               onEdit={onEdit}
               onDelete={onDelete}
-              onAddSubcategory={onAddSubcategory}
               onNavigate={onNavigate}
             />
           ))}
@@ -468,14 +454,6 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
     );
   }
 
-  function openAddSubcategory(cat: Category) {
-    setSubcategoryFormMode("create");
-    setEditingSubcategory(undefined);
-    setViewingCategoryId(cat.id);
-    setViewingCategoryLabel(cat.label);
-    setSubcategoryFormVisible(true);
-  }
-
   function openSubcategoryEdit(sub: Subcategory) {
     setSubcategoryFormMode("edit");
     setEditingSubcategory(sub);
@@ -676,7 +654,6 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
               mutatingId={mutatingId}
               onEdit={openCategoryEdit}
               onDelete={handleCategoryDelete}
-              onAddSubcategory={openAddSubcategory}
               onNavigate={navigateToSubcategories}
             />
           ))
