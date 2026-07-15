@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, Platform, View } from "react-native";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
+import OnboardingFlow from "./features/onboarding/OnboardingFlow";
 import { ToastProvider } from "./components/Toast";
 import { startConnectivityPolling } from "./services/connectivity";
 import { useDeepLink } from "./hooks/useDeepLink";
@@ -199,19 +200,36 @@ export default function App() {
     };
   }
 
+  async function handleOnboardingComplete() {
+    setAuthenticated((prev) =>
+      prev ? { ...prev, onboardingStatus: "submitted" } : prev,
+    );
+  }
+
   return (
     <ToastProvider>
       {authenticated ? (
-        <>
-          <MobileShell
-            accessToken={authenticated.accessToken}
-            userId={authenticated.userId ?? ""}
-            deviceId={deviceId}
-            onLoggedOut={handleLoggedOut}
-            signOut={async () => { await GoogleSignin.signOut(); }}
-          />
-          <StatusBar style="dark" />
-        </>
+        authenticated.onboardingStatus === "submitted" ? (
+          <>
+            <MobileShell
+              accessToken={authenticated.accessToken}
+              userId={authenticated.userId ?? ""}
+              deviceId={deviceId}
+              onLoggedOut={handleLoggedOut}
+              signOut={async () => { await GoogleSignin.signOut(); }}
+            />
+            <StatusBar style="dark" />
+          </>
+        ) : (
+          <>
+            <OnboardingFlow
+              accessToken={authenticated.accessToken}
+              userId={authenticated.userId ?? ""}
+              onComplete={handleOnboardingComplete}
+            />
+            <StatusBar style="dark" />
+          </>
+        )
       ) : isRestoringSession ? (
         <View className="flex-1 items-center justify-center bg-card">
           <ActivityIndicator color="#013220" />
