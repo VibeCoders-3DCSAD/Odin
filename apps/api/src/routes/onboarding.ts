@@ -14,7 +14,7 @@ function validateOnboardingPayload(
   if (raw_answers !== undefined && (typeof raw_answers !== "object" || raw_answers === null || Array.isArray(raw_answers))) {
     return "raw_answers must be a plain object when provided.";
   }
-  if (current_step_key !== undefined && typeof current_step_key !== "string") {
+  if (current_step_key !== undefined && current_step_key !== null && typeof current_step_key !== "string") {
     return "current_step_key must be a string when provided.";
   }
   return null;
@@ -261,6 +261,11 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
 
   const rawAnswers = (session.raw_answers ?? {}) as Record<string, unknown>;
   const requiredFields = [
+    "display_name",
+    "date_of_birth",
+    "is_filipino",
+    "metro_manila_presence",
+    "primary_employment_classification",
     "employment_status",
     "income_type",
     "pay_frequency",
@@ -289,9 +294,11 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     .rpc("submit_onboarding_session", { p_session_id: sessionId, p_user_id: userId });
 
   if (rpcError) {
+    console.error("submit_onboarding_session RPC error:", rpcError);
+    const message = (rpcError as { message?: string }).message ?? ONBOARDING_ERRORS.submit_failed;
     response.status(500).json({
       error: "Internal Server Error",
-      message: ONBOARDING_ERRORS.submit_failed,
+      message,
     });
     return;
   }
