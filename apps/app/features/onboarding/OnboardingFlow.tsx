@@ -15,6 +15,7 @@ export default function OnboardingFlow({ accessToken, userId, onComplete }: Onbo
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
   useEffect(() => {
+    if (!online) return;
     let cancelled = false;
     async function check() {
       try {
@@ -29,7 +30,20 @@ export default function OnboardingFlow({ accessToken, userId, onComplete }: Onbo
     }
     check();
     return () => { cancelled = true; };
-  }, [accessToken, onComplete]);
+  }, [accessToken, onComplete, online]);
+
+  if (!online) {
+    return (
+      <View className="flex-1 items-center justify-center bg-card px-6">
+        <Text className="text-lg font-semibold text-foreground text-center mb-4">
+          Internet Required
+        </Text>
+        <Text className="text-base text-muted-foreground text-center mb-6">
+          Onboarding requires an internet connection. Please connect and try again.
+        </Text>
+      </View>
+    );
+  }
 
   if (checking) {
     return (
@@ -39,22 +53,18 @@ export default function OnboardingFlow({ accessToken, userId, onComplete }: Onbo
     );
   }
 
-  if (alreadySubmitted || !online) {
+  if (alreadySubmitted) {
     return (
       <View className="flex-1 items-center justify-center bg-card px-6">
         <Text className="text-lg font-semibold text-foreground text-center mb-4">
-          {alreadySubmitted ? "Onboarding Complete" : "Internet Required"}
+          Onboarding Complete
         </Text>
         <Text className="text-base text-muted-foreground text-center mb-6">
-          {alreadySubmitted
-            ? "No onboarding session in progress. Continuing to Odin."
-            : "Onboarding requires an internet connection. Please connect and try again."}
+          No onboarding session in progress. Continuing to Odin.
         </Text>
-        {alreadySubmitted && (
-          <Text className="text-sm text-muted-foreground text-center mb-6">
-            Full onboarding questionnaire coming in next update.
-          </Text>
-        )}
+        <Text className="text-sm text-muted-foreground text-center mb-6">
+          Full onboarding questionnaire coming in next update.
+        </Text>
       </View>
     );
   }
