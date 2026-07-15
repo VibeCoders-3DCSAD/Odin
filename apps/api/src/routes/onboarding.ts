@@ -260,10 +260,24 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
   }
 
   const rawAnswers = (session.raw_answers ?? {}) as Record<string, unknown>;
-  const incomeType = typeof rawAnswers.income_type === "string" ? rawAnswers.income_type : "";
-  const monthlyIncome = typeof rawAnswers.monthly_income === "string" ? rawAnswers.monthly_income : "";
-  const monthlyObligations = typeof rawAnswers.monthly_obligations === "string" ? rawAnswers.monthly_obligations : "";
-  if (incomeType === "" || monthlyIncome === "" || monthlyObligations === "") {
+  const requiredFields = [
+    "employment_status",
+    "income_type",
+    "pay_frequency",
+    "monthly_income",
+    "fixed_obligation_types",
+    "monthly_obligations",
+    "protected_categories",
+  ];
+  const missing = requiredFields.filter((f) => {
+    const v = rawAnswers[f];
+    if (f === "monthly_income" || f === "monthly_obligations")
+      return typeof v !== "string" || v === "";
+    if (f === "fixed_obligation_types" || f === "protected_categories")
+      return !Array.isArray(v) || v.length === 0;
+    return typeof v !== "string" || v === "";
+  });
+  if (missing.length > 0) {
     response.status(400).json({
       error: "Bad Request",
       message: "Onboarding questionnaire is incomplete. Please complete all required steps before submitting.",
