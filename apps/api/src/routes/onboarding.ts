@@ -230,7 +230,7 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
 
   const { data: session, error: sessionError } = await authenticatedSupabase
     .from("onboarding_sessions")
-    .select("id, status")
+    .select("id, status, raw_answers")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -255,6 +255,18 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     response.status(409).json({
       error: "Conflict",
       message: ONBOARDING_ERRORS.session_not_in_progress,
+    });
+    return;
+  }
+
+  const rawAnswers = (session.raw_answers ?? {}) as Record<string, unknown>;
+  const incomeType = typeof rawAnswers.income_type === "string" ? rawAnswers.income_type : "";
+  const monthlyIncome = typeof rawAnswers.monthly_income === "string" ? rawAnswers.monthly_income : "";
+  const monthlyObligations = typeof rawAnswers.monthly_obligations === "string" ? rawAnswers.monthly_obligations : "";
+  if (incomeType === "" || monthlyIncome === "" || monthlyObligations === "") {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Onboarding questionnaire is incomplete. Please complete all required steps before submitting.",
     });
     return;
   }

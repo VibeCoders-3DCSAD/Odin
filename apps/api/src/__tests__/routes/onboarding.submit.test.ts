@@ -44,7 +44,11 @@ function mockAuth() {
 
 function mockInProgressSession() {
   mockFrom.mockReturnValueOnce(createMockQuery({
-    data: { id: "session-1", status: "in_progress" },
+    data: {
+      id: "session-1",
+      status: "in_progress",
+      raw_answers: { income_type: "stable", monthly_income: "50000", monthly_obligations: "5000" },
+    },
     error: null,
   }));
 }
