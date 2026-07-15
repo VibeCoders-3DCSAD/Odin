@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { CheckCircle, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
+import { ArrowsClockwise, CheckCircle, Cloud, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,6 +27,8 @@ import { isOnline } from "../lib/network";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(300, SCREEN_WIDTH * 0.8);
 const TOOLBAR_MAX_WIDTH = 430;
+const SYNC_STATUS_POLL_MS = 5_000;
+const AUTO_SYNC_MS = 30_000;
 
 const palette = {
   shell: "#fcf8f0",
@@ -130,15 +132,90 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const { showToast } = useToast();
   const [settingsSubPage, setSettingsSubPage] = useState(false);
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
   const initialSyncDone = useRef(false);
+  const wasOnline = useRef(false);
+  const syncInFlight = useRef(false);
+  const lastAutoSyncAt = useRef(0);
+  const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearSyncMessageSoon() {
+    if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current);
+    syncMessageTimer.current = setTimeout(() => setSyncMessage(null), 4000);
+  }
+
+  async function refreshQueueCount() {
+    const db = await initDatabase();
+    const row = await db.getFirstAsync<{ cnt: number }>(
+      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+      userId,
+      deviceId,
+    );
+    const count = row?.cnt ?? 0;
+    setQueueCount(count);
+    return count;
+  }
+
+  async function syncNow(showMessage: boolean) {
+    if (syncInFlight.current || !userId || !deviceId || !accessToken) return;
+
+    syncInFlight.current = true;
+    setSyncing(true);
+    if (showMessage) setSyncMessage(null);
+
+    try {
+      const online = await isOnline();
+      if (!online) {
+        if (showMessage) {
+          setSyncMessage("No internet connection");
+          clearSyncMessageSoon();
+        }
+        return;
+      }
+
+      lastAutoSyncAt.current = Date.now();
+      const result = await runSync(userId, deviceId, accessToken);
+      await refreshQueueCount();
+
+      if (showMessage && result.errors > 0) {
+        setSyncMessage(`${result.errors} item(s) could not be synced`);
+        clearSyncMessageSoon();
+      }
+    } catch {
+      if (showMessage) {
+        setSyncMessage("Sync failed");
+        clearSyncMessageSoon();
+      }
+    } finally {
+      syncInFlight.current = false;
+      setSyncing(false);
+    }
+  }
+
+  async function tickSyncStatus() {
+    if (!userId || !deviceId || !accessToken) return;
+
+    const pending = await refreshQueueCount();
+    const online = await isOnline();
+    const reconnected = online && !wasOnline.current;
+    const autoSyncDue = Date.now() - lastAutoSyncAt.current >= AUTO_SYNC_MS;
+
+    if (online && (reconnected || (pending > 0 && autoSyncDue))) {
+      await syncNow(false);
+    }
+
+    wasOnline.current = online;
+  }
 
   useEffect(() => {
     if (!userId || !deviceId || !accessToken) return;
 
-    const sync = () => { runSync(userId, deviceId, accessToken).catch(() => {}); };
+    const sync = () => { syncNow(false).catch(() => {}); };
 
     if (!initialSyncDone.current) {
       initialSyncDone.current = true;
@@ -149,7 +226,18 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       if (state === "active") sync();
     });
 
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current);
+    };
+  }, [userId, deviceId, accessToken]);
+
+  useEffect(() => {
+    if (!userId || !deviceId || !accessToken) return;
+
+    tickSyncStatus().catch(() => {});
+    const interval = setInterval(() => { tickSyncStatus().catch(() => {}); }, SYNC_STATUS_POLL_MS);
+    return () => clearInterval(interval);
   }, [userId, deviceId, accessToken]);
 
   function openDrawer() {
@@ -172,6 +260,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   function navigate(page: Page) {
     setCurrentPage(page);
     closeDrawer();
+  }
+
+  async function handleSync() {
+    await syncNow(true);
   }
 
   async function handleLogout() {
@@ -250,6 +342,37 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
                 </View>
               ) : null}
+              <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
+                Sync
+              </Text>
+              <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 20 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={queueCount > 0 ? "Sync pending changes" : "Synced"}
+                  disabled={syncing}
+                  onPress={handleSync}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}
+                >
+                  {syncing ? (
+                    <ActivityIndicator size="small" color={palette.mut} />
+                  ) : queueCount > 0 ? (
+                    <ArrowsClockwise size={18} color="#C25E00" weight="bold" />
+                  ) : (
+                    <Cloud size={18} color="#0B8A55" weight="bold" />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13.5, fontWeight: "600", color: palette.ink }}>
+                      {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} pending` : "Synced"}
+                    </Text>
+                    {syncMessage ? (
+                      <Text style={{ fontSize: 10.5, color: palette.mut, marginTop: 1 }}>
+                        {syncMessage}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
+                </Pressable>
+              </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
@@ -324,6 +447,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           </View>
           <View className="flex-row items-center gap-3">
             <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={queueCount > 0 ? `${queueCount} unsynced changes` : "Synced"}
+              onPress={handleSync}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <ActivityIndicator size="small" color={palette.mut} />
+              ) : queueCount > 0 ? (
+                <ArrowsClockwise size={20} color="#C25E00" weight="bold" />
+              ) : (
+                <Cloud size={20} color="#0B8A55" weight="bold" />
+              )}
+            </Pressable>
             <View className="relative">
               <MaterialCommunityIcons color={palette.ink2} name="bell-outline" size={20} />
               <View className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#ba1a1a] rounded-full" />
