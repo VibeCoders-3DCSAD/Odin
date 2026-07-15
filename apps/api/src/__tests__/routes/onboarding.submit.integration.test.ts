@@ -110,6 +110,11 @@ async function submitWithAnswers(answers: Record<string, unknown>) {
 }
 
 describe("submit_onboarding_session (integration)", () => {
+  if (!process.env.RUN_INTEGRATION_TESTS) {
+    it.skip("skipped — set RUN_INTEGRATION_TESTS=true to run", () => {});
+    return;
+  }
+
   it("returns stable_obligated for stable income with low obligations", async () => {
     const result = await submitWithAnswers({
       income_type: "stable",
