@@ -127,15 +127,8 @@ BEGIN
     END IF;
   END IF;
 
-  IF v_income_type_label = 'stable' AND (v_obligation_load_bps IS NULL OR v_obligation_load_bps < 3000) THEN
-    v_profile_label := 'stable_flexible';
-  ELSIF v_income_type_label = 'stable' THEN
-    v_profile_label := 'stable_obligated';
-  ELSIF v_obligation_load_bps IS NULL OR v_obligation_load_bps < 3000 THEN
-    v_profile_label := 'variable_flexible';
-  ELSE
-    v_profile_label := 'variable_obligated';
-  END IF;
+  -- ponytail: deterministic placeholder until ML classifier is ready
+  v_profile_label := 'stable_obligated';
 
   v_output_snapshot := jsonb_build_object(
     'profile_label', v_profile_label,
@@ -165,7 +158,7 @@ BEGIN
     input_snapshot, output_snapshot
   ) VALUES (
     p_user_id, p_session_id, 'suggested', 'questionnaire',
-    now(), 'heuristic_v1', v_profile_label, v_confidence_score,
+    now(), 'deterministic_placeholder_v1', v_profile_label, v_confidence_score,
     v_income_type_label, v_obligation_load_bps, v_explanation_summary,
     v_input_snapshot, v_output_snapshot
   )

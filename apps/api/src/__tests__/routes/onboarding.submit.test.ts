@@ -29,6 +29,7 @@ import {
   validUserId,
   authHeader,
 } from "../helpers/fixtures.js";
+import { ONBOARDING_ERRORS } from "../../lib/constants.js";
 
 const mockGetUser = supabase.auth.getUser as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
@@ -53,7 +54,7 @@ function mockRpcSuccess(overrides: Record<string, unknown> = {}) {
     data: {
       assessment_id: "assess-1",
       assignment_id: "assign-1",
-      profile_label: "stable_flexible",
+      profile_label: "stable_obligated",
       ...overrides,
     },
     error: null,
@@ -82,9 +83,24 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
     expect(response.status).toBe(200);
     expect(response.body.payload).toMatchObject({
       session: { id: sessionId, status: "submitted" },
-      assessment: { id: "assess-1", proposed_profile_label: "stable_flexible" },
-      assignment: { id: "assign-1", profile_label: "stable_flexible", confirmation_required: true },
+      assessment: { id: "assess-1", proposed_profile_label: "stable_obligated" },
+      assignment: { id: "assign-1", profile_label: "stable_obligated", confirmation_required: true },
     });
+  });
+
+  it("returns stable_obligated regardless of income type in answers", async () => {
+    mockAuth();
+    mockInProgressSession();
+    mockRpcSuccess();
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload.assessment.proposed_profile_label).toBe("stable_obligated");
+    expect(response.body.payload.assignment.profile_label).toBe("stable_obligated");
   });
 
   it("returns 400 when confirm_data_use is missing", async () => {
@@ -136,6 +152,20 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
       .send({ payload: { confirm_data_use: true } });
 
     expect(response.status).toBe(409);
+  });
+
+  it("returns 404 when session belongs to another user", async () => {
+    mockAuth();
+
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: null, error: null }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toBe(ONBOARDING_ERRORS.session_not_found);
   });
 
   it("returns 401 when no authorization header", async () => {
