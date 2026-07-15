@@ -152,7 +152,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   async function refreshQueueCount() {
     const db = await initDatabase();
     const row = await db.getFirstAsync<{ cnt: number }>(
-      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
       userId,
       deviceId,
     );
@@ -348,7 +348,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 20 }}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={queueCount > 0 ? "Sync pending changes" : "Synced"}
+                  accessibilityLabel={queueCount > 0 ? "Sync unsynced changes" : "Synced"}
                   disabled={syncing}
                   onPress={handleSync}
                   style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}
@@ -362,7 +362,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   )}
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13.5, fontWeight: "600", color: palette.ink }}>
-                      {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} pending` : "Synced"}
+                      {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} unsynced` : "Synced"}
                     </Text>
                     {syncMessage ? (
                       <Text style={{ fontSize: 10.5, color: palette.mut, marginTop: 1 }}>
