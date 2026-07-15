@@ -29,6 +29,7 @@ const DRAWER_WIDTH = Math.min(300, SCREEN_WIDTH * 0.8);
 const TOOLBAR_MAX_WIDTH = 430;
 const SYNC_STATUS_POLL_MS = 5_000;
 const AUTO_SYNC_MS = 30_000;
+const MAX_SYNC_ATTEMPTS = 3;
 
 const palette = {
   shell: "#fcf8f0",
@@ -161,6 +162,19 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     return count;
   }
 
+  async function countRetryableSyncRows() {
+    const db = await initDatabase();
+    const row = await db.getFirstAsync<{ cnt: number }>(
+      `SELECT COUNT(*) as cnt FROM sync_queue
+       WHERE user_id = ? AND device_id = ?
+         AND status IN ('pending', 'failed') AND attempts < ?`,
+      userId,
+      deviceId,
+      MAX_SYNC_ATTEMPTS,
+    );
+    return row?.cnt ?? 0;
+  }
+
   async function syncNow(showMessage: boolean) {
     if (syncInFlight.current || !userId || !deviceId || !accessToken) return;
 
@@ -200,12 +214,13 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   async function tickSyncStatus() {
     if (!userId || !deviceId || !accessToken) return;
 
-    const pending = await refreshQueueCount();
+    await refreshQueueCount();
+    const retryable = await countRetryableSyncRows();
     const online = await isOnline();
     const reconnected = online && !wasOnline.current;
     const autoSyncDue = Date.now() - lastAutoSyncAt.current >= AUTO_SYNC_MS;
 
-    if (online && (reconnected || (pending > 0 && autoSyncDue))) {
+    if (online && retryable > 0 && (reconnected || autoSyncDue)) {
       await syncNow(false);
     }
 
