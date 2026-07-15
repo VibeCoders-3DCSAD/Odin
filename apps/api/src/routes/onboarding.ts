@@ -291,8 +291,8 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
   }
 
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (typeof rawAnswers.date_of_birth === "string" && !dateRegex.test(rawAnswers.date_of_birth)) {
-    response.status(400).json({ error: "Bad Request", message: "date_of_birth must be in YYYY-MM-DD format." });
+  if (typeof rawAnswers.date_of_birth === "string" && (!dateRegex.test(rawAnswers.date_of_birth) || Number.isNaN(Date.parse(rawAnswers.date_of_birth)))) {
+    response.status(400).json({ error: "Bad Request", message: "date_of_birth must be a valid date in YYYY-MM-DD format." });
     return;
   }
   if (typeof rawAnswers.is_filipino === "string" && !["true", "false"].includes(rawAnswers.is_filipino)) {
