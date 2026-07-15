@@ -36,7 +36,6 @@ export type StepOption = {
 
 export type StepConfig = {
   key: string;
-  index: number;
   title: string;
   subtitle?: string;
   kind: StepKind;
@@ -49,8 +48,63 @@ export type StepConfig = {
 
 export const STEPS: StepConfig[] = [
   {
+    key: "display_name",
+    title: "What should we call you?",
+    kind: "input",
+    questionKey: "display_name",
+    inputPlaceholder: "Your name",
+  },
+  {
+    key: "date_of_birth",
+    title: "Date of Birth",
+    subtitle: "Enter your date of birth to confirm eligibility.",
+    kind: "input",
+    questionKey: "date_of_birth",
+    inputLabel: "Date of Birth (YYYY-MM-DD)",
+  },
+  {
+    key: "nationality",
+    title: "Filipino Citizenship",
+    subtitle: "Are you a Filipino citizen?",
+    kind: "card_select",
+    questionKey: "is_filipino",
+    options: [
+      { key: "true", label: "Yes", description: "I am a Filipino citizen" },
+      { key: "false", label: "No", description: "I am not a Filipino citizen" },
+    ],
+  },
+  {
+    key: "metro_manila",
+    title: "Metro Manila Presence",
+    subtitle: "Do you live or work in Metro Manila?",
+    kind: "card_select",
+    questionKey: "metro_manila_presence",
+    options: [
+      { key: "lives_in_metro_manila", label: "Live in Metro Manila" },
+      { key: "works_in_metro_manila", label: "Work in Metro Manila" },
+      { key: "lives_and_works_in_metro_manila", label: "Live & Work in Metro Manila" },
+    ],
+  },
+  {
+    key: "employment_classification",
+    title: "Employment Classification",
+    subtitle: "Select the option that best describes your employment.",
+    kind: "card_select",
+    questionKey: "primary_employment_classification",
+    options: [
+      { key: "full_time_employee", label: "Full-Time Employee" },
+      { key: "part_time_employee", label: "Part-Time Employee" },
+      { key: "self_employed", label: "Self-Employed" },
+      { key: "freelancer", label: "Freelancer" },
+      { key: "business_owner", label: "Business Owner" },
+      { key: "entrepreneur", label: "Entrepreneur" },
+      { key: "contractual_project_based", label: "Contractual / Project-Based" },
+      { key: "gig_worker", label: "Gig Worker" },
+      { key: "other", label: "Other" },
+    ],
+  },
+  {
     key: "employment",
-    index: 0,
     title: "Employment Status",
     subtitle: "Select the option that best describes your current employment.",
     kind: "card_select",
@@ -66,7 +120,6 @@ export const STEPS: StepConfig[] = [
   },
   {
     key: "income_stability",
-    index: 1,
     title: "Income Stability",
     subtitle: "How stable is your primary source of income?",
     kind: "card_select",
@@ -80,7 +133,6 @@ export const STEPS: StepConfig[] = [
   },
   {
     key: "pay_frequency",
-    index: 2,
     title: "Pay Frequency",
     subtitle: "How often do you receive your primary income?",
     kind: "dropdown",
@@ -96,7 +148,6 @@ export const STEPS: StepConfig[] = [
   },
   {
     key: "monthly_income",
-    index: 3,
     title: "Monthly Income",
     subtitle: "Enter your average monthly take-home income.",
     kind: "input",
@@ -106,7 +157,6 @@ export const STEPS: StepConfig[] = [
   },
   {
     key: "fixed_obligations",
-    index: 4,
     title: "Fixed Monthly Obligations",
     subtitle: "Select all that apply, then enter your total monthly obligations.",
     kind: "card_multi_select",
@@ -123,7 +173,6 @@ export const STEPS: StepConfig[] = [
   },
   {
     key: "dependents_protected",
-    index: 5,
     title: "Dependents & Protected Status",
     subtitle: "Select any that apply to your household.",
     kind: "card_multi_select",
@@ -139,7 +188,6 @@ export const STEPS: StepConfig[] = [
   },
   {
     key: "review",
-    index: 6,
     title: "Review Your Profile",
     subtitle: "Review your answers before submitting.",
     kind: "review",

@@ -7,6 +7,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import KeyboardAvoider from "../../components/KeyboardAvoider";
 import {
   CaretLeft,
   CaretRight,
@@ -303,7 +304,10 @@ export default function OnboardingFlow({
 
   const isCurrentStepComplete = (() => {
     const val = answers[step.questionKey];
-    if (step.kind === "input") return incomeText !== "";
+    if (step.kind === "input") {
+      if (step.key === "monthly_income") return incomeText !== "";
+      return typeof val === "string" && val !== "";
+    }
     if (step.kind === "card_multi_select") {
       if (step.key === "fixed_obligations") return Array.isArray(val) && val.length > 0 && obligationAmount !== "";
       return Array.isArray(val) && val.length > 0;
@@ -321,12 +325,13 @@ export default function OnboardingFlow({
   })();
 
   return (
+    <KeyboardAvoider>
     <View className="flex-1 bg-card">
       {/* Progress bar */}
       <View className="flex-row gap-1.5 px-5 pt-12 pb-4">
-        {STEPS.map((s) => {
-          const isDone = s.index < stepIndex;
-          const isCurrent = s.index === stepIndex;
+        {STEPS.map((s, i) => {
+          const isDone = i < stepIndex;
+          const isCurrent = i === stepIndex;
           const bg = isDone ? AQUA950 : isCurrent ? AQUA600 : LINE;
           return (
             <View
@@ -442,12 +447,16 @@ export default function OnboardingFlow({
         {step.kind === "input" && (
           <InputStep
             step={step}
-            value={incomeText}
-            onChangeText={(t) => {
-              const digits = t.replace(/[^0-9]/g, "");
-              setIncomeText(digits);
-              saveAnswer(step.questionKey, digits === "" ? "" : digits);
-            }}
+            value={step.key === "monthly_income" ? incomeText : (answers[step.questionKey] as string) ?? ""}
+            onChangeText={
+              step.key === "monthly_income"
+                ? (t: string) => {
+                    const digits = t.replace(/[^0-9]/g, "");
+                    setIncomeText(digits);
+                    saveAnswer(step.questionKey, digits === "" ? "" : digits);
+                  }
+                : (t: string) => saveAnswer(step.questionKey, t)
+            }
           />
         )}
 
@@ -609,6 +618,7 @@ export default function OnboardingFlow({
         )}
       </View>
     </View>
+    </KeyboardAvoider>
   );
 }
 
@@ -826,33 +836,51 @@ function InputStep({
         }}
       >
         {step.inputSuffix === "PHP" ? (
-          <Text
+          <>
+            <Text
+              style={{
+                fontFamily: "Manrope",
+                fontWeight: "500",
+                fontSize: 12,
+                color: MUTED,
+                paddingLeft: 16,
+              }}
+            >
+              PHP
+            </Text>
+            <TextInput
+              value={value ? Number(value).toLocaleString() : ""}
+              onChangeText={(t) => onChangeText(t.replace(/[^0-9]/g, ""))}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={MUTED}
+              style={{
+                flex: 1,
+                fontFamily: "Manrope",
+                fontWeight: "700",
+                fontSize: 20,
+                color: INK,
+                padding: 16,
+              }}
+            />
+          </>
+        ) : (
+          <TextInput
+            value={value as string}
+            onChangeText={(t) => onChangeText(t)}
+            keyboardType="default"
+            placeholder={step.inputPlaceholder ?? ""}
+            placeholderTextColor={MUTED}
             style={{
+              flex: 1,
               fontFamily: "Manrope",
-              fontWeight: "500",
-              fontSize: 12,
-              color: MUTED,
-              paddingLeft: 16,
+              fontWeight: "700",
+              fontSize: 20,
+              color: INK,
+              padding: 16,
             }}
-          >
-            PHP
-          </Text>
-        ) : null}
-        <TextInput
-          value={value ? Number(value).toLocaleString() : ""}
-          onChangeText={(t) => onChangeText(t.replace(/[^0-9]/g, ""))}
-          keyboardType="numeric"
-          placeholder="0"
-          placeholderTextColor={MUTED}
-          style={{
-            flex: 1,
-            fontFamily: "Manrope",
-            fontWeight: "700",
-            fontSize: 20,
-            color: INK,
-            padding: 16,
-          }}
-        />
+          />
+        )}
       </View>
     </View>
   );
@@ -871,26 +899,45 @@ function ReviewStep({
 }) {
   const rows: { label: string; value: string; stepIndex: number }[] = [];
 
-  const EMP_STEP = STEPS[0]!;
-  const STAB_STEP = STEPS[1]!;
-  const FREQ_STEP = STEPS[2]!;
-  const OBL_STEP = STEPS[4]!;
-  const DEP_STEP = STEPS[5]!;
+  const DOB_STEP = STEPS[1]!;
+  const NAT_STEP = STEPS[2]!;
+  const MM_STEP = STEPS[3]!;
+  const EMP_CLASS_STEP = STEPS[4]!;
+  const EMP_STEP = STEPS[5]!;
+  const STAB_STEP = STEPS[6]!;
+  const FREQ_STEP = STEPS[7]!;
+  const OBL_STEP = STEPS[9]!;
+  const DEP_STEP = STEPS[10]!;
+
+  const displayName = answers.display_name;
+  if (displayName && displayName !== "") rows.push({ label: "Name", value: displayName as string, stepIndex: 0 });
+
+  const dob = answers.date_of_birth;
+  if (dob && dob !== "") rows.push({ label: "Date of Birth", value: dob as string, stepIndex: 1 });
+
+  const natLabel = NAT_STEP.options?.find((o) => o.key === answers.is_filipino);
+  if (natLabel) rows.push({ label: "Filipino Citizen", value: natLabel.label, stepIndex: 2 });
+
+  const mmLabel = MM_STEP.options?.find((o) => o.key === answers.metro_manila_presence);
+  if (mmLabel) rows.push({ label: "Metro Manila", value: mmLabel.label, stepIndex: 3 });
+
+  const empClassLabel = EMP_CLASS_STEP.options?.find((o) => o.key === answers.primary_employment_classification);
+  if (empClassLabel) rows.push({ label: "Employment", value: empClassLabel.label, stepIndex: 4 });
 
   const empLabel = EMP_STEP.options?.find((o) => o.key === answers.employment_status);
-  if (empLabel) rows.push({ label: "Employment", value: empLabel.label, stepIndex: 0 });
+  if (empLabel) rows.push({ label: "Employment Status", value: empLabel.label, stepIndex: 5 });
 
-  const stabLabel = STEPS[1]!.options?.find((o) => o.key === answers.income_stability);
-  if (stabLabel) rows.push({ label: "Income Stability", value: stabLabel.label, stepIndex: 1 });
+  const stabLabel = STEPS[6]!.options?.find((o) => o.key === answers.income_stability);
+  if (stabLabel) rows.push({ label: "Income Stability", value: stabLabel.label, stepIndex: 6 });
 
   const freqLabel = FREQ_STEP.options?.find((o) => o.key === answers.pay_frequency);
-  if (freqLabel) rows.push({ label: "Pay Frequency", value: freqLabel.label, stepIndex: 2 });
+  if (freqLabel) rows.push({ label: "Pay Frequency", value: freqLabel.label, stepIndex: 7 });
 
   if (incomeText)
     rows.push({
       label: "Monthly Income",
       value: `PHP ${Number(incomeText).toLocaleString()}`,
-      stepIndex: 3,
+      stepIndex: 8,
     });
 
   const obligations = (answers.fixed_obligation_types as string[] | undefined) ?? [];
@@ -899,12 +946,12 @@ function ReviewStep({
     .filter(Boolean)
     .join(", ");
   if (oblLabels) {
-    rows.push({ label: "Obligations", value: oblLabels, stepIndex: 4 });
+    rows.push({ label: "Obligations", value: oblLabels, stepIndex: 9 });
     if (obligationAmount)
       rows.push({
         label: "Total",
         value: `PHP ${Number(obligationAmount).toLocaleString()}`,
-        stepIndex: 4,
+        stepIndex: 9,
       });
   }
 
@@ -913,7 +960,7 @@ function ReviewStep({
     .map((k) => DEP_STEP.options?.find((o) => o.key === k)?.label)
     .filter(Boolean)
     .join(", ");
-  if (catLabels) rows.push({ label: "Categories", value: catLabels, stepIndex: 5 });
+  if (catLabels) rows.push({ label: "Categories", value: catLabels, stepIndex: 10 });
 
   return (
     <View>
