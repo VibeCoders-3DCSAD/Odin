@@ -13,13 +13,13 @@ DECLARE
   v_eligibility_confirmed_at timestamptz;
   v_raw_answers jsonb;
   v_income_type text;
-  v_income_type_label text;
+  v_income_type_label odin_income_type;
   v_monthly_income numeric;
   v_monthly_obligations numeric;
   v_has_dependents boolean;
   v_obligation_load_bps integer;
   v_confidence_score numeric;
-  v_profile_label text;
+  v_profile_label odin_financial_profile_label;
   v_explanation_summary text;
   v_input_snapshot jsonb;
   v_output_snapshot jsonb;
@@ -41,7 +41,7 @@ BEGIN
     RAISE EXCEPTION 'Session not found or not in progress';
   END IF;
 
-  SELECT id, eligibility_confirmed_at INTO v_eligibility_id, v_eligibility_confirmed_at
+  SELECT user_id, eligibility_confirmed_at INTO v_eligibility_id, v_eligibility_confirmed_at
   FROM user_eligibility_profiles
   WHERE user_id = p_user_id;
 
