@@ -68,6 +68,8 @@ export default function OnboardingFlow({
   sessionRef.current = sessionId;
   const answersRef = useRef(answers);
   answersRef.current = answers;
+  const onlineRef = useRef(online);
+  onlineRef.current = online;
 
   // ── Session init ──
   useEffect(() => {
@@ -101,10 +103,12 @@ export default function OnboardingFlow({
             setSessionId(cb.payload.session.id);
           } else {
             if (!cancelled) setInitError(cb?.message ?? "Failed to create onboarding session.");
+            return;
           }
         }
+        if (!cancelled) setInitError(null);
       } catch {
-        if (!cancelled) setInitError("Failed to load onboarding session. Please check your connection and try again.");
+        if (!cancelled && onlineRef.current) setInitError("Failed to load onboarding session. Please check your connection and try again.");
       }
       if (!cancelled) setInitializing(false);
     }
