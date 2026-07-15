@@ -220,6 +220,35 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
     expect(response.status).toBe(500);
   });
 
+  it("returns 400 when raw_answers is missing a required field", async () => {
+    mockAuth();
+    mockFrom.mockReturnValueOnce(createMockQuery({
+      data: {
+        id: "session-1",
+        status: "in_progress",
+        raw_answers: {
+          employment_status: "employed_full_time",
+          income_type: "stable",
+          // pay_frequency missing
+          monthly_income: "50000",
+          fixed_obligation_types: ["rent_mortgage"],
+          monthly_obligations: "5000",
+          protected_categories: ["none"],
+        },
+      },
+      error: null,
+    }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain("incomplete");
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   it("returns 500 when rpc call fails", async () => {
     mockAuth();
     mockInProgressSession();
