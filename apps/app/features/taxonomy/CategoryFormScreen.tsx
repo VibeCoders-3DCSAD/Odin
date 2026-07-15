@@ -70,10 +70,10 @@ export default function CategoryFormScreen({
   }, [visible, mode, category?.id]);
 
   useEffect(() => {
-    if (isCreate && label.trim()) {
+    if (label.trim()) {
       setSlug(generateSlug(label));
     }
-  }, [label, isCreate]);
+  }, [label]);
 
   async function handleSave() {
     setFormError(null);
