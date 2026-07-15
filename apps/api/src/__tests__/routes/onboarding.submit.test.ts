@@ -47,7 +47,15 @@ function mockInProgressSession() {
     data: {
       id: "session-1",
       status: "in_progress",
-      raw_answers: { income_type: "stable", monthly_income: "50000", monthly_obligations: "5000" },
+      raw_answers: {
+        employment_status: "employed_full_time",
+        income_type: "stable",
+        pay_frequency: "monthly",
+        monthly_income: "50000",
+        fixed_obligation_types: ["rent_mortgage"],
+        monthly_obligations: "5000",
+        protected_categories: ["none"],
+      },
     },
     error: null,
   }));
