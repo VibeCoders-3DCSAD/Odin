@@ -3,7 +3,6 @@ import { initDatabase } from "../client";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
-const MAX_SYNC_ATTEMPTS = 3;
 
 let syncRunning = false;
 
@@ -108,11 +107,10 @@ async function pushQueue(
   const rows = await db.getAllAsync<QueueRow>(
     `SELECT * FROM sync_queue
      WHERE user_id = ? AND device_id = ?
-       AND status IN ('pending', 'failed') AND attempts < ?
+       AND status IN ('pending', 'failed')
      ORDER BY created_at LIMIT 50`,
     userId,
     deviceId,
-    MAX_SYNC_ATTEMPTS,
   );
 
   if (rows.length === 0) return { pushed: 0, errors: 0 };
