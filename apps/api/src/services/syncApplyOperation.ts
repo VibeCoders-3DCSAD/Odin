@@ -309,22 +309,71 @@ async function validateCreatePayload(
     return sanitized;
   }
 
-  // ponytail: basic allowlist validation for template/draft/recurring entities
   if (entity === "transaction_templates") {
     assertOnlyAllowed(payload, TEMPLATE_FIELDS);
-    return sanitizePayload(payload, TEMPLATE_FIELDS);
+    const sanitized = sanitizePayload(payload, TEMPLATE_FIELDS);
+    requireString(sanitized, "transaction_type");
+    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
+      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+    }
+    requireString(sanitized, "name");
+    if (sanitized.amount_centavos != null) {
+      requirePositiveInteger(sanitized, "amount_centavos");
+    }
+    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
+    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    return sanitized;
   }
   if (entity === "transaction_drafts") {
     assertOnlyAllowed(payload, DRAFT_FIELDS);
-    return sanitizePayload(payload, DRAFT_FIELDS);
+    const sanitized = sanitizePayload(payload, DRAFT_FIELDS);
+    requireString(sanitized, "client_draft_id");
+    if (!sanitized.payload || typeof sanitized.payload !== "object") {
+      throw new Error("payload must be an object");
+    }
+    return sanitized;
   }
   if (entity === "recurring_transaction_templates") {
     assertOnlyAllowed(payload, RECURRING_TEMPLATE_FIELDS);
-    return sanitizePayload(payload, RECURRING_TEMPLATE_FIELDS);
+    const sanitized = sanitizePayload(payload, RECURRING_TEMPLATE_FIELDS);
+    requireString(sanitized, "transaction_type");
+    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
+      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+    }
+    requireString(sanitized, "name");
+    requirePositiveInteger(sanitized, "amount_centavos");
+    requireString(sanitized, "frequency");
+    if (!["daily", "weekly", "monthly", "quarterly", "yearly", "custom"].includes(sanitized.frequency as string)) {
+      throw new Error("frequency must be a valid schedule");
+    }
+    requireString(sanitized, "starts_on");
+    if (sanitized.interval_count != null) {
+      if (typeof sanitized.interval_count !== "number" || !Number.isInteger(sanitized.interval_count) || (sanitized.interval_count as number) <= 0) {
+        throw new Error("interval_count must be a positive integer");
+      }
+    }
+    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
+    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    return sanitized;
   }
   if (entity === "recurring_transaction_occurrences") {
     assertOnlyAllowed(payload, RECURRING_OCCURRENCE_FIELDS);
-    return sanitizePayload(payload, RECURRING_OCCURRENCE_FIELDS);
+    const sanitized = sanitizePayload(payload, RECURRING_OCCURRENCE_FIELDS);
+    requireString(sanitized, "recurring_template_id");
+    requireString(sanitized, "scheduled_date");
+    // ponytail: verify the template exists and belongs to this user
+    const { data: template, error: templateErr } = await supabase
+      .from("recurring_transaction_templates")
+      .select("id")
+      .eq("id", sanitized.recurring_template_id as string)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (templateErr) throw new Error(`recurring template validation failed: ${templateErr.message}`);
+    if (!template) throw new Error("recurring template not found or inaccessible");
+    return sanitized;
   }
 
   throw new Error(`Unknown entity for create: ${entity}`);
@@ -399,6 +448,12 @@ async function validateUpdatePayload(
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
         continue;
       }
+      continue;
+    }
+
+    // ponytail: new template/draft/recurring entities validated by allowlist + RPC checks
+    if (entity === "transaction_templates" || entity === "transaction_drafts" ||
+        entity === "recurring_transaction_templates" || entity === "recurring_transaction_occurrences") {
       continue;
     }
 
