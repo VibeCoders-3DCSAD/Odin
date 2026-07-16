@@ -938,12 +938,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         <Modal visible={syncDetailsVisible} transparent animationType="slide" presentationStyle="overFullScreen" onDismiss={() => setSyncDetailsVisible(false)} onRequestClose={() => setSyncDetailsVisible(false)}>
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Close sync details" onPress={() => setSyncDetailsVisible(false)} style={{ flex: 1 }} />
-            <View
-              onStartShouldSetResponder={() => true}
-              {...syncSheetPanResponder.panHandlers}
-              style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}
-            >
-              <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginBottom: 18 }} />
+            <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
+              <View {...syncSheetPanResponder.panHandlers} style={{ paddingVertical: 8, marginTop: -8, marginBottom: 10 }}>
+                <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center" }} />
+              </View>
               <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
                 Unsynced changes
               </Text>
@@ -995,7 +993,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 {allowDiscardLogout && failedIssueTotal > 0 && pendingIssueTotal === 0 ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Discard failed changes and log out"
+                    accessibilityLabel={logoutAfterDiscard ? "Discard failed changes and log out" : "Discard failed changes"}
                     onPress={() => setDiscardConfirmVisible(true)}
                     style={{ minHeight: 50, borderRadius: 14, borderWidth: 1.5, borderColor: "#FFCDD2", backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
                   >
@@ -1029,7 +1027,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               <View style={{ gap: 10, marginTop: 18 }}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Confirm discard failed changes and log out"
+                  accessibilityLabel={logoutAfterDiscard ? "Confirm discard failed changes and log out" : "Confirm discard failed changes"}
                   disabled={isLoggingOut}
                   onPress={discardUnsyncedAndLogout}
                   style={{ minHeight: 50, borderRadius: 14, backgroundColor: palette.error, alignItems: "center", justifyContent: "center" }}
