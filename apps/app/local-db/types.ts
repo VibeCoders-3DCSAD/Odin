@@ -1,4 +1,4 @@
-export type SyncOperationStatus = "pending" | "synced" | "failed";
+export type SyncOperationStatus = "pending" | "synced" | "failed" | "discarded";
 
 export type SyncOperationType = "create" | "update" | "delete";
 
@@ -28,6 +28,7 @@ export type SyncOperation = {
   status: SyncOperationStatus;
   attempts: number;
   last_error: string | null;
+  discarded_at: string | null;
   created_at: string;
 };
 

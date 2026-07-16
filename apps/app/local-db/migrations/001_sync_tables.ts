@@ -27,6 +27,7 @@ const migration: Migration = {
         status text not null default 'pending',
         attempts integer not null default 0,
         last_error text,
+        discarded_at text,
         created_at text not null
       );
     `);

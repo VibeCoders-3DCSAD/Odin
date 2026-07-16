@@ -23,6 +23,7 @@ import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
 import { initDatabase } from "../local-db/client";
+import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -229,6 +230,12 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     };
   }, [deviceId, userId]);
 
+  useEffect(() => {
+    initDatabase()
+      .then(cleanupDiscardedSyncRows)
+      .catch(() => {});
+  }, []);
+
   function clearSyncMessageSoon() {
     if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current);
     syncMessageTimer.current = setTimeout(() => setSyncMessage(null), 4000);
@@ -253,6 +260,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
   async function refreshQueueCount() {
     const db = await initDatabase();
+    await cleanupDiscardedSyncRows(db);
     const row = await db.getFirstAsync<{ cnt: number }>(
       "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
       userId,
@@ -511,7 +519,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         return;
       }
       await db.runAsync(
-        "DELETE FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed' AND attempts >= ?",
+        "UPDATE sync_queue SET status = 'discarded', discarded_at = ? WHERE user_id = ? AND device_id = ? AND status = 'failed' AND attempts >= ?",
+        new Date().toISOString(),
         userId,
         deviceId,
         MAX_SYNC_ATTEMPTS,
