@@ -12,7 +12,7 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
-import { createExpense, createIncome, createTransfer } from "../../local-db/repositories/ledger";
+import { createExpense, createIncome, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../local-db/repositories/ledger";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
@@ -36,21 +36,32 @@ type Props = {
   deviceId: string;
   accessToken: string;
   onClose: () => void;
+  transaction?: Transaction;
 };
 
-export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose }: Props) {
+export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction }: Props) {
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
 
-  const [txType, setTxType] = useState<TransactionType>("expense");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date());
+  const isEdit = !!transaction;
+
+  const [txType, setTxType] = useState<TransactionType>(
+    (transaction?.transaction_type as TransactionType) ?? "expense",
+  );
+  const [amount, setAmount] = useState(
+    transaction ? String(transaction.amount_centavos / 100) : "",
+  );
+  const [date, setDate] = useState(
+    transaction ? new Date(transaction.transaction_date + "T00:00:00") : new Date(),
+  );
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [sourceAccountId, setSourceAccountId] = useState("");
-  const [destAccountId, setDestAccountId] = useState("");
-  const [subcategoryId, setSubcategoryId] = useState("");
-  const [description, setDescription] = useState("");
-  const [notes, setNotes] = useState("");
+  const [sourceAccountId, setSourceAccountId] = useState(transaction?.source_account_id ?? "");
+  const [destAccountId, setDestAccountId] = useState(transaction?.destination_account_id ?? "");
+  const [subcategoryId, setSubcategoryId] = useState(transaction?.subcategory_id ?? "");
+  const [description, setDescription] = useState(
+    transaction?.merchant_name ?? transaction?.counterparty_name ?? "",
+  );
+  const [notes, setNotes] = useState(transaction?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [accountPickerMode, setAccountPickerMode] = useState<"source" | "dest" | null>(null);
@@ -112,7 +123,29 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
     setSaving(true);
     try {
-      if (txType === "expense") {
+      if (isEdit) {
+        const updateInput: Record<string, unknown> = {
+          amount_centavos: centavos,
+          transaction_date: dateStr,
+          notes: notes.trim() || null,
+        };
+        if (txType === "expense") {
+          updateInput.source_account_id = sourceAccountId;
+          updateInput.subcategory_id = subcategoryId;
+          updateInput.merchant_name = description.trim() || null;
+        } else if (txType === "income") {
+          updateInput.destination_account_id = destAccountId;
+          updateInput.subcategory_id = subcategoryId;
+          updateInput.counterparty_name = description.trim() || null;
+        } else {
+          updateInput.source_account_id = sourceAccountId;
+          updateInput.destination_account_id = destAccountId;
+          const desc = description.trim();
+          const note = notes.trim();
+          updateInput.notes = (desc && note) ? `${desc} — ${note}` : (desc || note || null);
+        }
+        await updateTransaction(userId, deviceId, transaction!.id, updateInput as UpdateTransactionInput);
+      } else if (txType === "expense") {
         await createExpense(userId, deviceId, {
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
@@ -143,7 +176,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         });
       }
 
-      showToast("Transaction saved", "success");
+      showToast(isEdit ? "Transaction updated" : "Transaction saved", "success");
       runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
 
       if (addAnother) {
@@ -315,7 +348,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         </View>
       )}
 
-      <TransactionTypeSelector value={txType} onChange={setTxType} />
+      {isEdit ? (
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
+          Edit {txType.charAt(0).toUpperCase() + txType.slice(1)}
+        </Text>
+      ) : (
+        <TransactionTypeSelector value={txType} onChange={setTxType} />
+      )}
 
       {/* Amount */}
       <View>
@@ -512,6 +551,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         />
       </View>
 
+      {!isEdit && (<>
       {/* Recurring toggle — ponytail: visual placeholder, wired in Slice 6 templates */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
         <Pressable
@@ -535,6 +575,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           Make this recurring
         </Text>
       </View>
+      </>)}
 
       {/* Form errors */}
       {formError && (
@@ -546,6 +587,27 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       )}
 
       {/* Buttons */}
+      {isEdit ? (
+        <Pressable
+          onPress={() => handleSave(false)}
+          disabled={saving}
+          style={{
+            height: 50, borderRadius: 12, backgroundColor: palette.brand,
+            alignItems: "center", justifyContent: "center",
+            opacity: saving ? 0.5 : 1,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Save changes"
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: "#fff" }}>
+              Save Changes
+            </Text>
+          )}
+        </Pressable>
+      ) : (
       <View style={{ flexDirection: "row", gap: 10, paddingTop: 4 }}>
         <Pressable
           onPress={() => handleSave(true)}
@@ -586,6 +648,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           )}
         </Pressable>
       </View>
+      )}
 
       {renderAccountPicker()}
     </View>
