@@ -42,6 +42,51 @@ BEGIN
     RAISE EXCEPTION 'operation_type % is invalid', p_operation_type;
   END IF;
 
+  -- ponytail: per-entity payload allowlists matching API service syncApplyOperation.ts
+  IF p_operation_type IN ('create', 'update') AND p_payload IS NOT NULL AND p_payload != '{}'::jsonb THEN
+    DECLARE
+      v_allowed text[];
+      v_key text;
+    BEGIN
+      IF p_entity = 'categories' THEN
+        v_allowed := CASE p_operation_type
+          WHEN 'create' THEN ARRAY['category_group_id','slug','label','short_label','description','is_filipino_context','sort_order']
+          ELSE ARRAY['label','short_label','description','is_filipino_context','sort_order','is_active']
+        END;
+      ELSIF p_entity = 'subcategories' THEN
+        v_allowed := CASE p_operation_type
+          WHEN 'create' THEN ARRAY['category_id','slug','kind','label','short_label','description','is_filipino_context','is_protected','sort_order']
+          ELSE ARRAY['label','slug','short_label','description','is_filipino_context','is_protected','is_active']
+        END;
+      ELSIF p_entity = 'financial_accounts' THEN
+        v_allowed := CASE p_operation_type
+          WHEN 'create' THEN ARRAY['name','kind','opening_balance_centavos','credit_limit_centavos','include_in_dashboard_balance','institution_name','opened_on','sort_order','notes']
+          ELSE ARRAY['name','status','opening_balance_centavos','current_balance_centavos','credit_limit_centavos','include_in_dashboard_balance','institution_name','opened_on','archived_at','sort_order','notes']
+        END;
+      ELSIF p_entity = 'income_sources' THEN
+        v_allowed := CASE p_operation_type
+          WHEN 'create' THEN ARRAY['name','income_type','frequency','expected_amount_centavos','min_amount_centavos','max_amount_centavos','payday_day_of_month','payday_second_day_of_month','payday_day_of_week','payday_second_day_of_week','next_expected_date','estimated_interval_days','is_active','notes']
+          ELSE ARRAY['name','income_type','frequency','expected_amount_centavos','min_amount_centavos','max_amount_centavos','payday_day_of_month','payday_second_day_of_month','payday_day_of_week','payday_second_day_of_week','next_expected_date','estimated_interval_days','is_active','notes']
+        END;
+      ELSIF p_entity = 'financial_obligations' THEN
+        v_allowed := CASE p_operation_type
+          WHEN 'create' THEN ARRAY['subcategory_id','recurring_template_id','name','amount_centavos','frequency','due_day_of_month','due_second_day_of_month','due_day_of_week','due_second_day_of_week','due_month','is_family_support','is_dependent_support','protected_by_default','starts_on','ends_on','notes']
+          ELSE ARRAY['subcategory_id','recurring_template_id','name','amount_centavos','frequency','due_day_of_month','due_second_day_of_month','due_day_of_week','due_second_day_of_week','due_month','is_family_support','is_dependent_support','protected_by_default','starts_on','ends_on','notes']
+        END;
+      END IF;
+
+      FOR v_key IN SELECT jsonb_object_keys(p_payload) LOOP
+        IF v_key != ALL (v_allowed) THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object('status','rejected','reason', v_key || ' is not syncable for ' || p_entity || ' ' || p_operation_type)
+          WHERE operation_id = p_operation_id;
+          RETURN QUERY SELECT 'rejected'::text, (v_key || ' is not syncable for ' || p_entity || ' ' || p_operation_type)::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+      END LOOP;
+    END;
+  END IF;
+
   INSERT INTO applied_operations (
     operation_id,
     user_id,

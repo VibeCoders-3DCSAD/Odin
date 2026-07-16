@@ -139,6 +139,9 @@ export async function pullChanges(
 
     if (table === "category_groups") {
       // category_groups has no user_id column — system-wide data
+    } else if (table === "financial_accounts" || table === "income_sources" || table === "financial_obligations") {
+      // financial tables: user-scoped only — no system rows
+      query.eq("user_id", userId);
     } else {
       // categories and subcategories: include system rows (user_id IS NULL)
       // and user-owned rows
