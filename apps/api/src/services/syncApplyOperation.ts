@@ -442,6 +442,15 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
 
     if (key === "frequency") {
       if (typeof value !== "string") throw new Error("frequency must be a string");
+      if (entity === "income_sources") {
+        if (!["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"].includes(value as string)) {
+          throw new Error("frequency must be a valid income frequency");
+        }
+      } else if (entity === "financial_obligations") {
+        if (!["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
+          throw new Error("frequency must be a valid obligation frequency");
+        }
+      }
       continue;
     }
 
@@ -453,6 +462,51 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
     }
 
     if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+  }
+
+  if (entity === "financial_accounts") {
+    if (sanitized.status && typeof sanitized.status === "string" && !["active", "archived"].includes(sanitized.status as string)) {
+      throw new Error("status must be active or archived");
+    }
+    const centsFields = ["opening_balance_centavos", "current_balance_centavos", "credit_limit_centavos"] as const;
+    for (const f of centsFields) {
+      if (typeof sanitized[f] === "number" && (sanitized[f] as number) < 0) {
+        throw new Error(`${f} must be >= 0`);
+      }
+    }
+  } else if (entity === "income_sources") {
+    const centsFields = ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"] as const;
+    for (const f of centsFields) {
+      if (typeof sanitized[f] === "number" && (sanitized[f] as number) < 0) {
+        throw new Error(`${f} must be >= 0`);
+      }
+    }
+    const minVal = sanitized.min_amount_centavos as number | undefined;
+    const maxVal = sanitized.max_amount_centavos as number | undefined;
+    if (minVal !== undefined && maxVal !== undefined && minVal > maxVal) {
+      throw new Error("min_amount_centavos must be <= max_amount_centavos");
+    }
+    const dayFields = ["payday_day_of_month", "payday_second_day_of_month"] as const;
+    for (const f of dayFields) {
+      if (typeof sanitized[f] === "number" && ((sanitized[f] as number) < 1 || (sanitized[f] as number) > 31)) {
+        throw new Error(`${f} must be between 1 and 31`);
+      }
+    }
+    if (typeof sanitized.payday_day_of_week === "number" && ((sanitized.payday_day_of_week as number) < 0 || (sanitized.payday_day_of_week as number) > 6)) {
+      throw new Error("payday_day_of_week must be between 0 and 6");
+    }
+  } else if (entity === "financial_obligations") {
+    if (typeof sanitized.amount_centavos === "number" && (sanitized.amount_centavos as number) < 0) {
+      throw new Error("amount_centavos must be >= 0");
+    }
+    if (typeof sanitized.due_day_of_month === "number" && ((sanitized.due_day_of_month as number) < 1 || (sanitized.due_day_of_month as number) > 31)) {
+      throw new Error("due_day_of_month must be between 1 and 31");
+    }
+    const starts = sanitized.starts_on as string | undefined;
+    const ends = sanitized.ends_on as string | undefined;
+    if (starts !== undefined && ends !== undefined && starts > ends) {
+      throw new Error("starts_on must be <= ends_on");
+    }
   }
 
   return sanitized;
