@@ -30,10 +30,10 @@ env:
 - tapOn:
     id: "Essentials"
 - tapOn:
-    text: "LABEL"
+    placeholder: "e.g. My Category"
 - inputText: ${CATEGORY_LABEL}
 - tapOn:
-    text: "DESCRIPTION"
+    placeholder: "What this category covers"
 - inputText: ${CATEGORY_DESCRIPTION}
 - tapOn:
     text: "Save"
@@ -57,7 +57,7 @@ env:
 - tapOn:
     text: "Delete"
 
-# Category must be gone — fail if it is still visible
+# Wait until the category row disappears (negative poll, no race)
 - extendedWaitUntil:
     visible: ${CATEGORY_LABEL}
     timeout: 5000

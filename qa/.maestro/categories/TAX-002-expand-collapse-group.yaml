@@ -21,16 +21,26 @@ env:
 - runFlow:
     file: ../subflows/navigate-to-categories.yaml
 
+# Group should start collapsed — accessibilityLabel ends with "collapsed"
+- assertVisible:
+    text: "collapsed"
+
 # Tap Essentials group to expand
 - tapOn:
     text: "Essentials"
 
-# Categories within the group should now be visible (system categories like Food, Transport, etc.)
-# The group card shows category count — verify it expanded
+# Group accessibilityLabel should now contain "expanded"
+- assertVisible:
+    text: "expanded"
+
 - takeScreenshot: categories/TAX-002-group-expanded
 
 # Tap again to collapse
 - tapOn:
     text: "Essentials"
+
+# Should be back to collapsed
+- assertVisible:
+    text: "collapsed"
 
 - takeScreenshot: categories/TAX-002-group-collapsed
