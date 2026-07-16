@@ -403,8 +403,13 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
       continue;
     }
 
-    if (key === "slug" || key === "subcategory_id" || key === "recurring_template_id") {
+    if (key === "slug" || key === "subcategory_id") {
       if (typeof value !== "string") throw new Error(`${key} must be a string`);
+      continue;
+    }
+
+    if (key === "recurring_template_id") {
+      if (value !== null && typeof value !== "string") throw new Error("recurring_template_id must be a string or null");
       continue;
     }
 
@@ -431,6 +436,7 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
 
     if (key === "status") {
       if (typeof value !== "string") throw new Error("status must be a string");
+      if (value === "deleted") throw new Error("status 'deleted' must use the delete operation");
       continue;
     }
 

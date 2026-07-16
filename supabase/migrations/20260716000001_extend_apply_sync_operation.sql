@@ -625,6 +625,19 @@ BEGIN
       CASE WHEN p_payload ? 'archived_at' THEN jsonb_build_object('archived_at', (SELECT to_jsonb(archived_at) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'sort_order' THEN jsonb_build_object('sort_order', (SELECT to_jsonb(sort_order) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
 
+    IF p_payload ? 'status' AND (p_payload->>'status') = 'deleted' THEN
+      UPDATE applied_operations
+      SET result = jsonb_build_object(
+        'status', 'rejected',
+        'reason', 'status deleted must use the delete operation',
+        'current_version', v_current_version
+      )
+      WHERE operation_id = p_operation_id;
+
+      RETURN QUERY SELECT 'rejected'::text, 'status deleted must use the delete operation'::text, v_current_version, NULL::text[];
+      RETURN;
+    END IF;
+
     UPDATE financial_accounts
     SET name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
         status = CASE WHEN p_payload ? 'status' THEN (p_payload->>'status')::odin_account_status ELSE status END,
