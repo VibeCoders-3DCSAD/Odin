@@ -23,6 +23,7 @@ const migration: Migration = {
         base_version integer,
         changed_fields text not null default '[]',
         payload text not null default '{}',
+        failure_message text not null default 'This change could not be synced.',
         status text not null default 'pending',
         attempts integer not null default 0,
         last_error text,

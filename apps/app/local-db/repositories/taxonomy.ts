@@ -200,6 +200,14 @@ function now(): string {
   return new Date().toISOString();
 }
 
+function categoryFailureMessage(action: "created" | "updated" | "deleted", label: string): string {
+  return `This category "${label}" could not be ${action}.`;
+}
+
+function subcategoryFailureMessage(action: "created" | "updated" | "deleted", label: string): string {
+  return `This subcategory "${label}" could not be ${action}.`;
+}
+
 export async function listCategoryGroups(userId: string): Promise<CategoryGroup[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<CategoryGroupRow>(
@@ -327,6 +335,7 @@ export async function createCategory(
       baseVersion: null,
       changedFields: [],
       payload: { ...input, is_system: false },
+      failureMessage: categoryFailureMessage("created", input.label),
     });
 
     const row = await db.getFirstAsync<CategoryRow>(
@@ -397,6 +406,7 @@ export async function updateCategory(
       baseVersion: current.version,
       changedFields,
       payload: { ...input },
+      failureMessage: categoryFailureMessage("updated", input.label ?? current.label),
     });
 
     const row = await db.getFirstAsync<CategoryRow>(
@@ -445,6 +455,7 @@ export async function deleteCategory(
       baseVersion: current.version,
       changedFields: [],
       payload: { id },
+      failureMessage: categoryFailureMessage("deleted", current.label),
     });
 
     const row = await db.getFirstAsync<CategoryRow>(
@@ -522,6 +533,7 @@ export async function createSubcategory(
       baseVersion: null,
       changedFields: [],
       payload: { ...input, is_system: false },
+      failureMessage: subcategoryFailureMessage("created", input.label),
     });
 
     const row = await db.getFirstAsync<SubcategoryRow>(
@@ -592,6 +604,7 @@ export async function updateSubcategory(
       baseVersion: current.version,
       changedFields,
       payload: { ...input },
+      failureMessage: subcategoryFailureMessage("updated", input.label ?? current.label),
     });
 
     const row = await db.getFirstAsync<SubcategoryRow>(
@@ -640,6 +653,7 @@ export async function deleteSubcategory(
       baseVersion: current.version,
       changedFields: [],
       payload: { id },
+      failureMessage: subcategoryFailureMessage("deleted", current.label),
     });
 
     const row = await db.getFirstAsync<SubcategoryRow>(
