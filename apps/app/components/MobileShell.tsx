@@ -103,6 +103,10 @@ function formatSyncEntity(entity: string) {
   return entity.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 type DrawerItem = {
   page: Page;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -249,22 +253,49 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     return row?.cnt ?? 0;
   }
 
+  async function getRetryableSyncStats() {
+    const db = await initDatabase();
+    const row = await db.getFirstAsync<{ cnt: number; attempts: number }>(
+      `SELECT COUNT(*) as cnt, COALESCE(SUM(attempts), 0) as attempts FROM sync_queue
+       WHERE user_id = ? AND device_id = ?
+         AND status IN ('pending', 'failed') AND attempts < ?`,
+      userId,
+      deviceId,
+      MAX_SYNC_ATTEMPTS,
+    );
+    return { count: row?.cnt ?? 0, attempts: row?.attempts ?? 0 };
+  }
+
+  async function countExhaustedSyncRows() {
+    const db = await initDatabase();
+    const row = await db.getFirstAsync<{ cnt: number }>(
+      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed' AND attempts >= ?",
+      userId,
+      deviceId,
+      MAX_SYNC_ATTEMPTS,
+    );
+    return row?.cnt ?? 0;
+  }
+
   async function loadSyncIssues(offset = 0) {
     const db = await initDatabase();
     const totalRow = await db.getFirstAsync<{ cnt: number }>(
-      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
+      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed' AND attempts >= ?",
       userId,
       deviceId,
+      MAX_SYNC_ATTEMPTS,
     );
     const failedRow = await db.getFirstAsync<{ cnt: number }>(
-      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed'",
+      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed' AND attempts >= ?",
       userId,
       deviceId,
+      MAX_SYNC_ATTEMPTS,
     );
     const pendingRow = await db.getFirstAsync<{ cnt: number }>(
-      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+      "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed') AND attempts < ?",
       userId,
       deviceId,
+      MAX_SYNC_ATTEMPTS,
     );
     const rows = await db.getAllAsync<SyncQueueIssue>(
       `SELECT q.operation_id, q.entity, q.operation_type, q.record_id, q.failure_message, q.status, q.attempts, q.created_at,
@@ -273,10 +304,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
        LEFT JOIN categories c ON q.entity = 'categories' AND q.record_id = c.id AND q.user_id = c.user_id
        LEFT JOIN subcategories s ON q.entity = 'subcategories' AND q.record_id = s.id AND q.user_id = s.user_id
        LEFT JOIN category_groups g ON q.entity = 'category_groups' AND q.record_id = g.id AND q.user_id = g.user_id
-       WHERE q.user_id = ? AND q.device_id = ? AND q.status IN ('pending', 'failed')
+       WHERE q.user_id = ? AND q.device_id = ? AND q.status = 'failed' AND q.attempts >= ?
        ORDER BY q.created_at LIMIT ? OFFSET ?`,
       userId,
       deviceId,
+      MAX_SYNC_ATTEMPTS,
       SYNC_ISSUES_PAGE_SIZE,
       offset,
     );
@@ -325,7 +357,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       }
 
       lastAutoSyncAt.current = Date.now();
-      const result = await runSync(userId, deviceId, accessToken);
+      const result = await runSync(userId, deviceId, accessToken, { maxAttempts: MAX_SYNC_ATTEMPTS });
       await refreshQueueCount();
 
       if (showMessage && result.errors > 0) {
@@ -410,16 +442,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   async function handleSync() {
-    if (queueCount > 0) {
-      await openSyncDetails(false);
-      return;
-    }
     await syncNow(true);
-  }
-
-  async function retryFromDetails() {
-    await syncNow(true);
-    await loadSyncIssues();
   }
 
   async function finishLogout() {
@@ -446,9 +469,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     try {
       const db = await initDatabase();
       const pendingRows = await db.getFirstAsync<{ cnt: number }>(
-        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
+        "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed') AND attempts < ?",
         userId,
         deviceId,
+        MAX_SYNC_ATTEMPTS,
       );
       if ((pendingRows?.cnt ?? 0) > 0) {
         setDiscardConfirmVisible(false);
@@ -458,9 +482,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         return;
       }
       await db.runAsync(
-        "DELETE FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed'",
+        "DELETE FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'failed' AND attempts >= ?",
         userId,
         deviceId,
+        MAX_SYNC_ATTEMPTS,
       );
       await refreshQueueCount();
       setDiscardConfirmVisible(false);
@@ -502,7 +527,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           return;
         }
 
-        await runSync(userId, deviceId, accessToken);
+        setSyncMessage("Hold on, we're trying to sync unsynced changes");
+
+        let retryable = await getRetryableSyncStats();
+        while (retryable.count > 0) {
+          await runSync(userId, deviceId, accessToken, { maxAttempts: MAX_SYNC_ATTEMPTS });
+          await refreshQueueCount();
+
+          const nextRetryable = await getRetryableSyncStats();
+          if (nextRetryable.count === 0) break;
+          if (nextRetryable.count === retryable.count && nextRetryable.attempts === retryable.attempts) break;
+
+          retryable = nextRetryable;
+          await sleep(5_000);
+        }
 
         const stillPending = await db.getFirstAsync<{ cnt: number }>(
           "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')",
@@ -511,12 +549,12 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         );
 
         if (stillPending && stillPending.cnt > 0) {
-          const pendingRows = await db.getFirstAsync<{ cnt: number }>(
-            "SELECT COUNT(*) as cnt FROM sync_queue WHERE user_id = ? AND device_id = ? AND status = 'pending'",
-            userId,
-            deviceId,
-          );
-          await openSyncDetails((pendingRows?.cnt ?? 0) === 0);
+          const exhaustedRows = await countExhaustedSyncRows();
+          if (exhaustedRows > 0) {
+            await openSyncDetails(true);
+          } else {
+            setLogoutError("We couldn't finish syncing your changes. Please try again before logging out.");
+          }
           setIsLoggingOut(false);
           return;
         }
@@ -575,18 +613,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
                 </Pressable>
               </View>
-              {queueCount > 0 ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Review unsynced changes"
-                  onPress={() => { openSyncDetails(false).catch(() => {}); }}
-                  style={{ marginTop: -10, marginBottom: 14, alignSelf: "center" }}
-                >
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: palette.brand }}>
-                    Review unsynced changes
-                  </Text>
-                </Pressable>
-              ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
@@ -860,7 +886,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                       {issue.status === "failed" ? issue.failure_message : "This change is waiting to sync."}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: palette.mut, marginTop: 5 }}>
-                      {issue.status === "failed" ? "Retry sync, or discard it if you log out." : "Stay online so Odin can finish syncing."}
+                      Logging out will discard this change.
                     </Text>
                   </View>
                 ))}
@@ -883,19 +909,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               ) : null}
 
               <View style={{ gap: 10, marginTop: 18 }}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry sync"
-                  disabled={syncing}
-                  onPress={() => { retryFromDetails().catch(() => {}); }}
-                  style={{ minHeight: 50, borderRadius: 14, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}
-                >
-                  {syncing ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#fff" }}>Retry sync</Text>
-                  )}
-                </Pressable>
                 {allowDiscardLogout && failedIssueTotal > 0 && pendingIssueTotal === 0 ? (
                   <Pressable
                     accessibilityRole="button"

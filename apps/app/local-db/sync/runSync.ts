@@ -21,6 +21,10 @@ type SyncResult = {
   errors: number;
 };
 
+type RunSyncOptions = {
+  maxAttempts?: number;
+};
+
 type QueueRow = {
   operation_id: string;
   user_id: string;
@@ -63,6 +67,7 @@ export async function runSync(
   userId: string,
   deviceId: string,
   accessToken: string,
+  options: RunSyncOptions = {},
 ): Promise<SyncResult> {
   if (!userId || !accessToken || !deviceId) {
     return { pushed: 0, pulled: 0, errors: 0 };
@@ -81,7 +86,7 @@ export async function runSync(
       return { pushed: 0, pulled: 0, errors: 0 };
     }
 
-    const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken);
+    const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken, options.maxAttempts);
 
     const { pulled, cursors: newCursors } = await pullAndApply(
       db,
@@ -103,14 +108,17 @@ async function pushQueue(
   userId: string,
   deviceId: string,
   accessToken: string,
+  maxAttempts?: number,
 ): Promise<{ pushed: number; errors: number }> {
   const rows = await db.getAllAsync<QueueRow>(
     `SELECT * FROM sync_queue
      WHERE user_id = ? AND device_id = ?
        AND status IN ('pending', 'failed')
+       ${maxAttempts === undefined ? "" : "AND attempts < ?"}
      ORDER BY created_at LIMIT 50`,
     userId,
     deviceId,
+    ...(maxAttempts === undefined ? [] : [maxAttempts]),
   );
 
   if (rows.length === 0) return { pushed: 0, errors: 0 };
