@@ -74,6 +74,7 @@ type SyncQueueIssue = {
   entity: string;
   operation_type: string;
   record_id: string;
+  failure_message: string;
   status: string;
   attempts: number;
   created_at: string;
@@ -202,12 +203,13 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           await db.runAsync(
             `INSERT OR IGNORE INTO sync_queue
               (operation_id, user_id, device_id, entity, record_id, operation_type,
-               base_version, changed_fields, payload, status, attempts, last_error, created_at)
-             VALUES (?, ?, ?, 'categories', ?, 'update', 1, '[]', '{}', 'failed', 3, 'Test failed sync row', ?)`,
+               base_version, changed_fields, payload, failure_message, status, attempts, last_error, created_at)
+             VALUES (?, ?, ?, 'categories', ?, 'update', 1, '[]', '{}', ?, 'failed', 3, 'Test failed sync row', ?)`,
             `test-failed-${i}`,
             userId,
             deviceId,
             `test-record-${i}`,
+            `This category "Test category ${i + 1}" could not be updated.`,
             new Date(createdAtBase + i).toISOString(),
           );
         }
@@ -265,7 +267,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       deviceId,
     );
     const rows = await db.getAllAsync<SyncQueueIssue>(
-      `SELECT q.operation_id, q.entity, q.operation_type, q.record_id, q.status, q.attempts, q.created_at,
+      `SELECT q.operation_id, q.entity, q.operation_type, q.record_id, q.failure_message, q.status, q.attempts, q.created_at,
               COALESCE(c.label, s.label, g.label) as item_label
        FROM sync_queue q
        LEFT JOIN categories c ON q.entity = 'categories' AND q.record_id = c.id AND q.user_id = c.user_id
@@ -855,7 +857,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                       {formatSyncAction(issue.operation_type)} {issue.item_label ?? formatSyncEntity(issue.entity)} {issue.status === "failed" ? "Failed" : "Waiting"}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>
-                      {issue.status === "failed" ? "This change could not be synced." : "This change is waiting to sync."}
+                      {issue.status === "failed" ? issue.failure_message : "This change is waiting to sync."}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: palette.mut, marginTop: 5 }}>
                       {issue.status === "failed" ? "Retry sync, or discard it if you log out." : "Stay online so Odin can finish syncing."}

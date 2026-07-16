@@ -54,7 +54,8 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   const { default: m001 } = await import("./migrations/001_sync_tables");
   const { default: m002 } = await import("./migrations/002_taxonomy_tables");
   const { default: m003 } = await import("./migrations/003_privacy_settings");
-  return getDatabase([m001, m002, m003]);
+  const { default: m004 } = await import("./migrations/004_sync_failure_message");
+  return getDatabase([m001, m002, m003, m004]);
 }
 
 export function closeDatabase(): Promise<void> {

@@ -24,6 +24,7 @@ export type SyncOperation = {
   base_version: number | null;
   changed_fields: string[];
   payload: Record<string, unknown>;
+  failure_message: string;
   status: SyncOperationStatus;
   attempts: number;
   last_error: string | null;
@@ -46,4 +47,5 @@ export type EnqueueInput = {
   baseVersion: number | null;
   changedFields: string[];
   payload: Record<string, unknown>;
+  failureMessage: string;
 };
