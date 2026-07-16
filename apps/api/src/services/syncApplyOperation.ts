@@ -236,6 +236,7 @@ async function validateCreatePayload(
     optionalString(sanitized, "institution_name");
     optionalString(sanitized, "opened_on");
     optionalNumber(sanitized, "sort_order");
+    optionalString(sanitized, "notes");
     validateNonNegative(sanitized, ["credit_limit_centavos"]);
     return Promise.resolve(sanitized);
   }
@@ -260,6 +261,7 @@ async function validateCreatePayload(
     optionalNumber(sanitized, "payday_day_of_month");
     optionalNumber(sanitized, "payday_second_day_of_month");
     optionalNumber(sanitized, "payday_day_of_week");
+    optionalNumber(sanitized, "payday_second_day_of_week");
     optionalString(sanitized, "next_expected_date");
     optionalNumber(sanitized, "estimated_interval_days");
     optionalBoolean(sanitized, "is_active");
