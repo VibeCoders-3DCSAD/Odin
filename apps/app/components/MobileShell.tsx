@@ -183,6 +183,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [pendingIssueTotal, setPendingIssueTotal] = useState(0);
   const [syncIssuesLoading, setSyncIssuesLoading] = useState(false);
   const [allowDiscardLogout, setAllowDiscardLogout] = useState(false);
+  const [logoutAfterDiscard, setLogoutAfterDiscard] = useState(false);
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -331,11 +332,12 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
   }
 
-  async function openSyncDetails(canDiscardForLogout = false) {
+  async function openSyncDetails(canDiscard = false, shouldLogoutAfterDiscard = false) {
     setSyncIssuesLoading(true);
     await loadSyncIssues();
     setSyncIssuesLoading(false);
-    setAllowDiscardLogout(canDiscardForLogout);
+    setAllowDiscardLogout(canDiscard);
+    setLogoutAfterDiscard(shouldLogoutAfterDiscard);
     setSyncDetailsVisible(true);
   }
 
@@ -482,7 +484,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       if ((pendingRows?.cnt ?? 0) > 0) {
         setDiscardConfirmVisible(false);
         await loadSyncIssues();
-        showToast("New changes are still waiting to sync. Retry before logging out.");
+        showToast(logoutAfterDiscard ? "New changes are still waiting to sync. Retry before logging out." : "New changes are still waiting to sync. Retry before discarding.");
         setIsLoggingOut(false);
         return;
       }
@@ -500,10 +502,15 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       setFailedIssueTotal(0);
       setPendingIssueTotal(0);
       setAllowDiscardLogout(false);
-      await finishLogout();
+      setLogoutAfterDiscard(false);
+      if (logoutAfterDiscard) {
+        await finishLogout();
+      } else {
+        setIsLoggingOut(false);
+      }
     } catch (error) {
       console.error("Discard and logout failed", error);
-      showToast("Logout failed. Please check your connection and try again.");
+      showToast(logoutAfterDiscard ? "Logout failed. Please check your connection and try again." : "Discard failed. Please try again.");
       setIsLoggingOut(false);
     }
   }
@@ -556,7 +563,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         if (stillPending && stillPending.cnt > 0) {
           const exhaustedRows = await countExhaustedSyncRows();
           if (exhaustedRows > 0) {
-            await openSyncDetails(true);
+            await openSyncDetails(true, true);
           } else {
             setLogoutError("We couldn't finish syncing your changes. Please try again before logging out.");
           }
@@ -922,7 +929,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     style={{ minHeight: 50, borderRadius: 14, borderWidth: 1.5, borderColor: "#FFCDD2", backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
                   >
                     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.error }}>
-                      Discard {failedIssueTotal} failed change{failedIssueTotal === 1 ? "" : "s"}
+                      Discard {failedIssueTotal} failed change{failedIssueTotal === 1 ? "" : "s"}{logoutAfterDiscard ? " and log out" : ""}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -960,7 +967,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#fff" }}>
-                      Discard {failedIssueTotal} and log out
+                      Discard {failedIssueTotal}{logoutAfterDiscard ? " and log out" : ""}
                     </Text>
                   )}
                 </Pressable>
