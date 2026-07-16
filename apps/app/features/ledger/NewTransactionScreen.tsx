@@ -13,6 +13,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
 import { createExpense, createIncome, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../local-db/repositories/ledger";
+import { createRecurringTemplate } from "../../local-db/repositories/recurringTransactions";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
@@ -173,6 +174,20 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           destination_account_id: destAccountId,
           transaction_date: dateStr,
           notes: mergedNotes,
+        });
+      }
+
+      if (!isEdit && isRecurring) {
+        await createRecurringTemplate(userId, deviceId, {
+          transaction_type: txType,
+          name: description.trim() || `${txType} recurring`,
+          amount_centavos: centavos,
+          frequency: "monthly",
+          starts_on: dateStr,
+          subcategory_id: subcategoryId || undefined,
+          source_account_id: sourceAccountId || undefined,
+          destination_account_id: destAccountId || undefined,
+          notes: notes.trim() || undefined,
         });
       }
 
