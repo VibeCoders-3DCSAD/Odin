@@ -17,6 +17,10 @@ const SYNCED_ENTITIES = new Set([
   "subcategories",
   "financial_accounts",
   "transactions",
+  "transaction_templates",
+  "transaction_drafts",
+  "recurring_transaction_templates",
+  "recurring_transaction_occurrences",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -118,6 +122,23 @@ const TRANSACTION_UPDATE_FIELDS = new Set([
 
 const VALID_ACCOUNT_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "loan", "other"];
 const VALID_TRANSACTION_TYPES = ["income", "expense", "transfer"];
+
+const TEMPLATE_FIELDS = new Set([
+  "transaction_type", "name", "amount_centavos", "subcategory_id",
+  "source_account_id", "destination_account_id", "merchant_name", "counterparty_name", "notes",
+]);
+
+const DRAFT_FIELDS = new Set(["client_draft_id", "payload", "captured_offline_at"]);
+
+const RECURRING_TEMPLATE_FIELDS = new Set([
+  "transaction_type", "name", "amount_centavos", "frequency", "interval_count",
+  "day_of_month", "second_day_of_month", "day_of_week",
+  "starts_on", "ends_on", "subcategory_id", "source_account_id", "destination_account_id", "notes",
+]);
+
+const RECURRING_OCCURRENCE_FIELDS = new Set([
+  "recurring_template_id", "scheduled_date", "transaction_id",
+]);
 
 export async function prepareOperation(
   supabase: SupabaseClient,
@@ -286,6 +307,24 @@ async function validateCreatePayload(
     return sanitized;
   }
 
+  // ponytail: basic allowlist validation for template/draft/recurring entities
+  if (entity === "transaction_templates") {
+    assertOnlyAllowed(payload, TEMPLATE_FIELDS);
+    return sanitizePayload(payload, TEMPLATE_FIELDS);
+  }
+  if (entity === "transaction_drafts") {
+    assertOnlyAllowed(payload, DRAFT_FIELDS);
+    return sanitizePayload(payload, DRAFT_FIELDS);
+  }
+  if (entity === "recurring_transaction_templates") {
+    assertOnlyAllowed(payload, RECURRING_TEMPLATE_FIELDS);
+    return sanitizePayload(payload, RECURRING_TEMPLATE_FIELDS);
+  }
+  if (entity === "recurring_transaction_occurrences") {
+    assertOnlyAllowed(payload, RECURRING_OCCURRENCE_FIELDS);
+    return sanitizePayload(payload, RECURRING_OCCURRENCE_FIELDS);
+  }
+
   throw new Error(`Unknown entity for create: ${entity}`);
 }
 
@@ -305,6 +344,14 @@ async function validateUpdatePayload(
     allowedFields = FINANCIAL_ACCOUNT_UPDATE_FIELDS;
   } else if (entity === "transactions") {
     allowedFields = TRANSACTION_UPDATE_FIELDS;
+  } else if (entity === "transaction_templates") {
+    allowedFields = TEMPLATE_FIELDS;
+  } else if (entity === "transaction_drafts") {
+    allowedFields = DRAFT_FIELDS;
+  } else if (entity === "recurring_transaction_templates") {
+    allowedFields = RECURRING_TEMPLATE_FIELDS;
+  } else if (entity === "recurring_transaction_occurrences") {
+    allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else {
     throw new Error(`Unknown entity for update: ${entity}`);
   }

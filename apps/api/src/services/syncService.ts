@@ -37,6 +37,10 @@ const SYNCED_TABLES = [
   "subcategories",
   "financial_accounts",
   "transactions",
+  "transaction_templates",
+  "transaction_drafts",
+  "recurring_transaction_templates",
+  "recurring_transaction_occurrences",
 ] as const;
 
 export async function pushOperations(
