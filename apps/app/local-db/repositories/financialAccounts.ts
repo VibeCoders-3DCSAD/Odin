@@ -231,8 +231,15 @@ export async function updateFinancialAccount(
       const value = (input as Record<string, unknown>)[key];
       if (value === undefined) continue;
 
-      if (key === "credit_limit_centavos" && value != null && (typeof value !== "number" || value < 0)) {
-        throw new LocalDbError("VALIDATION_ERROR", "credit_limit_centavos must be >= 0");
+      if (key === "credit_limit_centavos") {
+        if (value != null && (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 0)) {
+          throw new LocalDbError("VALIDATION_ERROR", "credit_limit_centavos must be a finite integer >= 0");
+        }
+      }
+      if (key === "opening_balance_centavos") {
+        if (value != null && (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value))) {
+          throw new LocalDbError("VALIDATION_ERROR", "opening_balance_centavos must be a finite integer");
+        }
       }
 
       changedFields.push(key);
