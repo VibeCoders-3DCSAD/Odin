@@ -64,10 +64,6 @@ env:
 - tapOn:
     text: "Save"
 
-# Group may collapse after edit save — expand it
-- tapOn:
-    text: "Essentials"
-
 # Verify the updated name appears
 - extendedWaitUntil:
     visible: ${UPDATED_LABEL}
