@@ -34,11 +34,13 @@ env:
 - tapOn:
     id: "Delete account"
 
-# Verify deletion warning screen
+# Verify deletion warning screen — "Back to settings" is accessibilityLabel
 - extendedWaitUntil:
-    visible: "Back to settings"
+    visible:
+      id: "Back to settings"
     timeout: 5000
 
+# "I understand" is both rendered text and accessibilityLabel
 - assertVisible: "I understand"
 
 # Check the confirmation checkbox

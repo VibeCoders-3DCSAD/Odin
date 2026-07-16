@@ -36,12 +36,12 @@ env:
 
 # Fill label
 - tapOn:
-    placeholder: "e.g. My Category"
+    text: "e.g. My Category"
 - inputText: ${CATEGORY_LABEL}
 
 # Fill description
 - tapOn:
-    placeholder: "What this category covers"
+    text: "What this category covers"
 - inputText: ${CATEGORY_DESCRIPTION}
 
 # Save

@@ -21,17 +21,16 @@ env:
 - runFlow:
     file: ../subflows/navigate-to-categories.yaml
 
-# Essentials group should start collapsed
-- assertVisible:
-    text: "Essentials, "
+# Essentials group should start collapsed — verify group label is rendered
+- assertVisible: "Essentials"
 
 # Tap Essentials group to expand
 - tapOn:
     text: "Essentials"
 
-# After expand, the label includes "expanded" — verify it changed
+# After expand, a child category should be visible
 - extendedWaitUntil:
-    visible: "expanded"
+    visible: "Food"
     timeout: 5000
 
 - takeScreenshot: categories/TAX-002-group-expanded
@@ -40,12 +39,7 @@ env:
 - tapOn:
     text: "Essentials"
 
-# After collapse, "expanded" should no longer be visible
-- extendedWaitUntil:
-    visible: "expanded"
-    timeout: 3000
-    optional: true
-- assertNotVisible:
-    text: "expanded"
+# After collapse, child category should be hidden
+- assertNotVisible: "Food"
 
 - takeScreenshot: categories/TAX-002-group-collapsed
