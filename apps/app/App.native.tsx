@@ -5,15 +5,21 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, Platform, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
+import DevBypassBanner from "./components/DevBypassBanner";
 import MobileShell from "./components/MobileShell";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow";
 import { ToastProvider } from "./components/Toast";
 import { startConnectivityPolling } from "./services/connectivity";
 import { useDeepLink } from "./hooks/useDeepLink";
+import { useDevBypassBootstrap } from "./hooks/useDevBypassBootstrap";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "./lib/api";
-import { getOrCreateDeviceId } from "./local-db/deviceId";
-import { supabase } from "./lib/supabase";
+import {
+  createDevBypassSession,
+  isDevAuthBypassEnabled,
+} from "./lib/devBypass";
+import { isSupabaseConfigured, supabase } from "./lib/supabase";
 
 const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
@@ -100,15 +106,17 @@ async function getGoogleIdToken() {
 }
 
 export default function App() {
-  const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
+  const { deviceId, skipSessionRestore, retainSessionOnLogout } = useDevBypassBootstrap();
+  const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(
+    () => (isDevAuthBypassEnabled ? createDevBypassSession() : null),
+  );
   const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
-  const [deviceId, setDeviceId] = useState("");
-  const [isRestoringSession, setIsRestoringSession] = useState(true);
+  const [isRestoringSession, setIsRestoringSession] = useState(!skipSessionRestore);
 
-  useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
   useEffect(() => { startConnectivityPolling(); }, []);
 
   useEffect(() => {
+    if (isDevAuthBypassEnabled || !isSupabaseConfigured) return;
     GoogleSignin.configure({
       webClientId: googleWebClientId,
       iosClientId: googleIosClientId,
@@ -116,10 +124,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (skipSessionRestore) {
+      setIsRestoringSession(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function restoreSession() {
       if (isPasswordRecovery || isResolvingRecoveryToken) {
+        setIsRestoringSession(false);
+        return;
+      }
+
+      if (!isSupabaseConfigured) {
         setIsRestoringSession(false);
         return;
       }
@@ -165,7 +183,7 @@ export default function App() {
 
     restoreSession();
     return () => { cancelled = true; };
-  }, [isPasswordRecovery, isResolvingRecoveryToken]);
+  }, [isPasswordRecovery, isResolvingRecoveryToken, skipSessionRestore]);
 
   async function handleAuthenticated(state: AuthenticatedState) {
     setAuthenticated(state);
@@ -173,6 +191,7 @@ export default function App() {
   }
 
   async function handleLoggedOut() {
+    if (retainSessionOnLogout(setAuthenticated)) return;
     await clearAuthSession();
     setAuthenticated(null);
   }
@@ -207,53 +226,60 @@ export default function App() {
   }
 
   return (
-    <ToastProvider>
-      {authenticated ? (
-        authenticated.onboardingStatus === "submitted" ? (
-          <>
-            <MobileShell
-              accessToken={authenticated.accessToken}
-              userId={authenticated.userId ?? ""}
-              deviceId={deviceId}
-              onLoggedOut={handleLoggedOut}
-              signOut={async () => { await GoogleSignin.signOut(); }}
-            />
-            <StatusBar style="dark" />
-          </>
-        ) : (
-          <>
-            <OnboardingFlow
-              accessToken={authenticated.accessToken}
-              userId={authenticated.userId ?? ""}
-              onComplete={handleOnboardingComplete}
-            />
-            <StatusBar style="dark" />
-          </>
-        )
-      ) : isRestoringSession ? (
-        <View className="flex-1 items-center justify-center bg-card">
-          <ActivityIndicator color="#013220" />
-          <StatusBar style="dark" />
+    <SafeAreaProvider>
+      <ToastProvider>
+        <View className="flex-1">
+          <DevBypassBanner />
+          {authenticated ? (
+            authenticated.onboardingStatus === "submitted" ? (
+              <>
+                <MobileShell
+                  accessToken={authenticated.accessToken}
+                  userId={authenticated.userId ?? ""}
+                  deviceId={deviceId}
+                  onLoggedOut={handleLoggedOut}
+                  signOut={isDevAuthBypassEnabled
+                    ? undefined
+                    : async () => { await GoogleSignin.signOut(); }}
+                />
+                <StatusBar style="dark" />
+              </>
+            ) : (
+              <>
+                <OnboardingFlow
+                  accessToken={authenticated.accessToken}
+                  userId={authenticated.userId ?? ""}
+                  onComplete={handleOnboardingComplete}
+                />
+                <StatusBar style="dark" />
+              </>
+            )
+          ) : isRestoringSession ? (
+            <View className="flex-1 items-center justify-center bg-card">
+              <ActivityIndicator color="#013220" />
+              <StatusBar style="dark" />
+            </View>
+          ) : (
+            <>
+              <AuthExperience
+                google={{
+                  signIn: startGoogleSignIn,
+                  signOut: async () => {
+                    await GoogleSignin.signOut();
+                  },
+                }}
+                isPasswordRecovery={isPasswordRecovery}
+                isResolvingRecoveryToken={isResolvingRecoveryToken}
+                recoveryRefreshToken={recoveryRefreshToken ?? undefined}
+                recoveryToken={recoveryToken ?? undefined}
+                onAuthenticated={handleAuthenticated}
+                onLoggedOut={handleLoggedOut}
+              />
+              <StatusBar style="dark" />
+            </>
+          )}
         </View>
-      ) : (
-        <>
-          <AuthExperience
-            google={{
-              signIn: startGoogleSignIn,
-              signOut: async () => {
-                await GoogleSignin.signOut();
-              },
-            }}
-            isPasswordRecovery={isPasswordRecovery}
-            isResolvingRecoveryToken={isResolvingRecoveryToken}
-            recoveryRefreshToken={recoveryRefreshToken ?? undefined}
-            recoveryToken={recoveryToken ?? undefined}
-            onAuthenticated={handleAuthenticated}
-            onLoggedOut={handleLoggedOut}
-          />
-          <StatusBar style="dark" />
-        </>
-      )}
-    </ToastProvider>
+      </ToastProvider>
+    </SafeAreaProvider>
   );
 }

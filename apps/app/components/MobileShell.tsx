@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
+import { isDevAuthBypassEnabled } from "../lib/devBypass";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
@@ -136,6 +137,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const initialSyncDone = useRef(false);
 
   useEffect(() => {
+    if (isDevAuthBypassEnabled) return;
     if (!userId || !deviceId || !accessToken) return;
 
     const sync = () => { runSync(userId, deviceId, accessToken).catch(() => {}); };
@@ -175,6 +177,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   async function handleLogout() {
+    if (isDevAuthBypassEnabled) {
+      onLoggedOut();
+      return;
+    }
+
     if (!online) {
       showToast("This action can only be done while online");
       return;

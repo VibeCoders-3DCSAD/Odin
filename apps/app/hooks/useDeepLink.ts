@@ -1,6 +1,6 @@
 import * as Linking from "expo-linking";
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 type DeepLinkState = {
   isPasswordRecovery: boolean;
@@ -56,7 +56,7 @@ export function useDeepLink(): DeepLinkState {
     }
 
     const code = getUrlParam(url, "code");
-    if (code) {
+    if (code && isSupabaseConfigured) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
       if (!error && data.session?.access_token) {
         setVerificationToken(data.session.access_token);
@@ -78,7 +78,7 @@ export function useDeepLink(): DeepLinkState {
           setRecoveryRefreshToken(refreshToken);
         } else {
           const code = getUrlParam(url, "code");
-          if (code) {
+          if (code && isSupabaseConfigured) {
             const { data, error } = await supabase.auth.exchangeCodeForSession(code);
             if (!error && data.session?.access_token && data.session.refresh_token) {
               setRecoveryToken(data.session.access_token);
