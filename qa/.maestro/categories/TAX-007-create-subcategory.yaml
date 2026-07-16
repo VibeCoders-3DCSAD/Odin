@@ -32,10 +32,10 @@ env:
 - tapOn:
     id: "Essentials"
 - tapOn:
-    text: "LABEL"
+    placeholder: "e.g. My Category"
 - inputText: ${CATEGORY_LABEL}
 - tapOn:
-    text: "DESCRIPTION"
+    placeholder: "What this category covers"
 - inputText: ${CATEGORY_DESCRIPTION}
 - tapOn:
     text: "Save"
@@ -61,12 +61,12 @@ env:
 
 # Fill label
 - tapOn:
-    text: "LABEL"
+    placeholder: "e.g. Dining Out"
 - inputText: ${SUB_LABEL}
 
 # Fill description
 - tapOn:
-    text: "DESCRIPTION"
+    placeholder: "What this subcategory covers"
 - inputText: ${SUB_DESCRIPTION}
 
 # Save

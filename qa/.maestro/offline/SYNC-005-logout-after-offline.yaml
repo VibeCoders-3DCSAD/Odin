@@ -7,9 +7,9 @@ tags:
 env:
   USERNAME: "test@example.com"
   PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Offline Sync Category"
+  CATEGORY_DESCRIPTION: "Queued for sync"
 ---
-# ponytail: This test creates unsynced data by toggling settings offline,
-# then attempts logout to verify sync protection behavior.
 - launchApp:
     clearState: true
 
@@ -21,35 +21,49 @@ env:
     visible: "Home"
     timeout: 15000
 
-# Go offline and make a change that would queue for sync
+# Go offline
 - setAirplaneMode: enabled
 
+# Create a category while offline — this queues a real sync operation
 - runFlow:
-    file: ../subflows/navigate-to-settings.yaml
-
-- assertVisible: "Settings"
-
-# Try to toggle while offline — toast should appear, but the change
-# is blocked at the UI level so nothing actually queues
-- scrollUntilVisible:
-    element:
-      id: "Personalization"
-    direction: DOWN
+    file: ../subflows/navigate-to-categories.yaml
 
 - tapOn:
-    id: "Personalization"
+    id: "Create category"
+- assertVisible: "New Category"
+- tapOn:
+    id: "Essentials"
+- tapOn:
+    placeholder: "e.g. My Category"
+- inputText: ${CATEGORY_LABEL}
+- tapOn:
+    placeholder: "What this category covers"
+- inputText: ${CATEGORY_DESCRIPTION}
+- tapOn:
+    text: "Save"
 
-# Restore connectivity
-- setAirplaneMode: disabled
-
-# Now attempt logout — should work since no actual unsynced writes occurred
+# Attempt logout while offline with unsynced data
 - runFlow:
     file: ../subflows/logout.yaml
 
-# Should return to login
+# Logout should be blocked — app must warn about unsynced changes
+- extendedWaitUntil:
+    visible: "unsynced"
+    timeout: 15000
+
+- assertVisible: "unsynced"
+- takeScreenshot: offline/SYNC-005-logout-blocked
+
+# Restore connectivity so the queued category can sync
+- setAirplaneMode: disabled
+
+# Now logout should succeed
+- runFlow:
+    file: ../subflows/logout.yaml
+
 - extendedWaitUntil:
     visible: "Welcome back"
     timeout: 15000
 
 - assertVisible: "Welcome back"
-- takeScreenshot: offline/SYNC-005-logout-after-offline
+- takeScreenshot: offline/SYNC-005-logout-after-sync
