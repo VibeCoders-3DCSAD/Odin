@@ -496,7 +496,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             userId,
             deviceId,
           );
-          setLogoutError("Some changes could not be synced. Review them before logging out.");
           await openSyncDetails((pendingRows?.cnt ?? 0) === 0);
           setIsLoggingOut(false);
           return;
