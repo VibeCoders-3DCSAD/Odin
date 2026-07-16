@@ -12,7 +12,13 @@ export type Operation = {
 
 export type PreparedOperation = Operation;
 
-const SYNCED_ENTITIES = new Set(["categories", "subcategories"]);
+const SYNCED_ENTITIES = new Set([
+  "categories",
+  "subcategories",
+  "financial_accounts",
+  "income_sources",
+  "financial_obligations",
+]);
 
 const SERVER_COLUMNS = new Set([
   "id",
@@ -67,6 +73,90 @@ const SUBCATEGORY_UPDATE_FIELDS = new Set([
   "is_active",
 ]);
 
+const FINANCIAL_ACCOUNT_CREATE_FIELDS = new Set([
+  "name",
+  "kind",
+  "opening_balance_centavos",
+  "credit_limit_centavos",
+  "include_in_dashboard_balance",
+  "institution_name",
+  "opened_on",
+  "sort_order",
+]);
+
+const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
+  "name",
+  "status",
+  "opening_balance_centavos",
+  "current_balance_centavos",
+  "credit_limit_centavos",
+  "include_in_dashboard_balance",
+  "institution_name",
+  "opened_on",
+  "archived_at",
+  "sort_order",
+]);
+
+const INCOME_SOURCE_CREATE_FIELDS = new Set([
+  "name",
+  "income_type",
+  "frequency",
+  "expected_amount_centavos",
+  "min_amount_centavos",
+  "max_amount_centavos",
+  "payday_day_of_month",
+  "payday_second_day_of_month",
+  "payday_day_of_week",
+  "next_expected_date",
+  "is_active",
+  "notes",
+]);
+
+const INCOME_SOURCE_UPDATE_FIELDS = new Set([
+  "name",
+  "income_type",
+  "frequency",
+  "expected_amount_centavos",
+  "min_amount_centavos",
+  "max_amount_centavos",
+  "payday_day_of_month",
+  "payday_second_day_of_month",
+  "payday_day_of_week",
+  "next_expected_date",
+  "is_active",
+  "notes",
+]);
+
+const OBLIGATION_CREATE_FIELDS = new Set([
+  "subcategory_id",
+  "recurring_template_id",
+  "name",
+  "amount_centavos",
+  "frequency",
+  "due_day_of_month",
+  "is_family_support",
+  "is_dependent_support",
+  "protected_by_default",
+  "starts_on",
+  "ends_on",
+  "notes",
+]);
+
+const OBLIGATION_UPDATE_FIELDS = new Set([
+  "subcategory_id",
+  "recurring_template_id",
+  "name",
+  "amount_centavos",
+  "frequency",
+  "due_day_of_month",
+  "is_family_support",
+  "is_dependent_support",
+  "protected_by_default",
+  "starts_on",
+  "ends_on",
+  "notes",
+]);
+
 export async function prepareOperation(
   supabase: SupabaseClient,
   userId: string,
@@ -108,6 +198,120 @@ function sanitizePayload(
 }
 
 async function validateCreatePayload(
+  supabase: SupabaseClient,
+  userId: string,
+  entity: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (entity === "categories" || entity === "subcategories") {
+    return validateTaxonomyCreatePayload(supabase, userId, entity, payload);
+  }
+
+  if (entity === "financial_accounts") {
+    assertOnlyAllowed(payload, FINANCIAL_ACCOUNT_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, FINANCIAL_ACCOUNT_CREATE_FIELDS);
+    requireString(sanitized, "name");
+    requireString(sanitized, "kind");
+    const validKinds = ["cash", "bank", "e_wallet", "savings", "credit_card", "loan", "other"];
+    if (!validKinds.includes(sanitized.kind as string)) {
+      throw new Error(`kind must be one of: ${validKinds.join(", ")}`);
+    }
+    optionalBigInt(sanitized, "opening_balance_centavos");
+    optionalBigInt(sanitized, "credit_limit_centavos");
+    optionalBoolean(sanitized, "include_in_dashboard_balance");
+    optionalString(sanitized, "institution_name");
+    optionalString(sanitized, "opened_on");
+    optionalNumber(sanitized, "sort_order");
+    validateNonNegative(sanitized, ["credit_limit_centavos"]);
+    return Promise.resolve(sanitized);
+  }
+
+  if (entity === "income_sources") {
+    assertOnlyAllowed(payload, INCOME_SOURCE_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, INCOME_SOURCE_CREATE_FIELDS);
+    requireString(sanitized, "name");
+    requireString(sanitized, "income_type");
+    requireString(sanitized, "frequency");
+    const validTypes = ["stable", "variable"];
+    if (!validTypes.includes(sanitized.income_type as string)) {
+      throw new Error(`income_type must be one of: ${validTypes.join(", ")}`);
+    }
+    const validFrequencies = ["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"];
+    if (!validFrequencies.includes(sanitized.frequency as string)) {
+      throw new Error(`frequency must be one of: ${validFrequencies.join(", ")}`);
+    }
+    optionalBigInt(sanitized, "expected_amount_centavos");
+    optionalBigInt(sanitized, "min_amount_centavos");
+    optionalBigInt(sanitized, "max_amount_centavos");
+    optionalNumber(sanitized, "payday_day_of_month");
+    optionalNumber(sanitized, "payday_second_day_of_month");
+    optionalNumber(sanitized, "payday_day_of_week");
+    optionalString(sanitized, "next_expected_date");
+    optionalBoolean(sanitized, "is_active");
+    optionalString(sanitized, "notes");
+    validateNonNegative(sanitized, ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"]);
+    validateMinMaxOrdering(sanitized, "min_amount_centavos", "max_amount_centavos");
+    validateDayRange(sanitized, "payday_day_of_month", 1, 31);
+    validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
+    validateDayRange(sanitized, "payday_day_of_week", 0, 6);
+    return Promise.resolve(sanitized);
+  }
+
+  if (entity === "financial_obligations") {
+    assertOnlyAllowed(payload, OBLIGATION_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, OBLIGATION_CREATE_FIELDS);
+    requireString(sanitized, "name");
+    requireString(sanitized, "subcategory_id");
+    requireString(sanitized, "frequency");
+    requireBigInt(sanitized, "amount_centavos");
+    const val = sanitized.amount_centavos as number;
+    if (val < 0) throw new Error("amount_centavos must be >= 0");
+    const validFrequencies = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
+    if (!validFrequencies.includes(sanitized.frequency as string)) {
+      throw new Error(`frequency must be one of: ${validFrequencies.join(", ")}`);
+    }
+    optionalNumber(sanitized, "due_day_of_month");
+    optionalString(sanitized, "recurring_template_id");
+    optionalBoolean(sanitized, "is_family_support");
+    optionalBoolean(sanitized, "is_dependent_support");
+    optionalBoolean(sanitized, "protected_by_default");
+    optionalString(sanitized, "starts_on");
+    optionalString(sanitized, "ends_on");
+    optionalString(sanitized, "notes");
+    validateNonNegative(sanitized, ["amount_centavos"]);
+    validateDayRange(sanitized, "due_day_of_month", 1, 31);
+    validateDateOrdering(sanitized, "starts_on", "ends_on");
+
+    const { data: subcategory, error } = await supabase
+      .from("subcategories")
+      .select("id")
+      .eq("id", sanitized.subcategory_id as string)
+      .eq("kind", "expense")
+      .eq("deleted", false)
+      .eq("is_active", true)
+      .or(`user_id.is.null,user_id.eq.${userId}`)
+      .maybeSingle();
+    if (error) throw new Error(`subcategory_id validation failed: ${error.message}`);
+    if (!subcategory) throw new Error("subcategory_id does not reference an accessible active expense subcategory");
+
+    if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
+      const { data: template, error: templateErr } = await supabase
+        .from("recurring_transaction_templates")
+        .select("id")
+        .eq("id", sanitized.recurring_template_id as string)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
+      if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
+    }
+
+    return sanitized;
+  }
+
+  throw new Error(`entity '${entity}' is not in the sync allowlist`);
+}
+
+async function validateTaxonomyCreatePayload(
   supabase: SupabaseClient,
   userId: string,
   entity: string,
@@ -170,29 +374,148 @@ async function validateCreatePayload(
 }
 
 function validateUpdatePayload(entity: string, payload: Record<string, unknown>): Record<string, unknown> {
-  const allowedFields = entity === "categories" ? CATEGORY_UPDATE_FIELDS : SUBCATEGORY_UPDATE_FIELDS;
+  let allowedFields: Set<string>;
+  if (entity === "categories") {
+    allowedFields = CATEGORY_UPDATE_FIELDS;
+  } else if (entity === "subcategories") {
+    allowedFields = SUBCATEGORY_UPDATE_FIELDS;
+  } else if (entity === "financial_accounts") {
+    allowedFields = FINANCIAL_ACCOUNT_UPDATE_FIELDS;
+  } else if (entity === "income_sources") {
+    allowedFields = INCOME_SOURCE_UPDATE_FIELDS;
+  } else if (entity === "financial_obligations") {
+    allowedFields = OBLIGATION_UPDATE_FIELDS;
+  } else {
+    throw new Error(`entity '${entity}' is not in the sync allowlist`);
+  }
+
   assertOnlyAllowed(payload, allowedFields);
   const sanitized = sanitizePayload(payload, allowedFields);
 
   for (const [key, value] of Object.entries(sanitized)) {
-    if (key === "label" || key === "description") {
+    if (key === "label" || key === "description" || key === "name") {
       if (typeof value !== "string") throw new Error(`${key} must be a string`);
       continue;
     }
 
-    if (key === "short_label") {
+    if (key === "notes") {
       if (value !== null && typeof value !== "string") {
-        throw new Error("short_label must be a string or null");
+        throw new Error("notes must be a string or null");
       }
       continue;
     }
 
-    if (key === "sort_order") {
-      if (typeof value !== "number") throw new Error("sort_order must be a number");
+    if (key === "short_label" || key === "institution_name") {
+      if (value !== null && typeof value !== "string") {
+        throw new Error(`${key} must be a string or null`);
+      }
+      continue;
+    }
+
+    if (key === "slug" || key === "subcategory_id") {
+      if (typeof value !== "string") throw new Error(`${key} must be a string`);
+      continue;
+    }
+
+    if (key === "recurring_template_id") {
+      if (value !== null && typeof value !== "string") throw new Error("recurring_template_id must be a string or null");
+      continue;
+    }
+
+    if (key === "sort_order" || key === "due_day_of_month" || key === "payday_day_of_month" || key === "payday_second_day_of_month" || key === "payday_day_of_week") {
+      if (typeof value !== "number") throw new Error(`${key} must be a number`);
+      continue;
+    }
+
+    if (key === "opening_balance_centavos" || key === "current_balance_centavos" || key === "credit_limit_centavos" || key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "amount_centavos") {
+      if (typeof value !== "number") throw new Error(`${key} must be a number`);
+      continue;
+    }
+
+    if (key === "income_type") {
+      if (typeof value !== "string") throw new Error("income_type must be a string");
+      if (!["stable", "variable"].includes(value as string)) throw new Error(`income_type must be stable or variable`);
+      continue;
+    }
+
+    if (key === "kind") {
+      if (typeof value !== "string") throw new Error("kind must be a string");
+      continue;
+    }
+
+    if (key === "status") {
+      if (typeof value !== "string") throw new Error("status must be a string");
+      if (value === "deleted") throw new Error("status 'deleted' must use the delete operation");
+      continue;
+    }
+
+    if (key === "frequency") {
+      if (typeof value !== "string") throw new Error("frequency must be a string");
+      if (entity === "income_sources") {
+        if (!["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"].includes(value as string)) {
+          throw new Error("frequency must be a valid income frequency");
+        }
+      } else if (entity === "financial_obligations") {
+        if (!["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
+          throw new Error("frequency must be a valid obligation frequency");
+        }
+      }
+      continue;
+    }
+
+    if (key === "opened_on" || key === "archived_at" || key === "starts_on" || key === "ends_on" || key === "next_expected_date") {
+      if (value !== null && typeof value !== "string") {
+        throw new Error(`${key} must be a string or null`);
+      }
       continue;
     }
 
     if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+  }
+
+  if (entity === "financial_accounts") {
+    if (sanitized.status && typeof sanitized.status === "string" && !["active", "archived"].includes(sanitized.status as string)) {
+      throw new Error("status must be active or archived");
+    }
+    const centsFields = ["credit_limit_centavos"] as const;
+    for (const f of centsFields) {
+      if (typeof sanitized[f] === "number" && (sanitized[f] as number) < 0) {
+        throw new Error(`${f} must be >= 0`);
+      }
+    }
+  } else if (entity === "income_sources") {
+    const centsFields = ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"] as const;
+    for (const f of centsFields) {
+      if (typeof sanitized[f] === "number" && (sanitized[f] as number) < 0) {
+        throw new Error(`${f} must be >= 0`);
+      }
+    }
+    const minVal = sanitized.min_amount_centavos as number | undefined;
+    const maxVal = sanitized.max_amount_centavos as number | undefined;
+    if (minVal !== undefined && maxVal !== undefined && minVal > maxVal) {
+      throw new Error("min_amount_centavos must be <= max_amount_centavos");
+    }
+    const dayFields = ["payday_day_of_month", "payday_second_day_of_month"] as const;
+    for (const f of dayFields) {
+      if (typeof sanitized[f] === "number" && ((sanitized[f] as number) < 1 || (sanitized[f] as number) > 31)) {
+        throw new Error(`${f} must be between 1 and 31`);
+      }
+    }
+    if (typeof sanitized.payday_day_of_week === "number" && ((sanitized.payday_day_of_week as number) < 0 || (sanitized.payday_day_of_week as number) > 6)) {
+      throw new Error("payday_day_of_week must be between 0 and 6");
+    }
+  } else if (entity === "financial_obligations") {
+    if (typeof sanitized.amount_centavos === "number" && (sanitized.amount_centavos as number) < 0) {
+      throw new Error("amount_centavos must be >= 0");
+    }
+    if (typeof sanitized.due_day_of_month === "number" && ((sanitized.due_day_of_month as number) < 1 || (sanitized.due_day_of_month as number) > 31)) {
+      throw new Error("due_day_of_month must be between 1 and 31");
+    }
+    const starts = sanitized.starts_on as string | undefined;
+    const ends = sanitized.ends_on as string | undefined;
+    if (starts !== undefined && ends !== undefined && starts > ends) {
+      throw new Error("starts_on must be <= ends_on");
+    }
   }
 
   return sanitized;
@@ -225,6 +548,50 @@ function optionalBoolean(payload: Record<string, unknown>, field: string): void 
 function optionalNumber(payload: Record<string, unknown>, field: string): void {
   if (payload[field] !== undefined && typeof payload[field] !== "number") {
     throw new Error(`${field} must be a number`);
+  }
+}
+
+function requireBigInt(payload: Record<string, unknown>, field: string): void {
+  if (payload[field] === undefined || payload[field] === null || typeof payload[field] !== "number") {
+    throw new Error(`${field} is required and must be a number`);
+  }
+}
+
+function optionalBigInt(payload: Record<string, unknown>, field: string): void {
+  if (payload[field] !== undefined && payload[field] !== null && typeof payload[field] !== "number") {
+    throw new Error(`${field} must be a number or null`);
+  }
+}
+
+function validateNonNegative(payload: Record<string, unknown>, fields: string[]): void {
+  for (const field of fields) {
+    const val = payload[field];
+    if (val !== undefined && val !== null && typeof val === "number" && val < 0) {
+      throw new Error(`${field} must be >= 0`);
+    }
+  }
+}
+
+function validateMinMaxOrdering(payload: Record<string, unknown>, minField: string, maxField: string): void {
+  const minVal = payload[minField] as number | undefined;
+  const maxVal = payload[maxField] as number | undefined;
+  if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
+    throw new Error(`${minField} must be <= ${maxField}`);
+  }
+}
+
+function validateDayRange(payload: Record<string, unknown>, field: string, lo: number, hi: number): void {
+  const val = payload[field];
+  if (val !== undefined && val !== null && typeof val === "number") {
+    if (val < lo || val > hi) throw new Error(`${field} must be between ${lo} and ${hi}`);
+  }
+}
+
+function validateDateOrdering(payload: Record<string, unknown>, startField: string, endField: string): void {
+  const starts = payload[startField] as string | undefined;
+  const ends = payload[endField] as string | undefined;
+  if (starts !== undefined && starts !== null && ends !== undefined && ends !== null && starts > ends) {
+    throw new Error(`${startField} must be <= ${endField}`);
   }
 }
 

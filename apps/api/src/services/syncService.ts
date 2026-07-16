@@ -35,6 +35,9 @@ const SYNCED_TABLES = [
   "category_groups",
   "categories",
   "subcategories",
+  "financial_accounts",
+  "income_sources",
+  "financial_obligations",
 ] as const;
 
 export async function pushOperations(
