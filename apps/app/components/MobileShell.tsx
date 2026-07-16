@@ -80,6 +80,14 @@ type SyncQueueIssue = {
   created_at: string;
 };
 
+type OdinDevTools = {
+  seedFailedSyncRows: (count?: number) => Promise<void>;
+};
+
+type GlobalWithOdinDevTools = typeof globalThis & {
+  odinDevTools?: OdinDevTools;
+};
+
 type DrawerItem = {
   page: Page;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -165,6 +173,35 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const syncInFlight = useRef(false);
   const lastAutoSyncAt = useRef(0);
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    const global = globalThis as GlobalWithOdinDevTools;
+    global.odinDevTools = {
+      ...global.odinDevTools,
+      seedFailedSyncRows: async (count = 51) => {
+        const db = await initDatabase();
+        const createdAtBase = Date.now();
+
+        for (let i = 0; i < count; i++) {
+          await db.runAsync(
+            `INSERT OR IGNORE INTO sync_queue
+              (operation_id, user_id, device_id, entity, record_id, operation_type,
+               base_version, changed_fields, payload, status, attempts, last_error, created_at)
+             VALUES (?, ?, ?, 'categories', ?, 'update', 1, '[]', '{}', 'failed', 3, 'Test failed sync row', ?)`,
+            `test-failed-${i}`,
+            userId,
+            deviceId,
+            `test-record-${i}`,
+            new Date(createdAtBase + i).toISOString(),
+          );
+        }
+
+        await refreshQueueCount();
+      },
+    };
+  }, [deviceId, userId]);
 
   function clearSyncMessageSoon() {
     if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current);
