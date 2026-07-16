@@ -800,6 +800,12 @@ export async function updateIncomeSource(
     );
     if (!existing) throw new LocalDbError("NOT_FOUND", "income source not found");
 
+    const effectiveMin = input.minAmountCentavos !== undefined ? input.minAmountCentavos : existing.min_amount_centavos;
+    const effectiveMax = input.maxAmountCentavos !== undefined ? input.maxAmountCentavos : existing.max_amount_centavos;
+    if (effectiveMin !== null && effectiveMax !== null && effectiveMin! > effectiveMax!) {
+      throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be <= maxAmountCentavos");
+    }
+
     const setClauses: string[] = [];
     const params: SQLite.SQLiteBindValue[] = [];
 
@@ -1077,7 +1083,8 @@ export async function updateFinancialObligation(
 
     if (input.subcategoryId !== undefined) {
       const sc = await db.getFirstAsync<{ id: string }>(
-        "SELECT id FROM subcategories WHERE id = ? AND kind = 'expense' AND deleted = 0 AND is_active = 1",
+        "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND kind = 'expense' AND deleted = 0 AND is_active = 1",
+        userId,
         input.subcategoryId,
       );
       if (!sc) throw new LocalDbError("VALIDATION_ERROR", "subcategoryId does not reference an accessible active expense subcategory");
