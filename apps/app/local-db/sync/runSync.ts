@@ -378,6 +378,8 @@ function normalizePullRow(
     } else if (col === "metadata") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else if (typeof row[col] === "boolean") {
+      normalized[col] = row[col] ? 1 : 0;
     } else {
       normalized[col] = row[col];
     }
