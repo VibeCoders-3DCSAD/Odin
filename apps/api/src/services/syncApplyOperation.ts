@@ -269,6 +269,7 @@ async function validateCreatePayload(
     validateDayRange(sanitized, "payday_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_day_of_week", 0, 6);
+    validateDayRange(sanitized, "payday_second_day_of_week", 0, 6);
     return Promise.resolve(sanitized);
   }
 
@@ -302,6 +303,7 @@ async function validateCreatePayload(
     validateDayRange(sanitized, "due_second_day_of_month", 1, 31);
     validateDayRange(sanitized, "due_day_of_week", 0, 6);
     validateDayRange(sanitized, "due_second_day_of_week", 0, 6);
+    validateDayRange(sanitized, "due_month", 1, 12);
     validateDateOrdering(sanitized, "starts_on", "ends_on");
 
     const { data: subcategory, error } = await supabase
@@ -541,12 +543,27 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
     if (typeof sanitized.payday_day_of_week === "number" && ((sanitized.payday_day_of_week as number) < 0 || (sanitized.payday_day_of_week as number) > 6)) {
       throw new Error("payday_day_of_week must be between 0 and 6");
     }
+    if (typeof sanitized.payday_second_day_of_week === "number" && ((sanitized.payday_second_day_of_week as number) < 0 || (sanitized.payday_second_day_of_week as number) > 6)) {
+      throw new Error("payday_second_day_of_week must be between 0 and 6");
+    }
   } else if (entity === "financial_obligations") {
     if (typeof sanitized.amount_centavos === "number" && (sanitized.amount_centavos as number) < 0) {
       throw new Error("amount_centavos must be >= 0");
     }
     if (typeof sanitized.due_day_of_month === "number" && ((sanitized.due_day_of_month as number) < 1 || (sanitized.due_day_of_month as number) > 31)) {
       throw new Error("due_day_of_month must be between 1 and 31");
+    }
+    if (typeof sanitized.due_second_day_of_month === "number" && ((sanitized.due_second_day_of_month as number) < 1 || (sanitized.due_second_day_of_month as number) > 31)) {
+      throw new Error("due_second_day_of_month must be between 1 and 31");
+    }
+    if (typeof sanitized.due_day_of_week === "number" && ((sanitized.due_day_of_week as number) < 0 || (sanitized.due_day_of_week as number) > 6)) {
+      throw new Error("due_day_of_week must be between 0 and 6");
+    }
+    if (typeof sanitized.due_second_day_of_week === "number" && ((sanitized.due_second_day_of_week as number) < 0 || (sanitized.due_second_day_of_week as number) > 6)) {
+      throw new Error("due_second_day_of_week must be between 0 and 6");
+    }
+    if (typeof sanitized.due_month === "number" && ((sanitized.due_month as number) < 1 || (sanitized.due_month as number) > 12)) {
+      throw new Error("due_month must be between 1 and 12");
     }
     const starts = sanitized.starts_on as string | undefined;
     const ends = sanitized.ends_on as string | undefined;

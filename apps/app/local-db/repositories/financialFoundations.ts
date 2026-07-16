@@ -705,6 +705,9 @@ export async function createIncomeSource(
   if (input.paydayDayOfWeek !== undefined && input.paydayDayOfWeek !== null && (input.paydayDayOfWeek < 0 || input.paydayDayOfWeek > 6)) {
     throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfWeek must be between 0 and 6");
   }
+  if (input.paydaySecondDayOfWeek !== undefined && input.paydaySecondDayOfWeek !== null && (input.paydaySecondDayOfWeek < 0 || input.paydaySecondDayOfWeek > 6)) {
+    throw new LocalDbError("VALIDATION_ERROR", "paydaySecondDayOfWeek must be between 0 and 6");
+  }
 
   const db = await getDb();
   const id = randomUUID();
@@ -807,6 +810,9 @@ export async function updateIncomeSource(
   }
   if (input.paydayDayOfWeek !== undefined && input.paydayDayOfWeek !== null && (input.paydayDayOfWeek < 0 || input.paydayDayOfWeek > 6)) {
     throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfWeek must be between 0 and 6");
+  }
+  if (input.paydaySecondDayOfWeek !== undefined && input.paydaySecondDayOfWeek !== null && (input.paydaySecondDayOfWeek < 0 || input.paydaySecondDayOfWeek > 6)) {
+    throw new LocalDbError("VALIDATION_ERROR", "paydaySecondDayOfWeek must be between 0 and 6");
   }
 
   const db = await getDb();
@@ -997,6 +1003,18 @@ export async function createFinancialObligation(
   if (input.dueDayOfMonth !== undefined && input.dueDayOfMonth !== null && (input.dueDayOfMonth < 1 || input.dueDayOfMonth > 31)) {
     throw new LocalDbError("VALIDATION_ERROR", "dueDayOfMonth must be between 1 and 31");
   }
+  if (input.dueSecondDayOfMonth !== undefined && input.dueSecondDayOfMonth !== null && (input.dueSecondDayOfMonth < 1 || input.dueSecondDayOfMonth > 31)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueSecondDayOfMonth must be between 1 and 31");
+  }
+  if (input.dueDayOfWeek !== undefined && input.dueDayOfWeek !== null && (input.dueDayOfWeek < 0 || input.dueDayOfWeek > 6)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueDayOfWeek must be between 0 and 6");
+  }
+  if (input.dueSecondDayOfWeek !== undefined && input.dueSecondDayOfWeek !== null && (input.dueSecondDayOfWeek < 0 || input.dueSecondDayOfWeek > 6)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueSecondDayOfWeek must be between 0 and 6");
+  }
+  if (input.dueMonth !== undefined && input.dueMonth !== null && (input.dueMonth < 1 || input.dueMonth > 12)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueMonth must be between 1 and 12");
+  }
   if (input.startsOn !== undefined && input.startsOn !== null && input.endsOn !== undefined && input.endsOn !== null && input.startsOn > input.endsOn) {
     throw new LocalDbError("VALIDATION_ERROR", "startsOn must be <= endsOn");
   }
@@ -1102,6 +1120,18 @@ export async function updateFinancialObligation(
   }
   if (input.dueDayOfMonth !== undefined && input.dueDayOfMonth !== null && (input.dueDayOfMonth < 1 || input.dueDayOfMonth > 31)) {
     throw new LocalDbError("VALIDATION_ERROR", "dueDayOfMonth must be between 1 and 31");
+  }
+  if (input.dueSecondDayOfMonth !== undefined && input.dueSecondDayOfMonth !== null && (input.dueSecondDayOfMonth < 1 || input.dueSecondDayOfMonth > 31)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueSecondDayOfMonth must be between 1 and 31");
+  }
+  if (input.dueDayOfWeek !== undefined && input.dueDayOfWeek !== null && (input.dueDayOfWeek < 0 || input.dueDayOfWeek > 6)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueDayOfWeek must be between 0 and 6");
+  }
+  if (input.dueSecondDayOfWeek !== undefined && input.dueSecondDayOfWeek !== null && (input.dueSecondDayOfWeek < 0 || input.dueSecondDayOfWeek > 6)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueSecondDayOfWeek must be between 0 and 6");
+  }
+  if (input.dueMonth !== undefined && input.dueMonth !== null && (input.dueMonth < 1 || input.dueMonth > 12)) {
+    throw new LocalDbError("VALIDATION_ERROR", "dueMonth must be between 1 and 12");
   }
 
   const db = await getDb();
