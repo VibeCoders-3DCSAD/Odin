@@ -140,8 +140,13 @@ export async function createFinancialAccount(
   if (!VALID_KINDS.includes(input.kind as typeof VALID_KINDS[number])) {
     throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_KINDS.join(", ")}`);
   }
-  if (input.credit_limit_centavos != null && input.credit_limit_centavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "credit_limit_centavos must be >= 0");
+  if (input.opening_balance_centavos != null) {
+    if (typeof input.opening_balance_centavos !== "number" || !Number.isFinite(input.opening_balance_centavos) || !Number.isInteger(input.opening_balance_centavos)) {
+      throw new LocalDbError("VALIDATION_ERROR", "opening_balance_centavos must be a finite integer");
+    }
+  }
+  if (input.credit_limit_centavos != null && (typeof input.credit_limit_centavos !== "number" || !Number.isFinite(input.credit_limit_centavos) || !Number.isInteger(input.credit_limit_centavos) || input.credit_limit_centavos < 0)) {
+    throw new LocalDbError("VALIDATION_ERROR", "credit_limit_centavos must be a finite integer >= 0");
   }
 
   const db = await getDb();

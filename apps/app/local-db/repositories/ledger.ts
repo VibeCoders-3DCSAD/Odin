@@ -314,7 +314,7 @@ async function validateTransferShape(
   if (!input.transaction_date) {
     throw new LocalDbError("VALIDATION_ERROR", "transaction_date is required");
   }
-  if ((input as Record<string, unknown>).subcategory_id) {
+  if ("subcategory_id" in input && (input as Record<string, unknown>).subcategory_id != null) {
     throw new LocalDbError("VALIDATION_ERROR", "subcategory_id must not be set for transfer");
   }
   await verifyAccountOwnership(db, userId, input.source_account_id, "source account");
@@ -670,7 +670,7 @@ export async function updateTransaction(
 
     for (const key of UPDATE_FIELDS) {
       const value = (input as Record<string, unknown>)[key];
-      if (value === undefined) continue;
+      if (value === undefined || value === null) continue;
       changedFields.push(key);
       updates.push(`${key} = ?`);
       params.push(value as SQLite.SQLiteBindValue);
