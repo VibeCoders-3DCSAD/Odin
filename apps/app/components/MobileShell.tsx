@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
+import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
@@ -708,6 +709,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           ) : null}
         </View>
       );
+    }
+
+    if (currentPage === "add-transaction") {
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onClose={() => setCurrentPage("dashboard")} />;
     }
 
     if (currentPage === "categories") {
