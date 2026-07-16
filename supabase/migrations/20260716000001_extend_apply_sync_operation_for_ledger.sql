@@ -24,6 +24,13 @@ DECLARE
   v_now timestamptz := now();
   v_overwritten_values jsonb := '{}'::jsonb;
   v_deleted_check boolean;
+  v_tx_type odin_transaction_type;
+  v_cur_src uuid;
+  v_cur_dst uuid;
+  v_cur_sub uuid;
+  v_new_src uuid;
+  v_new_dst uuid;
+  v_new_sub uuid;
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'authentication required';
@@ -208,7 +215,9 @@ BEGIN
       SELECT version, deleted INTO v_current_version, v_deleted_check
       FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id FOR UPDATE;
     WHEN 'transactions' THEN
-      SELECT version, deleted INTO v_current_version, v_deleted_check
+      SELECT version, deleted, transaction_type,
+             source_account_id, destination_account_id, subcategory_id
+      INTO v_current_version, v_deleted_check, v_tx_type, v_cur_src, v_cur_dst, v_cur_sub
       FROM transactions WHERE id = p_record_id AND user_id = v_user_id FOR UPDATE;
   END CASE;
 
@@ -306,9 +315,33 @@ BEGIN
       WHERE id = p_record_id AND user_id = v_user_id;
 
     WHEN 'transactions' THEN
-      IF p_payload ? 'source_account_id' AND (p_payload->>'source_account_id') IS NOT NULL THEN
+      v_new_src := v_cur_src;
+      v_new_dst := v_cur_dst;
+      v_new_sub := v_cur_sub;
+      IF p_payload ? 'source_account_id' THEN
+        v_new_src := (p_payload->>'source_account_id')::uuid;
+      END IF;
+      IF p_payload ? 'destination_account_id' THEN
+        v_new_dst := (p_payload->>'destination_account_id')::uuid;
+      END IF;
+      IF p_payload ? 'subcategory_id' THEN
+        v_new_sub := (p_payload->>'subcategory_id')::uuid;
+      END IF;
+
+      IF v_tx_type = 'income' THEN
+        IF v_new_dst IS NULL THEN RAISE EXCEPTION 'destination_account_id is required for income'; END IF;
+        IF v_new_src IS NOT NULL THEN RAISE EXCEPTION 'source_account_id must be null for income'; END IF;
+      ELSIF v_tx_type = 'expense' THEN
+        IF v_new_src IS NULL THEN RAISE EXCEPTION 'source_account_id is required for expense'; END IF;
+        IF v_new_dst IS NOT NULL THEN RAISE EXCEPTION 'destination_account_id must be null for expense'; END IF;
+      ELSIF v_tx_type = 'transfer' THEN
+        IF v_new_src IS NULL OR v_new_dst IS NULL THEN RAISE EXCEPTION 'both accounts are required for transfer'; END IF;
+        IF v_new_src = v_new_dst THEN RAISE EXCEPTION 'source and destination accounts must differ'; END IF;
+      END IF;
+
+      IF v_new_src IS NOT NULL THEN
         PERFORM 1 FROM financial_accounts
-        WHERE id = (p_payload->>'source_account_id')::uuid
+        WHERE id = v_new_src
           AND user_id = v_user_id AND deleted = false;
         IF NOT FOUND THEN
           UPDATE applied_operations
@@ -319,9 +352,9 @@ BEGIN
         END IF;
       END IF;
 
-      IF p_payload ? 'destination_account_id' AND (p_payload->>'destination_account_id') IS NOT NULL THEN
+      IF v_new_dst IS NOT NULL THEN
         PERFORM 1 FROM financial_accounts
-        WHERE id = (p_payload->>'destination_account_id')::uuid
+        WHERE id = v_new_dst
           AND user_id = v_user_id AND deleted = false;
         IF NOT FOUND THEN
           UPDATE applied_operations
