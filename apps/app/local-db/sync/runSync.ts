@@ -1,8 +1,14 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
+import {
+  normalizePullRow,
+  applyPullRow,
+  SYNCED_TABLES,
+} from "./pullConvergence";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
+const MAX_SYNC_ATTEMPTS = 3;
 
 let syncRunning = false;
 
@@ -41,43 +47,6 @@ type QueueRow = {
   created_at: string;
 };
 
-const SYNCED_TABLES = ["category_groups", "categories", "subcategories", "financial_accounts", "transactions"] as const;
-
-const LOCAL_COLUMNS: Record<string, Set<string>> = {
-  category_groups: new Set([
-    "id", "user_id", "slug", "label", "short_label", "description",
-    "sort_order", "is_active", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  categories: new Set([
-    "id", "user_id", "category_group_id", "slug", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "sort_order",
-    "is_active", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  subcategories: new Set([
-    "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "is_protected",
-    "sort_order", "is_active", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  financial_accounts: new Set([
-    "id", "user_id", "name", "kind", "status",
-    "opening_balance_centavos", "current_balance_centavos",
-    "credit_limit_centavos", "include_in_dashboard_balance",
-    "institution_name", "opened_on", "archived_at",
-    "sort_order", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  transactions: new Set([
-    "id", "user_id", "transaction_type", "status", "entry_source",
-    "transaction_date", "posted_at", "amount_centavos",
-    "subcategory_id", "source_account_id", "destination_account_id",
-    "recurring_template_id", "merchant_name", "counterparty_name",
-    "notes", "client_mutation_id", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-};
 
 export async function runSync(
   userId: string,
@@ -160,10 +129,12 @@ async function pushQueue(
       body: JSON.stringify({ payload: { device_id: deviceId, operations } }),
     });
   } catch {
+    await bumpQueueAttempts(db, userId, deviceId, rows, "network error");
     return { pushed: 0, errors: rows.length };
   }
 
   if (!response.ok) {
+    await bumpQueueAttempts(db, userId, deviceId, rows, `server error: ${response.status}`);
     return { pushed: 0, errors: rows.length };
   }
 
@@ -192,6 +163,28 @@ async function pushQueue(
   }
 
   return { pushed, errors };
+}
+
+async function bumpQueueAttempts(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  rows: QueueRow[],
+  error: string,
+): Promise<void> {
+  for (const row of rows) {
+    await db.runAsync(
+      `UPDATE sync_queue
+       SET attempts = attempts + 1, last_error = ?,
+           status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE status END
+       WHERE operation_id = ? AND user_id = ? AND device_id = ?`,
+      error,
+      MAX_SYNC_ATTEMPTS,
+      row.operation_id,
+      userId,
+      deviceId,
+    );
+  }
 }
 
 async function pullAndApply(
@@ -238,61 +231,6 @@ async function pullAndApply(
   return { pulled, cursors: payload.cursors };
 }
 
-async function applyPullRow(
-  db: SQLite.SQLiteDatabase,
-  table: string,
-  row: Record<string, unknown>,
-): Promise<void> {
-  const recordId = row.id as string;
-  const rowVersion = (row.version as number) ?? 1;
-  const rowDeleted = (row.deleted as boolean) === true || row.deleted === 1;
-  const now = new Date().toISOString();
-
-  const existing = await db.getFirstAsync<{ version: number }>(
-    `SELECT version FROM "${table}" WHERE id = ?`,
-    recordId,
-  );
-
-  if (!existing) {
-    if (rowDeleted) return;
-
-    const columns = Object.keys(row).join(", ");
-    const placeholders = Object.keys(row).map(() => "?").join(", ");
-    const values = Object.keys(row).map((k) => row[k] as SQLite.SQLiteBindValue);
-
-    await db.runAsync(
-      `INSERT INTO "${table}" (${columns}) VALUES (${placeholders})`,
-      ...values,
-    );
-    return;
-  }
-
-  if (rowVersion <= existing.version) return;
-
-  if (rowDeleted) {
-    const taxonomyTables = new Set(["category_groups", "categories", "subcategories"]);
-    const isActiveClause = taxonomyTables.has(table) ? ", is_active = 0" : "";
-    const statusClause = table === "financial_accounts" ? ", status = 'deleted'" : 
-                         table === "transactions" ? ", status = 'deleted'" : "";
-    await db.runAsync(
-      `UPDATE "${table}" SET deleted = 1${isActiveClause}${statusClause}, version = ?,
-       updated_at = ? WHERE id = ?`,
-      rowVersion,
-      now,
-      recordId,
-    );
-    return;
-  }
-
-  const columns = Object.keys(row);
-  const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
-
-  await db.runAsync(
-    `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
-    ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
-    recordId,
-  );
-}
 
 async function loadCursors(
   db: SQLite.SQLiteDatabase,
@@ -353,40 +291,7 @@ async function ensureDeviceRegistered(
   }
 }
 
-function normalizePullRow(
-  table: string,
-  row: Record<string, unknown>,
-  userId: string,
-): Record<string, unknown> {
-  const columns = LOCAL_COLUMNS[table];
-  if (!columns) return row;
 
-  const now = new Date().toISOString();
-  const normalized: Record<string, unknown> = {};
-
-  for (const col of columns) {
-    if (col === "user_id") {
-      normalized[col] = (row[col] as string | null) ?? userId;
-    } else if (col === "created_at") {
-      normalized[col] = (row[col] as string | undefined) ?? (row.updated_at as string) ?? now;
-    } else if (col === "last_synced_at") {
-      normalized[col] = (row[col] as string | undefined) ?? now;
-    } else if (col === "is_protected") {
-      const isProtectedDefault = (row.is_protected_default as boolean) === true;
-      const isProtected = (row.is_protected as boolean) === true;
-      normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
-    } else if (col === "metadata") {
-      const val = row[col];
-      normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
-    } else if (typeof row[col] === "boolean") {
-      normalized[col] = row[col] ? 1 : 0;
-    } else {
-      normalized[col] = row[col];
-    }
-  }
-
-  return normalized;
-}
 function fetchWithTimeout(
   url: string,
   options: RequestInit & { timeout?: number },

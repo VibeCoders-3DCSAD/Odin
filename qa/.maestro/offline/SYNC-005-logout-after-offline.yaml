@@ -1,0 +1,49 @@
+appId: com.anonymous.odin
+name: "SYNC-005: Logout Blocked While Offline"
+tags:
+  - offline
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+---
+- launchApp:
+    clearState: true
+
+# Login while online
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+# Go offline
+- setAirplaneMode: enabled
+
+# Attempt logout while offline — app blocks with online-only toast
+- runFlow:
+    file: ../subflows/logout.yaml
+
+# handleLogout exits immediately when offline
+- extendedWaitUntil:
+    visible: "This action can only be done while online"
+    timeout: 10000
+
+- assertVisible: "This action can only be done while online"
+- takeScreenshot: offline/SYNC-005-offline-logout-blocked
+
+# Restore connectivity
+- setAirplaneMode: disabled
+
+# Now logout should succeed
+- runFlow:
+    file: ../subflows/logout.yaml
+
+- extendedWaitUntil:
+    visible: "Welcome back"
+    timeout: 15000
+
+- assertVisible: "Welcome back"
+- takeScreenshot: offline/SYNC-005-logout-after-reconnect

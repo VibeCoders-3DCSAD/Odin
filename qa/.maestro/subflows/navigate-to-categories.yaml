@@ -1,0 +1,6 @@
+# Subflow: Navigate to Categories via drawer
+---
+- tapOn:
+    id: "Open navigation menu"
+- tapOn:
+    text: "Categories"

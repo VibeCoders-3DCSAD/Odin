@@ -39,6 +39,7 @@ env:
     visible: "Back to settings"
     timeout: 5000
 
+# "I understand" is both rendered text and accessibilityLabel
 - assertVisible: "I understand"
 
 # Check the confirmation checkbox
@@ -53,6 +54,5 @@ env:
 - extendedWaitUntil:
     visible: "Deletion requested"
     timeout: 10000
-    optional: true
 
 - takeScreenshot: settings/SET-004-account-deletion-flow

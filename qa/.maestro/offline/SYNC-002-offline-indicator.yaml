@@ -1,5 +1,5 @@
 appId: com.anonymous.odin
-name: "SYNC-002: Offline Indicator Shown"
+name: "SYNC-002: Offline Blocks Settings Change"
 tags:
   - offline
   - regression
@@ -22,9 +22,23 @@ env:
 # Go offline
 - setAirplaneMode: enabled
 
-# The app has a connectivity store; verify toast or indicator appears
-# The toast shows "This action can only be done while online" on certain actions
-# Take screenshot to capture offline state
+# Navigate to settings
+- runFlow:
+    file: ../subflows/navigate-to-settings.yaml
+
+- assertVisible: "Settings"
+
+# Try to toggle a privacy setting while offline — should show toast
+- scrollUntilVisible:
+    element:
+      id: "Personalization"
+    direction: DOWN
+
+- tapOn:
+    id: "Personalization"
+
+# Expect offline toast
+- assertVisible: "Can't save while offline"
 - takeScreenshot: offline/SYNC-002-offline-indicator-shown
 
 # Restore

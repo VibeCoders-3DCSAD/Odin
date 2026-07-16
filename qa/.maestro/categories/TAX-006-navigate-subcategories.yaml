@@ -1,0 +1,60 @@
+appId: com.anonymous.odin
+name: "TAX-006: Navigate to Subcategories"
+tags:
+  - categories
+  - regression
+  - P1
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Nav Test Category"
+  CATEGORY_DESCRIPTION: "Temporary category for subcategory nav"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Create a category so we have a reliable row to tap
+- tapOn:
+    id: "Create category"
+- assertVisible: "New Category"
+- tapOn:
+    id: "Essentials"
+- tapOn:
+    text: "e.g. My Category"
+- inputText: ${CATEGORY_LABEL}
+- tapOn:
+    text: "What this category covers"
+- inputText: ${CATEGORY_DESCRIPTION}
+- tapOn:
+    text: "Save"
+
+# Expand Essentials to find the new category
+- tapOn:
+    text: "Essentials"
+
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 10000
+
+# Tap the category row to enter subcategory view
+- tapOn:
+    text: ${CATEGORY_LABEL}
+
+# Should show subcategory view with back button (accessibilityLabel)
+- assertVisible: "Back to categories"
+- takeScreenshot: categories/TAX-006-subcategory-view
+
+# Press back to return to main categories list
+- back
+
+- assertVisible: "Essentials"

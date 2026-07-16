@@ -41,7 +41,7 @@ env:
 
 # Cancel - go back to settings
 - tapOn:
-    id: "Back to settings"
+    text: "Back to settings"
 
 # Should be back on settings
 - assertVisible: "Settings"

@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ArrowsClockwise, CheckCircle, Cloud, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
+import { ArrowsClockwise, CheckCircle, Cloud, SquaresFour, ClockCounterClockwise, Plus, Pulse, TrashSimple, Wallet } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,6 +21,9 @@ import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
 import TransactionHistoryScreen from "../features/ledger/TransactionHistoryScreen";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
+import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
+import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
+import FinancialObligationsScreen from "../features/financial-obligations/FinancialObligationsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
@@ -68,6 +71,9 @@ type Page =
   | "assistant"
   | "add-transaction"
   | "categories"
+  | "financial-accounts"
+  | "income-sources"
+  | "financial-obligations"
   | "settings";
 
 type MobileShellProps = {
@@ -135,6 +141,9 @@ const drawerSections: DrawerSection[] = [
     label: "Overview",
     items: [
       { page: "dashboard", icon: "view-dashboard-outline", label: "Dashboard" },
+      { page: "financial-accounts", icon: "wallet-outline", label: "Financial Accounts" },
+      { page: "income-sources", icon: "cash-multiple", label: "Income Sources" },
+      { page: "financial-obligations", icon: "calendar-check-outline", label: "Obligations" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
       { page: "history", icon: "clock-outline", label: "History" },
@@ -172,6 +181,9 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
   categories: { title: "Categories", subtitle: "Manage your categories" },
+  "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
+  "income-sources": { title: "Income Sources", subtitle: "Track your income" },
+  "financial-obligations": { title: "Obligations", subtitle: "Manage recurring obligations" },
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
@@ -528,6 +540,22 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     onLoggedOut();
   }
 
+  async function discardSingleIssue(operationId: string) {
+    const db = await initDatabase();
+    await db.runAsync(
+      "UPDATE sync_queue SET status = 'discarded', discarded_at = ? WHERE operation_id = ? AND user_id = ?",
+      new Date().toISOString(),
+      operationId,
+      userId,
+    );
+    await refreshQueueCount();
+    setSyncIssues((prev) => prev.filter((i) => i.operation_id !== operationId));
+    setSyncIssueTotal((prev) => prev - 1);
+    const issue = syncIssues.find((i) => i.operation_id === operationId);
+    if (issue?.status === "failed") setFailedIssueTotal((prev) => prev - 1);
+    else setPendingIssueTotal((prev) => prev - 1);
+  }
+
   async function discardUnsyncedAndLogout() {
     setIsLoggingOut(true);
     try {
@@ -722,6 +750,18 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "categories") {
       return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
+    }
+
+    if (currentPage === "financial-accounts") {
+      return <FinancialAccountsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
+    }
+
+    if (currentPage === "income-sources") {
+      return <IncomeSourcesScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
+    }
+
+    if (currentPage === "financial-obligations") {
+      return <FinancialObligationsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
     }
 
     const meta = pageMeta[currentPage];
@@ -976,9 +1016,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>
                       {issue.status === "failed" ? issue.failure_message : "This change is waiting to sync."}
                     </Text>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: palette.mut, marginTop: 5 }}>
-                      Discard this change, then recreate it if needed.
-                    </Text>
+                    <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 8 }}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Discard this change"
+                        onPress={() => { discardSingleIssue(issue.operation_id); }}
+                        hitSlop={4}
+                        style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "#FFF0F2" }}
+                      >
+                        <TrashSimple size={12} color={palette.error} />
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: palette.error }}>
+                          Discard
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                 ))}
               </ScrollView>

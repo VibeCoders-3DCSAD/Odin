@@ -33,7 +33,7 @@ env:
 
 # Try to dismiss by tapping backdrop (should dismiss and logout, not bypass)
 - tapOn:
-    id: "Dismiss consent"
+    text: "Dismiss consent"
 
 # Should return to login, not enter the app
 - assertVisible: "Welcome back"

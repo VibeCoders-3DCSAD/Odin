@@ -37,6 +37,8 @@ const SYNCED_TABLES = [
   "subcategories",
   "financial_accounts",
   "transactions",
+  "income_sources",
+  "financial_obligations",
 ] as const;
 
 export async function pushOperations(
@@ -69,6 +71,18 @@ export async function pushOperations(
 
       if (!result) throw new Error("sync apply returned no result");
 
+      if (result.status === "rejected") {
+        console.error("[sync/push] rejected", {
+          userId,
+          deviceId,
+          operation_id: op.operation_id,
+          entity: op.entity,
+          record_id: op.record_id,
+          operation_type: op.operation_type,
+          reason: result.reason ?? "unknown",
+        });
+      }
+
       results.push({
         operation_id: op.operation_id,
         status: result.status,
@@ -77,6 +91,16 @@ export async function pushOperations(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
+
+      console.error("[sync/push] rejected", {
+        userId,
+        deviceId,
+        operation_id: op.operation_id,
+        entity: op.entity,
+        record_id: op.record_id,
+        operation_type: op.operation_type,
+        reason: message,
+      });
 
       await supabase.from("edit_history").insert({
         user_id: userId,
@@ -116,8 +140,8 @@ export async function pullChanges(
 
     if (table === "category_groups") {
       // category_groups has no user_id column — system-wide data
-    } else if (table === "financial_accounts" || table === "transactions") {
-      // purely user-scoped — no system rows
+    } else if (table === "financial_accounts" || table === "transactions" || table === "income_sources" || table === "financial_obligations") {
+      // user-scoped only — no system rows
       query.eq("user_id", userId);
     } else {
       // categories and subcategories: include system rows (user_id IS NULL)
@@ -126,7 +150,7 @@ export async function pullChanges(
     }
 
     const tableCursor = cursors[table];
-    if (tableCursor) {
+    if (tableCursor && tableCursor.id) {
       query.or(
         `updated_at.gt.${tableCursor.ts},and(updated_at.eq.${tableCursor.ts},id.gt.${tableCursor.id})`,
       );

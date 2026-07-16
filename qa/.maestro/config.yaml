@@ -9,6 +9,7 @@ flows:
   - navigation/*
   - offline/*
   - security/*
+  - categories/*
 
 excludeTags:
   - util

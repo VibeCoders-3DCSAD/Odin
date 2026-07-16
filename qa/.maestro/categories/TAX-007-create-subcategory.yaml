@@ -1,0 +1,81 @@
+appId: com.anonymous.odin
+name: "TAX-007: Create Subcategory"
+tags:
+  - categories
+  - regression
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Sub Parent"
+  CATEGORY_DESCRIPTION: "Parent for subcategory test"
+  SUB_LABEL: "Maestro Subcategory"
+  SUB_DESCRIPTION: "Automated test subcategory"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Create a parent category so we have a reliable row to enter
+- tapOn:
+    id: "Create category"
+- assertVisible: "New Category"
+- tapOn:
+    id: "Essentials"
+- tapOn:
+    text: "e.g. My Category"
+- inputText: ${CATEGORY_LABEL}
+- tapOn:
+    text: "What this category covers"
+- inputText: ${CATEGORY_DESCRIPTION}
+- tapOn:
+    text: "Save"
+
+# Expand Essentials to find the new category
+- tapOn:
+    text: "Essentials"
+
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 10000
+
+# Tap the category row to enter subcategory view
+- tapOn:
+    text: ${CATEGORY_LABEL}
+
+# Now inside subcategory view — tap Add subcategory
+- tapOn:
+    id: "Add subcategory"
+
+# Modal should appear
+- assertVisible: "New Subcategory"
+
+# Fill label
+- tapOn:
+    text: "e.g. Dining Out"
+- inputText: ${SUB_LABEL}
+
+# Fill description
+- tapOn:
+    text: "What this subcategory covers"
+- inputText: ${SUB_DESCRIPTION}
+
+# Save
+- tapOn:
+    text: "Save"
+
+# User stays in subcategory view after save — verify the new subcategory is visible
+- extendedWaitUntil:
+    visible: ${SUB_LABEL}
+    timeout: 10000
+
+- takeScreenshot: categories/TAX-007-create-subcategory

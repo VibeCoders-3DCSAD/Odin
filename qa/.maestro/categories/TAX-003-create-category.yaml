@@ -1,0 +1,61 @@
+appId: com.anonymous.odin
+name: "TAX-003: Create Category"
+tags:
+  - categories
+  - regression
+  - P0
+env:
+  USERNAME: "test@example.com"
+  PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Test Category"
+  CATEGORY_DESCRIPTION: "Automated test category for validation"
+---
+- launchApp:
+    clearState: true
+
+- runFlow:
+    file: ../subflows/login.yaml
+
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 15000
+
+- runFlow:
+    file: ../subflows/navigate-to-categories.yaml
+
+# Tap create category button
+- tapOn:
+    id: "Create category"
+
+# Modal should appear
+- assertVisible: "New Category"
+
+# Select a group (Essentials)
+- tapOn:
+    id: "Essentials"
+
+# Fill label
+- tapOn:
+    text: "e.g. My Category"
+- inputText: ${CATEGORY_LABEL}
+
+# Fill description
+- tapOn:
+    text: "What this category covers"
+- inputText: ${CATEGORY_DESCRIPTION}
+
+# Save
+- tapOn:
+    text: "Save"
+
+# Group collapses after save — expand it so the new row is visible
+- tapOn:
+    text: "Essentials"
+
+# Verify category appears in the list
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 10000
+
+- assertVisible: ${CATEGORY_LABEL}
+- takeScreenshot: categories/TAX-003-create-category
