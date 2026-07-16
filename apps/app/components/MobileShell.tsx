@@ -135,6 +135,7 @@ const drawerSections: DrawerSection[] = [
     label: "Overview",
     items: [
       { page: "dashboard", icon: "view-dashboard-outline", label: "Dashboard" },
+      { page: "financial-accounts", icon: "wallet-outline", label: "Financial Accounts" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
       { page: "history", icon: "clock-outline", label: "History" },

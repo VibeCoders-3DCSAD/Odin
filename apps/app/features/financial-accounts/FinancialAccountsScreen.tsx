@@ -31,6 +31,7 @@ import {
   type FinancialAccount,
   type FinancialAccountKind,
   type CreateFinancialAccountInput,
+  type UpdateFinancialAccountInput,
 } from "../../local-db/repositories/financialFoundations";
 
 // ---------------------------------------------------------------------------
@@ -109,6 +110,14 @@ function isNegativeAccount(account: FinancialAccount): boolean {
   );
 }
 
+function parseSafeCents(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = parseFloat(trimmed);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed * 100);
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -158,9 +167,14 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack }: Pr
 
   const handleUpdate = async (input: CreateFinancialAccountInput) => {
     if (!editingAccount) return;
-    // Map create shape to update shape — omit kind (not updateable)
-    const { kind: _, ...updateInput } = input;
-    await updateFinancialAccount(userId, deviceId, editingAccount.id, updateInput);
+    const balanceChange = input.openingBalanceCentavos ?? 0;
+    await updateFinancialAccount(userId, deviceId, editingAccount.id, {
+      ...input,
+      currentBalanceCentavos:
+        editingAccount.currentBalanceCentavos -
+        editingAccount.openingBalanceCentavos +
+        balanceChange,
+    } as UpdateFinancialAccountInput);
     setSheetVisible(false);
     setEditingAccount(null);
     await loadAccounts();
@@ -443,20 +457,25 @@ function AccountFormSheet({
       return;
     }
 
+    const openingCents = parseSafeCents(openingBalance);
+    if (openingCents === null && openingBalance.trim() !== "") {
+      Alert.alert("Error", "Opening balance must be a valid amount.");
+      return;
+    }
+    const limitCents = parseSafeCents(creditLimit);
+    if (limitCents === null && creditLimit.trim() !== "") {
+      Alert.alert("Error", "Credit limit must be a valid amount.");
+      return;
+    }
+
     setSaving(true);
     try {
       const input: CreateFinancialAccountInput = {
         name: name.trim(),
         kind,
-        openingBalanceCentavos: openingBalance
-          ? Math.round(parseFloat(openingBalance) * 100)
-          : 0,
+        openingBalanceCentavos: openingCents ?? 0,
         creditLimitCentavos:
-          kind === "credit_card" || kind === "loan"
-            ? creditLimit
-              ? Math.round(parseFloat(creditLimit) * 100)
-              : null
-            : null,
+          kind === "credit_card" || kind === "loan" ? limitCents : null,
         institutionName: institutionName.trim() || null,
       };
       await onSubmit(input);
