@@ -107,6 +107,8 @@ const TRANSACTION_CREATE_FIELDS = new Set([
   "merchant_name",
   "counterparty_name",
   "notes",
+  "entry_source",
+  "recurring_template_id",
 ]);
 
 const TRANSACTION_UPDATE_FIELDS = new Set([

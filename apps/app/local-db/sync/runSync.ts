@@ -41,7 +41,7 @@ type QueueRow = {
   created_at: string;
 };
 
-const SYNCED_TABLES = ["category_groups", "categories", "subcategories", "financial_accounts", "transactions"] as const;
+const SYNCED_TABLES = ["category_groups", "categories", "subcategories", "financial_accounts", "transactions", "transaction_templates", "transaction_drafts", "recurring_transaction_templates", "recurring_transaction_occurrences"] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
   category_groups: new Set([
@@ -76,6 +76,33 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "recurring_template_id", "merchant_name", "counterparty_name",
     "notes", "client_mutation_id", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
+  ]),
+  transaction_templates: new Set([
+    "id", "user_id", "transaction_type", "status", "name",
+    "amount_centavos", "subcategory_id", "source_account_id",
+    "destination_account_id", "merchant_name", "counterparty_name",
+    "notes", "use_count", "last_used_at", "metadata",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  transaction_drafts: new Set([
+    "id", "user_id", "client_draft_id", "status", "payload",
+    "captured_offline_at", "synced_transaction_id", "last_error",
+    "metadata", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  recurring_transaction_templates: new Set([
+    "id", "user_id", "transaction_type", "status", "name",
+    "amount_centavos", "frequency", "interval_count",
+    "day_of_month", "second_day_of_month", "day_of_week",
+    "custom_rule", "starts_on", "ends_on", "next_occurrence_date",
+    "last_generated_date", "subcategory_id", "source_account_id",
+    "destination_account_id", "reminder_enabled", "reminder_days_before", "notes",
+    "metadata", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  recurring_transaction_occurrences: new Set([
+    "id", "user_id", "recurring_template_id", "scheduled_date", "status",
+    "generated_transaction_id", "reminder_sent_at", "posted_at",
+    "skipped_at", "failure_reason", "metadata",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
 };
 
@@ -272,8 +299,8 @@ async function applyPullRow(
   if (rowDeleted) {
     const taxonomyTables = new Set(["category_groups", "categories", "subcategories"]);
     const isActiveClause = taxonomyTables.has(table) ? ", is_active = 0" : "";
-    const statusClause = table === "financial_accounts" ? ", status = 'deleted'" : 
-                         table === "transactions" ? ", status = 'deleted'" : "";
+    const templatedTables = new Set(["financial_accounts", "transactions", "transaction_templates", "transaction_drafts", "recurring_transaction_templates", "recurring_transaction_occurrences"]);
+    const statusClause = templatedTables.has(table) ? `, status = CASE WHEN '${table}' = 'transaction_drafts' THEN 'discarded' ELSE 'deleted' END` : "";
     await db.runAsync(
       `UPDATE "${table}" SET deleted = 1${isActiveClause}${statusClause}, version = ?,
        updated_at = ? WHERE id = ?`,

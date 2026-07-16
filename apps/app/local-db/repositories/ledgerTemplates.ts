@@ -332,26 +332,68 @@ export async function saveDraft(
   const id = crypto.randomUUID();
   const ts = now();
 
-  await db.runAsync(
-    `INSERT INTO transaction_drafts
-      (id, user_id, client_draft_id, status, payload, captured_offline_at, version, deleted, created_at, updated_at)
-     VALUES (?, ?, ?, 'pending', ?, ?, 1, 0, ?, ?)`,
-    id, userId, input.client_draft_id,
-    JSON.stringify(input.payload),
-    input.captured_offline_at ?? null,
-    ts, ts,
-  );
+  let result: TransactionDraft;
 
-  const row = await db.getFirstAsync<DraftRow>(
-    "SELECT * FROM transaction_drafts WHERE user_id = ? AND id = ?", userId, id,
-  );
-  return mapDraft(row!);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO transaction_drafts
+        (id, user_id, client_draft_id, status, payload, captured_offline_at, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, 'pending', ?, ?, 1, 0, ?, ?)`,
+      id, userId, input.client_draft_id,
+      JSON.stringify(input.payload),
+      input.captured_offline_at ?? null,
+      ts, ts,
+    );
+
+    await enqueueOperation(db, {
+      userId, deviceId,
+      entity: "transaction_drafts",
+      recordId: id,
+      operationType: "create",
+      baseVersion: null,
+      changedFields: [],
+      payload: {
+        client_draft_id: input.client_draft_id,
+        payload: input.payload,
+        captured_offline_at: input.captured_offline_at,
+      },
+      failureMessage: `This draft could not be created.`,
+    });
+
+    const row = await db.getFirstAsync<DraftRow>(
+      "SELECT * FROM transaction_drafts WHERE user_id = ? AND id = ?", userId, id,
+    );
+    result = mapDraft(row!);
+  });
+
+  return result!;
 }
 
-export async function deleteDraft(userId: string, id: string): Promise<void> {
+export async function deleteDraft(userId: string, deviceId: string, id: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync(
-    "UPDATE transaction_drafts SET status = 'discarded', deleted = 1, updated_at = ? WHERE user_id = ? AND id = ?",
-    now(), userId, id,
-  );
+  const ts = now();
+
+  await db.withTransactionAsync(async () => {
+    const current = await db.getFirstAsync<DraftRow>(
+      "SELECT * FROM transaction_drafts WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId, id,
+    );
+    if (!current) return;
+
+    await db.runAsync(
+      "UPDATE transaction_drafts SET status = 'discarded', deleted = 1, version = version + 1, updated_at = ? WHERE user_id = ? AND id = ?",
+      ts, userId, id,
+    );
+
+    await enqueueOperation(db, {
+      userId, deviceId,
+      entity: "transaction_drafts",
+      recordId: id,
+      operationType: "delete",
+      baseVersion: current.version,
+      changedFields: [],
+      payload: { id },
+      failureMessage: `This draft could not be deleted.`,
+    });
+  });
 }

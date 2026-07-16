@@ -313,6 +313,17 @@ export async function updateRecurringTemplate(
     for (const key of fields) {
       const value = (input as Record<string, unknown>)[key];
       if (value === undefined) continue;
+
+      if (key === "frequency" && typeof value === "string" && !(VALID_FREQUENCIES as readonly string[]).includes(value)) {
+        throw new LocalDbError("VALIDATION_ERROR", `frequency must be one of: ${VALID_FREQUENCIES.join(", ")}`);
+      }
+      if (key === "amount_centavos" && (typeof value !== "number" || value <= 0 || !Number.isInteger(value))) {
+        throw new LocalDbError("VALIDATION_ERROR", "amount_centavos must be a positive integer");
+      }
+      if (key === "interval_count" && (typeof value !== "number" || value <= 0 || !Number.isInteger(value))) {
+        throw new LocalDbError("VALIDATION_ERROR", "interval_count must be a positive integer");
+      }
+
       changedFields.push(key);
       updates.push(`${key} = ?`);
       params.push(value as SQLite.SQLiteBindValue);
@@ -483,6 +494,8 @@ export async function generateNextOccurrence(
           subcategory_id: subId,
           source_account_id: sourceId,
           destination_account_id: destId,
+          entry_source: "recurring",
+          recurring_template_id: templateId,
           merchant_name: template.transaction_type === "expense" ? template.name : null,
           counterparty_name: template.transaction_type === "income" ? template.name : null,
           notes: template.notes,
