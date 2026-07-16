@@ -620,47 +620,52 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
   function renderPage() {
     if (currentPage === "settings") {
+      const syncSection = settingsSubPage ? null : (
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
+            Sync
+          </Text>
+          <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden" }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={queueCount > 0 ? "Sync unsynced changes" : "Synced"}
+              disabled={syncing}
+              onPress={handleSync}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}
+            >
+              {syncing ? (
+                <ActivityIndicator size="small" color={palette.mut} />
+              ) : queueCount > 0 ? (
+                <ArrowsClockwise size={18} color="#C25E00" weight="bold" />
+              ) : (
+                <Cloud size={18} color="#0B8A55" weight="bold" />
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13.5, fontWeight: "600", color: palette.ink }}>
+                  {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} unsynced` : "Synced"}
+                </Text>
+                {syncMessage ? (
+                  <Text style={{ fontSize: 10.5, color: palette.mut, marginTop: 1 }}>
+                    {syncMessage}
+                  </Text>
+                ) : null}
+              </View>
+              <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
+            </Pressable>
+          </View>
+        </View>
+      );
+
       return (
-        <View className="gap-6">
-          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} />
+        <View>
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} beforeDangerZone={syncSection} />
           {!settingsSubPage ? (
-            <>
+            <View style={{ marginTop: 20 }}>
               {logoutError ? (
                 <View style={{ backgroundColor: "#FFF0F2", borderRadius: 14, padding: 14, marginBottom: 12 }}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
                 </View>
               ) : null}
-              <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
-                Sync
-              </Text>
-              <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 20 }}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={queueCount > 0 ? "Sync unsynced changes" : "Synced"}
-                  disabled={syncing}
-                  onPress={handleSync}
-                  style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}
-                >
-                  {syncing ? (
-                    <ActivityIndicator size="small" color={palette.mut} />
-                  ) : queueCount > 0 ? (
-                    <ArrowsClockwise size={18} color="#C25E00" weight="bold" />
-                  ) : (
-                    <Cloud size={18} color="#0B8A55" weight="bold" />
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13.5, fontWeight: "600", color: palette.ink }}>
-                      {syncing ? "Syncing..." : queueCount > 0 ? `${queueCount} unsynced` : "Synced"}
-                    </Text>
-                    {syncMessage ? (
-                      <Text style={{ fontSize: 10.5, color: palette.mut, marginTop: 1 }}>
-                        {syncMessage}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
-                </Pressable>
-              </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
@@ -674,7 +679,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 <Text className="text-[#D9001F] text-base font-bold">Log out</Text>
               )}
               </Pressable>
-            </>
+            </View>
           ) : null}
         </View>
       );
