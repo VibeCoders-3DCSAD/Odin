@@ -9,6 +9,7 @@ import {
   Dimensions,
   Image,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   Text,
@@ -194,6 +195,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const hamburgerAnim = useRef(new Animated.Value(0)).current;
+  const syncSheetPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 60) setSyncDetailsVisible(false);
+      },
+    }),
+  ).current;
   const initialSyncDone = useRef(false);
   const wasOnline = useRef(false);
   const syncInFlight = useRef(false);
@@ -910,9 +919,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           </View>
         ) : null}
 
-        <Modal visible={syncDetailsVisible} transparent animationType="slide" onRequestClose={() => setSyncDetailsVisible(false)}>
+        <Modal visible={syncDetailsVisible} transparent animationType="slide" presentationStyle="overFullScreen" onDismiss={() => setSyncDetailsVisible(false)} onRequestClose={() => setSyncDetailsVisible(false)}>
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
-            <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close sync details" onPress={() => setSyncDetailsVisible(false)} style={{ flex: 1 }} />
+            <View
+              onStartShouldSetResponder={() => true}
+              {...syncSheetPanResponder.panHandlers}
+              style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}
+            >
               <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginBottom: 18 }} />
               <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
                 Unsynced changes
