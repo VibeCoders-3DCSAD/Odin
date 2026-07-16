@@ -316,6 +316,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
       </View>
 
       <FlatList
+        nestedScrollEnabled
         data={accounts}
         keyExtractor={(a) => a.id}
         renderItem={renderAccount}

@@ -102,6 +102,7 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack, o
         <Text style={{ fontSize: 20, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>Obligations</Text>
       </View>
       <FlatList
+        nestedScrollEnabled
         data={obligations}
         keyExtractor={(o) => o.id}
         contentContainerStyle={{ padding: 16, paddingTop: 8 }}
