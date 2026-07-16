@@ -5,6 +5,7 @@ import type { SyncOperation } from "../types";
 
 const VALID_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "loan", "other"] as const;
 const VALID_STATUSES = ["active", "archived", "deleted"] as const;
+const UPDATE_FIELDS = ["name", "opening_balance_centavos", "credit_limit_centavos", "include_in_dashboard_balance", "institution_name", "opened_on", "sort_order"] as const;
 
 type FinancialAccountRow = {
   id: string;
@@ -218,8 +219,14 @@ export async function updateFinancialAccount(
     const params: SQLite.SQLiteBindValue[] = [];
     const changedFields: string[] = [];
 
-    for (const [key, value] of Object.entries(input)) {
+    for (const key of UPDATE_FIELDS) {
+      const value = (input as Record<string, unknown>)[key];
       if (value === undefined) continue;
+
+      if (key === "credit_limit_centavos" && value != null && (typeof value !== "number" || value < 0)) {
+        throw new LocalDbError("VALIDATION_ERROR", "credit_limit_centavos must be >= 0");
+      }
+
       changedFields.push(key);
 
       if (key === "include_in_dashboard_balance") {

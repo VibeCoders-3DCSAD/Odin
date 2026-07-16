@@ -6,6 +6,7 @@ import type { SyncOperation } from "../types";
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
 const VALID_SORT_DIR = ["asc", "desc"] as const;
+const UPDATE_FIELDS = ["amount_centavos", "subcategory_id", "source_account_id", "destination_account_id", "transaction_date", "merchant_name", "counterparty_name", "notes"] as const;
 
 type TransactionRow = {
   id: string;
@@ -338,6 +339,17 @@ async function validateUpdatedShape(
     await verifySubcategoryOwnership(db, userId, subId);
   }
 
+  if (transactionType === "income") {
+    if (!destId) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id is required for income");
+    if (sourceId) throw new LocalDbError("VALIDATION_ERROR", "source_account_id must be null for income");
+  } else if (transactionType === "expense") {
+    if (!sourceId) throw new LocalDbError("VALIDATION_ERROR", "source_account_id is required for expense");
+    if (destId) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id must be null for expense");
+  } else if (transactionType === "transfer") {
+    if (!sourceId || !destId) throw new LocalDbError("VALIDATION_ERROR", "both accounts are required for transfer");
+    if (sourceId === destId) throw new LocalDbError("VALIDATION_ERROR", "source and destination accounts must differ");
+  }
+
   return {
     transaction_type: transactionType,
     source_account_id: sourceId,
@@ -387,6 +399,9 @@ export async function listTransactions(
   const params: SQLite.SQLiteBindValue[] = [userId];
 
   if (filters?.transaction_type) {
+    if (!(VALID_TYPES as readonly string[]).includes(filters.transaction_type)) {
+      throw new LocalDbError("VALIDATION_ERROR", `transaction_type must be one of: ${VALID_TYPES.join(", ")}`);
+    }
     parts.push("AND transaction_type = ?");
     params.push(filters.transaction_type);
   }
@@ -636,7 +651,8 @@ export async function updateTransaction(
     const params: SQLite.SQLiteBindValue[] = [];
     const changedFields: string[] = [];
 
-    for (const [key, value] of Object.entries(input)) {
+    for (const key of UPDATE_FIELDS) {
+      const value = (input as Record<string, unknown>)[key];
       if (value === undefined) continue;
       changedFields.push(key);
       updates.push(`${key} = ?`);
