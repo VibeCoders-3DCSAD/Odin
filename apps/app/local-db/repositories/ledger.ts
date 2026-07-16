@@ -6,6 +6,7 @@ import type { SyncOperation } from "../types";
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
 const VALID_SORT_DIR = ["asc", "desc"] as const;
+const VALID_STATUSES = ["posted", "draft", "voided", "deleted"] as const;
 const UPDATE_FIELDS = ["amount_centavos", "subcategory_id", "source_account_id", "destination_account_id", "transaction_date", "merchant_name", "counterparty_name", "notes"] as const;
 
 type TransactionRow = {
@@ -342,12 +343,15 @@ async function validateUpdatedShape(
   if (transactionType === "income") {
     if (!destId) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id is required for income");
     if (sourceId) throw new LocalDbError("VALIDATION_ERROR", "source_account_id must be null for income");
+    if (!subId) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id is required for income");
   } else if (transactionType === "expense") {
     if (!sourceId) throw new LocalDbError("VALIDATION_ERROR", "source_account_id is required for expense");
     if (destId) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id must be null for expense");
+    if (!subId) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id is required for expense");
   } else if (transactionType === "transfer") {
     if (!sourceId || !destId) throw new LocalDbError("VALIDATION_ERROR", "both accounts are required for transfer");
     if (sourceId === destId) throw new LocalDbError("VALIDATION_ERROR", "source and destination accounts must differ");
+    if (subId) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id must be null for transfer");
   }
 
   return {
@@ -406,6 +410,9 @@ export async function listTransactions(
     params.push(filters.transaction_type);
   }
   if (filters?.status) {
+    if (!(VALID_STATUSES as readonly string[]).includes(filters.status)) {
+      throw new LocalDbError("VALIDATION_ERROR", `status must be one of: ${VALID_STATUSES.join(", ")}`);
+    }
     parts.push("AND status = ?");
     params.push(filters.status);
   }
@@ -432,8 +439,8 @@ export async function listTransactions(
 
   parts.push(`ORDER BY ${sortBy} ${sortDir}`);
   parts.push("LIMIT ? OFFSET ?");
-  params.push(filters?.limit ?? 100);
-  params.push(filters?.offset ?? 0);
+  params.push(Math.max(1, Math.min(filters?.limit ?? 100, 200)));
+  params.push(Math.max(0, filters?.offset ?? 0));
 
   const rows = await db.getAllAsync<TransactionRow>(parts.join(" "), ...params);
   return rows.map(mapTransaction);

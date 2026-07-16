@@ -104,6 +104,9 @@ export async function listFinancialAccounts(
   const params: SQLite.SQLiteBindValue[] = [userId];
 
   if (status) {
+    if (!(VALID_STATUSES as readonly string[]).includes(status)) {
+      throw new LocalDbError("VALIDATION_ERROR", `status must be one of: ${VALID_STATUSES.join(", ")}`);
+    }
     sql += " AND status = ?";
     params.push(status);
   }
