@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
+import { randomUUID } from "../uuid";
 import type { SyncOperation } from "../types";
 
 type CategoryGroupRow = {
@@ -290,7 +291,7 @@ export async function createCategory(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const metadata = "{}";
 
@@ -484,7 +485,7 @@ export async function createSubcategory(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const metadata = "{}";
 
