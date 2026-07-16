@@ -358,6 +358,24 @@ function now(): string {
   return new Date().toISOString();
 }
 
+async function assertAccessibleRecurringTemplate(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  recurringTemplateId: string,
+): Promise<void> {
+  const template = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM recurring_transaction_templates WHERE user_id = ? AND id = ? AND deleted = 0",
+    userId,
+    recurringTemplateId,
+  );
+  if (!template) {
+    throw new LocalDbError(
+      "VALIDATION_ERROR",
+      "recurringTemplateId does not reference an accessible recurring transaction template",
+    );
+  }
+}
+
 const VALID_ACCOUNT_KINDS: FinancialAccountKind[] = [
   "cash",
   "bank",
@@ -1053,6 +1071,10 @@ export async function createFinancialObligation(
       throw new LocalDbError("VALIDATION_ERROR", "subcategoryId does not reference an accessible active expense subcategory");
     }
 
+    if (input.recurringTemplateId != null) {
+      await assertAccessibleRecurringTemplate(db, userId, input.recurringTemplateId);
+    }
+
     await db.runAsync(
       `INSERT INTO financial_obligations
         (id, user_id, subcategory_id, recurring_template_id, name, status, amount_centavos,
@@ -1179,6 +1201,9 @@ export async function updateFinancialObligation(
         input.subcategoryId,
       );
       if (!sc) throw new LocalDbError("VALIDATION_ERROR", "subcategoryId does not reference an accessible active expense subcategory");
+    }
+    if (input.recurringTemplateId != null) {
+      await assertAccessibleRecurringTemplate(db, userId, input.recurringTemplateId);
     }
     if (input.startsOn !== undefined && input.startsOn !== null && input.endsOn === undefined) {
       if (input.startsOn > existing.ends_on!) {
