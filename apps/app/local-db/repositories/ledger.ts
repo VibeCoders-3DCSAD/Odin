@@ -308,6 +308,9 @@ async function validateTransferShape(
   if (!input.transaction_date) {
     throw new LocalDbError("VALIDATION_ERROR", "transaction_date is required");
   }
+  if ((input as Record<string, unknown>).subcategory_id) {
+    throw new LocalDbError("VALIDATION_ERROR", "subcategory_id must not be set for transfer");
+  }
   await verifyAccountOwnership(db, userId, input.source_account_id, "source account");
   await verifyAccountOwnership(db, userId, input.destination_account_id, "destination account");
 }
