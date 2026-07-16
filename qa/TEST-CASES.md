@@ -1,7 +1,7 @@
 ---
 metadata:
-  last_modified: "2026-07-15"
-  version: "1.0.0"
+  last_modified: "2026-07-16"
+  version: "1.1.0"
   author: "Odin QA"
   status: "active"
   description: "Master test case registry for Odin Android app E2E testing with Maestro"
@@ -136,7 +136,7 @@ metadata:
 | SYNC-001 | App usable in airplane mode | 1. Login 2. Enable airplane mode 3. Verify Dashboard visible 4. Navigate tabs 5. Disable airplane mode | (standard login credentials) | App remains functional with cached data; no crash; navigation works offline | — | — | offline/SYNC-001-app-usable-offline |
 | SYNC-002 | Offline blocks settings change | 1. Login 2. Enable airplane mode 3. Navigate to Settings 4. Tap Personalization toggle 5. Disable airplane mode | (standard login credentials) | Toast "Can't save while offline" shown; toggle does not persist; settings remain unchanged | — | — | offline/SYNC-002-offline-indicator-shown |
 | SYNC-004 | Sync on reconnect | 1. Login 2. Enable airplane mode 3. Wait 4. Disable airplane mode 5. Wait for sync | (standard login credentials) | App syncs automatically on reconnect; data fresh; no errors | — | — | offline/SYNC-004-sync-on-reconnect |
-| SYNC-005 | Logout after offline period | 1. Login 2. Enable airplane mode 3. Attempt settings change (toast shown) 4. Disable airplane mode 5. Navigate to Settings 6. Tap "Log out" | (standard login credentials) | Logout proceeds; app syncs if pending changes exist; returned to login screen | — | — | offline/SYNC-005-logout-after-offline |
+| SYNC-005 | Logout blocked while offline | 1. Login 2. Enable airplane mode 3. Attempt logout 4. Verify "This action can only be done while online" toast 5. Disable airplane mode 6. Logout succeeds 7. Verify login screen | (standard login credentials) | Logout blocked with toast while offline; logout succeeds after reconnect; returned to login screen | — | — | offline/SYNC-005-logout-after-offline |
 
 ---
 

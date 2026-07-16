@@ -51,8 +51,7 @@ env:
     text: ${CATEGORY_LABEL}
 
 # Should show subcategory view with back button (accessibilityLabel)
-- assertVisible:
-    id: "Back to categories"
+- assertVisible: "Back to categories"
 - takeScreenshot: categories/TAX-006-subcategory-view
 
 # Press back to return to main categories list
