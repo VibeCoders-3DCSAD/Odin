@@ -82,6 +82,7 @@ const FINANCIAL_ACCOUNT_CREATE_FIELDS = new Set([
   "institution_name",
   "opened_on",
   "sort_order",
+  "notes",
 ]);
 
 const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
@@ -95,6 +96,7 @@ const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
   "opened_on",
   "archived_at",
   "sort_order",
+  "notes",
 ]);
 
 const INCOME_SOURCE_CREATE_FIELDS = new Set([
@@ -107,7 +109,9 @@ const INCOME_SOURCE_CREATE_FIELDS = new Set([
   "payday_day_of_month",
   "payday_second_day_of_month",
   "payday_day_of_week",
+  "payday_second_day_of_week",
   "next_expected_date",
+  "estimated_interval_days",
   "is_active",
   "notes",
 ]);
@@ -122,7 +126,9 @@ const INCOME_SOURCE_UPDATE_FIELDS = new Set([
   "payday_day_of_month",
   "payday_second_day_of_month",
   "payday_day_of_week",
+  "payday_second_day_of_week",
   "next_expected_date",
+  "estimated_interval_days",
   "is_active",
   "notes",
 ]);
@@ -134,6 +140,10 @@ const OBLIGATION_CREATE_FIELDS = new Set([
   "amount_centavos",
   "frequency",
   "due_day_of_month",
+  "due_second_day_of_month",
+  "due_day_of_week",
+  "due_second_day_of_week",
+  "due_month",
   "is_family_support",
   "is_dependent_support",
   "protected_by_default",
@@ -149,6 +159,10 @@ const OBLIGATION_UPDATE_FIELDS = new Set([
   "amount_centavos",
   "frequency",
   "due_day_of_month",
+  "due_second_day_of_month",
+  "due_day_of_week",
+  "due_second_day_of_week",
+  "due_month",
   "is_family_support",
   "is_dependent_support",
   "protected_by_default",
@@ -247,6 +261,7 @@ async function validateCreatePayload(
     optionalNumber(sanitized, "payday_second_day_of_month");
     optionalNumber(sanitized, "payday_day_of_week");
     optionalString(sanitized, "next_expected_date");
+    optionalNumber(sanitized, "estimated_interval_days");
     optionalBoolean(sanitized, "is_active");
     optionalString(sanitized, "notes");
     validateNonNegative(sanitized, ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"]);
@@ -271,6 +286,10 @@ async function validateCreatePayload(
       throw new Error(`frequency must be one of: ${validFrequencies.join(", ")}`);
     }
     optionalNumber(sanitized, "due_day_of_month");
+    optionalNumber(sanitized, "due_second_day_of_month");
+    optionalNumber(sanitized, "due_day_of_week");
+    optionalNumber(sanitized, "due_second_day_of_week");
+    optionalNumber(sanitized, "due_month");
     optionalString(sanitized, "recurring_template_id");
     optionalBoolean(sanitized, "is_family_support");
     optionalBoolean(sanitized, "is_dependent_support");
@@ -280,6 +299,9 @@ async function validateCreatePayload(
     optionalString(sanitized, "notes");
     validateNonNegative(sanitized, ["amount_centavos"]);
     validateDayRange(sanitized, "due_day_of_month", 1, 31);
+    validateDayRange(sanitized, "due_second_day_of_month", 1, 31);
+    validateDayRange(sanitized, "due_day_of_week", 0, 6);
+    validateDayRange(sanitized, "due_second_day_of_week", 0, 6);
     validateDateOrdering(sanitized, "starts_on", "ends_on");
 
     const { data: subcategory, error } = await supabase
@@ -422,13 +444,28 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
       continue;
     }
 
-    if (key === "sort_order" || key === "due_day_of_month" || key === "payday_day_of_month" || key === "payday_second_day_of_month" || key === "payday_day_of_week") {
+    if (key === "payday_day_of_month" || key === "payday_second_day_of_month" || key === "payday_day_of_week" || key === "payday_second_day_of_week" || key === "estimated_interval_days") {
+      if (value !== null && typeof value !== "number") throw new Error(`${key} must be a number or null`);
+      continue;
+    }
+
+    if (key === "sort_order") {
       if (typeof value !== "number") throw new Error(`${key} must be a number`);
       continue;
     }
 
-    if (key === "opening_balance_centavos" || key === "current_balance_centavos" || key === "credit_limit_centavos" || key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "amount_centavos") {
+    if (key === "due_day_of_month" || key === "due_second_day_of_month" || key === "due_day_of_week" || key === "due_second_day_of_week" || key === "due_month") {
+      if (value !== null && typeof value !== "number") throw new Error(`${key} must be a number or null`);
+      continue;
+    }
+
+    if (key === "opening_balance_centavos" || key === "current_balance_centavos" || key === "amount_centavos") {
       if (typeof value !== "number") throw new Error(`${key} must be a number`);
+      continue;
+    }
+
+    if (key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "credit_limit_centavos") {
+      if (value !== null && typeof value !== "number") throw new Error(`${key} must be a number or null`);
       continue;
     }
 
@@ -540,14 +577,14 @@ function optionalString(payload: Record<string, unknown>, field: string): void {
 }
 
 function optionalBoolean(payload: Record<string, unknown>, field: string): void {
-  if (payload[field] !== undefined && typeof payload[field] !== "boolean") {
-    throw new Error(`${field} must be a boolean`);
+  if (payload[field] !== undefined && payload[field] !== null && typeof payload[field] !== "boolean") {
+    throw new Error(`${field} must be a boolean or null`);
   }
 }
 
 function optionalNumber(payload: Record<string, unknown>, field: string): void {
-  if (payload[field] !== undefined && typeof payload[field] !== "number") {
-    throw new Error(`${field} must be a number`);
+  if (payload[field] !== undefined && payload[field] !== null && typeof payload[field] !== "number") {
+    throw new Error(`${field} must be a number or null`);
   }
 }
 

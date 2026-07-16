@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ArrowsClockwise, CheckCircle, Cloud, SquaresFour, ClockCounterClockwise, Plus, Pulse, Wallet } from "phosphor-react-native";
+import { ArrowsClockwise, CheckCircle, Cloud, SquaresFour, ClockCounterClockwise, Plus, Pulse, TrashSimple, Wallet } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -538,6 +538,22 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     onLoggedOut();
   }
 
+  async function discardSingleIssue(operationId: string) {
+    const db = await initDatabase();
+    await db.runAsync(
+      "UPDATE sync_queue SET status = 'discarded', discarded_at = ? WHERE operation_id = ? AND user_id = ?",
+      new Date().toISOString(),
+      operationId,
+      userId,
+    );
+    await refreshQueueCount();
+    setSyncIssues((prev) => prev.filter((i) => i.operation_id !== operationId));
+    setSyncIssueTotal((prev) => prev - 1);
+    const issue = syncIssues.find((i) => i.operation_id === operationId);
+    if (issue?.status === "failed") setFailedIssueTotal((prev) => prev - 1);
+    else setPendingIssueTotal((prev) => prev - 1);
+  }
+
   async function discardUnsyncedAndLogout() {
     setIsLoggingOut(true);
     try {
@@ -990,9 +1006,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>
                       {issue.status === "failed" ? issue.failure_message : "This change is waiting to sync."}
                     </Text>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: palette.mut, marginTop: 5 }}>
-                      Discard this change, then recreate it if needed.
-                    </Text>
+                    <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 8 }}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Discard this change"
+                        onPress={() => { discardSingleIssue(issue.operation_id); }}
+                        hitSlop={4}
+                        style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: "#FFF0F2" }}
+                      >
+                        <TrashSimple size={12} color={palette.error} />
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: palette.error }}>
+                          Discard
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                 ))}
               </ScrollView>

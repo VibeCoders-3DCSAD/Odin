@@ -8,6 +8,7 @@ import {
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
+const MAX_SYNC_ATTEMPTS = 3;
 
 let syncRunning = false;
 
@@ -127,10 +128,12 @@ async function pushQueue(
       body: JSON.stringify({ payload: { device_id: deviceId, operations } }),
     });
   } catch {
+    await bumpQueueAttempts(db, userId, deviceId, rows, "network error");
     return { pushed: 0, errors: rows.length };
   }
 
   if (!response.ok) {
+    await bumpQueueAttempts(db, userId, deviceId, rows, `server error: ${response.status}`);
     return { pushed: 0, errors: rows.length };
   }
 
@@ -159,6 +162,28 @@ async function pushQueue(
   }
 
   return { pushed, errors };
+}
+
+async function bumpQueueAttempts(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  rows: QueueRow[],
+  error: string,
+): Promise<void> {
+  for (const row of rows) {
+    await db.runAsync(
+      `UPDATE sync_queue
+       SET attempts = attempts + 1, last_error = ?,
+           status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE status END
+       WHERE operation_id = ? AND user_id = ? AND device_id = ?`,
+      error,
+      MAX_SYNC_ATTEMPTS,
+      row.operation_id,
+      userId,
+      deviceId,
+    );
+  }
 }
 
 async function pullAndApply(

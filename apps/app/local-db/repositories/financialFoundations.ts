@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
+import { randomUUID } from "../uuid";
 import type { SyncOperation } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,7 @@ type FinancialAccountRow = {
   archived_at: string | null;
   deleted_at: string | null;
   sort_order: number;
+  notes: string | null;
   metadata: string;
   version: number;
   deleted: number;
@@ -42,7 +44,9 @@ type IncomeSourceRow = {
   payday_day_of_month: number | null;
   payday_second_day_of_month: number | null;
   payday_day_of_week: number | null;
+  payday_second_day_of_week: number | null;
   next_expected_date: string | null;
+  estimated_interval_days: number | null;
   is_active: number;
   notes: string | null;
   metadata: string;
@@ -63,6 +67,10 @@ type FinancialObligationRow = {
   amount_centavos: number;
   frequency: string;
   due_day_of_month: number | null;
+  due_second_day_of_month: number | null;
+  due_day_of_week: number | null;
+  due_second_day_of_week: number | null;
+  due_month: number | null;
   is_family_support: number;
   is_dependent_support: number;
   protected_by_default: number;
@@ -105,6 +113,7 @@ export type FinancialAccount = {
   openedOn: string | null;
   archivedAt: string | null;
   sortOrder: number;
+  notes: string | null;
 };
 
 export type IncomeType = "stable" | "variable";
@@ -128,7 +137,9 @@ export type IncomeSource = {
   paydayDayOfMonth: number | null;
   paydaySecondDayOfMonth: number | null;
   paydayDayOfWeek: number | null;
+  paydaySecondDayOfWeek: number | null;
   nextExpectedDate: string | null;
+  estimatedIntervalDays: number | null;
   isActive: boolean;
   notes: string | null;
 };
@@ -150,6 +161,10 @@ export type FinancialObligation = {
   amountCentavos: number;
   frequency: ObligationFrequency;
   dueDayOfMonth: number | null;
+  dueSecondDayOfMonth: number | null;
+  dueDayOfWeek: number | null;
+  dueSecondDayOfWeek: number | null;
+  dueMonth: number | null;
   isFamilySupport: boolean;
   isDependentSupport: boolean;
   protectedByDefault: boolean;
@@ -171,6 +186,7 @@ export type CreateFinancialAccountInput = {
   institutionName?: string | null;
   openedOn?: string | null;
   sortOrder?: number;
+  notes?: string | null;
 };
 
 export type UpdateFinancialAccountInput = {
@@ -184,6 +200,7 @@ export type UpdateFinancialAccountInput = {
   openedOn?: string | null;
   archivedAt?: string | null;
   sortOrder?: number;
+  notes?: string | null;
 };
 
 export type CreateIncomeSourceInput = {
@@ -196,7 +213,9 @@ export type CreateIncomeSourceInput = {
   paydayDayOfMonth?: number | null;
   paydaySecondDayOfMonth?: number | null;
   paydayDayOfWeek?: number | null;
+  paydaySecondDayOfWeek?: number | null;
   nextExpectedDate?: string | null;
+  estimatedIntervalDays?: number | null;
   isActive?: boolean;
   notes?: string | null;
 };
@@ -211,7 +230,9 @@ export type UpdateIncomeSourceInput = {
   paydayDayOfMonth?: number | null;
   paydaySecondDayOfMonth?: number | null;
   paydayDayOfWeek?: number | null;
+  paydaySecondDayOfWeek?: number | null;
   nextExpectedDate?: string | null;
+  estimatedIntervalDays?: number | null;
   isActive?: boolean;
   notes?: string | null;
 };
@@ -223,6 +244,10 @@ export type CreateFinancialObligationInput = {
   amountCentavos: number;
   frequency: ObligationFrequency;
   dueDayOfMonth?: number | null;
+  dueSecondDayOfMonth?: number | null;
+  dueDayOfWeek?: number | null;
+  dueSecondDayOfWeek?: number | null;
+  dueMonth?: number | null;
   isFamilySupport?: boolean;
   isDependentSupport?: boolean;
   protectedByDefault?: boolean;
@@ -238,6 +263,10 @@ export type UpdateFinancialObligationInput = {
   amountCentavos?: number;
   frequency?: ObligationFrequency;
   dueDayOfMonth?: number | null;
+  dueSecondDayOfMonth?: number | null;
+  dueDayOfWeek?: number | null;
+  dueSecondDayOfWeek?: number | null;
+  dueMonth?: number | null;
   isFamilySupport?: boolean;
   isDependentSupport?: boolean;
   protectedByDefault?: boolean;
@@ -264,6 +293,7 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
     openedOn: row.opened_on,
     archivedAt: row.archived_at,
     sortOrder: row.sort_order,
+    notes: row.notes,
   };
 }
 
@@ -279,7 +309,9 @@ function mapIncomeSource(row: IncomeSourceRow): IncomeSource {
     paydayDayOfMonth: row.payday_day_of_month,
     paydaySecondDayOfMonth: row.payday_second_day_of_month,
     paydayDayOfWeek: row.payday_day_of_week,
+    paydaySecondDayOfWeek: row.payday_second_day_of_week,
     nextExpectedDate: row.next_expected_date,
+    estimatedIntervalDays: row.estimated_interval_days,
     isActive: row.is_active === 1,
     notes: row.notes,
   };
@@ -294,6 +326,10 @@ function mapObligation(row: FinancialObligationRow): FinancialObligation {
     amountCentavos: row.amount_centavos,
     frequency: row.frequency as ObligationFrequency,
     dueDayOfMonth: row.due_day_of_month,
+    dueSecondDayOfMonth: row.due_second_day_of_month,
+    dueDayOfWeek: row.due_day_of_week,
+    dueSecondDayOfWeek: row.due_second_day_of_week,
+    dueMonth: row.due_month,
     isFamilySupport: row.is_family_support === 1,
     isDependentSupport: row.is_dependent_support === 1,
     protectedByDefault: row.protected_by_default === 1,
@@ -400,7 +436,7 @@ export async function createFinancialAccount(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const payload: Record<string, unknown> = {
     name: input.name,
@@ -411,6 +447,7 @@ export async function createFinancialAccount(
     institution_name: input.institutionName ?? null,
     opened_on: input.openedOn ?? null,
     sort_order: input.sortOrder ?? 0,
+    notes: input.notes ?? null,
   };
 
   let result: { account: FinancialAccount; operation: SyncOperation };
@@ -420,8 +457,8 @@ export async function createFinancialAccount(
       `INSERT INTO financial_accounts
         (id, user_id, name, kind, status, opening_balance_centavos, current_balance_centavos,
          credit_limit_centavos, include_in_dashboard_balance, institution_name, opened_on,
-         sort_order, metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+         sort_order, notes, metadata, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
       userId,
       input.name,
@@ -433,6 +470,7 @@ export async function createFinancialAccount(
       input.institutionName ?? null,
       input.openedOn ?? null,
       input.sortOrder ?? 0,
+      input.notes ?? null,
       ts,
       ts,
     );
@@ -488,6 +526,7 @@ export async function updateFinancialAccount(
   if (input.openedOn !== undefined) { changedFields.push("opened_on"); payload.opened_on = input.openedOn; }
   if (input.archivedAt !== undefined) { changedFields.push("archived_at"); payload.archived_at = input.archivedAt; }
   if (input.sortOrder !== undefined) { changedFields.push("sort_order"); payload.sort_order = input.sortOrder; }
+  if (input.notes !== undefined) { changedFields.push("notes"); payload.notes = input.notes; }
 
   if (changedFields.length === 0) {
     const existing = await getFinancialAccount(userId, id);
@@ -518,6 +557,7 @@ export async function updateFinancialAccount(
     if (input.openedOn !== undefined) { setClauses.push("opened_on = ?"); params.push(input.openedOn); }
     if (input.archivedAt !== undefined) { setClauses.push("archived_at = ?"); params.push(input.archivedAt); }
     if (input.sortOrder !== undefined) { setClauses.push("sort_order = ?"); params.push(input.sortOrder); }
+    if (input.notes !== undefined) { setClauses.push("notes = ?"); params.push(input.notes); }
 
     setClauses.push("updated_at = ?"); params.push(ts);
     setClauses.push("version = version + 1");
@@ -667,7 +707,7 @@ export async function createIncomeSource(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const payload: Record<string, unknown> = {
     name: input.name,
@@ -679,7 +719,9 @@ export async function createIncomeSource(
     payday_day_of_month: input.paydayDayOfMonth ?? null,
     payday_second_day_of_month: input.paydaySecondDayOfMonth ?? null,
     payday_day_of_week: input.paydayDayOfWeek ?? null,
+    payday_second_day_of_week: input.paydaySecondDayOfWeek ?? null,
     next_expected_date: input.nextExpectedDate ?? null,
+    estimated_interval_days: input.estimatedIntervalDays ?? null,
     is_active: input.isActive ?? true,
     notes: input.notes ?? null,
   };
@@ -691,8 +733,8 @@ export async function createIncomeSource(
       `INSERT INTO income_sources
         (id, user_id, name, income_type, frequency, expected_amount_centavos, min_amount_centavos,
          max_amount_centavos, payday_day_of_month, payday_second_day_of_month, payday_day_of_week,
-         next_expected_date, is_active, notes, metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+         next_expected_date, estimated_interval_days, payday_second_day_of_week, is_active, notes, metadata, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
       userId,
       input.name,
@@ -705,6 +747,8 @@ export async function createIncomeSource(
       input.paydaySecondDayOfMonth ?? null,
       input.paydayDayOfWeek ?? null,
       input.nextExpectedDate ?? null,
+      input.estimatedIntervalDays ?? null,
+      input.paydaySecondDayOfWeek ?? null,
       boolToInt(input.isActive ?? true),
       input.notes ?? null,
       ts,
@@ -779,7 +823,9 @@ export async function updateIncomeSource(
   if (input.paydayDayOfMonth !== undefined) { changedFields.push("payday_day_of_month"); payload.payday_day_of_month = input.paydayDayOfMonth; }
   if (input.paydaySecondDayOfMonth !== undefined) { changedFields.push("payday_second_day_of_month"); payload.payday_second_day_of_month = input.paydaySecondDayOfMonth; }
   if (input.paydayDayOfWeek !== undefined) { changedFields.push("payday_day_of_week"); payload.payday_day_of_week = input.paydayDayOfWeek; }
+  if (input.paydaySecondDayOfWeek !== undefined) { changedFields.push("payday_second_day_of_week"); payload.payday_second_day_of_week = input.paydaySecondDayOfWeek; }
   if (input.nextExpectedDate !== undefined) { changedFields.push("next_expected_date"); payload.next_expected_date = input.nextExpectedDate; }
+  if (input.estimatedIntervalDays !== undefined) { changedFields.push("estimated_interval_days"); payload.estimated_interval_days = input.estimatedIntervalDays; }
   if (input.isActive !== undefined) { changedFields.push("is_active"); payload.is_active = input.isActive; }
   if (input.notes !== undefined) { changedFields.push("notes"); payload.notes = input.notes; }
 
@@ -818,7 +864,9 @@ export async function updateIncomeSource(
     if (input.paydayDayOfMonth !== undefined) { setClauses.push("payday_day_of_month = ?"); params.push(input.paydayDayOfMonth); }
     if (input.paydaySecondDayOfMonth !== undefined) { setClauses.push("payday_second_day_of_month = ?"); params.push(input.paydaySecondDayOfMonth); }
     if (input.paydayDayOfWeek !== undefined) { setClauses.push("payday_day_of_week = ?"); params.push(input.paydayDayOfWeek); }
+    if (input.paydaySecondDayOfWeek !== undefined) { setClauses.push("payday_second_day_of_week = ?"); params.push(input.paydaySecondDayOfWeek); }
     if (input.nextExpectedDate !== undefined) { setClauses.push("next_expected_date = ?"); params.push(input.nextExpectedDate); }
+    if (input.estimatedIntervalDays !== undefined) { setClauses.push("estimated_interval_days = ?"); params.push(input.estimatedIntervalDays); }
     if (input.isActive !== undefined) { setClauses.push("is_active = ?"); params.push(boolToInt(input.isActive)); }
     if (input.notes !== undefined) { setClauses.push("notes = ?"); params.push(input.notes); }
 
@@ -954,7 +1002,7 @@ export async function createFinancialObligation(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const payload: Record<string, unknown> = {
     subcategory_id: input.subcategoryId,
@@ -963,6 +1011,10 @@ export async function createFinancialObligation(
     amount_centavos: input.amountCentavos,
     frequency: input.frequency,
     due_day_of_month: input.dueDayOfMonth ?? null,
+    due_second_day_of_month: input.dueSecondDayOfMonth ?? null,
+    due_day_of_week: input.dueDayOfWeek ?? null,
+    due_second_day_of_week: input.dueSecondDayOfWeek ?? null,
+    due_month: input.dueMonth ?? null,
     is_family_support: input.isFamilySupport ?? false,
     is_dependent_support: input.isDependentSupport ?? false,
     protected_by_default: input.protectedByDefault ?? true,
@@ -986,10 +1038,11 @@ export async function createFinancialObligation(
     await db.runAsync(
       `INSERT INTO financial_obligations
         (id, user_id, subcategory_id, recurring_template_id, name, status, amount_centavos,
-         frequency, due_day_of_month, is_family_support, is_dependent_support,
+         frequency, due_day_of_month, due_second_day_of_month, due_day_of_week,
+         due_second_day_of_week, due_month, is_family_support, is_dependent_support,
          protected_by_default, starts_on, ends_on, notes,
          metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
       userId,
       input.subcategoryId,
@@ -998,6 +1051,10 @@ export async function createFinancialObligation(
       input.amountCentavos,
       input.frequency,
       input.dueDayOfMonth ?? null,
+      input.dueSecondDayOfMonth ?? null,
+      input.dueDayOfWeek ?? null,
+      input.dueSecondDayOfWeek ?? null,
+      input.dueMonth ?? null,
       boolToInt(input.isFamilySupport ?? false),
       boolToInt(input.isDependentSupport ?? false),
       boolToInt(input.protectedByDefault ?? true),
@@ -1058,6 +1115,10 @@ export async function updateFinancialObligation(
   if (input.amountCentavos !== undefined) { changedFields.push("amount_centavos"); payload.amount_centavos = input.amountCentavos; }
   if (input.frequency !== undefined) { changedFields.push("frequency"); payload.frequency = input.frequency; }
   if (input.dueDayOfMonth !== undefined) { changedFields.push("due_day_of_month"); payload.due_day_of_month = input.dueDayOfMonth; }
+  if (input.dueSecondDayOfMonth !== undefined) { changedFields.push("due_second_day_of_month"); payload.due_second_day_of_month = input.dueSecondDayOfMonth; }
+  if (input.dueDayOfWeek !== undefined) { changedFields.push("due_day_of_week"); payload.due_day_of_week = input.dueDayOfWeek; }
+  if (input.dueSecondDayOfWeek !== undefined) { changedFields.push("due_second_day_of_week"); payload.due_second_day_of_week = input.dueSecondDayOfWeek; }
+  if (input.dueMonth !== undefined) { changedFields.push("due_month"); payload.due_month = input.dueMonth; }
   if (input.isFamilySupport !== undefined) { changedFields.push("is_family_support"); payload.is_family_support = input.isFamilySupport; }
   if (input.isDependentSupport !== undefined) { changedFields.push("is_dependent_support"); payload.is_dependent_support = input.isDependentSupport; }
   if (input.protectedByDefault !== undefined) { changedFields.push("protected_by_default"); payload.protected_by_default = input.protectedByDefault; }
@@ -1112,6 +1173,10 @@ export async function updateFinancialObligation(
     if (input.amountCentavos !== undefined) { setClauses.push("amount_centavos = ?"); params.push(input.amountCentavos); }
     if (input.frequency !== undefined) { setClauses.push("frequency = ?"); params.push(input.frequency); }
     if (input.dueDayOfMonth !== undefined) { setClauses.push("due_day_of_month = ?"); params.push(input.dueDayOfMonth); }
+    if (input.dueSecondDayOfMonth !== undefined) { setClauses.push("due_second_day_of_month = ?"); params.push(input.dueSecondDayOfMonth); }
+    if (input.dueDayOfWeek !== undefined) { setClauses.push("due_day_of_week = ?"); params.push(input.dueDayOfWeek); }
+    if (input.dueSecondDayOfWeek !== undefined) { setClauses.push("due_second_day_of_week = ?"); params.push(input.dueSecondDayOfWeek); }
+    if (input.dueMonth !== undefined) { setClauses.push("due_month = ?"); params.push(input.dueMonth); }
     if (input.isFamilySupport !== undefined) { setClauses.push("is_family_support = ?"); params.push(boolToInt(input.isFamilySupport)); }
     if (input.isDependentSupport !== undefined) { setClauses.push("is_dependent_support = ?"); params.push(boolToInt(input.isDependentSupport)); }
     if (input.protectedByDefault !== undefined) { setClauses.push("protected_by_default = ?"); params.push(boolToInt(input.protectedByDefault)); }

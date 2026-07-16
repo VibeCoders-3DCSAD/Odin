@@ -51,6 +51,8 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   financial_obligations: new Set([
     "id", "user_id", "subcategory_id", "recurring_template_id", "name",
     "status", "amount_centavos", "frequency", "due_day_of_month",
+    "due_second_day_of_month", "due_day_of_week", "due_second_day_of_week",
+    "due_month",
     "is_family_support", "is_dependent_support", "protected_by_default",
     "starts_on", "ends_on", "notes", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
