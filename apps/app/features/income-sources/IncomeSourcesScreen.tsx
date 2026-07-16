@@ -51,6 +51,14 @@ function parseSafeCents(raw: string): number | null {
   return Number.isFinite(p) ? Math.round(p * 100) : null;
 }
 
+function parseDayOfMonth(raw: string): number | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = parseInt(t, 10);
+  if (!Number.isInteger(n) || n < 1 || n > 31) return null;
+  return n;
+}
+
 type Props = { userId: string; deviceId: string; onBack: () => void; onSyncRequested?: () => void };
 
 export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRequested }: Props) {
@@ -166,9 +174,11 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
       Alert.alert("Error", "Amounts must be valid numbers."); return;
     }
     if (mn !== null && mx !== null && mn > mx) { Alert.alert("Error", "Min must be <= max."); return; }
+    const day = parseDayOfMonth(payday);
+    if (payday.trim() && day === null) { Alert.alert("Error", "Payday must be 1-31."); return; }
     setSaving(true);
     try {
-      await onSubmit({ name: name.trim(), incomeType, frequency, expectedAmountCentavos: e, minAmountCentavos: mn, maxAmountCentavos: mx, paydayDayOfMonth: payday ? parseInt(payday, 10) : null });
+      await onSubmit({ name: name.trim(), incomeType, frequency, expectedAmountCentavos: e, minAmountCentavos: mn, maxAmountCentavos: mx, paydayDayOfMonth: day });
     } catch (err) { Alert.alert("Error", err instanceof Error ? err.message : "Something went wrong"); }
     finally { setSaving(false); }
   };

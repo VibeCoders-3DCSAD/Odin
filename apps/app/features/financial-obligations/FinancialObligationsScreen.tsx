@@ -50,6 +50,14 @@ function parseSafeCents(raw: string): number | null {
   return Number.isFinite(p) ? Math.round(p * 100) : null;
 }
 
+function parseDayOfMonth(raw: string): number | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = parseInt(t, 10);
+  if (!Number.isInteger(n) || n < 1 || n > 31) return null;
+  return n;
+}
+
 type Props = { userId: string; deviceId: string; onBack: () => void; onSyncRequested?: () => void };
 
 export default function FinancialObligationsScreen({ userId, deviceId, onBack, onSyncRequested }: Props) {
@@ -155,9 +163,11 @@ function ObligationFormSheet({ visible, editing, subcategories, onClose, onSubmi
     if (!subcategoryId) { Alert.alert("Error", "Please select a subcategory."); return; }
     const cents = parseSafeCents(amount);
     if (cents === null || cents < 0) { Alert.alert("Error", "Amount must be a valid non-negative number."); return; }
+    const day = parseDayOfMonth(dueDay);
+    if (dueDay.trim() && day === null) { Alert.alert("Error", "Due day must be 1-31."); return; }
     setSaving(true);
     try {
-      await onSubmit({ name: name.trim(), subcategoryId, amountCentavos: cents, frequency, dueDayOfMonth: dueDay ? parseInt(dueDay, 10) : null });
+      await onSubmit({ name: name.trim(), subcategoryId, amountCentavos: cents, frequency, dueDayOfMonth: day });
     } catch (err) { Alert.alert("Error", err instanceof Error ? err.message : "Something went wrong"); }
     finally { setSaving(false); }
   };
