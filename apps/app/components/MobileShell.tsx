@@ -20,6 +20,8 @@ import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
+import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
+import FinancialObligationsScreen from "../features/financial-obligations/FinancialObligationsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
@@ -68,6 +70,8 @@ type Page =
   | "add-transaction"
   | "categories"
   | "financial-accounts"
+  | "income-sources"
+  | "financial-obligations"
   | "settings";
 
 type MobileShellProps = {
@@ -136,6 +140,8 @@ const drawerSections: DrawerSection[] = [
     items: [
       { page: "dashboard", icon: "view-dashboard-outline", label: "Dashboard" },
       { page: "financial-accounts", icon: "wallet-outline", label: "Financial Accounts" },
+      { page: "income-sources", icon: "cash-multiple", label: "Income Sources" },
+      { page: "financial-obligations", icon: "calendar-check-outline", label: "Obligations" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
       { page: "history", icon: "clock-outline", label: "History" },
@@ -174,6 +180,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
   categories: { title: "Categories", subtitle: "Manage your categories" },
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
+  "income-sources": { title: "Income Sources", subtitle: "Track your income" },
+  "financial-obligations": { title: "Obligations", subtitle: "Manage recurring obligations" },
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
@@ -720,6 +728,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "financial-accounts") {
       return <FinancialAccountsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
+    }
+
+    if (currentPage === "income-sources") {
+      return <IncomeSourcesScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
+    }
+
+    if (currentPage === "financial-obligations") {
+      return <FinancialObligationsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
