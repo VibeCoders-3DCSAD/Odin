@@ -442,6 +442,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   async function handleSync() {
+    if (await countExhaustedSyncRows() > 0) {
+      await openSyncDetails(true);
+      return;
+    }
+
     await syncNow(true);
   }
 
@@ -865,7 +870,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 Unsynced changes
               </Text>
               <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 6 }}>
-                We are sorry, we ran into a problem and cannot sync these changes. Logging out means discarding failed changes. Review them before continuing.
+                We are sorry, we ran into a problem and cannot sync these changes. The only option is to discard them, then recreate them if needed.
               </Text>
 
               <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 10 }}>
@@ -886,7 +891,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                       {issue.status === "failed" ? issue.failure_message : "This change is waiting to sync."}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: palette.mut, marginTop: 5 }}>
-                      Logging out will discard this change.
+                      Discard this change, then recreate it if needed.
                     </Text>
                   </View>
                 ))}
@@ -917,7 +922,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     style={{ minHeight: 50, borderRadius: 14, borderWidth: 1.5, borderColor: "#FFCDD2", backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
                   >
                     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.error }}>
-                      Discard {failedIssueTotal} failed change{failedIssueTotal === 1 ? "" : "s"} and log out
+                      Discard {failedIssueTotal} failed change{failedIssueTotal === 1 ? "" : "s"}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -941,7 +946,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 Discard failed changes?
               </Text>
               <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
-                This will discard all {failedIssueTotal} failed local change{failedIssueTotal === 1 ? "" : "s"}, not just the changes currently shown. This cannot be undone.
+                This will discard all {failedIssueTotal} failed local change{failedIssueTotal === 1 ? "" : "s"}, not just the changes currently shown. This cannot be undone. Recreate anything you still need.
               </Text>
               <View style={{ gap: 10, marginTop: 18 }}>
                 <Pressable
