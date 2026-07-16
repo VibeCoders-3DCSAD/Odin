@@ -143,6 +143,8 @@ const OBLIGATION_CREATE_FIELDS = new Set([
 ]);
 
 const OBLIGATION_UPDATE_FIELDS = new Set([
+  "subcategory_id",
+  "recurring_template_id",
   "name",
   "amount_centavos",
   "frequency",
@@ -401,8 +403,8 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
       continue;
     }
 
-    if (key === "slug") {
-      if (typeof value !== "string") throw new Error("slug must be a string");
+    if (key === "slug" || key === "subcategory_id" || key === "recurring_template_id") {
+      if (typeof value !== "string") throw new Error(`${key} must be a string`);
       continue;
     }
 

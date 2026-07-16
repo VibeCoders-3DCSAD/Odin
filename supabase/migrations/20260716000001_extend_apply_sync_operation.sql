@@ -713,7 +713,50 @@ BEGIN
       RETURN;
     END IF;
 
+    IF p_payload ? 'subcategory_id' THEN
+      PERFORM 1
+      FROM subcategories
+      WHERE id = (p_payload->>'subcategory_id')::uuid
+        AND kind = 'expense'
+        AND deleted = false
+        AND is_active = true
+        AND (user_id = v_user_id OR user_id IS NULL);
+
+      IF NOT FOUND THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object(
+          'status', 'rejected',
+          'reason', 'subcategory_id does not reference an accessible active expense subcategory'
+        )
+        WHERE operation_id = p_operation_id;
+
+        RETURN QUERY SELECT 'rejected'::text, 'subcategory_id does not reference an accessible active expense subcategory'::text, NULL::integer, NULL::text[];
+        RETURN;
+      END IF;
+    END IF;
+
+    IF p_payload ? 'recurring_template_id' AND (p_payload->>'recurring_template_id') IS NOT NULL THEN
+      PERFORM 1
+      FROM recurring_transaction_templates
+      WHERE id = (p_payload->>'recurring_template_id')::uuid
+        AND user_id = v_user_id;
+
+      IF NOT FOUND THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object(
+          'status', 'rejected',
+          'reason', 'recurring_template_id does not reference an accessible recurring template'
+        )
+        WHERE operation_id = p_operation_id;
+
+        RETURN QUERY SELECT 'rejected'::text, 'recurring_template_id does not reference an accessible recurring template'::text, NULL::integer, NULL::text[];
+        RETURN;
+      END IF;
+    END IF;
+
     v_overwritten_values :=
+      CASE WHEN p_payload ? 'subcategory_id' THEN jsonb_build_object('subcategory_id', (SELECT to_jsonb(subcategory_id) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'recurring_template_id' THEN jsonb_build_object('recurring_template_id', (SELECT to_jsonb(recurring_template_id) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'name' THEN jsonb_build_object('name', (SELECT to_jsonb(name) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'amount_centavos' THEN jsonb_build_object('amount_centavos', (SELECT to_jsonb(amount_centavos) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'frequency' THEN jsonb_build_object('frequency', (SELECT to_jsonb(frequency) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
@@ -726,7 +769,9 @@ BEGIN
       CASE WHEN p_payload ? 'notes' THEN jsonb_build_object('notes', (SELECT to_jsonb(notes) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
 
     UPDATE financial_obligations
-    SET name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
+    SET subcategory_id = CASE WHEN p_payload ? 'subcategory_id' THEN (p_payload->>'subcategory_id')::uuid ELSE subcategory_id END,
+        recurring_template_id = CASE WHEN p_payload ? 'recurring_template_id' THEN (p_payload->>'recurring_template_id')::uuid ELSE recurring_template_id END,
+        name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
         amount_centavos = CASE WHEN p_payload ? 'amount_centavos' THEN (p_payload->>'amount_centavos')::bigint ELSE amount_centavos END,
         frequency = CASE WHEN p_payload ? 'frequency' THEN (p_payload->>'frequency')::odin_recurring_frequency ELSE frequency END,
         due_day_of_month = CASE WHEN p_payload ? 'due_day_of_month' THEN (p_payload->>'due_day_of_month')::integer ELSE due_day_of_month END,
