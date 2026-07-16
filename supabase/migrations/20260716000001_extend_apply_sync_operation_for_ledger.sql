@@ -306,6 +306,32 @@ BEGIN
       WHERE id = p_record_id AND user_id = v_user_id;
 
     WHEN 'transactions' THEN
+      IF p_payload ? 'source_account_id' AND (p_payload->>'source_account_id') IS NOT NULL THEN
+        PERFORM 1 FROM financial_accounts
+        WHERE id = (p_payload->>'source_account_id')::uuid
+          AND user_id = v_user_id AND deleted = false;
+        IF NOT FOUND THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object('status', 'rejected', 'reason', 'source account not found or inaccessible')
+          WHERE operation_id = p_operation_id;
+          RETURN QUERY SELECT 'rejected'::text, 'source account not found or inaccessible'::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+      END IF;
+
+      IF p_payload ? 'destination_account_id' AND (p_payload->>'destination_account_id') IS NOT NULL THEN
+        PERFORM 1 FROM financial_accounts
+        WHERE id = (p_payload->>'destination_account_id')::uuid
+          AND user_id = v_user_id AND deleted = false;
+        IF NOT FOUND THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object('status', 'rejected', 'reason', 'destination account not found or inaccessible')
+          WHERE operation_id = p_operation_id;
+          RETURN QUERY SELECT 'rejected'::text, 'destination account not found or inaccessible'::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+      END IF;
+
       UPDATE transactions
       SET amount_centavos = CASE WHEN p_payload ? 'amount_centavos' THEN (p_payload->>'amount_centavos')::bigint ELSE amount_centavos END,
           subcategory_id = CASE WHEN p_payload ? 'subcategory_id' THEN (p_payload->>'subcategory_id')::uuid ELSE subcategory_id END,
