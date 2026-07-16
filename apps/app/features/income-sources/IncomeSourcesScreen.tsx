@@ -102,6 +102,7 @@ export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRe
         <Text style={{ fontSize: 20, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>Income Sources</Text>
       </View>
       <FlatList
+        nestedScrollEnabled
         data={sources}
         keyExtractor={(s) => s.id}
         contentContainerStyle={{ padding: 16, paddingTop: 8 }}
