@@ -50,9 +50,9 @@ function parseSafeCents(raw: string): number | null {
   return Number.isFinite(p) ? Math.round(p * 100) : null;
 }
 
-type Props = { userId: string; deviceId: string; onBack: () => void };
+type Props = { userId: string; deviceId: string; onBack: () => void; onSyncRequested?: () => void };
 
-export default function FinancialObligationsScreen({ userId, deviceId, onBack }: Props) {
+export default function FinancialObligationsScreen({ userId, deviceId, onBack, onSyncRequested }: Props) {
   const [obligations, setObligations] = useState<FinancialObligation[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +60,7 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack }:
   const [editing, setEditing] = useState<FinancialObligation | null>(null);
 
   const load = useCallback(async () => {
-    const [obs, subs] = await Promise.all([listFinancialObligations(userId), listSubcategories(userId, "expense")]);
+    const [obs, subs] = await Promise.all([listFinancialObligations(userId), listSubcategories(userId, undefined, "expense")]);
     setObligations(obs);
     setSubcategories(subs);
     setLoading(false);
@@ -70,16 +70,18 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack }:
   const handleCreate = async (input: CreateFinancialObligationInput) => {
     await createFinancialObligation(userId, deviceId, input);
     setSheetVisible(false); await load();
+    onSyncRequested?.();
   };
   const handleUpdate = async (input: CreateFinancialObligationInput) => {
     if (!editing) return;
     await updateFinancialObligation(userId, deviceId, editing.id, input);
     setSheetVisible(false); setEditing(null); await load();
+    onSyncRequested?.();
   };
   const handleDelete = (o: FinancialObligation) => {
     Alert.alert(`Delete ${o.name}?`, "This obligation will be permanently removed.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { await deleteFinancialObligation(userId, deviceId, o.id); await load(); } },
+      { text: "Delete", style: "destructive", onPress: async () => { await deleteFinancialObligation(userId, deviceId, o.id); await load(); onSyncRequested?.(); } },
     ]);
   };
 

@@ -51,9 +51,9 @@ function parseSafeCents(raw: string): number | null {
   return Number.isFinite(p) ? Math.round(p * 100) : null;
 }
 
-type Props = { userId: string; deviceId: string; onBack: () => void };
+type Props = { userId: string; deviceId: string; onBack: () => void; onSyncRequested?: () => void };
 
-export default function IncomeSourcesScreen({ userId, deviceId, onBack }: Props) {
+export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRequested }: Props) {
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -72,16 +72,18 @@ export default function IncomeSourcesScreen({ userId, deviceId, onBack }: Props)
   const handleCreate = async (input: CreateIncomeSourceInput) => {
     await createIncomeSource(userId, deviceId, input);
     setSheetVisible(false); await load();
+    onSyncRequested?.();
   };
   const handleUpdate = async (input: CreateIncomeSourceInput) => {
     if (!editing) return;
     await updateIncomeSource(userId, deviceId, editing.id, input);
     setSheetVisible(false); setEditing(null); await load();
+    onSyncRequested?.();
   };
   const handleDelete = (s: IncomeSource) => {
     Alert.alert(`Delete ${s.name}?`, "This income source will be permanently removed.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { await deleteIncomeSource(userId, deviceId, s.id); await load(); } },
+      { text: "Delete", style: "destructive", onPress: async () => { await deleteIncomeSource(userId, deviceId, s.id); await load(); onSyncRequested?.(); } },
     ]);
   };
 

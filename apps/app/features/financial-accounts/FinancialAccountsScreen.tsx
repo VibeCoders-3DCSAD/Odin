@@ -126,13 +126,14 @@ type Props = {
   userId: string;
   deviceId: string;
   onBack: () => void;
+  onSyncRequested?: () => void;
 };
 
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
-export default function FinancialAccountsScreen({ userId, deviceId, onBack }: Props) {
+export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSyncRequested }: Props) {
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -163,6 +164,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack }: Pr
     await createFinancialAccount(userId, deviceId, input);
     setSheetVisible(false);
     await loadAccounts();
+    onSyncRequested?.();
   };
 
   const handleUpdate = async (input: CreateFinancialAccountInput) => {
@@ -178,6 +180,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack }: Pr
     setSheetVisible(false);
     setEditingAccount(null);
     await loadAccounts();
+    onSyncRequested?.();
   };
 
   const handleDelete = (account: FinancialAccount) => {
@@ -192,6 +195,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack }: Pr
           onPress: async () => {
             await deleteFinancialAccount(userId, deviceId, account.id);
             await loadAccounts();
+            onSyncRequested?.();
           },
         },
       ],
