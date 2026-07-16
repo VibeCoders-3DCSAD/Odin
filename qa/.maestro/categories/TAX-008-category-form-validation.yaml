@@ -35,9 +35,9 @@ env:
 - assertVisible: "Label is required"
 - takeScreenshot: categories/TAX-008-form-validation
 
-# Fill label only, try save again
+# Fill label only — tap the TextInput by its placeholder text
 - tapOn:
-    text: "LABEL"
+    text: "e.g. My Category"
 - inputText: "Test"
 
 - tapOn:

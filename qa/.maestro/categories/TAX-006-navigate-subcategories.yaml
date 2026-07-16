@@ -30,10 +30,10 @@ env:
 - tapOn:
     id: "Essentials"
 - tapOn:
-    placeholder: "e.g. My Category"
+    text: "e.g. My Category"
 - inputText: ${CATEGORY_LABEL}
 - tapOn:
-    placeholder: "What this category covers"
+    text: "What this category covers"
 - inputText: ${CATEGORY_DESCRIPTION}
 - tapOn:
     text: "Save"
@@ -47,12 +47,12 @@ env:
     timeout: 10000
 
 # Tap the category row to enter subcategory view
-# CategoryRow accessibilityLabel is "${label}, ${subCount} subcategories"
 - tapOn:
     text: ${CATEGORY_LABEL}
 
-# Should show subcategory view with back button
-- assertVisible: "Back to categories"
+# Should show subcategory view with back button (accessibilityLabel)
+- assertVisible:
+    id: "Back to categories"
 - takeScreenshot: categories/TAX-006-subcategory-view
 
 # Press back to return to main categories list

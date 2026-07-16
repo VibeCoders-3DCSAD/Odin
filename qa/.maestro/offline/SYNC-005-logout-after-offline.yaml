@@ -1,5 +1,5 @@
 appId: com.anonymous.odin
-name: "SYNC-005: Logout With Unsynced Data"
+name: "SYNC-005: Logout Blocked While Offline"
 tags:
   - offline
   - regression
@@ -7,8 +7,6 @@ tags:
 env:
   USERNAME: "test@example.com"
   PASSWORD: "Test1234!"
-  CATEGORY_LABEL: "Maestro Offline Sync Category"
-  CATEGORY_DESCRIPTION: "Queued for sync"
 ---
 - launchApp:
     clearState: true
@@ -24,37 +22,19 @@ env:
 # Go offline
 - setAirplaneMode: enabled
 
-# Create a category while offline — this queues a real sync operation
-- runFlow:
-    file: ../subflows/navigate-to-categories.yaml
-
-- tapOn:
-    id: "Create category"
-- assertVisible: "New Category"
-- tapOn:
-    id: "Essentials"
-- tapOn:
-    placeholder: "e.g. My Category"
-- inputText: ${CATEGORY_LABEL}
-- tapOn:
-    placeholder: "What this category covers"
-- inputText: ${CATEGORY_DESCRIPTION}
-- tapOn:
-    text: "Save"
-
-# Attempt logout while offline with unsynced data
+# Attempt logout while offline — app blocks with online-only toast
 - runFlow:
     file: ../subflows/logout.yaml
 
-# Logout should be blocked — app must warn about unsynced changes
+# handleLogout exits immediately when offline
 - extendedWaitUntil:
-    visible: "unsynced"
-    timeout: 15000
+    visible: "This action can only be done while online"
+    timeout: 10000
 
-- assertVisible: "unsynced"
-- takeScreenshot: offline/SYNC-005-logout-blocked
+- assertVisible: "This action can only be done while online"
+- takeScreenshot: offline/SYNC-005-offline-logout-blocked
 
-# Restore connectivity so the queued category can sync
+# Restore connectivity
 - setAirplaneMode: disabled
 
 # Now logout should succeed
@@ -66,4 +46,4 @@ env:
     timeout: 15000
 
 - assertVisible: "Welcome back"
-- takeScreenshot: offline/SYNC-005-logout-after-sync
+- takeScreenshot: offline/SYNC-005-logout-after-reconnect

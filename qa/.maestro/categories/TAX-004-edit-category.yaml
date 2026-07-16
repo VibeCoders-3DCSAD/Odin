@@ -31,10 +31,10 @@ env:
 - tapOn:
     id: "Essentials"
 - tapOn:
-    placeholder: "e.g. My Category"
+    text: "e.g. My Category"
 - inputText: ${CATEGORY_LABEL}
 - tapOn:
-    placeholder: "What this category covers"
+    text: "What this category covers"
 - inputText: ${CATEGORY_DESCRIPTION}
 - tapOn:
     text: "Save"
@@ -54,11 +54,9 @@ env:
 # Modal should show "Edit Category"
 - assertVisible: "Edit Category"
 
-# Update the label
+# Update the label — tap the input, erase existing text, type new name
 - tapOn:
-    placeholder: "e.g. My Category"
-- tapOn:
-    text: ${CATEGORY_LABEL}
+    text: "e.g. My Category"
 - eraseText: 30
 - inputText: ${UPDATED_LABEL}
 

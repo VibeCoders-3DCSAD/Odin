@@ -32,10 +32,10 @@ env:
 - tapOn:
     id: "Essentials"
 - tapOn:
-    placeholder: "e.g. My Category"
+    text: "e.g. My Category"
 - inputText: ${CATEGORY_LABEL}
 - tapOn:
-    placeholder: "What this category covers"
+    text: "What this category covers"
 - inputText: ${CATEGORY_DESCRIPTION}
 - tapOn:
     text: "Save"
@@ -61,21 +61,21 @@ env:
 
 # Fill label
 - tapOn:
-    placeholder: "e.g. Dining Out"
+    text: "e.g. Dining Out"
 - inputText: ${SUB_LABEL}
 
 # Fill description
 - tapOn:
-    placeholder: "What this subcategory covers"
+    text: "What this subcategory covers"
 - inputText: ${SUB_DESCRIPTION}
 
 # Save
 - tapOn:
     text: "Save"
 
-# Verify we're back on the categories screen
+# User stays in subcategory view after save — verify the new subcategory is visible
 - extendedWaitUntil:
-    visible: "Essentials"
+    visible: ${SUB_LABEL}
     timeout: 10000
 
 - takeScreenshot: categories/TAX-007-create-subcategory
