@@ -90,6 +90,8 @@ type SyncQueueIssue = {
 
 type OdinDevTools = {
   seedFailedSyncRows: (count?: number) => Promise<void>;
+  ageDiscardedSyncRows: (days?: number) => Promise<void>;
+  countDiscardedSyncRows: () => Promise<number>;
 };
 
 type GlobalWithOdinDevTools = typeof globalThis & {
@@ -235,6 +237,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         }
 
         await refreshQueueCount();
+      },
+      ageDiscardedSyncRows: async (days = 31) => {
+        const db = await initDatabase();
+        await db.runAsync(
+          "UPDATE sync_queue SET discarded_at = datetime('now', ?) WHERE status = 'discarded'",
+          `-${days} days`,
+        );
+      },
+      countDiscardedSyncRows: async () => {
+        const db = await initDatabase();
+        const row = await db.getFirstAsync<{ cnt: number }>(
+          "SELECT COUNT(*) as cnt FROM sync_queue WHERE status = 'discarded'",
+        );
+        return row?.cnt ?? 0;
       },
     };
   }, [deviceId, userId]);
