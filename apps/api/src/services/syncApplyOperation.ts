@@ -371,8 +371,15 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
   const sanitized = sanitizePayload(payload, allowedFields);
 
   for (const [key, value] of Object.entries(sanitized)) {
-    if (key === "label" || key === "description" || key === "name" || key === "notes") {
-      if (typeof value !== "string" && value !== null) throw new Error(`${key} must be a string or null`);
+    if (key === "label" || key === "description" || key === "name") {
+      if (typeof value !== "string") throw new Error(`${key} must be a string`);
+      continue;
+    }
+
+    if (key === "notes") {
+      if (value !== null && typeof value !== "string") {
+        throw new Error("notes must be a string or null");
+      }
       continue;
     }
 

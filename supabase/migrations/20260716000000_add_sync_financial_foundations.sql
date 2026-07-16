@@ -20,3 +20,16 @@ CREATE INDEX IF NOT EXISTS idx_income_sources_updated_at
 
 CREATE INDEX IF NOT EXISTS idx_financial_obligations_updated_at
   ON financial_obligations (updated_at, id) WHERE deleted = false;
+
+-- Sync bump triggers for financial tables
+CREATE TRIGGER financial_accounts_sync_bump
+  BEFORE UPDATE ON financial_accounts
+  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+
+CREATE TRIGGER income_sources_sync_bump
+  BEFORE UPDATE ON income_sources
+  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+
+CREATE TRIGGER financial_obligations_sync_bump
+  BEFORE UPDATE ON financial_obligations
+  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
