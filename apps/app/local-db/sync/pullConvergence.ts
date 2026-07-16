@@ -38,7 +38,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "name", "kind", "status", "opening_balance_centavos",
     "current_balance_centavos", "credit_limit_centavos",
     "include_in_dashboard_balance", "institution_name", "opened_on",
-    "archived_at", "deleted_at", "sort_order", "metadata", "version",
+    "archived_at", "deleted_at", "sort_order", "notes", "metadata", "version",
     "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   income_sources: new Set([
