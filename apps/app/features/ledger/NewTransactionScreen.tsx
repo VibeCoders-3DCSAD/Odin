@@ -73,16 +73,17 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     setDescription("");
     setNotes("");
     setSubcategoryId(subcategories[0]?.id ?? "");
+    setSourceAccountId("");
+    setDestAccountId("");
     setFormError(null);
     if (!keepType) {
       setTxType("expense");
-      setSourceAccountId("");
-      setDestAccountId("");
     }
   }
 
   function parseAmount(): number {
-    const parsed = parseFloat(amount);
+    const cleaned = amount.replace(/,/g, "");
+    const parsed = parseFloat(cleaned);
     if (isNaN(parsed) || parsed <= 0) return 0;
     return Math.round(parsed * 100);
   }
@@ -98,7 +99,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const centavos = parseAmount();
     if (centavos <= 0) { setFormError("Enter a valid amount"); return; }
 
-    const dateStr = date.toISOString().split("T")[0]!;
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
     if (txType === "expense" && !sourceAccountId) { setFormError("Select a source account"); return; }
     if (txType === "income" && !destAccountId) { setFormError("Select a destination account"); return; }
@@ -129,12 +130,15 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           notes: notes.trim() || undefined,
         });
       } else {
+        const desc = description.trim();
+        const note = notes.trim();
+        const mergedNotes = (desc && note) ? `${desc} — ${note}` : (desc || note || undefined);
         await createTransfer(userId, deviceId, {
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
           destination_account_id: destAccountId,
           transaction_date: dateStr,
-          notes: notes.trim() || undefined,
+          notes: mergedNotes,
         });
       }
 
