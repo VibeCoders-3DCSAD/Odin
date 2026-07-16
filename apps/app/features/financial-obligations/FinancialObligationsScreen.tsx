@@ -53,7 +53,7 @@ function parseSafeCents(raw: string): number | null {
 function parseDayOfMonth(raw: string): number | null {
   const t = raw.trim();
   if (!t) return null;
-  const n = parseInt(t, 10);
+  const n = Number(t);
   if (!Number.isInteger(n) || n < 1 || n > 31) return null;
   return n;
 }
