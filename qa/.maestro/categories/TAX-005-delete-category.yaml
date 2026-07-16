@@ -59,9 +59,8 @@ env:
 
 # Wait for row to disappear — fails if still visible after timeout
 - extendedWaitUntil:
-    visible: ${CATEGORY_LABEL}
-    timeout: 5000
-    optional: false
+    notVisible: ${CATEGORY_LABEL}
+    timeout: 10000
 - assertNotVisible: ${CATEGORY_LABEL}
 
 - takeScreenshot: categories/TAX-005-delete-category

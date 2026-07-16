@@ -34,15 +34,14 @@ env:
 - tapOn:
     id: "Delete account"
 
-# Verify deletion screen — "Back to settings" is accessibilityLabel
+# Verify deletion screen
 - extendedWaitUntil:
-    visible:
-      id: "Back to settings"
+    visible: "Back to settings"
     timeout: 5000
 
 # Cancel - go back to settings
 - tapOn:
-    id: "Back to settings"
+    text: "Back to settings"
 
 # Should be back on settings
 - assertVisible: "Settings"
