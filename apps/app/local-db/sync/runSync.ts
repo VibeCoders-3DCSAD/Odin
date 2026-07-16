@@ -1,5 +1,10 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
+import {
+  normalizePullRow,
+  applyPullRow,
+  SYNCED_TABLES,
+} from "./pullConvergence";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
@@ -39,56 +44,6 @@ type QueueRow = {
   attempts: number;
   last_error: string | null;
   created_at: string;
-};
-
-const SYNCED_TABLES = [
-  "category_groups",
-  "categories",
-  "subcategories",
-  "financial_accounts",
-  "income_sources",
-  "financial_obligations",
-] as const;
-
-const LOCAL_COLUMNS: Record<string, Set<string>> = {
-  category_groups: new Set([
-    "id", "user_id", "slug", "label", "short_label", "description",
-    "sort_order", "is_active", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  categories: new Set([
-    "id", "user_id", "category_group_id", "slug", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "sort_order",
-    "is_active", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  subcategories: new Set([
-    "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "is_protected",
-    "sort_order", "is_active", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  financial_accounts: new Set([
-    "id", "user_id", "name", "kind", "status", "opening_balance_centavos",
-    "current_balance_centavos", "credit_limit_centavos",
-    "include_in_dashboard_balance", "institution_name", "opened_on",
-    "archived_at", "deleted_at", "sort_order", "metadata", "version",
-    "deleted", "created_at", "updated_at", "last_synced_at",
-  ]),
-  income_sources: new Set([
-    "id", "user_id", "name", "income_type", "frequency",
-    "expected_amount_centavos", "min_amount_centavos", "max_amount_centavos",
-    "payday_day_of_month", "payday_second_day_of_month", "payday_day_of_week",
-    "next_expected_date", "is_active", "notes", "metadata", "version",
-    "deleted", "created_at", "updated_at", "last_synced_at",
-  ]),
-  financial_obligations: new Set([
-    "id", "user_id", "subcategory_id", "recurring_template_id", "name",
-    "status", "amount_centavos", "frequency", "due_day_of_month",
-    "is_family_support", "is_dependent_support", "protected_by_default",
-    "starts_on", "ends_on", "notes", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
 };
 
 export async function runSync(
@@ -250,68 +205,6 @@ async function pullAndApply(
   return { pulled, cursors: payload.cursors };
 }
 
-async function applyPullRow(
-  db: SQLite.SQLiteDatabase,
-  table: string,
-  row: Record<string, unknown>,
-): Promise<void> {
-  const recordId = row.id as string;
-  const rowVersion = (row.version as number) ?? 1;
-  const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
-  const now = new Date().toISOString();
-
-  const existing = await db.getFirstAsync<{ version: number }>(
-    `SELECT version FROM "${table}" WHERE id = ?`,
-    recordId,
-  );
-
-  if (!existing) {
-    if (rowDeleted) return;
-
-    const columns = Object.keys(row).join(", ");
-    const placeholders = Object.keys(row).map(() => "?").join(", ");
-    const values = Object.keys(row).map((k) => row[k] as SQLite.SQLiteBindValue);
-
-    await db.runAsync(
-      `INSERT INTO "${table}" (${columns}) VALUES (${placeholders})`,
-      ...values,
-    );
-    return;
-  }
-
-  if (rowVersion <= existing.version) return;
-
-  if (rowDeleted) {
-    if (table === "financial_accounts" || table === "financial_obligations") {
-      await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
-         updated_at = ? WHERE id = ?`,
-        rowVersion,
-        now,
-        recordId,
-      );
-    } else {
-      await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, is_active = 0, version = ?,
-         updated_at = ? WHERE id = ?`,
-        rowVersion,
-        now,
-        recordId,
-      );
-    }
-    return;
-  }
-
-  const columns = Object.keys(row);
-  const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
-
-  await db.runAsync(
-    `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
-    ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
-    recordId,
-  );
-}
-
 async function loadCursors(
   db: SQLite.SQLiteDatabase,
   userId: string,
@@ -371,39 +264,6 @@ async function ensureDeviceRegistered(
   }
 }
 
-function normalizePullRow(
-  table: string,
-  row: Record<string, unknown>,
-  userId: string,
-): Record<string, unknown> {
-  const columns = LOCAL_COLUMNS[table];
-  if (!columns) return row;
-
-  const now = new Date().toISOString();
-  const normalized: Record<string, unknown> = {};
-
-  for (const col of columns) {
-    if (col === "user_id") {
-      normalized[col] = (row[col] as string | null) ?? userId;
-    } else if (col === "created_at") {
-      normalized[col] = (row[col] as string | undefined) ?? (row.updated_at as string) ?? now;
-    } else if (col === "last_synced_at") {
-      normalized[col] = (row[col] as string | undefined) ?? now;
-    } else if (col === "is_protected") {
-      const isProtectedDefault = (row.is_protected_default as boolean) === true;
-      const isProtected = (row.is_protected as boolean) === true;
-      normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
-    } else if (col === "metadata") {
-      const val = row[col];
-      normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
-    } else {
-      const val = row[col];
-      normalized[col] = typeof val === "boolean" ? (val ? 1 : 0) : val;
-    }
-  }
-
-  return normalized;
-}
 function fetchWithTimeout(
   url: string,
   options: RequestInit & { timeout?: number },
