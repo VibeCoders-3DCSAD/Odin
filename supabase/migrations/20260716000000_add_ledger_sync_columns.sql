@@ -66,24 +66,24 @@ CREATE TRIGGER recurring_transaction_occurrences_sync_bump
   BEFORE UPDATE ON recurring_transaction_occurrences
   FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
 
--- Indexes for sync pull performance
+-- Indexes for sync pull performance (no WHERE deleted=false — pull must include tombstones)
 CREATE INDEX IF NOT EXISTS idx_financial_accounts_updated_at
-  ON financial_accounts (updated_at) WHERE deleted = false;
+  ON financial_accounts (updated_at, id);
 
 CREATE INDEX IF NOT EXISTS idx_transactions_updated_at
-  ON transactions (updated_at) WHERE deleted = false;
+  ON transactions (updated_at, id);
 
 CREATE INDEX IF NOT EXISTS idx_transaction_line_items_updated_at
-  ON transaction_line_items (updated_at) WHERE deleted = false;
+  ON transaction_line_items (updated_at, id);
 
 CREATE INDEX IF NOT EXISTS idx_transaction_templates_updated_at
-  ON transaction_templates (updated_at) WHERE deleted = false;
+  ON transaction_templates (updated_at, id);
 
 CREATE INDEX IF NOT EXISTS idx_transaction_drafts_updated_at
-  ON transaction_drafts (updated_at) WHERE deleted = false;
+  ON transaction_drafts (updated_at, id);
 
 CREATE INDEX IF NOT EXISTS idx_recurring_transaction_templates_updated_at
-  ON recurring_transaction_templates (updated_at) WHERE deleted = false;
+  ON recurring_transaction_templates (updated_at, id);
 
 CREATE INDEX IF NOT EXISTS idx_recurring_transaction_occurrences_updated_at
-  ON recurring_transaction_occurrences (updated_at) WHERE deleted = false;
+  ON recurring_transaction_occurrences (updated_at, id);

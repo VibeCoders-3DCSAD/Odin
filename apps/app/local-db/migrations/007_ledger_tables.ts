@@ -105,7 +105,6 @@ const migration: Migration = {
         captured_offline_at text,
         synced_transaction_id text,
         last_error text,
-        metadata text not null default '{}',
         version integer not null default 1,
         deleted integer not null default 0,
         created_at text not null,
