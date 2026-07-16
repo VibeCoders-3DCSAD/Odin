@@ -39,7 +39,7 @@ const SORT_OPTIONS = [
   { key: "amount_centavos", label: "Amount" },
 ] as const;
 
-const FILTER_TYPES = ["all", "income", "expense", "transfer"] as const;
+const DATE_RANGES = ["all", "week", "month", "year"] as const;
 
 type Props = {
   userId: string;
@@ -57,6 +57,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<string>("transaction_date");
   const [sortDir, setSortDir] = useState<string>("desc");
+  const [dateRange, setDateRange] = useState<string>("all");
   const [editTarget, setEditTarget] = useState<Transaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -88,6 +89,19 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       };
       if (typeFilter !== "all") filters.transaction_type = typeFilter;
       if (search.trim()) filters.search = search.trim();
+      if (dateRange === "week") {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        filters.from_date = d.toISOString().split("T")[0]!;
+      } else if (dateRange === "month") {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 1);
+        filters.from_date = d.toISOString().split("T")[0]!;
+      } else if (dateRange === "year") {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - 1);
+        filters.from_date = d.toISOString().split("T")[0]!;
+      }
       const rows = await listTransactions(userId, filters);
       setTransactions(rows);
     } catch {
@@ -99,7 +113,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
 
   useEffect(() => {
     load();
-  }, [typeFilter, sortBy, sortDir]);
+  }, [typeFilter, sortBy, sortDir, dateRange]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -135,7 +149,8 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     if (tx.merchant_name) return tx.merchant_name;
     if (tx.counterparty_name) return tx.counterparty_name;
     if (tx.notes) return tx.notes;
-    if (tx.subcategory_id && subcategoryMap[tx.subcategory_id]) return subcategoryMap[tx.subcategory_id];
+    const subcat = tx.subcategory_id ? subcategoryMap[tx.subcategory_id] : undefined;
+    if (subcat) return subcat;
     return "Transaction";
   }
 
@@ -198,6 +213,29 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               color: typeFilter === t ? "#fff" : palette.ink2,
             }}>
               {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {/* Date range chips */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+        {DATE_RANGES.map((r) => (
+          <Pressable
+            key={r}
+            onPress={() => setDateRange(r)}
+            style={{
+              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+              backgroundColor: dateRange === r ? palette.brand : palette.card,
+              borderWidth: 1,
+              borderColor: dateRange === r ? palette.brand : palette.line,
+            }}
+          >
+            <Text style={{
+              fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
+              color: dateRange === r ? "#fff" : palette.ink2,
+            }}>
+              {r === "all" ? "Any time" : r === "week" ? "This week" : r === "month" ? "This month" : "This year"}
             </Text>
           </Pressable>
         ))}

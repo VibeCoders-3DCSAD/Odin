@@ -70,14 +70,14 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const { accounts, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
 
   useEffect(() => {
-    setSubcategoryId("");
-  }, [txType]);
+    if (!isEdit) setSubcategoryId("");
+  }, [txType, isEdit]);
 
   useEffect(() => {
-    if (txType !== "transfer" && subcategories.length > 0 && !subcategoryId) {
+    if (!isEdit && txType !== "transfer" && subcategories.length > 0 && !subcategoryId) {
       setSubcategoryId(subcategories[0]!.id);
     }
-  }, [subcategories, txType, subcategoryId]);
+  }, [subcategories, txType, subcategoryId, isEdit]);
 
   function resetForm(keepType = false) {
     setAmount("");
