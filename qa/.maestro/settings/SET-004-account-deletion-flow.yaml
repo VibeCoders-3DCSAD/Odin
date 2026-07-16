@@ -54,6 +54,5 @@ env:
 - extendedWaitUntil:
     visible: "Deletion requested"
     timeout: 10000
-    optional: true
 
 - takeScreenshot: settings/SET-004-account-deletion-flow

@@ -56,7 +56,7 @@ env:
 
 # Update the label — tap the input, erase existing text, type new name
 - tapOn:
-    text: "e.g. My Category"
+    text: ${CATEGORY_LABEL}
 - eraseText: 30
 - inputText: ${UPDATED_LABEL}
 
