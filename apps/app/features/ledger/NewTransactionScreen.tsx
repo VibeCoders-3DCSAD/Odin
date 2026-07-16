@@ -177,11 +177,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         });
       }
 
-      showToast(isEdit ? "Transaction updated" : "Transaction saved", "success");
-      runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
-
       if (!isEdit && isRecurring) {
-        createRecurringTemplate(userId, deviceId, {
+        await createRecurringTemplate(userId, deviceId, {
           transaction_type: txType,
           name: description.trim() || `${txType} recurring`,
           amount_centavos: centavos,
@@ -191,8 +188,11 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           source_account_id: sourceAccountId || undefined,
           destination_account_id: destAccountId || undefined,
           notes: notes.trim() || undefined,
-        }).catch(() => {});
+        });
       }
+
+      showToast(isEdit ? "Transaction updated" : "Transaction saved", "success");
+      runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
 
       if (addAnother) {
         resetForm(true);

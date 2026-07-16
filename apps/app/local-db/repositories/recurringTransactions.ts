@@ -2,7 +2,6 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
-import { createExpense, createIncome, createTransfer } from "./ledger";
 
 type RecurringTemplateRow = {
   id: string;
@@ -420,36 +419,76 @@ export async function generateNextOccurrence(
       return;
     }
 
-    // Generate the transaction through the normal ledger path
-    let txResult: { transaction: { id: string } };
+    // Generate the transaction directly with recurring metadata
+    const txId = crypto.randomUUID();
     try {
-      if (template.transaction_type === "expense") {
-        txResult = await createExpense(userId, deviceId, {
-          amount_centavos: template.amount_centavos,
-          source_account_id: template.source_account_id!,
-          subcategory_id: template.subcategory_id!,
-          transaction_date: nextDate,
-          merchant_name: template.name,
-          notes: template.notes ?? undefined,
-        }) as unknown as { transaction: { id: string } };
-      } else if (template.transaction_type === "income") {
-        txResult = await createIncome(userId, deviceId, {
-          amount_centavos: template.amount_centavos,
-          destination_account_id: template.destination_account_id!,
-          subcategory_id: template.subcategory_id!,
-          transaction_date: nextDate,
-          counterparty_name: template.name,
-          notes: template.notes ?? undefined,
-        }) as unknown as { transaction: { id: string } };
-      } else {
-        txResult = await createTransfer(userId, deviceId, {
-          amount_centavos: template.amount_centavos,
-          source_account_id: template.source_account_id!,
-          destination_account_id: template.destination_account_id!,
-          transaction_date: nextDate,
-          notes: template.notes ?? undefined,
-        }) as unknown as { transaction: { id: string } };
+      const sourceId = template.transaction_type === "expense" || template.transaction_type === "transfer"
+        ? template.source_account_id! : null;
+      const destId = template.transaction_type === "income" || template.transaction_type === "transfer"
+        ? template.destination_account_id! : null;
+      const subId = template.transaction_type !== "transfer"
+        ? template.subcategory_id! : null;
+
+      // Apply balance effects
+      if (template.transaction_type === "income" && destId) {
+        await db.runAsync(
+          "UPDATE financial_accounts SET current_balance_centavos = current_balance_centavos + ? WHERE id = ? AND user_id = ? AND deleted = 0",
+          template.amount_centavos, destId, userId,
+        );
+      } else if (template.transaction_type === "expense" && sourceId) {
+        await db.runAsync(
+          "UPDATE financial_accounts SET current_balance_centavos = current_balance_centavos - ? WHERE id = ? AND user_id = ? AND deleted = 0",
+          template.amount_centavos, sourceId, userId,
+        );
+      } else if (template.transaction_type === "transfer" && sourceId && destId) {
+        await db.runAsync(
+          "UPDATE financial_accounts SET current_balance_centavos = current_balance_centavos - ? WHERE id = ? AND user_id = ? AND deleted = 0",
+          template.amount_centavos, sourceId, userId,
+        );
+        await db.runAsync(
+          "UPDATE financial_accounts SET current_balance_centavos = current_balance_centavos + ? WHERE id = ? AND user_id = ? AND deleted = 0",
+          template.amount_centavos, destId, userId,
+        );
       }
+
+      // Insert transaction with recurring metadata
+      await db.runAsync(
+        `INSERT INTO transactions
+          (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at,
+           amount_centavos, subcategory_id, source_account_id, destination_account_id,
+           recurring_template_id, merchant_name, counterparty_name, notes,
+           client_mutation_id, metadata, version, deleted, created_at, updated_at)
+         VALUES (?, ?, ?, 'posted', 'recurring', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '{}', 1, 0, ?, ?)`,
+        txId, userId, template.transaction_type, nextDate, ts,
+        template.amount_centavos, subId, sourceId, destId,
+        templateId,
+        template.transaction_type === "expense" ? template.name : null,
+        template.transaction_type === "income" ? template.name : null,
+        template.notes,
+        ts, ts,
+      );
+
+      // Enqueue transaction sync operation with recurring metadata
+      await enqueueOperation(db, {
+        userId, deviceId,
+        entity: "transactions",
+        recordId: txId,
+        operationType: "create",
+        baseVersion: null,
+        changedFields: [],
+        payload: {
+          transaction_type: template.transaction_type,
+          amount_centavos: template.amount_centavos,
+          transaction_date: nextDate,
+          subcategory_id: subId,
+          source_account_id: sourceId,
+          destination_account_id: destId,
+          merchant_name: template.transaction_type === "expense" ? template.name : null,
+          counterparty_name: template.transaction_type === "income" ? template.name : null,
+          notes: template.notes,
+        },
+        failureMessage: `This recurring transaction could not be created.`,
+      });
     } catch (e) {
       // ponytail: if transaction creation fails, mark failure and continue
       const occId = crypto.randomUUID();
@@ -465,11 +504,7 @@ export async function generateNextOccurrence(
       return;
     }
 
-    // Mark the transaction as recurring-sourced
-    await db.runAsync(
-      "UPDATE transactions SET entry_source = 'recurring', recurring_template_id = ? WHERE user_id = ? AND id = ?",
-      templateId, userId, txResult.transaction.id,
-    );
+    // ponytail: transaction already created with entry_source='recurring' and recurring_template_id
 
     // Create occurrence record
     const occId = crypto.randomUUID();
@@ -480,7 +515,7 @@ export async function generateNextOccurrence(
          metadata, version, deleted, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'posted', ?, ?, '{}', 1, 0, ?, ?)`,
       occId, templateId, userId, nextDate,
-      txResult.transaction.id, ts,
+      txId, ts,
       ts, ts,
     );
 
@@ -491,7 +526,7 @@ export async function generateNextOccurrence(
       operationType: "create",
       baseVersion: null,
       changedFields: [],
-      payload: { recurring_template_id: templateId, scheduled_date: nextDate, transaction_id: txResult.transaction.id },
+      payload: { recurring_template_id: templateId, scheduled_date: nextDate, generated_transaction_id: txId },
       failureMessage: `This recurring occurrence could not be created.`,
     });
 
@@ -510,7 +545,7 @@ export async function generateNextOccurrence(
 
     result = {
       occurrence: mapOccurrence(occurRow!),
-      transaction: { id: txResult.transaction.id },
+      transaction: { id: txId },
       operation,
     };
   });

@@ -137,7 +137,7 @@ const RECURRING_TEMPLATE_FIELDS = new Set([
 ]);
 
 const RECURRING_OCCURRENCE_FIELDS = new Set([
-  "recurring_template_id", "scheduled_date", "transaction_id",
+  "recurring_template_id", "scheduled_date", "generated_transaction_id",
 ]);
 
 export async function prepareOperation(
