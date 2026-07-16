@@ -32,6 +32,11 @@ const SYNC_STATUS_POLL_MS = 5_000;
 const AUTO_SYNC_MS = 30_000;
 const MAX_SYNC_ATTEMPTS = 3;
 const SYNC_ISSUES_PAGE_SIZE = 50;
+const LOGOUT_SYNC_MESSAGES = [
+  "Hold on, we're trying to sync unsynced changes",
+  "Finishing up...",
+  "Please wait...",
+];
 
 const palette = {
   shell: "#fcf8f0",
@@ -227,6 +232,23 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   function clearSyncMessageSoon() {
     if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current);
     syncMessageTimer.current = setTimeout(() => setSyncMessage(null), 4000);
+  }
+
+  function startLogoutSyncMessages() {
+    if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current);
+
+    let index = 0;
+    const firstMessage = LOGOUT_SYNC_MESSAGES[0]!;
+    setSyncMessage(LOGOUT_SYNC_MESSAGES[index] ?? firstMessage);
+    const interval = setInterval(() => {
+      index = (index + 1) % LOGOUT_SYNC_MESSAGES.length;
+      setSyncMessage(LOGOUT_SYNC_MESSAGES[index] ?? firstMessage);
+    }, 3_000);
+
+    return () => {
+      clearInterval(interval);
+      setSyncMessage(null);
+    };
   }
 
   async function refreshQueueCount() {
@@ -522,6 +544,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
     setIsLoggingOut(true);
     setLogoutError(null);
+    let stopLogoutSyncMessages: (() => void) | null = null;
 
     try {
       const db = await initDatabase();
@@ -539,7 +562,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           return;
         }
 
-        setSyncMessage("Hold on, we're trying to sync unsynced changes");
+        stopLogoutSyncMessages = startLogoutSyncMessages();
 
         let retryable = await getRetryableSyncStats();
         while (retryable.count > 0) {
@@ -560,6 +583,9 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           deviceId,
         );
 
+        stopLogoutSyncMessages();
+        stopLogoutSyncMessages = null;
+
         if (stillPending && stillPending.cnt > 0) {
           const exhaustedRows = await countExhaustedSyncRows();
           if (exhaustedRows > 0) {
@@ -574,6 +600,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
       await finishLogout();
     } catch (error) {
+      stopLogoutSyncMessages?.();
       console.error("Logout request failed", error);
       setLogoutError("Logout failed. Please check your connection and try again.");
       setIsLoggingOut(false);
