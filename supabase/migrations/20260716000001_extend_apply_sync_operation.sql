@@ -688,6 +688,24 @@ BEGIN
       CASE WHEN p_payload ? 'is_active' THEN jsonb_build_object('is_active', (SELECT to_jsonb(is_active) FROM income_sources WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'notes' THEN jsonb_build_object('notes', (SELECT to_jsonb(notes) FROM income_sources WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
 
+    IF p_payload ? 'min_amount_centavos' AND NOT p_payload ? 'max_amount_centavos' THEN
+      IF (p_payload->>'min_amount_centavos')::bigint > (SELECT max_amount_centavos FROM income_sources WHERE id = p_record_id AND user_id = v_user_id) THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object('status', 'rejected', 'reason', 'min_amount_centavos must be <= existing max_amount_centavos', 'current_version', v_current_version)
+        WHERE operation_id = p_operation_id;
+        RETURN QUERY SELECT 'rejected'::text, 'min_amount_centavos must be <= existing max_amount_centavos'::text, v_current_version, NULL::text[];
+        RETURN;
+      END IF;
+    ELSIF p_payload ? 'max_amount_centavos' AND NOT p_payload ? 'min_amount_centavos' THEN
+      IF (SELECT min_amount_centavos FROM income_sources WHERE id = p_record_id AND user_id = v_user_id) > (p_payload->>'max_amount_centavos')::bigint THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object('status', 'rejected', 'reason', 'existing min_amount_centavos must be <= max_amount_centavos', 'current_version', v_current_version)
+        WHERE operation_id = p_operation_id;
+        RETURN QUERY SELECT 'rejected'::text, 'existing min_amount_centavos must be <= max_amount_centavos'::text, v_current_version, NULL::text[];
+        RETURN;
+      END IF;
+    END IF;
+
     UPDATE income_sources
     SET name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
         income_type = CASE WHEN p_payload ? 'income_type' THEN (p_payload->>'income_type')::odin_income_type ELSE income_type END,
@@ -780,6 +798,24 @@ BEGIN
       CASE WHEN p_payload ? 'starts_on' THEN jsonb_build_object('starts_on', (SELECT to_jsonb(starts_on) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'ends_on' THEN jsonb_build_object('ends_on', (SELECT to_jsonb(ends_on) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'notes' THEN jsonb_build_object('notes', (SELECT to_jsonb(notes) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
+
+    IF p_payload ? 'starts_on' AND NOT p_payload ? 'ends_on' THEN
+      IF (p_payload->>'starts_on') > (SELECT ends_on FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id) THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object('status', 'rejected', 'reason', 'starts_on must be <= existing ends_on', 'current_version', v_current_version)
+        WHERE operation_id = p_operation_id;
+        RETURN QUERY SELECT 'rejected'::text, 'starts_on must be <= existing ends_on'::text, v_current_version, NULL::text[];
+        RETURN;
+      END IF;
+    ELSIF p_payload ? 'ends_on' AND NOT p_payload ? 'starts_on' THEN
+      IF (SELECT starts_on FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id) > (p_payload->>'ends_on') THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object('status', 'rejected', 'reason', 'existing starts_on must be <= ends_on', 'current_version', v_current_version)
+        WHERE operation_id = p_operation_id;
+        RETURN QUERY SELECT 'rejected'::text, 'existing starts_on must be <= ends_on'::text, v_current_version, NULL::text[];
+        RETURN;
+      END IF;
+    END IF;
 
     UPDATE financial_obligations
     SET subcategory_id = CASE WHEN p_payload ? 'subcategory_id' THEN (p_payload->>'subcategory_id')::uuid ELSE subcategory_id END,
