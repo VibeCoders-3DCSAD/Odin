@@ -222,7 +222,7 @@ async function validateCreatePayload(
     optionalString(sanitized, "institution_name");
     optionalString(sanitized, "opened_on");
     optionalNumber(sanitized, "sort_order");
-    validateNonNegative(sanitized, ["opening_balance_centavos", "credit_limit_centavos"]);
+    validateNonNegative(sanitized, ["credit_limit_centavos"]);
     return Promise.resolve(sanitized);
   }
 
@@ -477,7 +477,7 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
     if (sanitized.status && typeof sanitized.status === "string" && !["active", "archived"].includes(sanitized.status as string)) {
       throw new Error("status must be active or archived");
     }
-    const centsFields = ["opening_balance_centavos", "current_balance_centavos", "credit_limit_centavos"] as const;
+    const centsFields = ["credit_limit_centavos"] as const;
     for (const f of centsFields) {
       if (typeof sanitized[f] === "number" && (sanitized[f] as number) < 0) {
         throw new Error(`${f} must be >= 0`);
