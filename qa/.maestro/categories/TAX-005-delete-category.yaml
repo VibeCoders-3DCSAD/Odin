@@ -57,11 +57,16 @@ env:
 - tapOn:
     text: "Delete"
 
-# Wait until the category row disappears (negative poll, no race)
+# Wait for the delete to complete — negative poll avoids racing async removal
 - extendedWaitUntil:
     visible: ${CATEGORY_LABEL}
     timeout: 5000
     optional: true
+- assertNotVisible: ${CATEGORY_LABEL}
+
+# Verify the row is also gone from the expanded group (belt-and-suspenders)
+- tapOn:
+    text: "Essentials"
 - assertNotVisible: ${CATEGORY_LABEL}
 
 - takeScreenshot: categories/TAX-005-delete-category
