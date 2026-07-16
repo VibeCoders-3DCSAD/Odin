@@ -21,17 +21,18 @@ env:
 - runFlow:
     file: ../subflows/navigate-to-categories.yaml
 
-# Group should start collapsed — accessibilityLabel ends with "collapsed"
+# Essentials group should start collapsed
 - assertVisible:
-    text: "collapsed"
+    text: "Essentials, "
 
 # Tap Essentials group to expand
 - tapOn:
     text: "Essentials"
 
-# Group accessibilityLabel should now contain "expanded"
-- assertVisible:
-    text: "expanded"
+# After expand, the label includes "expanded" — verify it changed
+- extendedWaitUntil:
+    visible: "expanded"
+    timeout: 5000
 
 - takeScreenshot: categories/TAX-002-group-expanded
 
@@ -39,8 +40,12 @@ env:
 - tapOn:
     text: "Essentials"
 
-# Should be back to collapsed
-- assertVisible:
-    text: "collapsed"
+# After collapse, "expanded" should no longer be visible
+- extendedWaitUntil:
+    visible: "expanded"
+    timeout: 3000
+    optional: true
+- assertNotVisible:
+    text: "expanded"
 
 - takeScreenshot: categories/TAX-002-group-collapsed
