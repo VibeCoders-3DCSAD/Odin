@@ -507,6 +507,30 @@ async function validateUpdatePayload(
     }
   }
 
+  if (entity === "transaction_templates" || entity === "recurring_transaction_templates") {
+    const src = sanitized.source_account_id;
+    const dst = sanitized.destination_account_id;
+    const sub = sanitized.subcategory_id;
+    if (src && typeof src === "string") await verifyAccountOwnership(supabase, userId, src);
+    if (dst && typeof dst === "string") await verifyAccountOwnership(supabase, userId, dst);
+    if (sub && typeof sub === "string") await verifySubcategoryOwnership(supabase, userId, sub);
+  }
+
+  if (entity === "recurring_transaction_occurrences") {
+    const tid = sanitized.generated_transaction_id;
+    if (tid && typeof tid === "string") {
+      const { data: tx, error: txErr } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("id", tid)
+        .eq("user_id", userId)
+        .eq("deleted", false)
+        .maybeSingle();
+      if (txErr) throw new Error(`transaction lookup failed: ${txErr.message}`);
+      if (!tx) throw new Error("generated_transaction_id not found or inaccessible");
+    }
+  }
+
   return sanitized;
 }
 
