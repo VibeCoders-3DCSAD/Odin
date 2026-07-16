@@ -41,7 +41,14 @@ type QueueRow = {
   created_at: string;
 };
 
-const SYNCED_TABLES = ["category_groups", "categories", "subcategories"] as const;
+const SYNCED_TABLES = [
+  "category_groups",
+  "categories",
+  "subcategories",
+  "financial_accounts",
+  "income_sources",
+  "financial_obligations",
+] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
   category_groups: new Set([
@@ -59,6 +66,27 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
     "description", "is_system", "is_filipino_context", "is_protected",
     "sort_order", "is_active", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+  financial_accounts: new Set([
+    "id", "user_id", "name", "kind", "status", "opening_balance_centavos",
+    "current_balance_centavos", "credit_limit_centavos",
+    "include_in_dashboard_balance", "institution_name", "opened_on",
+    "archived_at", "deleted_at", "sort_order", "metadata", "version",
+    "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  income_sources: new Set([
+    "id", "user_id", "name", "income_type", "frequency",
+    "expected_amount_centavos", "min_amount_centavos", "max_amount_centavos",
+    "payday_day_of_month", "payday_second_day_of_month", "payday_day_of_week",
+    "next_expected_date", "is_active", "notes", "metadata", "version",
+    "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  financial_obligations: new Set([
+    "id", "user_id", "subcategory_id", "recurring_template_id", "name",
+    "status", "amount_centavos", "frequency", "due_day_of_month",
+    "is_family_support", "is_dependent_support", "protected_by_default",
+    "starts_on", "ends_on", "notes", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
 };
@@ -254,13 +282,23 @@ async function applyPullRow(
   if (rowVersion <= existing.version) return;
 
   if (rowDeleted) {
-    await db.runAsync(
-      `UPDATE "${table}" SET deleted = 1, is_active = 0, version = ?,
-       updated_at = ? WHERE id = ?`,
-      rowVersion,
-      now,
-      recordId,
-    );
+    if (table === "financial_accounts" || table === "financial_obligations") {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
+         updated_at = ? WHERE id = ?`,
+        rowVersion,
+        now,
+        recordId,
+      );
+    } else {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, is_active = 0, version = ?,
+         updated_at = ? WHERE id = ?`,
+        rowVersion,
+        now,
+        recordId,
+      );
+    }
     return;
   }
 
@@ -359,7 +397,8 @@ function normalizePullRow(
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
     } else {
-      normalized[col] = row[col];
+      const val = row[col];
+      normalized[col] = typeof val === "boolean" ? (val ? 1 : 0) : val;
     }
   }
 
