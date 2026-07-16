@@ -143,6 +143,32 @@ BEGIN
           END IF;
         END IF;
 
+        IF (p_payload->>'source_account_id') IS NOT NULL THEN
+          PERFORM 1 FROM financial_accounts
+          WHERE id = (p_payload->>'source_account_id')::uuid
+            AND user_id = v_user_id AND deleted = false;
+          IF NOT FOUND THEN
+            UPDATE applied_operations
+            SET result = jsonb_build_object('status', 'rejected', 'reason', 'source account not found or inaccessible')
+            WHERE operation_id = p_operation_id;
+            RETURN QUERY SELECT 'rejected'::text, 'source account not found or inaccessible'::text, NULL::integer, NULL::text[];
+            RETURN;
+          END IF;
+        END IF;
+
+        IF (p_payload->>'destination_account_id') IS NOT NULL THEN
+          PERFORM 1 FROM financial_accounts
+          WHERE id = (p_payload->>'destination_account_id')::uuid
+            AND user_id = v_user_id AND deleted = false;
+          IF NOT FOUND THEN
+            UPDATE applied_operations
+            SET result = jsonb_build_object('status', 'rejected', 'reason', 'destination account not found or inaccessible')
+            WHERE operation_id = p_operation_id;
+            RETURN QUERY SELECT 'rejected'::text, 'destination account not found or inaccessible'::text, NULL::integer, NULL::text[];
+            RETURN;
+          END IF;
+        END IF;
+
         INSERT INTO transactions (
           id, user_id, transaction_type, status, entry_source, transaction_date,
           posted_at, amount_centavos, subcategory_id, source_account_id,
