@@ -48,6 +48,10 @@ env:
 - tapOn:
     text: "Save"
 
+# Group collapses after save — expand it so the new row is visible
+- tapOn:
+    text: "Essentials"
+
 # Verify category appears in the list
 - extendedWaitUntil:
     visible: ${CATEGORY_LABEL}

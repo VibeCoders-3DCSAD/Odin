@@ -38,13 +38,14 @@ env:
 - inputText: ${CATEGORY_DESCRIPTION}
 - tapOn:
     text: "Save"
+
+# Group collapses after save — expand it to find the category
+- tapOn:
+    text: "Essentials"
+
 - extendedWaitUntil:
     visible: ${CATEGORY_LABEL}
     timeout: 10000
-
-# Expand the group to find the category
-- tapOn:
-    text: "Essentials"
 
 # Tap edit on the created category
 - tapOn:
@@ -64,6 +65,10 @@ env:
 # Save
 - tapOn:
     text: "Save"
+
+# Group may collapse after edit save — expand it
+- tapOn:
+    text: "Essentials"
 
 # Verify the updated name appears
 - extendedWaitUntil:

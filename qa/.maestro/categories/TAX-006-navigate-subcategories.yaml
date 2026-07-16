@@ -7,6 +7,8 @@ tags:
 env:
   USERNAME: "test@example.com"
   PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Nav Test Category"
+  CATEGORY_DESCRIPTION: "Temporary category for subcategory nav"
 ---
 - launchApp:
     clearState: true
@@ -21,17 +23,36 @@ env:
 - runFlow:
     file: ../subflows/navigate-to-categories.yaml
 
-# Expand Essentials group
+# Create a category so we have a reliable row to tap
+- tapOn:
+    id: "Create category"
+- assertVisible: "New Category"
+- tapOn:
+    id: "Essentials"
+- tapOn:
+    text: "LABEL"
+- inputText: ${CATEGORY_LABEL}
+- tapOn:
+    text: "DESCRIPTION"
+- inputText: ${CATEGORY_DESCRIPTION}
+- tapOn:
+    text: "Save"
+
+# Expand Essentials to find the new category
 - tapOn:
     text: "Essentials"
 
-# Tap on a system category (e.g. Food if it exists, or any category row)
-# The category row has accessibilityLabel like "Food, 0 subcategories"
-- tapOn:
-    id: "Essentials.*subcategories"
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 10000
 
-# Should show subcategory view with breadcrumb
-- assertVisible: "Categories"
+# Tap the category row to enter subcategory view
+# CategoryRow accessibilityLabel is "${label}, ${subCount} subcategories"
+- tapOn:
+    text: ${CATEGORY_LABEL}
+
+# Should show subcategory view with back button
+- assertVisible: "Back to categories"
 - takeScreenshot: categories/TAX-006-subcategory-view
 
 # Press back to return to main categories list
