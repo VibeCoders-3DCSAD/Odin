@@ -28,6 +28,7 @@ type PrivacySettingsScreenProps = {
   onBackToLogin?: () => void;
   onDeleted?: (scheduledDate: string) => void;
   onSubPageChange?: (showingSubPage: boolean) => void;
+  beforeDangerZone?: React.ReactNode;
 };
 
 const MUTED = "#6B7A6F";
@@ -254,7 +255,7 @@ function SettingsSkeleton() {
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange, beforeDangerZone }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -545,6 +546,8 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
       </BorderedGroup>
 
       <View style={{ height: 20 }} />
+
+      {beforeDangerZone ? <View style={{ marginBottom: 20 }}>{beforeDangerZone}</View> : null}
 
       <Pressable
         onPress={() => {
