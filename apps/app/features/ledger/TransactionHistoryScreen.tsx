@@ -39,6 +39,8 @@ const SORT_OPTIONS = [
   { key: "amount_centavos", label: "Amount" },
 ] as const;
 
+const FILTER_TYPES = ["all", "income", "expense", "transfer"] as const;
+
 const DATE_RANGES = ["all", "week", "month", "year"] as const;
 
 type Props = {

@@ -127,22 +127,22 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         const updateInput: Record<string, unknown> = {
           amount_centavos: centavos,
           transaction_date: dateStr,
-          notes: notes.trim() || null,
+          notes: notes.trim() || "",
         };
         if (txType === "expense") {
           updateInput.source_account_id = sourceAccountId;
           updateInput.subcategory_id = subcategoryId;
-          updateInput.merchant_name = description.trim() || null;
+          updateInput.merchant_name = description.trim() || "";
         } else if (txType === "income") {
           updateInput.destination_account_id = destAccountId;
           updateInput.subcategory_id = subcategoryId;
-          updateInput.counterparty_name = description.trim() || null;
+          updateInput.counterparty_name = description.trim() || "";
         } else {
           updateInput.source_account_id = sourceAccountId;
           updateInput.destination_account_id = destAccountId;
           const desc = description.trim();
           const note = notes.trim();
-          updateInput.notes = (desc && note) ? `${desc} — ${note}` : (desc || note || null);
+          updateInput.notes = (desc && note) ? `${desc} — ${note}` : (desc || note || "");
         }
         await updateTransaction(userId, deviceId, transaction!.id, updateInput as UpdateTransactionInput);
       } else if (txType === "expense") {
