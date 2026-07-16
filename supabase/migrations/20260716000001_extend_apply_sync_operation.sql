@@ -308,6 +308,25 @@ BEGIN
         RETURN;
       END IF;
 
+      IF (p_payload->>'recurring_template_id') IS NOT NULL THEN
+        PERFORM 1
+        FROM recurring_transaction_templates
+        WHERE id = (p_payload->>'recurring_template_id')::uuid
+          AND user_id = v_user_id;
+
+        IF NOT FOUND THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object(
+            'status', 'rejected',
+            'reason', 'recurring_template_id does not reference an accessible recurring template'
+          )
+          WHERE operation_id = p_operation_id;
+
+          RETURN QUERY SELECT 'rejected'::text, 'recurring_template_id does not reference an accessible recurring template'::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+      END IF;
+
       INSERT INTO financial_obligations (
         id,
         user_id,
@@ -696,7 +715,6 @@ BEGIN
 
     v_overwritten_values :=
       CASE WHEN p_payload ? 'name' THEN jsonb_build_object('name', (SELECT to_jsonb(name) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'status' THEN jsonb_build_object('status', (SELECT to_jsonb(status) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'amount_centavos' THEN jsonb_build_object('amount_centavos', (SELECT to_jsonb(amount_centavos) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'frequency' THEN jsonb_build_object('frequency', (SELECT to_jsonb(frequency) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'due_day_of_month' THEN jsonb_build_object('due_day_of_month', (SELECT to_jsonb(due_day_of_month) FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
@@ -709,7 +727,6 @@ BEGIN
 
     UPDATE financial_obligations
     SET name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
-        status = CASE WHEN p_payload ? 'status' THEN (p_payload->>'status')::odin_obligation_status ELSE status END,
         amount_centavos = CASE WHEN p_payload ? 'amount_centavos' THEN (p_payload->>'amount_centavos')::bigint ELSE amount_centavos END,
         frequency = CASE WHEN p_payload ? 'frequency' THEN (p_payload->>'frequency')::odin_recurring_frequency ELSE frequency END,
         due_day_of_month = CASE WHEN p_payload ? 'due_day_of_month' THEN (p_payload->>'due_day_of_month')::integer ELSE due_day_of_month END,

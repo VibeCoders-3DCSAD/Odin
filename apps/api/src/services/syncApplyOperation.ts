@@ -144,7 +144,6 @@ const OBLIGATION_CREATE_FIELDS = new Set([
 
 const OBLIGATION_UPDATE_FIELDS = new Set([
   "name",
-  "status",
   "amount_centavos",
   "frequency",
   "due_day_of_month",
@@ -283,6 +282,18 @@ async function validateCreatePayload(
       .maybeSingle();
     if (error) throw new Error(`subcategory_id validation failed: ${error.message}`);
     if (!subcategory) throw new Error("subcategory_id does not reference an accessible active expense subcategory");
+
+    if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
+      const { data: template, error: templateErr } = await supabase
+        .from("recurring_transaction_templates")
+        .select("id")
+        .eq("id", sanitized.recurring_template_id as string)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
+      if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
+    }
+
     return sanitized;
   }
 
