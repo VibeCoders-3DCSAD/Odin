@@ -76,8 +76,8 @@ type SyncQueueIssue = {
   record_id: string;
   status: string;
   attempts: number;
-  last_error: string | null;
   created_at: string;
+  item_label: string | null;
 };
 
 type OdinDevTools = {
@@ -87,6 +87,20 @@ type OdinDevTools = {
 type GlobalWithOdinDevTools = typeof globalThis & {
   odinDevTools?: OdinDevTools;
 };
+
+function formatSyncAction(operationType: string) {
+  if (operationType === "create") return "Create";
+  if (operationType === "update") return "Update";
+  if (operationType === "delete") return "Delete";
+  return "Sync";
+}
+
+function formatSyncEntity(entity: string) {
+  if (entity === "category_groups") return "Category Group";
+  if (entity === "categories") return "Category";
+  if (entity === "subcategories") return "Subcategory";
+  return entity.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 type DrawerItem = {
   page: Page;
@@ -251,10 +265,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       deviceId,
     );
     const rows = await db.getAllAsync<SyncQueueIssue>(
-      `SELECT operation_id, entity, operation_type, record_id, status, attempts, last_error, created_at
-       FROM sync_queue
-       WHERE user_id = ? AND device_id = ? AND status IN ('pending', 'failed')
-       ORDER BY created_at LIMIT ? OFFSET ?`,
+      `SELECT q.operation_id, q.entity, q.operation_type, q.record_id, q.status, q.attempts, q.created_at,
+              COALESCE(c.label, s.label, g.label) as item_label
+       FROM sync_queue q
+       LEFT JOIN categories c ON q.entity = 'categories' AND q.record_id = c.id AND q.user_id = c.user_id
+       LEFT JOIN subcategories s ON q.entity = 'subcategories' AND q.record_id = s.id AND q.user_id = s.user_id
+       LEFT JOIN category_groups g ON q.entity = 'category_groups' AND q.record_id = g.id AND q.user_id = g.user_id
+       WHERE q.user_id = ? AND q.device_id = ? AND q.status IN ('pending', 'failed')
+       ORDER BY q.created_at LIMIT ? OFFSET ?`,
       userId,
       deviceId,
       SYNC_ISSUES_PAGE_SIZE,
@@ -819,7 +837,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 Unsynced changes
               </Text>
               <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 6 }}>
-                These local changes have not reached the server yet. Retry sync before logging out. If only failed changes remain, you can explicitly discard them.
+                We are sorry, we ran into a problem and cannot sync these changes. Logging out means discarding failed changes. Review them before continuing.
               </Text>
 
               <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 10 }}>
@@ -834,13 +852,13 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 ) : syncIssues.map((issue) => (
                   <View key={issue.operation_id} style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.card, padding: 12 }}>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }}>
-                      {issue.operation_type} {issue.entity.replace(/_/g, " ")}
+                      {formatSyncAction(issue.operation_type)} {issue.item_label ?? formatSyncEntity(issue.entity)} {issue.status === "failed" ? "Failed" : "Waiting"}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>
-                      {issue.status === "failed" ? (issue.last_error ?? "Sync failed") : "Waiting to sync"}
+                      {issue.status === "failed" ? "This change could not be synced." : "This change is waiting to sync."}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: palette.mut, marginTop: 5 }}>
-                      Attempts: {issue.attempts} · ID: {issue.record_id.slice(0, 8)}
+                      {issue.status === "failed" ? "Retry sync, or discard it if you log out." : "Stay online so Odin can finish syncing."}
                     </Text>
                   </View>
                 ))}
