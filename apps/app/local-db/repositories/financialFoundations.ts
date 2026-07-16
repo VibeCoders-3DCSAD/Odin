@@ -469,6 +469,9 @@ export async function updateFinancialAccount(
   if (input.status && !VALID_ACCOUNT_STATUSES.includes(input.status)) {
     throw new LocalDbError("VALIDATION_ERROR", "status must be active or archived");
   }
+  if (input.creditLimitCentavos !== undefined && input.creditLimitCentavos !== null && input.creditLimitCentavos < 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "creditLimitCentavos must be >= 0");
+  }
 
   const db = await getDb();
   const ts = now();
@@ -743,6 +746,24 @@ export async function updateIncomeSource(
   if (input.frequency && !VALID_INCOME_FREQUENCIES.includes(input.frequency)) {
     throw new LocalDbError("VALIDATION_ERROR", `frequency must be one of: ${VALID_INCOME_FREQUENCIES.join(", ")}`);
   }
+  if (input.expectedAmountCentavos !== undefined && input.expectedAmountCentavos !== null && input.expectedAmountCentavos < 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "expectedAmountCentavos must be >= 0");
+  }
+  if (input.minAmountCentavos !== undefined && input.minAmountCentavos !== null && input.minAmountCentavos < 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be >= 0");
+  }
+  if (input.maxAmountCentavos !== undefined && input.maxAmountCentavos !== null && input.maxAmountCentavos < 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "maxAmountCentavos must be >= 0");
+  }
+  if (input.paydayDayOfMonth !== undefined && input.paydayDayOfMonth !== null && (input.paydayDayOfMonth < 1 || input.paydayDayOfMonth > 31)) {
+    throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfMonth must be between 1 and 31");
+  }
+  if (input.paydaySecondDayOfMonth !== undefined && input.paydaySecondDayOfMonth !== null && (input.paydaySecondDayOfMonth < 1 || input.paydaySecondDayOfMonth > 31)) {
+    throw new LocalDbError("VALIDATION_ERROR", "paydaySecondDayOfMonth must be between 1 and 31");
+  }
+  if (input.paydayDayOfWeek !== undefined && input.paydayDayOfWeek !== null && (input.paydayDayOfWeek < 0 || input.paydayDayOfWeek > 6)) {
+    throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfWeek must be between 0 and 6");
+  }
 
   const db = await getDb();
   const ts = now();
@@ -922,6 +943,9 @@ export async function createFinancialObligation(
   if (input.dueDayOfMonth !== undefined && input.dueDayOfMonth !== null && (input.dueDayOfMonth < 1 || input.dueDayOfMonth > 31)) {
     throw new LocalDbError("VALIDATION_ERROR", "dueDayOfMonth must be between 1 and 31");
   }
+  if (input.startsOn !== undefined && input.startsOn !== null && input.endsOn !== undefined && input.endsOn !== null && input.startsOn > input.endsOn) {
+    throw new LocalDbError("VALIDATION_ERROR", "startsOn must be <= endsOn");
+  }
 
   const db = await getDb();
   const id = crypto.randomUUID();
@@ -945,7 +969,8 @@ export async function createFinancialObligation(
 
   await db.withTransactionAsync(async () => {
     const subcategory = await db.getFirstAsync<{ id: string }>(
-      "SELECT id FROM subcategories WHERE id = ? AND kind = 'expense' AND deleted = 0 AND is_active = 1",
+      "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND kind = 'expense' AND deleted = 0 AND is_active = 1",
+      userId,
       input.subcategoryId,
     );
     if (!subcategory) {
