@@ -257,7 +257,7 @@ async function applyPullRow(
 ): Promise<void> {
   const recordId = row.id as string;
   const rowVersion = (row.version as number) ?? 1;
-  const rowDeleted = (row.deleted as boolean) === true;
+  const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
 
   const existing = await db.getFirstAsync<{ version: number }>(
