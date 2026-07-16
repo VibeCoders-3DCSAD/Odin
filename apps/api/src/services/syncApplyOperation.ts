@@ -137,7 +137,7 @@ export async function prepareOperation(
     case "update":
       return {
         ...op,
-        payload: validateUpdatePayload(op.entity, filterPayloadFields(op.payload, op.changed_fields)),
+        payload: await validateUpdatePayload(supabase, userId, op.entity, op.record_id, filterPayloadFields(op.payload, op.changed_fields)),
       };
     case "delete":
       return op;
@@ -289,7 +289,13 @@ async function validateCreatePayload(
   throw new Error(`Unknown entity for create: ${entity}`);
 }
 
-function validateUpdatePayload(entity: string, payload: Record<string, unknown>): Record<string, unknown> {
+async function validateUpdatePayload(
+  supabase: SupabaseClient,
+  userId: string,
+  entity: string,
+  recordId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   let allowedFields: Set<string>;
   if (entity === "categories") {
     allowedFields = CATEGORY_UPDATE_FIELDS;
@@ -366,6 +372,35 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
     }
 
     if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+  }
+
+  if (entity === "transactions") {
+    const { data: current, error } = await supabase
+      .from("transactions")
+      .select("id, transaction_type")
+      .eq("id", recordId)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw new Error(`transaction lookup failed: ${error.message}`);
+    if (!current) throw new Error("transaction not found or inaccessible");
+
+    const txType = current.transaction_type as string;
+    const src = sanitized.source_account_id ?? undefined;
+    const dst = sanitized.destination_account_id ?? undefined;
+    const sub = sanitized.subcategory_id ?? undefined;
+
+    if (txType === "income" || txType === "expense") {
+      if (sub && typeof sub === "string") {
+        await verifySubcategoryOwnership(supabase, userId, sub, txType);
+      }
+    }
+    if (src && typeof src === "string") {
+      await verifyAccountOwnership(supabase, userId, src);
+    }
+    if (dst && typeof dst === "string") {
+      await verifyAccountOwnership(supabase, userId, dst);
+    }
   }
 
   return sanitized;

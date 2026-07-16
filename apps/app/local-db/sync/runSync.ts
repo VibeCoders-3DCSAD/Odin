@@ -270,8 +270,12 @@ async function applyPullRow(
   if (rowVersion <= existing.version) return;
 
   if (rowDeleted) {
+    const taxonomyTables = new Set(["category_groups", "categories", "subcategories"]);
+    const isActiveClause = taxonomyTables.has(table) ? ", is_active = 0" : "";
+    const statusClause = table === "financial_accounts" ? ", status = 'deleted'" : 
+                         table === "transactions" ? ", status = 'deleted'" : "";
     await db.runAsync(
-      `UPDATE "${table}" SET deleted = 1, is_active = 0, version = ?,
+      `UPDATE "${table}" SET deleted = 1${isActiveClause}${statusClause}, version = ?,
        updated_at = ? WHERE id = ?`,
       rowVersion,
       now,

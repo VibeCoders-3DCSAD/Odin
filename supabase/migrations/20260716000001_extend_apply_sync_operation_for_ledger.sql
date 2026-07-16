@@ -123,6 +123,26 @@ BEGIN
         );
 
       WHEN 'transactions' THEN
+        IF (p_payload->>'subcategory_id') IS NOT NULL THEN
+          PERFORM 1
+          FROM subcategories
+          WHERE id = (p_payload->>'subcategory_id')::uuid
+            AND (user_id = v_user_id OR user_id IS NULL)
+            AND deleted = false AND is_active = true
+            AND kind = CASE
+              WHEN (p_payload->>'transaction_type') = 'income' THEN 'income'::odin_subcategory_kind
+              WHEN (p_payload->>'transaction_type') = 'expense' THEN 'expense'::odin_subcategory_kind
+              ELSE NULL
+            END;
+          IF (p_payload->>'transaction_type') <> 'transfer' AND NOT FOUND THEN
+            UPDATE applied_operations
+            SET result = jsonb_build_object('status', 'rejected', 'reason', 'subcategory not found or wrong kind')
+            WHERE operation_id = p_operation_id;
+            RETURN QUERY SELECT 'rejected'::text, 'subcategory not found or wrong kind'::text, NULL::integer, NULL::text[];
+            RETURN;
+          END IF;
+        END IF;
+
         INSERT INTO transactions (
           id, user_id, transaction_type, status, entry_source, transaction_date,
           posted_at, amount_centavos, subcategory_id, source_account_id,
