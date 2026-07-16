@@ -155,15 +155,21 @@ async function verifySubcategoryOwnership(
   db: SQLite.SQLiteDatabase,
   userId: string,
   subcategoryId: string,
+  kind?: string,
 ): Promise<void> {
   // ponytail: query subcategories inline, skip full repo import
-  const row = await db.getFirstAsync<{ id: string }>(
-    "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
-    userId,
-    subcategoryId,
-  );
+  let sql = "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0";
+  const params: SQLite.SQLiteBindValue[] = [userId, subcategoryId];
+  if (kind) {
+    sql += " AND kind = ?";
+    params.push(kind);
+  }
+  const row = await db.getFirstAsync<{ id: string }>(sql, ...params);
   if (!row) {
-    throw new LocalDbError("VALIDATION_ERROR", "subcategory not found or inaccessible");
+    const msg = kind
+      ? `subcategory not found or not a ${kind} subcategory`
+      : "subcategory not found or inaccessible";
+    throw new LocalDbError("VALIDATION_ERROR", msg);
   }
 }
 
@@ -268,7 +274,7 @@ async function validateIncomeShape(
     throw new LocalDbError("VALIDATION_ERROR", "transaction_date is required");
   }
   await verifyAccountOwnership(db, userId, input.destination_account_id, "destination account");
-  await verifySubcategoryOwnership(db, userId, input.subcategory_id);
+  await verifySubcategoryOwnership(db, userId, input.subcategory_id, "income");
 }
 
 async function validateExpenseShape(
@@ -287,7 +293,7 @@ async function validateExpenseShape(
     throw new LocalDbError("VALIDATION_ERROR", "transaction_date is required");
   }
   await verifyAccountOwnership(db, userId, input.source_account_id, "source account");
-  await verifySubcategoryOwnership(db, userId, input.subcategory_id);
+  await verifySubcategoryOwnership(db, userId, input.subcategory_id, "expense");
 }
 
 async function validateTransferShape(
@@ -340,7 +346,8 @@ async function validateUpdatedShape(
     await verifyAccountOwnership(db, userId, destId, "destination account");
   }
   if (subId) {
-    await verifySubcategoryOwnership(db, userId, subId);
+    const subKind = transactionType === "income" ? "income" : "expense";
+    await verifySubcategoryOwnership(db, userId, subId, subKind);
   }
 
   if (transactionType === "income") {
