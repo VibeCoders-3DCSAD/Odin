@@ -222,6 +222,7 @@ async function validateCreatePayload(
     optionalString(sanitized, "institution_name");
     optionalString(sanitized, "opened_on");
     optionalNumber(sanitized, "sort_order");
+    validateNonNegative(sanitized, ["opening_balance_centavos", "credit_limit_centavos"]);
     return Promise.resolve(sanitized);
   }
 
@@ -248,6 +249,11 @@ async function validateCreatePayload(
     optionalString(sanitized, "next_expected_date");
     optionalBoolean(sanitized, "is_active");
     optionalString(sanitized, "notes");
+    validateNonNegative(sanitized, ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"]);
+    validateMinMaxOrdering(sanitized, "min_amount_centavos", "max_amount_centavos");
+    validateDayRange(sanitized, "payday_day_of_month", 1, 31);
+    validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
+    validateDayRange(sanitized, "payday_day_of_week", 0, 6);
     return Promise.resolve(sanitized);
   }
 
@@ -272,6 +278,9 @@ async function validateCreatePayload(
     optionalString(sanitized, "starts_on");
     optionalString(sanitized, "ends_on");
     optionalString(sanitized, "notes");
+    validateNonNegative(sanitized, ["amount_centavos"]);
+    validateDayRange(sanitized, "due_day_of_month", 1, 31);
+    validateDateOrdering(sanitized, "starts_on", "ends_on");
 
     const { data: subcategory, error } = await supabase
       .from("subcategories")
@@ -551,6 +560,38 @@ function requireBigInt(payload: Record<string, unknown>, field: string): void {
 function optionalBigInt(payload: Record<string, unknown>, field: string): void {
   if (payload[field] !== undefined && payload[field] !== null && typeof payload[field] !== "number") {
     throw new Error(`${field} must be a number or null`);
+  }
+}
+
+function validateNonNegative(payload: Record<string, unknown>, fields: string[]): void {
+  for (const field of fields) {
+    const val = payload[field];
+    if (val !== undefined && val !== null && typeof val === "number" && val < 0) {
+      throw new Error(`${field} must be >= 0`);
+    }
+  }
+}
+
+function validateMinMaxOrdering(payload: Record<string, unknown>, minField: string, maxField: string): void {
+  const minVal = payload[minField] as number | undefined;
+  const maxVal = payload[maxField] as number | undefined;
+  if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
+    throw new Error(`${minField} must be <= ${maxField}`);
+  }
+}
+
+function validateDayRange(payload: Record<string, unknown>, field: string, lo: number, hi: number): void {
+  const val = payload[field];
+  if (val !== undefined && val !== null && typeof val === "number") {
+    if (val < lo || val > hi) throw new Error(`${field} must be between ${lo} and ${hi}`);
+  }
+}
+
+function validateDateOrdering(payload: Record<string, unknown>, startField: string, endField: string): void {
+  const starts = payload[startField] as string | undefined;
+  const ends = payload[endField] as string | undefined;
+  if (starts !== undefined && starts !== null && ends !== undefined && ends !== null && starts > ends) {
+    throw new Error(`${startField} must be <= ${endField}`);
   }
 }
 
