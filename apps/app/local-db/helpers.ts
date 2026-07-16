@@ -56,6 +56,15 @@ export async function enqueueOperation(
     status: "pending",
     attempts: 0,
     last_error: null,
+    discarded_at: null,
     created_at: createdAt,
   };
+}
+
+export async function cleanupDiscardedSyncRows(db: SQLite.SQLiteDatabase): Promise<void> {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  await db.runAsync(
+    "DELETE FROM sync_queue WHERE status = 'discarded' AND discarded_at IS NOT NULL AND discarded_at < ?",
+    cutoff,
+  );
 }
