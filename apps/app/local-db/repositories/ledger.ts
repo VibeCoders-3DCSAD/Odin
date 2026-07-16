@@ -273,6 +273,9 @@ async function validateIncomeShape(
   if (!input.transaction_date) {
     throw new LocalDbError("VALIDATION_ERROR", "transaction_date is required");
   }
+  if ((input as Record<string, unknown>).source_account_id != null) {
+    throw new LocalDbError("VALIDATION_ERROR", "source_account_id must not be set for income");
+  }
   await verifyAccountOwnership(db, userId, input.destination_account_id, "destination account");
   await verifySubcategoryOwnership(db, userId, input.subcategory_id, "income");
 }
@@ -291,6 +294,9 @@ async function validateExpenseShape(
   }
   if (!input.transaction_date) {
     throw new LocalDbError("VALIDATION_ERROR", "transaction_date is required");
+  }
+  if ((input as Record<string, unknown>).destination_account_id != null) {
+    throw new LocalDbError("VALIDATION_ERROR", "destination_account_id must not be set for expense");
   }
   await verifyAccountOwnership(db, userId, input.source_account_id, "source account");
   await verifySubcategoryOwnership(db, userId, input.subcategory_id, "expense");
@@ -339,29 +345,29 @@ async function validateUpdatedShape(
 
   if (input.amount_centavos != null) validateAmount(input.amount_centavos);
 
-  if (sourceId) {
+  if (sourceId != null) {
     await verifyAccountOwnership(db, userId, sourceId, "source account");
   }
-  if (destId) {
+  if (destId != null) {
     await verifyAccountOwnership(db, userId, destId, "destination account");
   }
-  if (subId) {
+  if (subId != null) {
     const subKind = transactionType === "income" ? "income" : "expense";
     await verifySubcategoryOwnership(db, userId, subId, subKind);
   }
 
   if (transactionType === "income") {
     if (!destId) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id is required for income");
-    if (sourceId) throw new LocalDbError("VALIDATION_ERROR", "source_account_id must be null for income");
+    if (sourceId != null) throw new LocalDbError("VALIDATION_ERROR", "source_account_id must be null for income");
     if (!subId) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id is required for income");
   } else if (transactionType === "expense") {
     if (!sourceId) throw new LocalDbError("VALIDATION_ERROR", "source_account_id is required for expense");
-    if (destId) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id must be null for expense");
+    if (destId != null) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id must be null for expense");
     if (!subId) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id is required for expense");
   } else if (transactionType === "transfer") {
     if (!sourceId || !destId) throw new LocalDbError("VALIDATION_ERROR", "both accounts are required for transfer");
     if (sourceId === destId) throw new LocalDbError("VALIDATION_ERROR", "source and destination accounts must differ");
-    if (subId) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id must be null for transfer");
+    if (subId != null) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id must be null for transfer");
   }
 
   return {
@@ -380,14 +386,20 @@ function buildTransactionInsert(
   ts: string,
 ): { sql: string; params: SQLite.SQLiteBindValue[] } {
   const sourceAccountId =
-    "source_account_id" in input ? (input as CreateExpenseInput | CreateTransferInput).source_account_id ?? null : null;
+    transactionType === "expense" || transactionType === "transfer"
+      ? (input as Record<string, unknown>).source_account_id ?? null
+      : null;
   const destinationAccountId =
-    "destination_account_id" in input ? (input as CreateIncomeInput | CreateTransferInput).destination_account_id ?? null : null;
+    transactionType === "income" || transactionType === "transfer"
+      ? (input as Record<string, unknown>).destination_account_id ?? null
+      : null;
   const subcategoryId =
-    "subcategory_id" in input ? (input as CreateIncomeInput | CreateExpenseInput).subcategory_id ?? null : null;
-  const merchantName = "merchant_name" in input ? (input as CreateIncomeInput | CreateExpenseInput).merchant_name ?? null : null;
-  const counterpartyName = "counterparty_name" in input ? (input as CreateIncomeInput | CreateExpenseInput).counterparty_name ?? null : null;
-  const notes = input.notes ?? null;
+    transactionType === "income" || transactionType === "expense"
+      ? (input as Record<string, unknown>).subcategory_id ?? null
+      : null;
+  const merchantName = (input as Record<string, unknown>).merchant_name ?? null;
+  const counterpartyName = (input as Record<string, unknown>).counterparty_name ?? null;
+  const notes = (input as Record<string, unknown>).notes ?? null;
 
   return {
     sql: `INSERT INTO transactions
