@@ -37,13 +37,14 @@ env:
 - inputText: ${CATEGORY_DESCRIPTION}
 - tapOn:
     text: "Save"
+
+# Group collapses after save — expand it to find the category
+- tapOn:
+    text: "Essentials"
+
 - extendedWaitUntil:
     visible: ${CATEGORY_LABEL}
     timeout: 10000
-
-# Expand group to find it
-- tapOn:
-    text: "Essentials"
 
 # Tap delete
 - tapOn:
@@ -56,10 +57,11 @@ env:
 - tapOn:
     text: "Delete"
 
-# Category should be removed
+# Category must be gone — fail if it is still visible
 - extendedWaitUntil:
     visible: ${CATEGORY_LABEL}
     timeout: 5000
     optional: true
+- assertNotVisible: ${CATEGORY_LABEL}
 
 - takeScreenshot: categories/TAX-005-delete-category

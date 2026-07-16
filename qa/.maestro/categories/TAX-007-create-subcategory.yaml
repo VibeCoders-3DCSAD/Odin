@@ -7,6 +7,8 @@ tags:
 env:
   USERNAME: "test@example.com"
   PASSWORD: "Test1234!"
+  CATEGORY_LABEL: "Maestro Sub Parent"
+  CATEGORY_DESCRIPTION: "Parent for subcategory test"
   SUB_LABEL: "Maestro Subcategory"
   SUB_DESCRIPTION: "Automated test subcategory"
 ---
@@ -23,17 +25,39 @@ env:
 - runFlow:
     file: ../subflows/navigate-to-categories.yaml
 
-# Expand Essentials group
+# Create a parent category so we have a reliable row to enter
+- tapOn:
+    id: "Create category"
+- assertVisible: "New Category"
+- tapOn:
+    id: "Essentials"
+- tapOn:
+    text: "LABEL"
+- inputText: ${CATEGORY_LABEL}
+- tapOn:
+    text: "DESCRIPTION"
+- inputText: ${CATEGORY_DESCRIPTION}
+- tapOn:
+    text: "Save"
+
+# Expand Essentials to find the new category
 - tapOn:
     text: "Essentials"
 
-# Tap add subcategory on a category
+- extendedWaitUntil:
+    visible: ${CATEGORY_LABEL}
+    timeout: 10000
+
+# Tap the category row to enter subcategory view
 - tapOn:
-    id: "Add subcategory to Essentials"
+    text: ${CATEGORY_LABEL}
+
+# Now inside subcategory view — tap Add subcategory
+- tapOn:
+    id: "Add subcategory"
 
 # Modal should appear
 - assertVisible: "New Subcategory"
-- assertVisible: "Under: Essentials"
 
 # Fill label
 - tapOn:
