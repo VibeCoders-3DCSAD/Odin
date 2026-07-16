@@ -25,7 +25,7 @@ Cross-referenced against `TEST-CASES.md` (31 automated + 4 manual = 37 total) an
 | 6 | Session restore on launch | `App.native.tsx` (lines 117-167) | SecureStore read, Supabase session restore, loading spinner during restore, silent clear on failure | AUTH-020 (automated) |
 | 7 | Email verification deep link | `components/AuthExperience.tsx` (lines 431-436) | Handle `auth/verify` URL, extract tokens, show "Email verified!" notice, switch to login mode | AUTH-023 (manual — requires email client) |
 | 8 | Logout unsynced data protection | `components/MobileShell.tsx` (lines 177-236) | Check sync queue before logout, attempt sync if pending, show inline error if still unsynced | — |
-| 9 | Account deletion success screen | `components/MobileShell.tsx` (lines 443-481) | "Deletion requested" overlay, 30-day grace period message, scheduled date card, "Back to login" button | SET-004 (automated — `optional: true` assertion) |
+| 9 | Account deletion success screen | `components/MobileShell.tsx` (lines 443-481) | "Deletion requested" overlay, 30-day grace period message, scheduled date card, "Back to login" button | SET-004 (automated) |
 | 10 | Settings error + retry | `features/governance/PrivacySettingsScreen.tsx` (lines 371-405) | Error message with Retry button, re-fetches settings from API | SET-006 (manual — requires API failure simulation) |
 
 ---
