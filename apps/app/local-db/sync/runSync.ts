@@ -41,7 +41,7 @@ type QueueRow = {
   created_at: string;
 };
 
-const SYNCED_TABLES = ["category_groups", "categories", "subcategories"] as const;
+const SYNCED_TABLES = ["category_groups", "categories", "subcategories", "financial_accounts", "transactions"] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
   category_groups: new Set([
@@ -59,6 +59,22 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
     "description", "is_system", "is_filipino_context", "is_protected",
     "sort_order", "is_active", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+  financial_accounts: new Set([
+    "id", "user_id", "name", "kind", "status",
+    "opening_balance_centavos", "current_balance_centavos",
+    "credit_limit_centavos", "include_in_dashboard_balance",
+    "institution_name", "opened_on", "archived_at",
+    "sort_order", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+  transactions: new Set([
+    "id", "user_id", "transaction_type", "status", "entry_source",
+    "transaction_date", "posted_at", "amount_centavos",
+    "subcategory_id", "source_account_id", "destination_account_id",
+    "recurring_template_id", "merchant_name", "counterparty_name",
+    "notes", "client_mutation_id", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
 };
@@ -229,7 +245,7 @@ async function applyPullRow(
 ): Promise<void> {
   const recordId = row.id as string;
   const rowVersion = (row.version as number) ?? 1;
-  const rowDeleted = (row.deleted as boolean) === true;
+  const rowDeleted = (row.deleted as boolean) === true || row.deleted === 1;
   const now = new Date().toISOString();
 
   const existing = await db.getFirstAsync<{ version: number }>(
@@ -254,8 +270,12 @@ async function applyPullRow(
   if (rowVersion <= existing.version) return;
 
   if (rowDeleted) {
+    const taxonomyTables = new Set(["category_groups", "categories", "subcategories"]);
+    const isActiveClause = taxonomyTables.has(table) ? ", is_active = 0" : "";
+    const statusClause = table === "financial_accounts" ? ", status = 'deleted'" : 
+                         table === "transactions" ? ", status = 'deleted'" : "";
     await db.runAsync(
-      `UPDATE "${table}" SET deleted = 1, is_active = 0, version = ?,
+      `UPDATE "${table}" SET deleted = 1${isActiveClause}${statusClause}, version = ?,
        updated_at = ? WHERE id = ?`,
       rowVersion,
       now,
@@ -358,6 +378,8 @@ function normalizePullRow(
     } else if (col === "metadata") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else if (typeof row[col] === "boolean") {
+      normalized[col] = row[col] ? 1 : 0;
     } else {
       normalized[col] = row[col];
     }

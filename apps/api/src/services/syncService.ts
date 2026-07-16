@@ -35,6 +35,8 @@ const SYNCED_TABLES = [
   "category_groups",
   "categories",
   "subcategories",
+  "financial_accounts",
+  "transactions",
 ] as const;
 
 export async function pushOperations(
@@ -114,6 +116,9 @@ export async function pullChanges(
 
     if (table === "category_groups") {
       // category_groups has no user_id column — system-wide data
+    } else if (table === "financial_accounts" || table === "transactions") {
+      // purely user-scoped — no system rows
+      query.eq("user_id", userId);
     } else {
       // categories and subcategories: include system rows (user_id IS NULL)
       // and user-owned rows
