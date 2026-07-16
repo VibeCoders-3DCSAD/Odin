@@ -82,7 +82,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   }
 
   function parseAmount(): number {
-    const cleaned = amount.replace(/,/g, "");
+    const cleaned = amount.replace(/,/g, "").trim();
+    if (!/^\d+(?:\.\d{1,2})?$/.test(cleaned)) return 0;
     const parsed = parseFloat(cleaned);
     if (isNaN(parsed) || parsed <= 0) return 0;
     return Math.round(parsed * 100);
