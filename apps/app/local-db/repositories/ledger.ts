@@ -447,9 +447,9 @@ export async function listTransactions(
     params.push(filters.to_date);
   }
   if (filters?.search) {
-    parts.push("AND (merchant_name LIKE ? OR counterparty_name LIKE ? OR notes LIKE ?)");
+    parts.push("AND (merchant_name LIKE ? OR counterparty_name LIKE ? OR notes LIKE ? OR EXISTS (SELECT 1 FROM transaction_line_items tli WHERE tli.transaction_id = transactions.id AND tli.user_id = transactions.user_id AND tli.deleted = 0 AND tli.item_label LIKE ?))");
     const term = `%${filters.search}%`;
-    params.push(term, term, term);
+    params.push(term, term, term, term);
   }
 
   const sortBy = filters?.sort_by && (VALID_SORT_BY as readonly string[]).includes(filters.sort_by)
