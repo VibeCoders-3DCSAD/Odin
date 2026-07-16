@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
+import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
@@ -66,6 +67,7 @@ type Page =
   | "assistant"
   | "add-transaction"
   | "categories"
+  | "financial-accounts"
   | "settings";
 
 type MobileShellProps = {
@@ -170,6 +172,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
   categories: { title: "Categories", subtitle: "Manage your categories" },
+  "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
@@ -712,6 +715,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "categories") {
       return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
+    }
+
+    if (currentPage === "financial-accounts") {
+      return <FinancialAccountsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
