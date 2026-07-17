@@ -1,5 +1,6 @@
 CREATE OR REPLACE FUNCTION odin.create_recurring_template_from_obligation(
-    p_obligation_id uuid
+    p_obligation_id uuid,
+    p_user_id uuid
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -12,7 +13,9 @@ DECLARE
 BEGIN
     SELECT * INTO v_obligation
     FROM financial_obligations
-    WHERE id = p_obligation_id AND deleted = false;
+    WHERE id = p_obligation_id
+      AND user_id = p_user_id
+      AND deleted = false;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Obligation not found' USING ERRCODE = 'P0002';
@@ -75,7 +78,8 @@ BEGIN
     );
 
     v_template_id := odin.create_recurring_template_from_obligation(
-        'f1000000-0000-0000-0000-000000000001'
+        'f1000000-0000-0000-0000-000000000001',
+        v_user_id
     );
 
     ASSERT v_template_id IS NOT NULL, 'template id should be returned';

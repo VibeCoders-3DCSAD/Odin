@@ -1283,7 +1283,7 @@ export async function automateObligation(
     dayOfWeek?: number | null;
     startDate?: string;
   },
-): Promise<{ obligation: FinancialObligation; template: import("./recurringTransactions").RecurringTemplate; operation: SyncOperation }> {
+): Promise<{ obligation: FinancialObligation; template: import("./recurringTransactions").RecurringTemplate }> {
   const { getRecurringTemplate, createRecurringTemplate } = await import("./recurringTransactions");
 
   const obligation = await getFinancialObligation(userId, obligationId);
@@ -1318,7 +1318,7 @@ export async function automateObligation(
   });
 
   const { obligation: updated } = await linkObligationToRecurringTemplate(userId, deviceId, obligationId, template.id);
-  return { obligation: updated, template, operation: null as unknown as SyncOperation };
+  return { obligation: updated, template };
 }
 
 export async function deleteFinancialObligation(
