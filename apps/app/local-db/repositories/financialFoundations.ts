@@ -1277,6 +1277,12 @@ export async function automateObligation(
   userId: string,
   deviceId: string,
   obligationId: string,
+  overrides?: {
+    frequency?: ObligationFrequency;
+    dayOfMonth?: number | null;
+    dayOfWeek?: number | null;
+    startDate?: string;
+  },
 ): Promise<{ obligation: FinancialObligation; template: import("./recurringTransactions").RecurringTemplate; operation: SyncOperation }> {
   const { getRecurringTemplate, createRecurringTemplate } = await import("./recurringTransactions");
 
@@ -1284,11 +1290,11 @@ export async function automateObligation(
   if (!obligation) throw new LocalDbError("NOT_FOUND", "obligation not found");
   if (obligation.recurringTemplateId) throw new LocalDbError("VALIDATION_ERROR", "obligation already linked to a recurring template");
 
-  let freq = obligation.frequency;
+  let freq = overrides?.frequency ?? obligation.frequency;
   let intervalCount = 1;
-  let dayOfMonth = obligation.dueDayOfMonth ?? undefined;
+  let dayOfMonth = overrides?.dayOfMonth !== undefined ? overrides.dayOfMonth : (obligation.dueDayOfMonth ?? undefined);
   let secondDayOfMonth = obligation.dueSecondDayOfMonth ?? undefined;
-  let dayOfWeek = obligation.dueDayOfWeek ?? undefined;
+  let dayOfWeek = overrides?.dayOfWeek !== undefined ? overrides.dayOfWeek : (obligation.dueDayOfWeek ?? undefined);
 
   if (freq === "biweekly") {
     freq = "weekly";
@@ -1303,10 +1309,10 @@ export async function automateObligation(
     amount_centavos: obligation.amountCentavos,
     frequency: freq,
     interval_count: intervalCount,
-    day_of_month: dayOfMonth,
-    second_day_of_month: secondDayOfMonth,
-    day_of_week: dayOfWeek,
-    starts_on: new Date().toISOString().slice(0, 10),
+    day_of_month: dayOfMonth ?? undefined,
+    second_day_of_month: secondDayOfMonth ?? undefined,
+    day_of_week: dayOfWeek ?? undefined,
+    starts_on: overrides?.startDate ?? new Date().toISOString().slice(0, 10),
     subcategory_id: obligation.subcategoryId,
     notes: obligation.notes ?? undefined,
   });

@@ -11,12 +11,11 @@ import {
   View,
 } from "react-native";
 import {
-  listFinancialObligations,
   automateObligation,
   type FinancialObligation,
   type ObligationFrequency,
 } from "../../../local-db/repositories/financialFoundations";
-import { listSubcategories, type Subcategory } from "../../../local-db/repositories/taxonomy";
+import type { Subcategory } from "../../../local-db/repositories/taxonomy";
 
 const P = {
   shell: "#fcf8f0", brand: "#013220", brandMedium: "#0E6D46",
@@ -25,17 +24,6 @@ const P = {
 };
 
 const FREQUENCIES: readonly ObligationFrequency[] = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
-
-function parseSafeCents(raw: string): number | null {
-  const t = raw.trim();
-  if (!t) return null;
-  if (t.length > 15) return null;
-  const p = parseFloat(t);
-  if (!Number.isFinite(p)) return null;
-  const cents = Math.round(p * 100);
-  if (!Number.isSafeInteger(cents)) return null;
-  return cents;
-}
 
 type Props = {
   visible: boolean;
@@ -85,7 +73,12 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
 
     setSaving(true);
     try {
-      await automateObligation(userId, deviceId, obligation.id);
+      await automateObligation(userId, deviceId, obligation.id, {
+        frequency,
+        dayOfMonth: showDayOfMonth ? (dayOfMonth.trim() ? parseInt(dayOfMonth, 10) : null) : undefined,
+        dayOfWeek: showDayOfWeek ? dayOfWeek : undefined,
+        startDate: startDate.trim() || undefined,
+      });
       onComplete();
       onClose();
     } catch (err) {
