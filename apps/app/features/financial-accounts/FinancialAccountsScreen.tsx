@@ -207,7 +207,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
   const [openingBalance, setOpeningBalance] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
   const [institutionName, setInstitutionName] = useState("");
-  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const isEdit = editing !== null;
@@ -219,9 +218,8 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
       setOpeningBalance(String(editing.openingBalanceCentavos / 100));
       setCreditLimit(editing.creditLimitCentavos != null ? String(editing.creditLimitCentavos / 100) : "");
       setInstitutionName(editing.institutionName ?? "");
-      setNotes(editing.notes ?? "");
     } else {
-      setName(""); setKind("bank"); setOpeningBalance(""); setCreditLimit(""); setInstitutionName(""); setNotes("");
+      setName(""); setKind("bank"); setOpeningBalance(""); setCreditLimit(""); setInstitutionName("");
     }
     setFormError(null);
   }, [editing]);
@@ -253,7 +251,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
         openingBalanceCentavos: openingCents ?? 0,
         creditLimitCentavos: showCreditLimit ? limitCents : null,
         institutionName: institutionName.trim() || null,
-        notes: notes.trim() || null,
       });
     } catch (err) { setFormError(err instanceof Error ? err.message : "Something went wrong"); }
     finally { setSaving(false); }
@@ -348,19 +345,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
                       value={institutionName}
                       onChangeText={setInstitutionName}
                       placeholder="e.g. BPI"
-                      placeholderTextColor={P.muted}
-                      style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                    />
-                  </View>
-
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      NOTES (OPTIONAL)
-                    </Text>
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Add any details..."
                       placeholderTextColor={P.muted}
                       style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                     />
