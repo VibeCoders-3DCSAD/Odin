@@ -8,6 +8,7 @@ SET search_path = odin, public
 AS $$
 DECLARE
     v_obligation record;
+    v_account_id uuid;
     v_template_id uuid;
     v_next_date date;
 BEGIN
@@ -19,6 +20,18 @@ BEGIN
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Obligation not found' USING ERRCODE = 'P0002';
+    END IF;
+
+    SELECT id INTO v_account_id
+    FROM financial_accounts
+    WHERE user_id = p_user_id
+      AND status = 'active'
+      AND kind IN ('cash', 'bank', 'e_wallet', 'savings')
+    ORDER BY sort_order
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No active debit account found for user' USING ERRCODE = 'P0002';
     END IF;
 
     v_template_id := gen_random_uuid();
@@ -40,7 +53,7 @@ BEGIN
     ) VALUES (
         v_template_id, v_obligation.user_id, 'expense', 'active',
         v_obligation.name, v_obligation.amount_centavos,
-        v_obligation.subcategory_id, NULL, NULL,
+        v_obligation.subcategory_id, v_account_id, NULL,
         v_obligation.frequency, 1,
         v_obligation.due_day_of_month, v_obligation.due_second_day_of_month,
         v_obligation.due_day_of_week, '{}', CURRENT_DATE, v_obligation.ends_on,
@@ -63,6 +76,7 @@ DO $$
 DECLARE
     v_user_id uuid;
     v_subcategory_id uuid;
+    v_account_id uuid;
     v_template_id uuid;
     v_profile_exists boolean;
 BEGIN
@@ -84,6 +98,10 @@ BEGIN
         VALUES (v_user_id, 'Test Profile')
         ON CONFLICT DO NOTHING;
     END IF;
+
+    INSERT INTO financial_accounts (user_id, name, kind, opening_balance_centavos, current_balance_centavos)
+    VALUES (v_user_id, 'Test Wallet', 'e_wallet', 0, 0)
+    RETURNING id INTO v_account_id;
 
     INSERT INTO financial_obligations (
         id, user_id, subcategory_id, name, status, amount_centavos,
@@ -122,6 +140,7 @@ BEGIN
 
     DELETE FROM recurring_transaction_templates WHERE id = v_template_id;
     DELETE FROM financial_obligations WHERE id = 'f1000000-0000-0000-0000-000000000001';
+    DELETE FROM financial_accounts WHERE id = v_account_id;
 
     RAISE NOTICE 'All odin.create_recurring_template_from_obligation tests passed';
 END $$;
