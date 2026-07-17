@@ -12,6 +12,11 @@ export const SYNCED_TABLES = [
   "categories",
   "subcategories",
   "financial_accounts",
+  "transactions",
+  "transaction_templates",
+  "transaction_drafts",
+  "recurring_transaction_templates",
+  "recurring_transaction_occurrences",
   "income_sources",
   "financial_obligations",
 ] as const;
@@ -57,6 +62,41 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "is_family_support", "is_dependent_support", "protected_by_default",
     "starts_on", "ends_on", "notes", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
+  ]),
+  transactions: new Set([
+    "id", "user_id", "transaction_type", "status", "entry_source",
+    "transaction_date", "posted_at", "amount_centavos",
+    "subcategory_id", "source_account_id", "destination_account_id",
+    "recurring_template_id", "merchant_name", "counterparty_name",
+    "notes", "client_mutation_id", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+  transaction_templates: new Set([
+    "id", "user_id", "transaction_type", "status", "name",
+    "amount_centavos", "subcategory_id", "source_account_id",
+    "destination_account_id", "merchant_name", "counterparty_name",
+    "notes", "use_count", "last_used_at", "metadata",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  transaction_drafts: new Set([
+    "id", "user_id", "client_draft_id", "status", "payload",
+    "captured_offline_at", "synced_transaction_id", "last_error",
+    "metadata", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  recurring_transaction_templates: new Set([
+    "id", "user_id", "transaction_type", "status", "name",
+    "amount_centavos", "frequency", "interval_count",
+    "day_of_month", "second_day_of_month", "day_of_week",
+    "custom_rule", "starts_on", "ends_on", "next_occurrence_date",
+    "last_generated_date", "subcategory_id", "source_account_id",
+    "destination_account_id", "reminder_enabled", "reminder_days_before", "notes",
+    "metadata", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  recurring_transaction_occurrences: new Set([
+    "id", "user_id", "recurring_template_id", "scheduled_date", "status",
+    "generated_transaction_id", "reminder_sent_at", "posted_at",
+    "skipped_at", "failure_reason", "metadata",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
 };
 
@@ -126,9 +166,24 @@ export async function applyPullRow(
   if (rowVersion <= existing.version) return;
 
   if (rowDeleted) {
-    if (table === "financial_accounts" || table === "financial_obligations") {
+    if (
+      table === "financial_accounts" ||
+      table === "financial_obligations" ||
+      table === "transactions" ||
+      table === "transaction_templates" ||
+      table === "recurring_transaction_templates" ||
+      table === "recurring_transaction_occurrences"
+    ) {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
+         updated_at = ? WHERE id = ?`,
+        rowVersion,
+        now,
+        recordId,
+      );
+    } else if (table === "transaction_drafts") {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, status = 'discarded', version = ?,
          updated_at = ? WHERE id = ?`,
         rowVersion,
         now,

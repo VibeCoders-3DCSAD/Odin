@@ -23,6 +23,14 @@ DECLARE
   v_current_version integer;
   v_now timestamptz := now();
   v_overwritten_values jsonb := '{}'::jsonb;
+  v_deleted_check boolean;
+  v_tx_type odin_transaction_type;
+  v_cur_src uuid;
+  v_cur_dst uuid;
+  v_cur_sub uuid;
+  v_new_src uuid;
+  v_new_dst uuid;
+  v_new_sub uuid;
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'authentication required';
@@ -33,58 +41,14 @@ BEGIN
     'subcategories',
     'financial_accounts',
     'income_sources',
-    'financial_obligations'
+    'financial_obligations',
+    'transactions'
   ) THEN
     RAISE EXCEPTION 'entity % is not syncable', p_entity;
   END IF;
 
   IF p_operation_type NOT IN ('create', 'update', 'delete') THEN
     RAISE EXCEPTION 'operation_type % is invalid', p_operation_type;
-  END IF;
-
-  -- ponytail: per-entity payload allowlists matching API service syncApplyOperation.ts
-  IF p_operation_type IN ('create', 'update') AND p_payload IS NOT NULL AND p_payload != '{}'::jsonb THEN
-    DECLARE
-      v_allowed text[];
-      v_key text;
-    BEGIN
-      IF p_entity = 'categories' THEN
-        v_allowed := CASE p_operation_type
-          WHEN 'create' THEN ARRAY['category_group_id','slug','label','short_label','description','is_filipino_context','sort_order']
-          ELSE ARRAY['label','short_label','description','is_filipino_context','sort_order','is_active']
-        END;
-      ELSIF p_entity = 'subcategories' THEN
-        v_allowed := CASE p_operation_type
-          WHEN 'create' THEN ARRAY['category_id','slug','kind','label','short_label','description','is_filipino_context','is_protected','sort_order']
-          ELSE ARRAY['label','slug','short_label','description','is_filipino_context','is_protected','is_active']
-        END;
-      ELSIF p_entity = 'financial_accounts' THEN
-        v_allowed := CASE p_operation_type
-          WHEN 'create' THEN ARRAY['name','kind','opening_balance_centavos','credit_limit_centavos','include_in_dashboard_balance','institution_name','opened_on','sort_order']
-          ELSE ARRAY['name','status','opening_balance_centavos','current_balance_centavos','credit_limit_centavos','include_in_dashboard_balance','institution_name','opened_on','archived_at','sort_order']
-        END;
-      ELSIF p_entity = 'income_sources' THEN
-        v_allowed := CASE p_operation_type
-          WHEN 'create' THEN ARRAY['name','income_type','frequency','expected_amount_centavos','min_amount_centavos','max_amount_centavos','payday_day_of_month','payday_second_day_of_month','payday_day_of_week','payday_second_day_of_week','next_expected_date','estimated_interval_days','is_active','notes']
-          ELSE ARRAY['name','income_type','frequency','expected_amount_centavos','min_amount_centavos','max_amount_centavos','payday_day_of_month','payday_second_day_of_month','payday_day_of_week','payday_second_day_of_week','next_expected_date','estimated_interval_days','is_active','notes']
-        END;
-      ELSIF p_entity = 'financial_obligations' THEN
-        v_allowed := CASE p_operation_type
-          WHEN 'create' THEN ARRAY['subcategory_id','recurring_template_id','name','amount_centavos','frequency','due_day_of_month','due_second_day_of_month','due_day_of_week','due_second_day_of_week','due_month','is_family_support','is_dependent_support','protected_by_default','starts_on','ends_on','notes']
-          ELSE ARRAY['subcategory_id','recurring_template_id','name','amount_centavos','frequency','due_day_of_month','due_second_day_of_month','due_day_of_week','due_second_day_of_week','due_month','is_family_support','is_dependent_support','protected_by_default','starts_on','ends_on','notes']
-        END;
-      END IF;
-
-      FOR v_key IN SELECT jsonb_object_keys(p_payload) LOOP
-        IF v_key != ALL (v_allowed) THEN
-          UPDATE applied_operations
-          SET result = jsonb_build_object('status','rejected','reason', v_key || ' is not syncable for ' || p_entity || ' ' || p_operation_type)
-          WHERE operation_id = p_operation_id;
-          RETURN QUERY SELECT 'rejected'::text, (v_key || ' is not syncable for ' || p_entity || ' ' || p_operation_type)::text, NULL::integer, NULL::text[];
-          RETURN;
-        END IF;
-      END LOOP;
-    END;
   END IF;
 
   INSERT INTO applied_operations (
@@ -425,6 +389,113 @@ BEGIN
         1,
         false
       );
+
+    ELSIF p_entity = 'transactions' THEN
+      IF (p_payload->>'subcategory_id') IS NOT NULL THEN
+        PERFORM 1
+        FROM subcategories
+        WHERE id = (p_payload->>'subcategory_id')::uuid
+          AND (user_id = v_user_id OR user_id IS NULL)
+          AND deleted = false
+          AND is_active = true
+          AND kind = CASE
+            WHEN (p_payload->>'transaction_type') = 'income' THEN 'income'::odin_subcategory_kind
+            WHEN (p_payload->>'transaction_type') = 'expense' THEN 'expense'::odin_subcategory_kind
+            ELSE NULL
+          END;
+
+        IF (p_payload->>'transaction_type') <> 'transfer' AND NOT FOUND THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object(
+            'status', 'rejected',
+            'reason', 'subcategory not found or wrong kind'
+          )
+          WHERE operation_id = p_operation_id;
+
+          RETURN QUERY SELECT 'rejected'::text, 'subcategory not found or wrong kind'::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+      END IF;
+
+      IF (p_payload->>'source_account_id') IS NOT NULL THEN
+        PERFORM 1
+        FROM financial_accounts
+        WHERE id = (p_payload->>'source_account_id')::uuid
+          AND user_id = v_user_id
+          AND deleted = false;
+
+        IF NOT FOUND THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object(
+            'status', 'rejected',
+            'reason', 'source account not found or inaccessible'
+          )
+          WHERE operation_id = p_operation_id;
+
+          RETURN QUERY SELECT 'rejected'::text, 'source account not found or inaccessible'::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+      END IF;
+
+      IF (p_payload->>'destination_account_id') IS NOT NULL THEN
+        PERFORM 1
+        FROM financial_accounts
+        WHERE id = (p_payload->>'destination_account_id')::uuid
+          AND user_id = v_user_id
+          AND deleted = false;
+
+        IF NOT FOUND THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object(
+            'status', 'rejected',
+            'reason', 'destination account not found or inaccessible'
+          )
+          WHERE operation_id = p_operation_id;
+
+          RETURN QUERY SELECT 'rejected'::text, 'destination account not found or inaccessible'::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+      END IF;
+
+      INSERT INTO transactions (
+        id,
+        user_id,
+        transaction_type,
+        status,
+        entry_source,
+        transaction_date,
+        posted_at,
+        amount_centavos,
+        subcategory_id,
+        source_account_id,
+        destination_account_id,
+        merchant_name,
+        counterparty_name,
+        notes,
+        metadata,
+        updated_at,
+        version,
+        deleted
+      ) VALUES (
+        p_record_id,
+        v_user_id,
+        (p_payload->>'transaction_type')::odin_transaction_type,
+        'posted',
+        'offline_sync',
+        (p_payload->>'transaction_date')::date,
+        v_now,
+        (p_payload->>'amount_centavos')::bigint,
+        (p_payload->>'subcategory_id')::uuid,
+        (p_payload->>'source_account_id')::uuid,
+        (p_payload->>'destination_account_id')::uuid,
+        p_payload->>'merchant_name',
+        p_payload->>'counterparty_name',
+        p_payload->>'notes',
+        '{}'::jsonb,
+        v_now,
+        1,
+        false
+      );
     END IF;
 
     UPDATE applied_operations
@@ -476,6 +547,14 @@ BEGIN
       WHERE id = p_record_id
         AND user_id = v_user_id
       FOR UPDATE;
+  ELSIF p_entity = 'transactions' THEN
+    SELECT version, deleted, transaction_type,
+           source_account_id, destination_account_id, subcategory_id
+    INTO v_current_version, v_deleted_check, v_tx_type, v_cur_src, v_cur_dst, v_cur_sub
+    FROM transactions
+    WHERE id = p_record_id
+      AND user_id = v_user_id
+    FOR UPDATE;
   ELSE
     UPDATE applied_operations
     SET result = jsonb_build_object(
@@ -539,6 +618,10 @@ BEGIN
       UPDATE financial_obligations
       SET deleted = true, status = 'deleted'
       WHERE id = p_record_id AND user_id = v_user_id;
+    ELSIF p_entity = 'transactions' THEN
+      UPDATE transactions
+      SET deleted = true, status = 'deleted', deleted_at = v_now
+      WHERE id = p_record_id AND user_id = v_user_id;
     END IF;
 
     UPDATE applied_operations
@@ -553,9 +636,9 @@ BEGIN
   END IF;
 
   ---------------------------------------------------------------------------
-  -- PA YLOAD CHECK
+  -- PAYLOAD CHECK
   ---------------------------------------------------------------------------
-  IF p_payload IS NULL OR p_payload = '{}'::jsonb THEN
+  IF COALESCE(jsonb_object_length(p_payload), 0) = 0 THEN
     UPDATE applied_operations
     SET result = jsonb_build_object(
       'status', 'rejected',
@@ -671,15 +754,15 @@ BEGIN
     END IF;
 
     v_overwritten_values :=
-      CASE WHEN p_payload ? 'name' THEN jsonb_build_object('name', (SELECT to_jsonb(fa.name) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'status' THEN jsonb_build_object('status', (SELECT to_jsonb(fa.status) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'opening_balance_centavos' THEN jsonb_build_object('opening_balance_centavos', (SELECT to_jsonb(fa.opening_balance_centavos) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'current_balance_centavos' THEN jsonb_build_object('current_balance_centavos', (SELECT to_jsonb(fa.current_balance_centavos) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'credit_limit_centavos' THEN jsonb_build_object('credit_limit_centavos', (SELECT to_jsonb(fa.credit_limit_centavos) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'include_in_dashboard_balance' THEN jsonb_build_object('include_in_dashboard_balance', (SELECT to_jsonb(fa.include_in_dashboard_balance) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'institution_name' THEN jsonb_build_object('institution_name', (SELECT to_jsonb(fa.institution_name) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'opened_on' THEN jsonb_build_object('opened_on', (SELECT to_jsonb(fa.opened_on) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'archived_at' THEN jsonb_build_object('archived_at', (SELECT to_jsonb(fa.archived_at) FROM financial_accounts fa WHERE fa.id = p_record_id AND fa.user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'name' THEN jsonb_build_object('name', (SELECT to_jsonb(name) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'status' THEN jsonb_build_object('status', (SELECT to_jsonb(status) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'opening_balance_centavos' THEN jsonb_build_object('opening_balance_centavos', (SELECT to_jsonb(opening_balance_centavos) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'current_balance_centavos' THEN jsonb_build_object('current_balance_centavos', (SELECT to_jsonb(current_balance_centavos) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'credit_limit_centavos' THEN jsonb_build_object('credit_limit_centavos', (SELECT to_jsonb(credit_limit_centavos) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'include_in_dashboard_balance' THEN jsonb_build_object('include_in_dashboard_balance', (SELECT to_jsonb(include_in_dashboard_balance) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'institution_name' THEN jsonb_build_object('institution_name', (SELECT to_jsonb(institution_name) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'opened_on' THEN jsonb_build_object('opened_on', (SELECT to_jsonb(opened_on) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'archived_at' THEN jsonb_build_object('archived_at', (SELECT to_jsonb(archived_at) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'sort_order' THEN jsonb_build_object('sort_order', (SELECT to_jsonb(sort_order) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
 
     IF p_payload ? 'status' AND (p_payload->>'status') = 'deleted' THEN
@@ -697,7 +780,7 @@ BEGIN
 
     UPDATE financial_accounts
     SET name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
-        status = CASE WHEN p_payload ? 'status' THEN (p_payload->>'status')::odin_account_status ELSE financial_accounts.status END,
+        status = CASE WHEN p_payload ? 'status' THEN (p_payload->>'status')::odin_account_status ELSE status END,
         opening_balance_centavos = CASE WHEN p_payload ? 'opening_balance_centavos' THEN (p_payload->>'opening_balance_centavos')::bigint ELSE opening_balance_centavos END,
         current_balance_centavos = CASE WHEN p_payload ? 'current_balance_centavos' THEN (p_payload->>'current_balance_centavos')::bigint ELSE current_balance_centavos END,
         credit_limit_centavos = CASE WHEN p_payload ? 'credit_limit_centavos' THEN (p_payload->>'credit_limit_centavos')::bigint ELSE credit_limit_centavos END,
@@ -898,6 +981,126 @@ BEGIN
         protected_by_default = CASE WHEN p_payload ? 'protected_by_default' THEN (p_payload->>'protected_by_default')::boolean ELSE protected_by_default END,
         starts_on = CASE WHEN p_payload ? 'starts_on' THEN (p_payload->>'starts_on')::date ELSE starts_on END,
         ends_on = CASE WHEN p_payload ? 'ends_on' THEN (p_payload->>'ends_on')::date ELSE ends_on END,
+        notes = CASE WHEN p_payload ? 'notes' THEN p_payload->>'notes' ELSE notes END
+    WHERE id = p_record_id
+      AND user_id = v_user_id;
+
+  ---------------------------------------------------------------------------
+  -- UPDATE — transactions
+  ---------------------------------------------------------------------------
+  ELSIF p_entity = 'transactions' THEN
+    IF EXISTS (
+      SELECT 1 FROM transactions WHERE id = p_record_id AND user_id = v_user_id AND deleted = true
+    ) THEN
+      INSERT INTO edit_history (user_id, operation_id, entity, record_id, reason, payload)
+      VALUES (v_user_id, p_operation_id, p_entity, p_record_id, 'delete_wins', p_payload);
+
+      UPDATE applied_operations
+      SET result = jsonb_build_object(
+        'status', 'rejected',
+        'reason', 'record is deleted',
+        'current_version', v_current_version
+      )
+      WHERE operation_id = p_operation_id;
+
+      RETURN QUERY SELECT 'rejected'::text, 'record is deleted'::text, v_current_version, NULL::text[];
+      RETURN;
+    END IF;
+
+    v_new_src := v_cur_src;
+    v_new_dst := v_cur_dst;
+    v_new_sub := v_cur_sub;
+    IF p_payload ? 'source_account_id' THEN
+      v_new_src := (p_payload->>'source_account_id')::uuid;
+    END IF;
+    IF p_payload ? 'destination_account_id' THEN
+      v_new_dst := (p_payload->>'destination_account_id')::uuid;
+    END IF;
+    IF p_payload ? 'subcategory_id' THEN
+      v_new_sub := (p_payload->>'subcategory_id')::uuid;
+    END IF;
+
+    IF v_tx_type = 'income' THEN
+      IF v_new_dst IS NULL THEN
+        RAISE EXCEPTION 'destination_account_id is required for income';
+      END IF;
+      IF v_new_src IS NOT NULL THEN
+        RAISE EXCEPTION 'source_account_id must be null for income';
+      END IF;
+    ELSIF v_tx_type = 'expense' THEN
+      IF v_new_src IS NULL THEN
+        RAISE EXCEPTION 'source_account_id is required for expense';
+      END IF;
+      IF v_new_dst IS NOT NULL THEN
+        RAISE EXCEPTION 'destination_account_id must be null for expense';
+      END IF;
+    ELSIF v_tx_type = 'transfer' THEN
+      IF v_new_src IS NULL OR v_new_dst IS NULL THEN
+        RAISE EXCEPTION 'both accounts are required for transfer';
+      END IF;
+      IF v_new_src = v_new_dst THEN
+        RAISE EXCEPTION 'source and destination accounts must differ';
+      END IF;
+    END IF;
+
+    IF v_new_src IS NOT NULL THEN
+      PERFORM 1
+      FROM financial_accounts
+      WHERE id = v_new_src
+        AND user_id = v_user_id
+        AND deleted = false;
+
+      IF NOT FOUND THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object(
+          'status', 'rejected',
+          'reason', 'source account not found or inaccessible'
+        )
+        WHERE operation_id = p_operation_id;
+
+        RETURN QUERY SELECT 'rejected'::text, 'source account not found or inaccessible'::text, NULL::integer, NULL::text[];
+        RETURN;
+      END IF;
+    END IF;
+
+    IF v_new_dst IS NOT NULL THEN
+      PERFORM 1
+      FROM financial_accounts
+      WHERE id = v_new_dst
+        AND user_id = v_user_id
+        AND deleted = false;
+
+      IF NOT FOUND THEN
+        UPDATE applied_operations
+        SET result = jsonb_build_object(
+          'status', 'rejected',
+          'reason', 'destination account not found or inaccessible'
+        )
+        WHERE operation_id = p_operation_id;
+
+        RETURN QUERY SELECT 'rejected'::text, 'destination account not found or inaccessible'::text, NULL::integer, NULL::text[];
+        RETURN;
+      END IF;
+    END IF;
+
+    v_overwritten_values :=
+      CASE WHEN p_payload ? 'amount_centavos' THEN jsonb_build_object('amount_centavos', (SELECT to_jsonb(amount_centavos) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'subcategory_id' THEN jsonb_build_object('subcategory_id', (SELECT to_jsonb(subcategory_id) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'source_account_id' THEN jsonb_build_object('source_account_id', (SELECT to_jsonb(source_account_id) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'destination_account_id' THEN jsonb_build_object('destination_account_id', (SELECT to_jsonb(destination_account_id) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'transaction_date' THEN jsonb_build_object('transaction_date', (SELECT to_jsonb(transaction_date) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'merchant_name' THEN jsonb_build_object('merchant_name', (SELECT to_jsonb(merchant_name) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'counterparty_name' THEN jsonb_build_object('counterparty_name', (SELECT to_jsonb(counterparty_name) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
+      CASE WHEN p_payload ? 'notes' THEN jsonb_build_object('notes', (SELECT to_jsonb(notes) FROM transactions WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
+
+    UPDATE transactions
+    SET amount_centavos = CASE WHEN p_payload ? 'amount_centavos' THEN (p_payload->>'amount_centavos')::bigint ELSE amount_centavos END,
+        subcategory_id = CASE WHEN p_payload ? 'subcategory_id' THEN (p_payload->>'subcategory_id')::uuid ELSE subcategory_id END,
+        source_account_id = CASE WHEN p_payload ? 'source_account_id' THEN (p_payload->>'source_account_id')::uuid ELSE source_account_id END,
+        destination_account_id = CASE WHEN p_payload ? 'destination_account_id' THEN (p_payload->>'destination_account_id')::uuid ELSE destination_account_id END,
+        transaction_date = CASE WHEN p_payload ? 'transaction_date' THEN (p_payload->>'transaction_date')::date ELSE transaction_date END,
+        merchant_name = CASE WHEN p_payload ? 'merchant_name' THEN p_payload->>'merchant_name' ELSE merchant_name END,
+        counterparty_name = CASE WHEN p_payload ? 'counterparty_name' THEN p_payload->>'counterparty_name' ELSE counterparty_name END,
         notes = CASE WHEN p_payload ? 'notes' THEN p_payload->>'notes' ELSE notes END
     WHERE id = p_record_id
       AND user_id = v_user_id;

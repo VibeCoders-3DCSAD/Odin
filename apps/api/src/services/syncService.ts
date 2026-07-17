@@ -36,8 +36,13 @@ const SYNCED_TABLES = [
   "categories",
   "subcategories",
   "financial_accounts",
+  "transactions",
   "income_sources",
   "financial_obligations",
+  "transaction_templates",
+  "transaction_drafts",
+  "recurring_transaction_templates",
+  "recurring_transaction_occurrences",
 ] as const;
 
 export async function pushOperations(
@@ -139,8 +144,17 @@ export async function pullChanges(
 
     if (table === "category_groups") {
       // category_groups has no user_id column — system-wide data
-    } else if (table === "financial_accounts" || table === "income_sources" || table === "financial_obligations") {
-      // financial tables: user-scoped only — no system rows
+    } else if (
+      table === "financial_accounts" ||
+      table === "transactions" ||
+      table === "income_sources" ||
+      table === "financial_obligations" ||
+      table === "transaction_templates" ||
+      table === "transaction_drafts" ||
+      table === "recurring_transaction_templates" ||
+      table === "recurring_transaction_occurrences"
+    ) {
+      // user-scoped only — no system rows
       query.eq("user_id", userId);
     } else {
       // categories and subcategories: include system rows (user_id IS NULL)

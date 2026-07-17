@@ -47,6 +47,7 @@ type QueueRow = {
   created_at: string;
 };
 
+
 export async function runSync(
   userId: string,
   deviceId: string,
@@ -230,6 +231,7 @@ async function pullAndApply(
   return { pulled, cursors: payload.cursors };
 }
 
+
 async function loadCursors(
   db: SQLite.SQLiteDatabase,
   userId: string,
@@ -288,6 +290,7 @@ async function ensureDeviceRegistered(
     throw new Error(`device registration failed: ${response.status}`);
   }
 }
+
 
 function fetchWithTimeout(
   url: string,

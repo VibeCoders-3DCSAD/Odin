@@ -17,6 +17,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
+import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
+import TransactionHistoryScreen from "../features/ledger/TransactionHistoryScreen";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
@@ -187,6 +189,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
 
 export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
+  const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -738,6 +741,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       );
     }
 
+    if (currentPage === "add-transaction") {
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onClose={() => setCurrentPage(transactionReturnPage)} />;
+    }
+
+    if (currentPage === "transactions") {
+      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} />;
+    }
+
     if (currentPage === "categories") {
       return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
     }
@@ -761,6 +772,12 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   return (
     <View className="flex-1">
       <SafeAreaView style={{ backgroundColor: palette.shell }} className="flex-1">
+        {currentPage === "add-transaction" ? (
+          <View style={{ flex: 1 }}>
+            {renderPage()}
+          </View>
+        ) : (
+          <>
         {/* Top bar */}
         <View style={{ backgroundColor: palette.shell }} className="px-5 py-3 flex-row items-center justify-between">
           <View className="flex-row items-center gap-3">
@@ -880,7 +897,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             </Pressable>
 
             <Pressable
-              onPress={() => setCurrentPage("add-transaction")}
+              onPress={() => { setTransactionReturnPage("dashboard"); setCurrentPage("add-transaction"); }}
               accessibilityRole="button"
               accessibilityLabel="Add transaction"
               className="w-[50px] h-[50px] rounded-full items-center justify-center -mt-[22px]"
@@ -934,6 +951,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             </Pressable>
           </View>
         </View>
+          </>
+        )}
 
         {deletionSuccessDate ? (
           <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: palette.shell, paddingHorizontal: 30, justifyContent: "center", alignItems: "center" }}>

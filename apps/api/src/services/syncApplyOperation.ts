@@ -16,8 +16,13 @@ const SYNCED_ENTITIES = new Set([
   "categories",
   "subcategories",
   "financial_accounts",
+  "transactions",
   "income_sources",
   "financial_obligations",
+  "transaction_templates",
+  "transaction_drafts",
+  "recurring_transaction_templates",
+  "recurring_transaction_occurrences",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -99,6 +104,34 @@ const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
   "notes",
 ]);
 
+const TRANSACTION_CREATE_FIELDS = new Set([
+  "transaction_type",
+  "transaction_date",
+  "amount_centavos",
+  "subcategory_id",
+  "source_account_id",
+  "destination_account_id",
+  "merchant_name",
+  "counterparty_name",
+  "notes",
+  "entry_source",
+  "recurring_template_id",
+]);
+
+const TRANSACTION_UPDATE_FIELDS = new Set([
+  "amount_centavos",
+  "subcategory_id",
+  "source_account_id",
+  "destination_account_id",
+  "transaction_date",
+  "merchant_name",
+  "counterparty_name",
+  "notes",
+]);
+
+const VALID_ACCOUNT_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "loan", "other"];
+const VALID_TRANSACTION_TYPES = ["income", "expense", "transfer"];
+
 const INCOME_SOURCE_CREATE_FIELDS = new Set([
   "name",
   "income_type",
@@ -171,6 +204,23 @@ const OBLIGATION_UPDATE_FIELDS = new Set([
   "notes",
 ]);
 
+const TEMPLATE_FIELDS = new Set([
+  "transaction_type", "name", "amount_centavos", "subcategory_id",
+  "source_account_id", "destination_account_id", "merchant_name", "counterparty_name", "notes",
+]);
+
+const DRAFT_FIELDS = new Set(["client_draft_id", "payload", "captured_offline_at"]);
+
+const RECURRING_TEMPLATE_FIELDS = new Set([
+  "transaction_type", "name", "amount_centavos", "frequency", "interval_count",
+  "day_of_month", "second_day_of_month", "day_of_week",
+  "starts_on", "ends_on", "subcategory_id", "source_account_id", "destination_account_id", "notes",
+]);
+
+const RECURRING_OCCURRENCE_FIELDS = new Set([
+  "recurring_template_id", "scheduled_date", "generated_transaction_id",
+]);
+
 export async function prepareOperation(
   supabase: SupabaseClient,
   userId: string,
@@ -189,7 +239,7 @@ export async function prepareOperation(
     case "update":
       return {
         ...op,
-        payload: validateUpdatePayload(op.entity, filterPayloadFields(op.payload, op.changed_fields)),
+        payload: await validateUpdatePayload(supabase, userId, op.entity, op.record_id, filterPayloadFields(op.payload, op.changed_fields)),
       };
     case "delete":
       return op;
@@ -217,7 +267,7 @@ async function validateCreatePayload(
   entity: string,
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (entity === "categories" || entity === "subcategories") {
+  if (entity === "categories" || entity === "subcategories" || entity === "transactions") {
     return validateTaxonomyCreatePayload(supabase, userId, entity, payload);
   }
 
@@ -365,41 +415,182 @@ async function validateTaxonomyCreatePayload(
     return sanitized;
   }
 
-  assertOnlyAllowed(payload, SUBCATEGORY_CREATE_FIELDS);
-  const sanitized = sanitizePayload(payload, SUBCATEGORY_CREATE_FIELDS);
-  requireString(sanitized, "kind");
-  if (!["income", "expense", "transfer_adjustment"].includes(sanitized.kind as string)) {
-    throw new Error("kind must be income, expense, or transfer_adjustment");
+  if (entity === "financial_accounts") {
+    assertOnlyAllowed(payload, FINANCIAL_ACCOUNT_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, FINANCIAL_ACCOUNT_CREATE_FIELDS);
+    requireString(sanitized, "name");
+    requireString(sanitized, "kind");
+    if (!VALID_ACCOUNT_KINDS.includes(sanitized.kind as string)) {
+      throw new Error(`kind must be one of: ${VALID_ACCOUNT_KINDS.join(", ")}`);
+    }
+    optionalFiniteInteger(sanitized, "opening_balance_centavos");
+    optionalFiniteInteger(sanitized, "credit_limit_centavos");
+    if (sanitized.credit_limit_centavos != null && (sanitized.credit_limit_centavos as number) < 0) {
+      throw new Error("credit_limit_centavos must be >= 0");
+    }
+    optionalBoolean(sanitized, "include_in_dashboard_balance");
+    optionalString(sanitized, "institution_name");
+    optionalString(sanitized, "opened_on");
+    optionalNumber(sanitized, "sort_order");
+    return sanitized;
   }
-  requireString(sanitized, "slug");
-  requireString(sanitized, "label");
-  requireString(sanitized, "description");
-  optionalString(sanitized, "short_label");
-  optionalBoolean(sanitized, "is_filipino_context");
-  optionalBoolean(sanitized, "is_protected");
-  optionalNumber(sanitized, "sort_order");
 
-  if (sanitized.kind === "expense") {
-    requireString(sanitized, "category_id");
-    const { data: category, error } = await supabase
-      .from("categories")
+  if (entity === "transactions") {
+    assertOnlyAllowed(payload, TRANSACTION_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, TRANSACTION_CREATE_FIELDS);
+    requireString(sanitized, "transaction_type");
+    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
+      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+    }
+    requireString(sanitized, "transaction_date");
+    requirePositiveInteger(sanitized, "amount_centavos");
+
+    const txType = sanitized.transaction_type as string;
+
+    if (txType === "income") {
+      requireString(sanitized, "destination_account_id");
+      requireString(sanitized, "subcategory_id");
+      if (sanitized.source_account_id != null) throw new Error("source_account_id must not be set for income");
+      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+      await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
+      sanitized.source_account_id = null;
+    } else if (txType === "expense") {
+      requireString(sanitized, "source_account_id");
+      requireString(sanitized, "subcategory_id");
+      if (sanitized.destination_account_id != null) throw new Error("destination_account_id must not be set for expense");
+      await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+      await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "expense");
+      sanitized.destination_account_id = null;
+    } else {
+      requireString(sanitized, "source_account_id");
+      requireString(sanitized, "destination_account_id");
+      if (sanitized.source_account_id === sanitized.destination_account_id) {
+        throw new Error("source and destination accounts must differ");
+      }
+      if (sanitized.subcategory_id != null) throw new Error("subcategory_id must not be set for transfer");
+      await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+      sanitized.subcategory_id = null;
+    }
+
+    optionalString(sanitized, "merchant_name");
+    optionalString(sanitized, "counterparty_name");
+    optionalString(sanitized, "notes");
+    return sanitized;
+  }
+
+  if (entity === "subcategories") {
+    assertOnlyAllowed(payload, SUBCATEGORY_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, SUBCATEGORY_CREATE_FIELDS);
+    requireString(sanitized, "kind");
+    if (!["income", "expense", "transfer_adjustment"].includes(sanitized.kind as string)) {
+      throw new Error("kind must be income, expense, or transfer_adjustment");
+    }
+    requireString(sanitized, "slug");
+    requireString(sanitized, "label");
+    requireString(sanitized, "description");
+    optionalString(sanitized, "short_label");
+    optionalBoolean(sanitized, "is_filipino_context");
+    optionalBoolean(sanitized, "is_protected");
+    optionalNumber(sanitized, "sort_order");
+
+    if (sanitized.kind === "expense") {
+      requireString(sanitized, "category_id");
+      const { data: category, error } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("id", sanitized.category_id as string)
+        .eq("deleted", false)
+        .eq("is_active", true)
+        .or(`user_id.is.null,user_id.eq.${userId}`)
+        .maybeSingle();
+      if (error) throw new Error(`category_id validation failed: ${error.message}`);
+      if (!category) throw new Error("category_id does not reference an accessible active category");
+    } else if (sanitized.category_id !== undefined && sanitized.category_id !== null) {
+      throw new Error("category_id must not be set for non-expense subcategories");
+    }
+
+    sanitized.category_id = sanitized.kind === "expense" ? sanitized.category_id : null;
+    return sanitized;
+  }
+
+  if (entity === "transaction_templates") {
+    assertOnlyAllowed(payload, TEMPLATE_FIELDS);
+    const sanitized = sanitizePayload(payload, TEMPLATE_FIELDS);
+    requireString(sanitized, "transaction_type");
+    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
+      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+    }
+    requireString(sanitized, "name");
+    if (sanitized.amount_centavos != null) {
+      requirePositiveInteger(sanitized, "amount_centavos");
+    }
+    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
+    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    return sanitized;
+  }
+  if (entity === "transaction_drafts") {
+    assertOnlyAllowed(payload, DRAFT_FIELDS);
+    const sanitized = sanitizePayload(payload, DRAFT_FIELDS);
+    requireString(sanitized, "client_draft_id");
+    if (!sanitized.payload || typeof sanitized.payload !== "object") {
+      throw new Error("payload must be an object");
+    }
+    return sanitized;
+  }
+  if (entity === "recurring_transaction_templates") {
+    assertOnlyAllowed(payload, RECURRING_TEMPLATE_FIELDS);
+    const sanitized = sanitizePayload(payload, RECURRING_TEMPLATE_FIELDS);
+    requireString(sanitized, "transaction_type");
+    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
+      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+    }
+    requireString(sanitized, "name");
+    requirePositiveInteger(sanitized, "amount_centavos");
+    requireString(sanitized, "frequency");
+    if (!["daily", "weekly", "monthly", "quarterly", "yearly", "custom"].includes(sanitized.frequency as string)) {
+      throw new Error("frequency must be a valid schedule");
+    }
+    requireString(sanitized, "starts_on");
+    if (sanitized.interval_count != null) {
+      if (typeof sanitized.interval_count !== "number" || !Number.isInteger(sanitized.interval_count) || (sanitized.interval_count as number) <= 0) {
+        throw new Error("interval_count must be a positive integer");
+      }
+    }
+    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
+    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    return sanitized;
+  }
+  if (entity === "recurring_transaction_occurrences") {
+    assertOnlyAllowed(payload, RECURRING_OCCURRENCE_FIELDS);
+    const sanitized = sanitizePayload(payload, RECURRING_OCCURRENCE_FIELDS);
+    requireString(sanitized, "recurring_template_id");
+    requireString(sanitized, "scheduled_date");
+    // ponytail: verify the template exists and belongs to this user
+    const { data: template, error: templateErr } = await supabase
+      .from("recurring_transaction_templates")
       .select("id")
-      .eq("id", sanitized.category_id as string)
+      .eq("id", sanitized.recurring_template_id as string)
+      .eq("user_id", userId)
       .eq("deleted", false)
-      .eq("is_active", true)
-      .or(`user_id.is.null,user_id.eq.${userId}`)
       .maybeSingle();
-    if (error) throw new Error(`category_id validation failed: ${error.message}`);
-    if (!category) throw new Error("category_id does not reference an accessible active category");
-  } else if (sanitized.category_id !== undefined && sanitized.category_id !== null) {
-    throw new Error("category_id must not be set for non-expense subcategories");
+    if (templateErr) throw new Error(`recurring template validation failed: ${templateErr.message}`);
+    if (!template) throw new Error("recurring template not found or inaccessible");
+    return sanitized;
   }
 
-  sanitized.category_id = sanitized.kind === "expense" ? sanitized.category_id : null;
-  return sanitized;
+  throw new Error(`Unknown entity for create: ${entity}`);
 }
 
-function validateUpdatePayload(entity: string, payload: Record<string, unknown>): Record<string, unknown> {
+async function validateUpdatePayload(
+  supabase: SupabaseClient,
+  userId: string,
+  entity: string,
+  recordId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   let allowedFields: Set<string>;
   if (entity === "categories") {
     allowedFields = CATEGORY_UPDATE_FIELDS;
@@ -407,10 +598,20 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
     allowedFields = SUBCATEGORY_UPDATE_FIELDS;
   } else if (entity === "financial_accounts") {
     allowedFields = FINANCIAL_ACCOUNT_UPDATE_FIELDS;
+  } else if (entity === "transactions") {
+    allowedFields = TRANSACTION_UPDATE_FIELDS;
   } else if (entity === "income_sources") {
     allowedFields = INCOME_SOURCE_UPDATE_FIELDS;
   } else if (entity === "financial_obligations") {
     allowedFields = OBLIGATION_UPDATE_FIELDS;
+  } else if (entity === "transaction_templates") {
+    allowedFields = TEMPLATE_FIELDS;
+  } else if (entity === "transaction_drafts") {
+    allowedFields = DRAFT_FIELDS;
+  } else if (entity === "recurring_transaction_templates") {
+    allowedFields = RECURRING_TEMPLATE_FIELDS;
+  } else if (entity === "recurring_transaction_occurrences") {
+    allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
@@ -419,6 +620,52 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
   const sanitized = sanitizePayload(payload, allowedFields);
 
   for (const [key, value] of Object.entries(sanitized)) {
+    if (entity === "financial_accounts") {
+      if (key === "name" || key === "institution_name" || key === "opened_on" || key === "archived_at" || key === "notes") {
+        if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+        continue;
+      }
+      if (key === "status") {
+        if (typeof value !== "string") throw new Error("status must be a string");
+        if (value === "deleted") throw new Error("status 'deleted' must use the delete operation");
+        if (!["active", "archived"].includes(value)) throw new Error("status must be active or archived");
+        continue;
+      }
+      if (key === "opening_balance_centavos" || key === "current_balance_centavos" || key === "credit_limit_centavos") {
+        if (value != null) {
+          if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+            throw new Error(`${key} must be a finite integer or null`);
+          }
+          if (key === "credit_limit_centavos" && value < 0) throw new Error("credit_limit_centavos must be >= 0");
+        }
+        continue;
+      }
+      if (key === "sort_order") {
+        if (typeof value !== "number") throw new Error("sort_order must be a number");
+        continue;
+      }
+      if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+      continue;
+    }
+
+    if (entity === "transactions") {
+      if (key === "amount_centavos") {
+        if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+          throw new Error("amount_centavos must be a positive integer");
+        }
+        continue;
+      }
+      if (key === "subcategory_id" || key === "source_account_id" || key === "destination_account_id") {
+        if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+        continue;
+      }
+      if (key === "transaction_date" || key === "merchant_name" || key === "counterparty_name" || key === "notes") {
+        if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+        continue;
+      }
+      continue;
+    }
+
     if (key === "label" || key === "description" || key === "name") {
       if (typeof value !== "string") throw new Error(`${key} must be a string`);
       continue;
@@ -514,6 +761,35 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
     if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
   }
 
+  if (entity === "transactions") {
+    const { data: current, error } = await supabase
+      .from("transactions")
+      .select("id, transaction_type")
+      .eq("id", recordId)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw new Error(`transaction lookup failed: ${error.message}`);
+    if (!current) throw new Error("transaction not found or inaccessible");
+
+    const txType = current.transaction_type as string;
+    const src = sanitized.source_account_id ?? undefined;
+    const dst = sanitized.destination_account_id ?? undefined;
+    const sub = sanitized.subcategory_id ?? undefined;
+
+    if (txType === "income" || txType === "expense") {
+      if (sub && typeof sub === "string") {
+        await verifySubcategoryOwnership(supabase, userId, sub, txType);
+      }
+    }
+    if (src && typeof src === "string") {
+      await verifyAccountOwnership(supabase, userId, src);
+    }
+    if (dst && typeof dst === "string") {
+      await verifyAccountOwnership(supabase, userId, dst);
+    }
+  }
+
   if (entity === "financial_accounts") {
     if (sanitized.status && typeof sanitized.status === "string" && !["active", "archived"].includes(sanitized.status as string)) {
       throw new Error("status must be active or archived");
@@ -571,6 +847,30 @@ function validateUpdatePayload(entity: string, payload: Record<string, unknown>)
     const ends = sanitized.ends_on as string | undefined;
     if (starts !== undefined && ends !== undefined && starts > ends) {
       throw new Error("starts_on must be <= ends_on");
+    }
+  }
+
+  if (entity === "transaction_templates" || entity === "recurring_transaction_templates") {
+    const src = sanitized.source_account_id;
+    const dst = sanitized.destination_account_id;
+    const sub = sanitized.subcategory_id;
+    if (src && typeof src === "string") await verifyAccountOwnership(supabase, userId, src);
+    if (dst && typeof dst === "string") await verifyAccountOwnership(supabase, userId, dst);
+    if (sub && typeof sub === "string") await verifySubcategoryOwnership(supabase, userId, sub);
+  }
+
+  if (entity === "recurring_transaction_occurrences") {
+    const tid = sanitized.generated_transaction_id;
+    if (tid && typeof tid === "string") {
+      const { data: tx, error: txErr } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("id", tid)
+        .eq("user_id", userId)
+        .eq("deleted", false)
+        .maybeSingle();
+      if (txErr) throw new Error(`transaction lookup failed: ${txErr.message}`);
+      if (!tx) throw new Error("generated_transaction_id not found or inaccessible");
     }
   }
 
@@ -662,4 +962,59 @@ function filterPayloadFields(
     }
   }
   return filtered;
+}
+
+function requirePositiveInteger(payload: Record<string, unknown>, field: string): void {
+  const v = payload[field];
+  if (typeof v !== "number" || !Number.isInteger(v) || v <= 0) {
+    throw new Error(`${field} must be a positive integer`);
+  }
+}
+
+function optionalFiniteInteger(payload: Record<string, unknown>, field: string): void {
+  const v = payload[field];
+  if (v !== undefined && v !== null) {
+    if (typeof v !== "number" || !Number.isFinite(v) || !Number.isInteger(v)) {
+      throw new Error(`${field} must be a finite integer or null`);
+    }
+  }
+}
+
+async function verifyAccountOwnership(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("financial_accounts")
+    .select("id")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .eq("deleted", false)
+    .maybeSingle();
+  if (error) throw new Error(`account validation failed: ${error.message}`);
+  if (!data) throw new Error("account not found or inaccessible");
+}
+
+async function verifySubcategoryOwnership(
+  supabase: SupabaseClient,
+  userId: string,
+  subcategoryId: string,
+  kind?: string,
+): Promise<void> {
+  let query = supabase
+    .from("subcategories")
+    .select("id")
+    .eq("id", subcategoryId)
+    .eq("deleted", false)
+    .eq("is_active", true)
+    .or(`user_id.is.null,user_id.eq.${userId}`);
+
+  if (kind) {
+    query = query.eq("kind", kind);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(`subcategory validation failed: ${error.message}`);
+  if (!data) throw new Error("subcategory not found or inaccessible");
 }
