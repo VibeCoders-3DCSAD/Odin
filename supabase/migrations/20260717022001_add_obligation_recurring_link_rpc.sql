@@ -36,7 +36,7 @@ BEGIN
         frequency, interval_count, day_of_month, second_day_of_month,
         day_of_week, custom_rule, starts_on, ends_on, next_occurrence_date,
         last_generated_date, reminder_enabled, reminder_days_before, notes,
-        metadata, version, deleted, created_at, updated_at
+        created_at, updated_at
     ) VALUES (
         v_template_id, v_obligation.user_id, 'expense', 'active',
         v_obligation.name, v_obligation.amount_centavos,
@@ -45,8 +45,8 @@ BEGIN
         v_obligation.due_day_of_month, v_obligation.due_second_day_of_month,
         v_obligation.due_day_of_week, '{}', CURRENT_DATE, v_obligation.ends_on,
         v_next_date,
-        NULL, 0, 0, v_obligation.notes,
-        '{}', 1, 0, now(), now()
+        NULL, false, 0, v_obligation.notes,
+        now(), now()
     );
 
     UPDATE financial_obligations
