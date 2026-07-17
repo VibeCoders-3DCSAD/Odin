@@ -232,7 +232,6 @@ BEGIN
         institution_name,
         opened_on,
         sort_order,
-        notes,
         metadata,
         updated_at,
         version,
@@ -250,7 +249,6 @@ BEGIN
         p_payload->>'institution_name',
         (p_payload->>'opened_on')::date,
         COALESCE((p_payload->>'sort_order')::integer, 0),
-        p_payload->>'notes',
         '{}'::jsonb,
         v_now,
         1,
@@ -765,8 +763,7 @@ BEGIN
       CASE WHEN p_payload ? 'institution_name' THEN jsonb_build_object('institution_name', (SELECT to_jsonb(institution_name) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'opened_on' THEN jsonb_build_object('opened_on', (SELECT to_jsonb(opened_on) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
       CASE WHEN p_payload ? 'archived_at' THEN jsonb_build_object('archived_at', (SELECT to_jsonb(archived_at) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'sort_order' THEN jsonb_build_object('sort_order', (SELECT to_jsonb(sort_order) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END ||
-      CASE WHEN p_payload ? 'notes' THEN jsonb_build_object('notes', (SELECT to_jsonb(notes) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
+      CASE WHEN p_payload ? 'sort_order' THEN jsonb_build_object('sort_order', (SELECT to_jsonb(sort_order) FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id)) ELSE '{}'::jsonb END;
 
     IF p_payload ? 'status' AND (p_payload->>'status') = 'deleted' THEN
       UPDATE applied_operations
@@ -791,8 +788,7 @@ BEGIN
         institution_name = CASE WHEN p_payload ? 'institution_name' THEN p_payload->>'institution_name' ELSE institution_name END,
         opened_on = CASE WHEN p_payload ? 'opened_on' THEN (p_payload->>'opened_on')::date ELSE opened_on END,
         archived_at = CASE WHEN p_payload ? 'archived_at' THEN (p_payload->>'archived_at')::timestamptz ELSE archived_at END,
-        sort_order = CASE WHEN p_payload ? 'sort_order' THEN (p_payload->>'sort_order')::integer ELSE sort_order END,
-        notes = CASE WHEN p_payload ? 'notes' THEN p_payload->>'notes' ELSE notes END
+        sort_order = CASE WHEN p_payload ? 'sort_order' THEN (p_payload->>'sort_order')::integer ELSE sort_order END
     WHERE id = p_record_id
       AND user_id = v_user_id;
 

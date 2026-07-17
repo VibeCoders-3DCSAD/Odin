@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Funnel } from "phosphor-react-native";
 import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
 import { listTransactions, deleteTransaction, type TransactionFilters } from "../../local-db/repositories/ledger";
 import { listSubcategories } from "../../local-db/repositories/taxonomy";
@@ -60,6 +61,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [sortBy, setSortBy] = useState<string>("transaction_date");
   const [sortDir, setSortDir] = useState<string>("desc");
   const [dateRange, setDateRange] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
   const [editTarget, setEditTarget] = useState<Transaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -183,6 +185,16 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     return groups;
   }, [transactions]);
 
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (typeFilter !== "all") count++;
+    if (dateRange !== "all") count++;
+    if (sortBy !== "transaction_date" || sortDir !== "desc") count++;
+    return count;
+  }, [typeFilter, dateRange, sortBy, sortDir]);
+
+  const filterActive = showFilters || activeFilterCount > 0;
+
   if (editTarget) {
     return (
       <NewTransactionScreen
@@ -197,96 +209,43 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
 
   return (
     <View style={{ gap: 12 }}>
-      {/* Type filter chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-        {FILTER_TYPES.map((t) => (
-          <Pressable
-            key={t}
-            onPress={() => setTypeFilter(t)}
-            style={{
-              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-              backgroundColor: typeFilter === t ? palette.brand : palette.card,
-              borderWidth: 1,
-              borderColor: typeFilter === t ? palette.brand : palette.line,
-            }}
-          >
-            <Text style={{
-              fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
-              color: typeFilter === t ? "#fff" : palette.ink2,
+      {/* Search bar + filter icon */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          onSubmitEditing={load}
+          returnKeyType="search"
+          placeholder="Search transactions..."
+          placeholderTextColor={palette.mut}
+          style={{
+            flex: 1, height: 44, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
+            paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 13, color: palette.ink,
+            backgroundColor: palette.card,
+          }}
+        />
+        <Pressable
+          onPress={() => setShowFilters(true)}
+          style={{
+            width: 44, height: 44, borderRadius: 12, borderWidth: 1,
+            borderColor: filterActive ? palette.brand : palette.line,
+            backgroundColor: filterActive ? palette.brand : palette.card,
+            alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <Funnel size={20} color={filterActive ? "#fff" : palette.mut} weight="bold" />
+          {activeFilterCount > 0 && (
+            <View style={{
+              position: "absolute", top: -4, right: -4, minWidth: 16, height: 16,
+              borderRadius: 8, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center",
+              paddingHorizontal: 4,
             }}>
-              {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      {/* Date range chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-        {DATE_RANGES.map((r) => (
-          <Pressable
-            key={r}
-            onPress={() => setDateRange(r)}
-            style={{
-              paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-              backgroundColor: dateRange === r ? palette.brand : palette.card,
-              borderWidth: 1,
-              borderColor: dateRange === r ? palette.brand : palette.line,
-            }}
-          >
-            <Text style={{
-              fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
-              color: dateRange === r ? "#fff" : palette.ink2,
-            }}>
-              {r === "all" ? "Any time" : r === "week" ? "This week" : r === "month" ? "This month" : "This year"}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      {/* Search */}
-      <TextInput
-        value={search}
-        onChangeText={setSearch}
-        onSubmitEditing={load}
-        returnKeyType="search"
-        placeholder="Search transactions..."
-        placeholderTextColor={palette.mut}
-        style={{
-          height: 44, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
-          paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 13, color: palette.ink,
-          backgroundColor: palette.card,
-        }}
-      />
-
-      {/* Sort */}
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {SORT_OPTIONS.map((opt) => {
-          const active = sortBy === opt.key;
-          return (
-            <Pressable
-              key={opt.key}
-              onPress={() => {
-                if (active) {
-                  setSortDir(sortDir === "desc" ? "asc" : "desc");
-                } else {
-                  setSortBy(opt.key);
-                }
-              }}
-              style={{
-                paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
-                backgroundColor: active ? palette.brand : palette.card,
-                flexDirection: "row", alignItems: "center", gap: 4,
-              }}
-            >
-              <Text style={{
-                fontFamily: "Manrope", fontWeight: "600", fontSize: 11,
-                color: active ? "#fff" : palette.ink2,
-              }}>
-                {opt.label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
+              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: "#fff" }}>
+                {activeFilterCount}
               </Text>
-            </Pressable>
-          );
-        })}
+            </View>
+          )}
+        </Pressable>
       </View>
 
       {/* Transaction list */}
@@ -356,6 +315,141 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
           </View>
         ))
       )}
+
+      {/* Filter bottom drawer */}
+      <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}
+          onPress={() => setShowFilters(false)}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: palette.shell, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+              padding: 20, paddingBottom: 32,
+            }}
+          >
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginBottom: 16 }} />
+
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink, marginBottom: 16 }}>
+              Filter & Sort
+            </Text>
+
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
+              Type
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
+              {FILTER_TYPES.map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setTypeFilter(t)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                    backgroundColor: typeFilter === t ? palette.brand : palette.card,
+                    borderWidth: 1,
+                    borderColor: typeFilter === t ? palette.brand : palette.line,
+                  }}
+                >
+                  <Text style={{
+                    fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
+                    color: typeFilter === t ? "#fff" : palette.ink2,
+                  }}>
+                    {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
+              Date Range
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
+              {DATE_RANGES.map((r) => (
+                <Pressable
+                  key={r}
+                  onPress={() => setDateRange(r)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                    backgroundColor: dateRange === r ? palette.brand : palette.card,
+                    borderWidth: 1,
+                    borderColor: dateRange === r ? palette.brand : palette.line,
+                  }}
+                >
+                  <Text style={{
+                    fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
+                    color: dateRange === r ? "#fff" : palette.ink2,
+                  }}>
+                    {r === "all" ? "Any time" : r === "week" ? "This week" : r === "month" ? "This month" : "This year"}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
+              Sort By
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
+              {SORT_OPTIONS.map((opt) => {
+                const active = sortBy === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => {
+                      if (active) {
+                        setSortDir(sortDir === "desc" ? "asc" : "desc");
+                      } else {
+                        setSortBy(opt.key);
+                      }
+                    }}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+                      backgroundColor: active ? palette.brand : palette.card,
+                      flexDirection: "row", alignItems: "center", gap: 4,
+                    }}
+                  >
+                    <Text style={{
+                      fontFamily: "Manrope", fontWeight: "600", fontSize: 11,
+                      color: active ? "#fff" : palette.ink2,
+                    }}>
+                      {opt.label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable
+                onPress={() => {
+                  setTypeFilter("all");
+                  setDateRange("all");
+                  setSortBy("transaction_date");
+                  setSortDir("desc");
+                }}
+                style={{
+                  flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: palette.line,
+                  alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>
+                  Reset
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setShowFilters(false)}
+                style={{
+                  flex: 1, minHeight: 48, borderRadius: 14, backgroundColor: palette.brand,
+                  alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#fff" }}>
+                  Apply
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Delete confirmation modal */}
       <Modal visible={deleteTarget !== null} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>

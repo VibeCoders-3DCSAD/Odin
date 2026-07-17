@@ -37,6 +37,7 @@ BEGIN
   END IF;
 
   IF p_entity NOT IN ('categories', 'subcategories', 'financial_accounts', 'transactions',
+                       'income_sources', 'financial_obligations',
                        'transaction_templates', 'transaction_drafts',
                        'recurring_transaction_templates', 'recurring_transaction_occurrences') THEN
     RAISE EXCEPTION 'entity % is not syncable', p_entity;
@@ -198,6 +199,94 @@ BEGIN
           p_payload->>'notes', '{}'::jsonb, v_now, 1, false
         );
 
+      WHEN 'income_sources' THEN
+        INSERT INTO income_sources (
+          id, user_id, name, income_type, frequency,
+          expected_amount_centavos, min_amount_centavos, max_amount_centavos,
+          payday_day_of_month, payday_second_day_of_month,
+          payday_day_of_week, payday_second_day_of_week,
+          next_expected_date, estimated_interval_days,
+          is_active, notes, metadata, updated_at, version, deleted
+        ) VALUES (
+          p_record_id, v_user_id,
+          p_payload->>'name',
+          (p_payload->>'income_type')::odin_income_type,
+          (p_payload->>'frequency')::odin_income_frequency,
+          (p_payload->>'expected_amount_centavos')::bigint,
+          (p_payload->>'min_amount_centavos')::bigint,
+          (p_payload->>'max_amount_centavos')::bigint,
+          (p_payload->>'payday_day_of_month')::integer,
+          (p_payload->>'payday_second_day_of_month')::integer,
+          (p_payload->>'payday_day_of_week')::integer,
+          (p_payload->>'payday_second_day_of_week')::integer,
+          (p_payload->>'next_expected_date')::date,
+          (p_payload->>'estimated_interval_days')::integer,
+          COALESCE((p_payload->>'is_active')::boolean, true),
+          p_payload->>'notes',
+          '{}'::jsonb, v_now, 1, false
+        );
+
+      WHEN 'financial_obligations' THEN
+        PERFORM 1
+        FROM subcategories
+        WHERE id = (p_payload->>'subcategory_id')::uuid
+          AND kind = 'expense'
+          AND deleted = false
+          AND is_active = true
+          AND (user_id = v_user_id OR user_id IS NULL);
+
+        IF NOT FOUND THEN
+          UPDATE applied_operations
+          SET result = jsonb_build_object('status', 'rejected', 'reason', 'subcategory_id does not reference an accessible active expense subcategory')
+          WHERE operation_id = p_operation_id;
+          RETURN QUERY SELECT 'rejected'::text, 'subcategory_id does not reference an accessible active expense subcategory'::text, NULL::integer, NULL::text[];
+          RETURN;
+        END IF;
+
+        IF (p_payload->>'recurring_template_id') IS NOT NULL THEN
+          PERFORM 1
+          FROM recurring_transaction_templates
+          WHERE id = (p_payload->>'recurring_template_id')::uuid
+            AND user_id = v_user_id;
+          IF NOT FOUND THEN
+            UPDATE applied_operations
+            SET result = jsonb_build_object('status', 'rejected', 'reason', 'recurring_template_id does not reference an accessible recurring template')
+            WHERE operation_id = p_operation_id;
+            RETURN QUERY SELECT 'rejected'::text, 'recurring_template_id does not reference an accessible recurring template'::text, NULL::integer, NULL::text[];
+            RETURN;
+          END IF;
+        END IF;
+
+        INSERT INTO financial_obligations (
+          id, user_id, subcategory_id, recurring_template_id,
+          name, status, amount_centavos, frequency,
+          due_day_of_month, due_second_day_of_month,
+          due_day_of_week, due_second_day_of_week, due_month,
+          is_family_support, is_dependent_support, protected_by_default,
+          starts_on, ends_on, notes,
+          metadata, updated_at, version, deleted
+        ) VALUES (
+          p_record_id, v_user_id,
+          (p_payload->>'subcategory_id')::uuid,
+          (p_payload->>'recurring_template_id')::uuid,
+          p_payload->>'name',
+          'active',
+          (p_payload->>'amount_centavos')::bigint,
+          (p_payload->>'frequency')::odin_recurring_frequency,
+          (p_payload->>'due_day_of_month')::integer,
+          (p_payload->>'due_second_day_of_month')::integer,
+          (p_payload->>'due_day_of_week')::integer,
+          (p_payload->>'due_second_day_of_week')::integer,
+          (p_payload->>'due_month')::integer,
+          COALESCE((p_payload->>'is_family_support')::boolean, false),
+          COALESCE((p_payload->>'is_dependent_support')::boolean, false),
+          COALESCE((p_payload->>'protected_by_default')::boolean, true),
+          (p_payload->>'starts_on')::date,
+          (p_payload->>'ends_on')::date,
+          p_payload->>'notes',
+          '{}'::jsonb, v_now, 1, false
+        );
+
       WHEN 'transaction_templates' THEN
         INSERT INTO transaction_templates (
           id, user_id, transaction_type, status, name, amount_centavos,
@@ -294,6 +383,12 @@ BEGIN
     WHEN 'financial_accounts' THEN
       SELECT version, deleted INTO v_current_version, v_deleted_check
       FROM financial_accounts WHERE id = p_record_id AND user_id = v_user_id FOR UPDATE;
+    WHEN 'income_sources' THEN
+      SELECT version, deleted INTO v_current_version, v_deleted_check
+      FROM income_sources WHERE id = p_record_id AND user_id = v_user_id FOR UPDATE;
+    WHEN 'financial_obligations' THEN
+      SELECT version, deleted INTO v_current_version, v_deleted_check
+      FROM financial_obligations WHERE id = p_record_id AND user_id = v_user_id FOR UPDATE;
     WHEN 'transactions' THEN
       SELECT version, deleted, transaction_type,
              source_account_id, destination_account_id, subcategory_id
@@ -337,6 +432,12 @@ BEGIN
         UPDATE subcategories SET deleted = true, is_active = false WHERE id = p_record_id AND user_id = v_user_id;
       WHEN 'financial_accounts' THEN
         UPDATE financial_accounts SET deleted = true, status = 'deleted', deleted_at = v_now
+        WHERE id = p_record_id AND user_id = v_user_id;
+      WHEN 'income_sources' THEN
+        UPDATE income_sources SET deleted = true, is_active = false
+        WHERE id = p_record_id AND user_id = v_user_id;
+      WHEN 'financial_obligations' THEN
+        UPDATE financial_obligations SET deleted = true, status = 'deleted'
         WHERE id = p_record_id AND user_id = v_user_id;
       WHEN 'transactions' THEN
         UPDATE transactions SET deleted = true, status = 'deleted', deleted_at = v_now
@@ -416,6 +517,39 @@ BEGIN
           institution_name = CASE WHEN p_payload ? 'institution_name' THEN p_payload->>'institution_name' ELSE institution_name END,
           opened_on = CASE WHEN p_payload ? 'opened_on' THEN (p_payload->>'opened_on')::date ELSE opened_on END,
           sort_order = CASE WHEN p_payload ? 'sort_order' THEN (p_payload->>'sort_order')::integer ELSE sort_order END
+      WHERE id = p_record_id AND user_id = v_user_id;
+
+    WHEN 'income_sources' THEN
+      UPDATE income_sources
+      SET name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
+          income_type = CASE WHEN p_payload ? 'income_type' THEN (p_payload->>'income_type')::odin_income_type ELSE income_type END,
+          frequency = CASE WHEN p_payload ? 'frequency' THEN (p_payload->>'frequency')::odin_income_frequency ELSE frequency END,
+          expected_amount_centavos = CASE WHEN p_payload ? 'expected_amount_centavos' THEN (p_payload->>'expected_amount_centavos')::bigint ELSE expected_amount_centavos END,
+          min_amount_centavos = CASE WHEN p_payload ? 'min_amount_centavos' THEN (p_payload->>'min_amount_centavos')::bigint ELSE min_amount_centavos END,
+          max_amount_centavos = CASE WHEN p_payload ? 'max_amount_centavos' THEN (p_payload->>'max_amount_centavos')::bigint ELSE max_amount_centavos END,
+          payday_day_of_month = CASE WHEN p_payload ? 'payday_day_of_month' THEN (p_payload->>'payday_day_of_month')::integer ELSE payday_day_of_month END,
+          payday_second_day_of_month = CASE WHEN p_payload ? 'payday_second_day_of_month' THEN (p_payload->>'payday_second_day_of_month')::integer ELSE payday_second_day_of_month END,
+          payday_day_of_week = CASE WHEN p_payload ? 'payday_day_of_week' THEN (p_payload->>'payday_day_of_week')::integer ELSE payday_day_of_week END,
+          payday_second_day_of_week = CASE WHEN p_payload ? 'payday_second_day_of_week' THEN (p_payload->>'payday_second_day_of_week')::integer ELSE payday_second_day_of_week END,
+          next_expected_date = CASE WHEN p_payload ? 'next_expected_date' THEN (p_payload->>'next_expected_date')::date ELSE next_expected_date END,
+          estimated_interval_days = CASE WHEN p_payload ? 'estimated_interval_days' THEN (p_payload->>'estimated_interval_days')::integer ELSE estimated_interval_days END,
+          is_active = CASE WHEN p_payload ? 'is_active' THEN (p_payload->>'is_active')::boolean ELSE is_active END,
+          notes = CASE WHEN p_payload ? 'notes' THEN p_payload->>'notes' ELSE notes END
+      WHERE id = p_record_id AND user_id = v_user_id;
+
+    WHEN 'financial_obligations' THEN
+      UPDATE financial_obligations
+      SET name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
+          amount_centavos = CASE WHEN p_payload ? 'amount_centavos' THEN (p_payload->>'amount_centavos')::bigint ELSE amount_centavos END,
+          frequency = CASE WHEN p_payload ? 'frequency' THEN (p_payload->>'frequency')::odin_recurring_frequency ELSE frequency END,
+          due_day_of_month = CASE WHEN p_payload ? 'due_day_of_month' THEN (p_payload->>'due_day_of_month')::integer ELSE due_day_of_month END,
+          due_second_day_of_month = CASE WHEN p_payload ? 'due_second_day_of_month' THEN (p_payload->>'due_second_day_of_month')::integer ELSE due_second_day_of_month END,
+          due_day_of_week = CASE WHEN p_payload ? 'due_day_of_week' THEN (p_payload->>'due_day_of_week')::integer ELSE due_day_of_week END,
+          due_second_day_of_week = CASE WHEN p_payload ? 'due_second_day_of_week' THEN (p_payload->>'due_second_day_of_week')::integer ELSE due_second_day_of_week END,
+          due_month = CASE WHEN p_payload ? 'due_month' THEN (p_payload->>'due_month')::integer ELSE due_month END,
+          starts_on = CASE WHEN p_payload ? 'starts_on' THEN (p_payload->>'starts_on')::date ELSE starts_on END,
+          ends_on = CASE WHEN p_payload ? 'ends_on' THEN (p_payload->>'ends_on')::date ELSE ends_on END,
+          notes = CASE WHEN p_payload ? 'notes' THEN p_payload->>'notes' ELSE notes END
       WHERE id = p_record_id AND user_id = v_user_id;
 
     WHEN 'transactions' THEN

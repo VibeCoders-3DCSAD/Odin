@@ -267,7 +267,7 @@ async function validateCreatePayload(
   entity: string,
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (entity === "categories" || entity === "subcategories") {
+  if (entity === "categories" || entity === "subcategories" || entity === "transactions") {
     return validateTaxonomyCreatePayload(supabase, userId, entity, payload);
   }
 
