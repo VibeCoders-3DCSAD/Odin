@@ -23,10 +23,13 @@ DECLARE
     v_scheduled_date date;
     v_next_occurrence date;
     v_error_message text;
-    v_bumped timestamptz;
 BEGIN
     v_as_of := COALESCE(p_as_of, CURRENT_DATE);
     v_limit := COALESCE(p_limit, 200);
+
+    IF auth.uid() IS NOT NULL AND p_user_id IS NOT NULL AND p_user_id <> auth.uid() THEN
+        RAISE EXCEPTION 'Not authorized' USING ERRCODE = '42501';
+    END IF;
 
     FOR v_template IN
         SELECT t.*
