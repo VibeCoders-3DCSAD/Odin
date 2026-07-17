@@ -306,7 +306,9 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
 
   const amountInvalid = amount.trim() !== "" && parseSafeCents(amount) === null;
   const dueDayInvalid = dueDay.trim() !== "" && parseDayOfMonth(dueDay) === null;
-  const dueSecondDayInvalid = dueSecondDay.trim() !== "" && parseDayOfMonth(dueSecondDay) === null;
+  const dueSecondDayInvalid = dueSecondDay.trim() !== "" && (
+    parseDayOfMonth(dueSecondDay) === null || (frequency === "semi_monthly" && dueDay.trim() !== "" && dueSecondDay.trim() === dueDay.trim())
+  );
 
   const showDayOfMonth = frequency === "monthly" || frequency === "semi_monthly";
   const showDayOfWeek = frequency === "weekly" || frequency === "biweekly";
@@ -324,6 +326,13 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
     else if (cents < 0) errors.push("Amount must be >= 0.");
 
     if (dueDay.trim() && parseDayOfMonth(dueDay) === null) errors.push("Due day must be 1-31.");
+
+    if (frequency === "semi_monthly" && dueDay.trim() && dueSecondDay.trim() && dueSecondDay.trim() === dueDay.trim()) {
+      errors.push("Second due day must differ from the first.");
+    }
+    if (frequency === "biweekly" && dueDayOfWeek === dueSecondDayOfWeek && dueDayOfWeek !== null) {
+      errors.push("Second due day of week must differ from the first.");
+    }
 
     if (errors.length > 0) { setFormError(errors.join("\n")); return; }
 
@@ -554,27 +563,30 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
                               ))}
                             </View>
                           </View>
-                          {frequency === "biweekly" && (
-                            <View>
-                              <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                                2ND DUE DAY OF WEEK
-                              </Text>
-                              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                                {WEEKDAYS.map((day, idx) => (
-                                  <Pressable
-                                    key={day}
-                                    onPress={() => setDueSecondDayOfWeek(idx)}
-                                    accessibilityRole="radio"
-                                    accessibilityLabel={day}
-                                    accessibilityState={{ checked: dueSecondDayOfWeek === idx }}
-                                    style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueSecondDayOfWeek === idx ? P.brand : P.card }}
-                                  >
-                                    <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueSecondDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
-                                  </Pressable>
-                                ))}
-                              </View>
-                            </View>
-                          )}
+                           {frequency === "biweekly" && (
+                             <View>
+                               <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                                 2ND DUE DAY OF WEEK
+                               </Text>
+                               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                 {WEEKDAYS.map((day, idx) => {
+                                   const isFirst = idx === dueDayOfWeek;
+                                   return (
+                                   <Pressable
+                                     key={day}
+                                     onPress={() => { if (!isFirst) setDueSecondDayOfWeek(idx); }}
+                                     accessibilityRole="radio"
+                                     accessibilityLabel={day}
+                                     accessibilityState={{ checked: dueSecondDayOfWeek === idx, disabled: isFirst }}
+                                     style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueSecondDayOfWeek === idx ? P.brand : P.card, opacity: isFirst ? 0.35 : 1 }}
+                                   >
+                                     <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueSecondDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
+                                   </Pressable>
+                                   );
+                                 })}
+                               </View>
+                             </View>
+                           )}
                         </>
                       )}
 
