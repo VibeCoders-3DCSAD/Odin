@@ -12,6 +12,7 @@ import accountDeletionRoutes from "./routes/account-deletion-requests.js";
 import onboardingRoutes from "./routes/onboarding.js";
 import profileRoutes from "./routes/profile.js";
 import syncRoutes from "./routes/sync.js";
+import recurringRoutes from "./routes/recurring.js";
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use("/odin/api", accountDeletionRoutes);
 app.use("/odin/api", onboardingRoutes);
 app.use("/odin/api", profileRoutes);
 app.use("/odin/api/sync", syncRoutes);
+app.use("/odin/api/recurring", recurringRoutes);
 
 app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };
