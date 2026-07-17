@@ -74,7 +74,7 @@ BEGIN
         'd290f1ee-6c54-4b01-90e6-d701748f0851',
         'Test Obligation', 'active', 50000,
         'monthly', 15, CURRENT_DATE,
-        '{}', 1, 0, now(), now()
+        '{}', 1, false, now(), now()
     );
 
     v_template_id := odin.create_recurring_template_from_obligation(
