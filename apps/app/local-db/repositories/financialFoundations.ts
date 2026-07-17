@@ -1262,6 +1262,65 @@ export async function updateFinancialObligation(
   return result!;
 }
 
+export async function linkObligationToRecurringTemplate(
+  userId: string,
+  deviceId: string,
+  obligationId: string,
+  templateId: string | null,
+): Promise<{ obligation: FinancialObligation; operation: SyncOperation }> {
+  return updateFinancialObligation(userId, deviceId, obligationId, {
+    recurringTemplateId: templateId,
+  });
+}
+
+export async function automateObligation(
+  userId: string,
+  deviceId: string,
+  obligationId: string,
+  overrides?: {
+    frequency?: ObligationFrequency;
+    dayOfMonth?: number | null;
+    dayOfWeek?: number | null;
+    startDate?: string;
+  },
+): Promise<{ obligation: FinancialObligation; template: import("./recurringTransactions").RecurringTemplate; operation: SyncOperation }> {
+  const { getRecurringTemplate, createRecurringTemplate } = await import("./recurringTransactions");
+
+  const obligation = await getFinancialObligation(userId, obligationId);
+  if (!obligation) throw new LocalDbError("NOT_FOUND", "obligation not found");
+  if (obligation.recurringTemplateId) throw new LocalDbError("VALIDATION_ERROR", "obligation already linked to a recurring template");
+
+  let freq = overrides?.frequency ?? obligation.frequency;
+  let intervalCount = 1;
+  let dayOfMonth = overrides?.dayOfMonth !== undefined ? overrides.dayOfMonth : (obligation.dueDayOfMonth ?? undefined);
+  let secondDayOfMonth = obligation.dueSecondDayOfMonth ?? undefined;
+  let dayOfWeek = overrides?.dayOfWeek !== undefined ? overrides.dayOfWeek : (obligation.dueDayOfWeek ?? undefined);
+
+  if (freq === "biweekly") {
+    freq = "weekly";
+    intervalCount = 2;
+  } else if (freq === "semi_monthly") {
+    freq = "monthly";
+  }
+
+  const { template } = await createRecurringTemplate(userId, deviceId, {
+    transaction_type: "expense",
+    name: obligation.name,
+    amount_centavos: obligation.amountCentavos,
+    frequency: freq,
+    interval_count: intervalCount,
+    day_of_month: dayOfMonth ?? undefined,
+    second_day_of_month: secondDayOfMonth ?? undefined,
+    day_of_week: dayOfWeek ?? undefined,
+    starts_on: overrides?.startDate ?? new Date().toISOString().slice(0, 10),
+    subcategory_id: obligation.subcategoryId,
+    notes: obligation.notes ?? undefined,
+  });
+
+  const { obligation: updated } = await linkObligationToRecurringTemplate(userId, deviceId, obligationId, template.id);
+  return { obligation: updated, template, operation: null as unknown as SyncOperation };
+}
+
 export async function deleteFinancialObligation(
   userId: string,
   deviceId: string,
