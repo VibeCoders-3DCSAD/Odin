@@ -62,12 +62,19 @@ $$;
 DO $$
 DECLARE
     v_user_id uuid;
+    v_subcategory_id uuid;
     v_template_id uuid;
     v_profile_exists boolean;
 BEGIN
     SELECT id INTO v_user_id FROM auth.users LIMIT 1;
     IF NOT FOUND THEN
         RAISE NOTICE 'Skipping inline tests: no auth.users row exists';
+        RETURN;
+    END IF;
+
+    SELECT id INTO v_subcategory_id FROM subcategories WHERE kind = 'expense' LIMIT 1;
+    IF NOT FOUND THEN
+        RAISE NOTICE 'Skipping inline tests: no expense subcategory exists';
         RETURN;
     END IF;
 
@@ -84,7 +91,7 @@ BEGIN
         metadata, version, deleted, created_at, updated_at
     ) VALUES (
         'f1000000-0000-0000-0000-000000000001', v_user_id,
-        'd290f1ee-6c54-4b01-90e6-d701748f0851',
+        v_subcategory_id,
         'Test Obligation', 'active', 50000,
         'monthly', 15, CURRENT_DATE,
         '{}', 1, false, now(), now()
