@@ -61,10 +61,23 @@ $$;
 
 DO $$
 DECLARE
-    v_obligation_id uuid;
-    v_user_id uuid := '00000000-0000-0000-0000-000000000001';
+    v_user_id uuid;
     v_template_id uuid;
+    v_profile_exists boolean;
 BEGIN
+    SELECT id INTO v_user_id FROM auth.users LIMIT 1;
+    IF NOT FOUND THEN
+        RAISE NOTICE 'Skipping inline tests: no auth.users row exists';
+        RETURN;
+    END IF;
+
+    SELECT true INTO v_profile_exists FROM profiles WHERE user_id = v_user_id LIMIT 1;
+    IF NOT FOUND THEN
+        INSERT INTO profiles (user_id, display_name)
+        VALUES (v_user_id, 'Test Profile')
+        ON CONFLICT DO NOTHING;
+    END IF;
+
     INSERT INTO financial_obligations (
         id, user_id, subcategory_id, name, status, amount_centavos,
         frequency, due_day_of_month, starts_on,
