@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
+import { randomUUID } from "../uuid";
 
 const VALID_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "loan", "other"] as const;
 const VALID_STATUSES = ["active", "archived", "deleted"] as const;
@@ -150,7 +151,7 @@ export async function createFinancialAccount(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
   const openingBalance = input.opening_balance_centavos ?? 0;
   const metadata = "{}";

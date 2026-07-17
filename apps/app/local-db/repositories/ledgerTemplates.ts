@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
+import { randomUUID } from "../uuid";
 
 type TemplateRow = {
   id: string;
@@ -172,7 +173,7 @@ export async function createTemplate(
   }
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
 
   let result: { template: TransactionTemplate; operation: SyncOperation };
@@ -329,7 +330,7 @@ export async function saveDraft(
   input: SaveDraftInput,
 ): Promise<TransactionDraft> {
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
 
   let result: TransactionDraft;
