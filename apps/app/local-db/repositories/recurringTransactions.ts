@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
+import { randomUUID } from "../uuid";
 
 type RecurringTemplateRow = {
   id: string;
@@ -242,7 +243,7 @@ export async function createRecurringTemplate(
   if (!input.starts_on) throw new LocalDbError("VALIDATION_ERROR", "starts_on is required");
 
   const db = await getDb();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   const ts = now();
 
   let result: { template: RecurringTemplate; operation: SyncOperation };
@@ -431,7 +432,7 @@ export async function generateNextOccurrence(
     }
 
     // Generate the transaction directly with recurring metadata
-    const txId = crypto.randomUUID();
+    const txId = randomUUID();
     try {
       const sourceId = template.transaction_type === "expense" || template.transaction_type === "transfer"
         ? template.source_account_id! : null;
@@ -504,7 +505,7 @@ export async function generateNextOccurrence(
       });
     } catch (e) {
       // ponytail: if transaction creation fails, mark failure and continue
-      const occId = crypto.randomUUID();
+      const occId = randomUUID();
       await db.runAsync(
         `INSERT INTO recurring_transaction_occurrences
           (id, recurring_template_id, user_id, scheduled_date, status, failure_reason,
@@ -520,7 +521,7 @@ export async function generateNextOccurrence(
     // ponytail: transaction already created with entry_source='recurring' and recurring_template_id
 
     // Create occurrence record
-    const occId = crypto.randomUUID();
+    const occId = randomUUID();
     await db.runAsync(
       `INSERT INTO recurring_transaction_occurrences
         (id, recurring_template_id, user_id, scheduled_date, status,

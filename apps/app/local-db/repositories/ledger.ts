@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
+import { randomUUID } from "../uuid";
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
@@ -488,7 +489,7 @@ export async function createIncome(
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const db = await getDb();
   const ts = now();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
 
   let result: { transaction: Transaction; operation: SyncOperation };
 
@@ -538,7 +539,7 @@ export async function createExpense(
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const db = await getDb();
   const ts = now();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
 
   let result: { transaction: Transaction; operation: SyncOperation };
 
@@ -588,7 +589,7 @@ export async function createTransfer(
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const db = await getDb();
   const ts = now();
-  const id = crypto.randomUUID();
+  const id = randomUUID();
 
   let result: { transaction: Transaction; operation: SyncOperation };
 
