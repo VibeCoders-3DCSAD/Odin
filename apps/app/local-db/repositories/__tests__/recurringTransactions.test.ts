@@ -152,7 +152,7 @@ describe("computeNextOccurrenceDate", () => {
     expect(computeNextOccurrenceDate(tpl)).toBe("2024-01-15");
   });
 
-  it("handles semi_monthly on 1st and 15th from Jan 16 (next month)", () => {
+  it("handles semi_monthly from Jan 16 (next month)", () => {
     setNow("2024-01-16");
     const tpl = makeTemplate({
       frequency: "semi_monthly", interval_count: 1, starts_on: "2024-01-16",
@@ -161,7 +161,7 @@ describe("computeNextOccurrenceDate", () => {
     expect(computeNextOccurrenceDate(tpl)).toBe("2024-02-01");
   });
 
-  it("handles monthly with both day_of_month and second_day_of_month", () => {
+  it("handles monthly with both dom and sdom", () => {
     setNow("2024-01-10");
     const tpl = makeTemplate({
       frequency: "monthly", interval_count: 1, starts_on: "2024-01-10",
@@ -192,5 +192,29 @@ describe("computeNextOccurrenceDate", () => {
       frequency: "monthly", interval_count: 2, starts_on: "2024-04-30", day_of_month: 31,
     });
     expect(computeNextOccurrenceDate(tpl)).toBe("2024-06-30");
+  });
+
+  it("computes initial next_occurrence_date from starts_on with day_of_month alignment", () => {
+    const tpl = makeTemplate({
+      frequency: "monthly", interval_count: 1, starts_on: "2024-01-15", day_of_month: 31,
+    });
+    const asOf = new Date("2024-01-15T00:00:00Z");
+    expect(computeNextOccurrenceDate(tpl, asOf)).toBe("2024-01-31");
+  });
+
+  it("computes initial next_occurrence_date from starts_on with day_of_week alignment", () => {
+    const tpl = makeTemplate({
+      frequency: "weekly", interval_count: 1, starts_on: "2024-07-17", day_of_week: 1,
+    });
+    const asOf = new Date("2024-07-17T00:00:00Z");
+    expect(computeNextOccurrenceDate(tpl, asOf)).toBe("2024-07-22");
+  });
+
+  it("computes initial next_occurrence_date with no alignment (starts_on + interval)", () => {
+    const tpl = makeTemplate({
+      frequency: "monthly", interval_count: 1, starts_on: "2024-01-15",
+    });
+    const asOf = new Date("2024-01-15T00:00:00Z");
+    expect(computeNextOccurrenceDate(tpl, asOf)).toBe("2024-02-15");
   });
 });
