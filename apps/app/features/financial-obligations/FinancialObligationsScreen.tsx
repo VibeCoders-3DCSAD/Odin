@@ -20,6 +20,9 @@ import {
   PencilSimple,
   TrashSimple,
   ShieldCheck,
+  Gear,
+  LinkSimple,
+  LinkBreak,
 } from "phosphor-react-native";
 import {
   listFinancialObligations,
@@ -33,6 +36,9 @@ import {
 } from "../../local-db/repositories/financialFoundations";
 import { listCategoryGroups, listCategories, listSubcategories, type Category, type CategoryGroup, type Subcategory } from "../../local-db/repositories/taxonomy";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
+import { listRecurringTemplates, type RecurringTemplate } from "../../local-db/repositories/recurringTransactions";
+import { linkObligationToRecurringTemplate } from "../../local-db/repositories/financialFoundations";
+import AutomateObligationSheet from "./components/AutomateObligationSheet";
 
 const P = {
   shell: "#fcf8f0", brand: "#013220", brandMedium: "#0E6D46",
@@ -77,19 +83,24 @@ type Props = { userId: string; deviceId: string; onBack: () => void; onSyncReque
 export default function FinancialObligationsScreen({ userId, deviceId, onBack, onSyncRequested }: Props) {
   const [obligations, setObligations] = useState<FinancialObligation[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editing, setEditing] = useState<FinancialObligation | null>(null);
+  const [automateTarget, setAutomateTarget] = useState<FinancialObligation | null>(null);
+  const [pendingActions, setPendingActions] = useState<Record<string, "automating" | "unlinking">>({});
   const [defaultFrequency, setDefaultFrequency] = useState<ObligationFrequency>("monthly");
 
   const load = useCallback(async () => {
-    const [obs, subs, incomes] = await Promise.all([
+    const [obs, subs, incomes, tmpls] = await Promise.all([
       listFinancialObligations(userId),
       listSubcategories(userId, undefined, "expense"),
       listIncomeSources(userId),
+      listRecurringTemplates(userId),
     ]);
     setObligations(obs);
     setSubcategories(subs);
+    setTemplates(tmpls);
     if (incomes.length > 0 && incomes[0]) {
       const freq = incomes[0].frequency as ObligationFrequency;
       if (FREQUENCIES.includes(freq)) setDefaultFrequency(freq);
@@ -116,6 +127,28 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack, o
     ]);
   };
 
+  const handleAutomate = (o: FinancialObligation) => {
+    setAutomateTarget(o);
+  };
+
+  const handleUnlink = (o: FinancialObligation) => {
+    Alert.alert(`Unlink "${o.name}"?`, "The recurring template will stay active but this obligation will no longer be linked to it.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Unlink", style: "destructive", onPress: async () => {
+          setPendingActions((prev) => ({ ...prev, [o.id]: "unlinking" }));
+          try {
+            await linkObligationToRecurringTemplate(userId, deviceId, o.id, null);
+            await load();
+            onSyncRequested?.();
+          } finally {
+            setPendingActions((prev) => { const n = { ...prev }; delete n[o.id]; return n; });
+          }
+        },
+      },
+    ]);
+  };
+
   const getSubcategoryName = (id: string) => subcategories.find((s) => s.id === id)?.label ?? id;
 
   return (
@@ -133,28 +166,76 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack, o
           <Text style={{ marginTop: 4, fontSize: 13, fontFamily: "Manrope", color: P.muted }}>Tap + to add your first obligation</Text>
         </View>
       ) : (
-        obligations.map((o) => (
-          <View key={o.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: P.white, borderRadius: 12, marginBottom: 8, padding: 12, borderWidth: 1, borderColor: P.line }}>
-            <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: P.card, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-              <CalendarBlank size={22} color={P.brandMedium} weight="fill" />
+        obligations.map((o) => {
+          const linkedTemplate = o.recurringTemplateId
+            ? templates.find((t) => t.id === o.recurringTemplateId) ?? null
+            : null;
+          const action = pendingActions[o.id];
+          return (
+          <View key={o.id} style={{ backgroundColor: P.white, borderRadius: 12, marginBottom: 8, padding: 12, borderWidth: 1, borderColor: P.line }}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: P.card, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+                <CalendarBlank size={22} color={P.brandMedium} weight="fill" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "600", color: P.ink }}>{o.name}</Text>
+                <Text style={{ fontSize: 12, fontFamily: "Manrope", color: P.muted, marginTop: 2 }}>
+                  {getSubcategoryName(o.subcategoryId)} · {o.frequency} · {formatPeso(o.amountCentavos)}
+                  {o.dueDayOfMonth != null ? ` · due ${o.dueDayOfMonth}` : ""}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => { setEditing(o); setSheetVisible(true); }} hitSlop={8} style={{ padding: 6 }}>
+                <PencilSimple size={16} color={P.muted} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDelete(o)} hitSlop={8} style={{ padding: 6, marginLeft: 4 }}>
+                <TrashSimple size={16} color={P.error} />
+              </TouchableOpacity>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "600", color: P.ink }}>{o.name}</Text>
-              <Text style={{ fontSize: 12, fontFamily: "Manrope", color: P.muted, marginTop: 2 }}>
-                {getSubcategoryName(o.subcategoryId)} · {o.frequency} · {formatPeso(o.amountCentavos)}
-                {o.dueDayOfMonth != null ? ` · due ${o.dueDayOfMonth}` : ""}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => { setEditing(o); setSheetVisible(true); }} hitSlop={8} style={{ padding: 6 }}>
-              <PencilSimple size={16} color={P.muted} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(o)} hitSlop={8} style={{ padding: 6, marginLeft: 4 }}>
-              <TrashSimple size={16} color={P.error} />
-            </TouchableOpacity>
+            {linkedTemplate ? (
+              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: P.line }}>
+                <LinkSimple size={14} color={P.brandMedium} style={{ marginRight: 6 }} />
+                <Text style={{ flex: 1, fontSize: 12, fontFamily: "Manrope", color: P.ink2 }}>
+                  Linked: {linkedTemplate.name}{linkedTemplate.next_occurrence_date ? ` · next ${linkedTemplate.next_occurrence_date}` : ""}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => handleUnlink(o)}
+                  disabled={action === "unlinking"}
+                  hitSlop={8}
+                  style={{ padding: 4, opacity: action === "unlinking" ? 0.5 : 1 }}
+                >
+                  <LinkBreak size={14} color={P.error} weight="bold" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => handleAutomate(o)}
+                disabled={action === "automating"}
+                style={{ flexDirection: "row", alignItems: "center", marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: P.line, opacity: action === "automating" ? 0.5 : 1 }}
+              >
+                <Gear size={14} color={P.brandMedium} style={{ marginRight: 6 }} />
+                <Text style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: "600", color: P.brandMedium }}>
+                  {action === "automating" ? "Automating…" : "Automate this obligation"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
-        ))
+          );
+        })
       )}
       <ObligationFormSheet visible={sheetVisible} editing={editing} subcategories={subcategories} defaultFrequency={defaultFrequency} userId={userId} onClose={() => { setSheetVisible(false); setEditing(null); }} onSubmit={editing ? handleUpdate : handleCreate} />
+      <AutomateObligationSheet
+        visible={automateTarget !== null}
+        obligation={automateTarget}
+        subcategories={subcategories}
+        userId={userId}
+        deviceId={deviceId}
+        onClose={() => setAutomateTarget(null)}
+        onComplete={() => {
+          setAutomateTarget(null);
+          load();
+          onSyncRequested?.();
+        }}
+      />
     </>
   );
 }
