@@ -132,9 +132,6 @@ describe("POST /odin/api/recurring/run", () => {
       .post("/odin/api/recurring/run")
       .set("x-cron-secret", cronSecret);
 
-    expect(mockRpc).toHaveBeenCalledWith("run_recurring_transaction_engine", {
-      p_as_of: null,
-      p_limit: null,
-    });
+    expect(mockRpc).toHaveBeenCalledWith("run_recurring_transaction_engine", {});
   });
 });

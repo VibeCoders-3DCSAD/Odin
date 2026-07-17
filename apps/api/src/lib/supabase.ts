@@ -23,6 +23,15 @@ export function getServiceRoleClient(): SupabaseClient {
         autoRefreshToken: false,
         persistSession: false,
       },
+      global: {
+        fetch: (url, init) => {
+          const controller = new AbortController();
+          const signal = controller.signal;
+          const timeout = setTimeout(() => controller.abort(), 30_000);
+          init = { ...init, signal };
+          return fetch(url, init).finally(() => clearTimeout(timeout));
+        },
+      },
     });
   }
   return serviceRoleClientInstance;

@@ -1,6 +1,7 @@
 CREATE OR REPLACE FUNCTION odin.run_recurring_transaction_engine(
     p_as_of date DEFAULT CURRENT_DATE,
-    p_limit int DEFAULT 200
+    p_limit int DEFAULT 200,
+    p_user_id uuid DEFAULT NULL
 ) RETURNS TABLE(
     out_user_id uuid,
     out_template_id uuid,
@@ -14,6 +15,8 @@ SECURITY DEFINER
 SET search_path = odin, public
 AS $$
 DECLARE
+    v_as_of date;
+    v_limit int;
     v_template record;
     v_occurrence_id uuid;
     v_transaction_id uuid;
@@ -22,20 +25,24 @@ DECLARE
     v_error_message text;
     v_bumped timestamptz;
 BEGIN
+    v_as_of := COALESCE(p_as_of, CURRENT_DATE);
+    v_limit := COALESCE(p_limit, 200);
+
     FOR v_template IN
         SELECT t.*
         FROM recurring_transaction_templates t
         WHERE t.status = 'active'
           AND t.deleted = false
           AND t.next_occurrence_date IS NOT NULL
-          AND t.next_occurrence_date <= p_as_of
+          AND t.next_occurrence_date <= v_as_of
+          AND (p_user_id IS NULL OR t.user_id = p_user_id)
         ORDER BY t.next_occurrence_date
-        LIMIT p_limit
+        LIMIT v_limit
         FOR UPDATE SKIP LOCKED
     LOOP
         v_scheduled_date := v_template.next_occurrence_date;
 
-        WHILE v_scheduled_date <= p_as_of LOOP
+        WHILE v_scheduled_date <= v_as_of LOOP
             BEGIN
                 INSERT INTO transactions (
                     user_id, transaction_type, status, entry_source,
@@ -86,7 +93,7 @@ BEGIN
                     v_template.second_day_of_month,
                     v_template.day_of_week,
                     v_template.ends_on,
-                    p_as_of
+                    v_scheduled_date
                 );
 
                 UPDATE recurring_transaction_templates
@@ -129,7 +136,7 @@ BEGIN
                         v_template.second_day_of_month,
                         v_template.day_of_week,
                         v_template.ends_on,
-                        p_as_of
+                        v_scheduled_date
                     );
 
                     UPDATE recurring_transaction_templates

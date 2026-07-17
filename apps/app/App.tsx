@@ -8,6 +8,7 @@ import OnboardingFlow from "./features/onboarding/OnboardingFlow";
 import { ToastProvider } from "./components/Toast";
 import { startConnectivityPolling } from "./services/connectivity";
 import { useDeepLink } from "./hooks/useDeepLink";
+import { useRecurringEngineTrigger } from "./hooks/useRecurringEngineTrigger";
 import { getOrCreateDeviceId } from "./local-db/deviceId";
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
 
   useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
   useEffect(() => { startConnectivityPolling(); }, []);
+  useRecurringEngineTrigger(authenticated?.onboardingStatus === "submitted");
 
   const handleOnboardingComplete = () => {
     setAuthenticated((prev) =>
