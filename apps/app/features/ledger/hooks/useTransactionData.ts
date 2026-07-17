@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import type { FinancialAccount } from "../../../local-db/repositories/financialAccounts";
-import type { Subcategory } from "../../../local-db/repositories/taxonomy";
+import type { Category, CategoryGroup, Subcategory } from "../../../local-db/repositories/taxonomy";
 import { listFinancialAccounts } from "../../../local-db/repositories/financialAccounts";
-import { listSubcategories } from "../../../local-db/repositories/taxonomy";
+import { listCategories, listCategoryGroups, listSubcategories } from "../../../local-db/repositories/taxonomy";
 
 type TransactionKind = "expense" | "income" | "transfer";
 
 export function useTransactionData(userId: string, kind: TransactionKind) {
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [groups, setGroups] = useState<CategoryGroup[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,14 +20,18 @@ export function useTransactionData(userId: string, kind: TransactionKind) {
       setLoading(true);
       setError(null);
       try {
-        const [accts, subs] = await Promise.all([
+        const [accts, localGroups, localCategories, subs] = await Promise.all([
           listFinancialAccounts(userId, "active"),
+          kind !== "transfer" ? listCategoryGroups(userId) : Promise.resolve([] as CategoryGroup[]),
+          kind !== "transfer" ? listCategories(userId) : Promise.resolve([] as Category[]),
           kind !== "transfer"
             ? listSubcategories(userId, undefined, kind as "income" | "expense")
             : Promise.resolve([] as Subcategory[]),
         ]);
         if (!cancelled) {
           setAccounts(accts);
+          setGroups(localGroups);
+          setCategories(localCategories);
           setSubcategories(subs);
         }
       } catch (e) {
@@ -38,5 +44,5 @@ export function useTransactionData(userId: string, kind: TransactionKind) {
     return () => { cancelled = true; };
   }, [userId, kind]);
 
-  return { accounts, subcategories, loading, error };
+  return { accounts, groups, categories, subcategories, loading, error };
 }
