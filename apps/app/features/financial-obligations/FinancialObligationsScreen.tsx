@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   KeyboardAvoidingView,
@@ -14,6 +15,7 @@ import {
 } from "react-native";
 import {
   CalendarBlank,
+  CaretLeft,
   Plus,
   PencilSimple,
   TrashSimple,
@@ -29,7 +31,8 @@ import {
   type ObligationFrequency,
   listIncomeSources,
 } from "../../local-db/repositories/financialFoundations";
-import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
+import { listCategoryGroups, listCategories, listSubcategories, type Category, type CategoryGroup, type Subcategory } from "../../local-db/repositories/taxonomy";
+import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
 
 const P = {
   shell: "#fcf8f0", brand: "#013220", brandMedium: "#0E6D46",
@@ -151,12 +154,12 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack, o
           </View>
         ))
       )}
-      <ObligationFormSheet visible={sheetVisible} editing={editing} subcategories={subcategories} defaultFrequency={defaultFrequency} onClose={() => { setSheetVisible(false); setEditing(null); }} onSubmit={editing ? handleUpdate : handleCreate} />
+      <ObligationFormSheet visible={sheetVisible} editing={editing} subcategories={subcategories} defaultFrequency={defaultFrequency} userId={userId} onClose={() => { setSheetVisible(false); setEditing(null); }} onSubmit={editing ? handleUpdate : handleCreate} />
     </>
   );
 }
 
-function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency, onClose, onSubmit }: { visible: boolean; editing: FinancialObligation | null; subcategories: Subcategory[]; defaultFrequency: ObligationFrequency; onClose: () => void; onSubmit: (input: CreateFinancialObligationInput) => Promise<void> }) {
+function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency, userId, onClose, onSubmit }: { visible: boolean; editing: FinancialObligation | null; subcategories: Subcategory[]; defaultFrequency: ObligationFrequency; userId: string; onClose: () => void; onSubmit: (input: CreateFinancialObligationInput) => Promise<void> }) {
   const [name, setName] = useState("");
   const [subcategoryId, setSubcategoryId] = useState(subcategories[0]?.id ?? "");
   const [amount, setAmount] = useState("");
@@ -169,6 +172,12 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [pickerGroups, setPickerGroups] = useState<CategoryGroup[]>([]);
+  const [pickerCategories, setPickerCategories] = useState<Category[]>([]);
+  const [pickerSubcategories, setPickerSubcategories] = useState<Subcategory[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [categorySelection, setCategorySelection] = useState<CategorySelection>({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
   const isEdit = editing !== null;
 
   useEffect(() => {
@@ -189,6 +198,27 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
     }
     setFormError(null);
   }, [editing]);
+
+  useEffect(() => {
+    if (!showCategoryPicker) return;
+
+    let cancelled = false;
+    async function load() {
+      setPickerLoading(true);
+      const [gs, cs, subs] = await Promise.all([
+        listCategoryGroups(userId),
+        listCategories(userId),
+        listSubcategories(userId, undefined, "expense"),
+      ]);
+      if (cancelled) return;
+      setPickerGroups(gs);
+      setPickerCategories(cs);
+      setPickerSubcategories(subs);
+      setPickerLoading(false);
+    }
+    load().catch(() => { if (cancelled) return; setPickerLoading(false); });
+    return () => { cancelled = true; };
+  }, [showCategoryPicker, userId]);
 
   const amountInvalid = amount.trim() !== "" && parseSafeCents(amount) === null;
   const dueDayInvalid = dueDay.trim() !== "" && parseDayOfMonth(dueDay) === null;
@@ -228,261 +258,323 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
     finally { setSaving(false); }
   };
 
+  function renderCategoryPickerPage() {
+    const selectedSub = categorySelection.subcategoryId
+      ? pickerSubcategories.find((s) => s.id === categorySelection.subcategoryId) ?? null
+      : null;
+    const selectedCat = selectedSub?.category_id
+      ? pickerCategories.find((c) => c.id === selectedSub.category_id) ?? null
+      : null;
+    const selectedGrp = selectedCat
+      ? pickerGroups.find((g) => g.id === selectedCat.category_group_id) ?? null
+      : null;
+    const hasSelection = selectedGrp || selectedCat || selectedSub;
+    const summaryLabel = [selectedGrp?.label, selectedCat?.label, selectedSub?.label].filter(Boolean).join(" · ");
+
+    return (
+      <View style={{ flex: 1 }}>
+        {hasSelection ? (
+          <View style={{ borderRadius: 16, borderWidth: 1, borderColor: "#20c277", backgroundColor: "#effff6", padding: 14, marginBottom: 18 }}>
+            <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: "600", color: "#20c277", letterSpacing: 0.4, marginBottom: 4 }}>
+              CURRENT SELECTION
+            </Text>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: P.ink }}>
+              {summaryLabel}
+            </Text>
+          </View>
+        ) : null}
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+          <CategorySelectorTree
+            groups={pickerGroups}
+            categories={pickerCategories}
+            subcategories={pickerSubcategories}
+            selection={categorySelection}
+            onSelect={(nextSelection) => {
+              setCategorySelection(nextSelection);
+              if (nextSelection.subcategoryId) {
+                setSubcategoryId(nextSelection.subcategoryId);
+                setShowCategoryPicker(false);
+              }
+            }}
+            emptyMessage="No categories found for this transaction type."
+          />
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable onPress={onClose} style={{ flex: 1 }}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: P.line, alignSelf: "center", marginTop: 10 }} />
-                <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled" bounces={false}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
-                    {isEdit ? "Edit Obligation" : "Add Obligation"}
-                  </Text>
-
-                  <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted }}>
-                    Fields marked with (*) are required
-                  </Text>
-
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      SUBCATEGORY <Text style={{ color: P.error }}>*</Text>
-                    </Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {subcategories.map((s) => (
-                          <Pressable
-                            key={s.id}
-                            onPress={() => setSubcategoryId(s.id)}
-                            accessibilityRole="radio"
-                            accessibilityLabel={s.label}
-                            accessibilityState={{ checked: subcategoryId === s.id }}
-                            style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: subcategoryId === s.id ? P.brand : P.card }}
-                          >
-                            <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: subcategoryId === s.id ? P.white : P.ink2 }} numberOfLines={1}>{s.label}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                  </View>
-
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      NAME <Text style={{ color: P.error }}>*</Text>
-                    </Text>
-                    <TextInput
-                      value={name}
-                      onChangeText={setName}
-                      placeholder="e.g. Rent"
-                      placeholderTextColor={P.muted}
-                      style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                    />
-                  </View>
-
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      AMOUNT (₱) <Text style={{ color: P.error }}>*</Text>
-                    </Text>
-                    <TextInput
-                      value={amount}
-                      onChangeText={setAmount}
-                      placeholder="0.00"
-                      placeholderTextColor={P.muted}
-                      keyboardType="decimal-pad"
-                      style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: amountInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                    />
-                  </View>
-
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      FREQUENCY <Text style={{ color: P.error }}>*</Text>
-                    </Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                      {FREQUENCIES.map((f) => (
-                        <Pressable
-                          key={f}
-                          onPress={() => setFrequency(f)}
-                          accessibilityRole="radio"
-                          accessibilityLabel={f}
-                          accessibilityState={{ checked: frequency === f }}
-                          style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: frequency === f ? P.brand : P.card }}
-                        >
-                          <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: frequency === f ? P.white : P.ink2 }}>{f}</Text>
-                        </Pressable>
-                      ))}
+              <View style={{ backgroundColor: P.shell, maxHeight: "100%", overflow: "hidden" }}>
+                {showCategoryPicker ? (
+                  <View style={{ padding: 22, gap: 8, minHeight: Dimensions.get("window").height * 0.75 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <Pressable onPress={() => setShowCategoryPicker(false)} hitSlop={10} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <CaretLeft color={P.ink} size={22} weight="bold" />
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: P.ink }}>
+                          Select Category
+                        </Text>
+                      </Pressable>
                     </View>
+                    {pickerLoading ? (
+                      <View style={{ alignItems: "center", paddingVertical: 30 }}>
+                        <ActivityIndicator color={P.ink2} />
+                      </View>
+                    ) : (
+                      renderCategoryPickerPage()
+                    )}
                   </View>
-
-                  {frequency === "monthly" && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        DUE DAY OF MONTH
+                ) : (
+                  <>
+                    <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: P.line, alignSelf: "center", marginTop: 10 }} />
+                    <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled" bounces={false}>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
+                        {isEdit ? "Edit Obligation" : "Add Obligation"}
                       </Text>
-                      <TextInput
-                        value={dueDay}
-                        onChangeText={setDueDay}
-                        placeholder="1"
-                        placeholderTextColor={P.muted}
-                        keyboardType="number-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                      />
-                    </View>
-                  )}
 
-                  {frequency === "semi_monthly" && (
-                    <>
+                      <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted }}>
+                        Fields marked with (*) are required
+                      </Text>
+
+                      <Pressable onPress={() => setShowCategoryPicker(true)} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, backgroundColor: P.card, borderWidth: 1, borderColor: P.line }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 4 }}>
+                            CATEGORY <Text style={{ color: P.error }}>*</Text>
+                          </Text>
+                          <Text style={{ fontFamily: "Manrope", fontSize: 14, color: subcategoryId ? P.ink : P.muted }}>
+                            {subcategoryId ? subcategories.find((s) => s.id === subcategoryId)?.label ?? "Unknown" : "Select Category"}
+                          </Text>
+                        </View>
+                        <View style={{ marginLeft: 8 }}>
+                          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.muted }}>{">"}</Text>
+                        </View>
+                      </Pressable>
+
                       <View>
                         <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          1ST DUE DAY OF MONTH
+                          NAME <Text style={{ color: P.error }}>*</Text>
                         </Text>
                         <TextInput
-                          value={dueDay}
-                          onChangeText={setDueDay}
-                          placeholder="1"
+                          value={name}
+                          onChangeText={setName}
+                          placeholder="e.g. Rent"
                           placeholderTextColor={P.muted}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                         />
                       </View>
+
                       <View>
                         <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          2ND DUE DAY OF MONTH
+                          AMOUNT (₱) <Text style={{ color: P.error }}>*</Text>
                         </Text>
                         <TextInput
-                          value={dueSecondDay}
-                          onChangeText={setDueSecondDay}
-                          placeholder="15"
+                          value={amount}
+                          onChangeText={setAmount}
+                          placeholder="0.00"
                           placeholderTextColor={P.muted}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueSecondDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                          keyboardType="decimal-pad"
+                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: amountInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                         />
                       </View>
-                    </>
-                  )}
 
-                  {showDayOfWeek && (
-                    <>
                       <View>
                         <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          {frequency === "biweekly" ? "1ST DUE DAY OF WEEK" : "DUE DAY OF WEEK"}
+                          FREQUENCY <Text style={{ color: P.error }}>*</Text>
                         </Text>
                         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                          {WEEKDAYS.map((day, idx) => (
+                          {FREQUENCIES.map((f) => (
                             <Pressable
-                              key={day}
-                              onPress={() => setDueDayOfWeek(idx)}
+                              key={f}
+                              onPress={() => setFrequency(f)}
                               accessibilityRole="radio"
-                              accessibilityLabel={day}
-                              accessibilityState={{ checked: dueDayOfWeek === idx }}
-                              style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueDayOfWeek === idx ? P.brand : P.card }}
+                              accessibilityLabel={f}
+                              accessibilityState={{ checked: frequency === f }}
+                              style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: frequency === f ? P.brand : P.card }}
                             >
-                              <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
+                              <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: frequency === f ? P.white : P.ink2 }}>{f}</Text>
                             </Pressable>
                           ))}
                         </View>
                       </View>
-                      {frequency === "biweekly" && (
+
+                      {frequency === "monthly" && (
                         <View>
                           <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                            2ND DUE DAY OF WEEK
+                            DUE DAY OF MONTH
                           </Text>
-                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                            {WEEKDAYS.map((day, idx) => (
-                              <Pressable
-                                key={day}
-                                onPress={() => setDueSecondDayOfWeek(idx)}
-                                accessibilityRole="radio"
-                                accessibilityLabel={day}
-                                accessibilityState={{ checked: dueSecondDayOfWeek === idx }}
-                                style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueSecondDayOfWeek === idx ? P.brand : P.card }}
-                              >
-                                <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueSecondDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
+                          <TextInput
+                            value={dueDay}
+                            onChangeText={setDueDay}
+                            placeholder="1"
+                            placeholderTextColor={P.muted}
+                            keyboardType="number-pad"
+                            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                          />
                         </View>
                       )}
-                    </>
-                  )}
 
-                  {frequency === "quarterly" && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        DUE DAY OF THE MONTH (EVERY QUARTER)
-                      </Text>
-                      <TextInput
-                        value={dueDay}
-                        onChangeText={setDueDay}
-                        placeholder="15"
-                        placeholderTextColor={P.muted}
-                        keyboardType="number-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                      />
-                    </View>
-                  )}
+                      {frequency === "semi_monthly" && (
+                        <>
+                          <View>
+                            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                              1ST DUE DAY OF MONTH
+                            </Text>
+                            <TextInput
+                              value={dueDay}
+                              onChangeText={setDueDay}
+                              placeholder="1"
+                              placeholderTextColor={P.muted}
+                              keyboardType="number-pad"
+                              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                            />
+                          </View>
+                          <View>
+                            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                              2ND DUE DAY OF MONTH
+                            </Text>
+                            <TextInput
+                              value={dueSecondDay}
+                              onChangeText={setDueSecondDay}
+                              placeholder="15"
+                              placeholderTextColor={P.muted}
+                              keyboardType="number-pad"
+                              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueSecondDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                            />
+                          </View>
+                        </>
+                      )}
 
-                  {frequency === "yearly" && (
-                    <>
-                      <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          DUE MONTH
-                        </Text>
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                          {MONTHS.map((m, idx) => (
-                            <Pressable
-                              key={m}
-                              onPress={() => setDueMonth(idx + 1)}
-                              accessibilityRole="radio"
-                              accessibilityLabel={m}
-                              accessibilityState={{ checked: dueMonth === idx + 1 }}
-                              style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueMonth === idx + 1 ? P.brand : P.card }}
-                            >
-                              <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueMonth === idx + 1 ? P.white : P.ink2 }}>{m}</Text>
-                            </Pressable>
-                          ))}
+                      {showDayOfWeek && (
+                        <>
+                          <View>
+                            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                              {frequency === "biweekly" ? "1ST DUE DAY OF WEEK" : "DUE DAY OF WEEK"}
+                            </Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                              {WEEKDAYS.map((day, idx) => (
+                                <Pressable
+                                  key={day}
+                                  onPress={() => setDueDayOfWeek(idx)}
+                                  accessibilityRole="radio"
+                                  accessibilityLabel={day}
+                                  accessibilityState={{ checked: dueDayOfWeek === idx }}
+                                  style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueDayOfWeek === idx ? P.brand : P.card }}
+                                >
+                                  <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                          </View>
+                          {frequency === "biweekly" && (
+                            <View>
+                              <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                                2ND DUE DAY OF WEEK
+                              </Text>
+                              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                {WEEKDAYS.map((day, idx) => (
+                                  <Pressable
+                                    key={day}
+                                    onPress={() => setDueSecondDayOfWeek(idx)}
+                                    accessibilityRole="radio"
+                                    accessibilityLabel={day}
+                                    accessibilityState={{ checked: dueSecondDayOfWeek === idx }}
+                                    style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueSecondDayOfWeek === idx ? P.brand : P.card }}
+                                  >
+                                    <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueSecondDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                            </View>
+                          )}
+                        </>
+                      )}
+
+                      {frequency === "quarterly" && (
+                        <View>
+                          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                            DUE DAY OF THE MONTH (EVERY QUARTER)
+                          </Text>
+                          <TextInput
+                            value={dueDay}
+                            onChangeText={setDueDay}
+                            placeholder="15"
+                            placeholderTextColor={P.muted}
+                            keyboardType="number-pad"
+                            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                          />
                         </View>
-                      </View>
+                      )}
+
+                      {frequency === "yearly" && (
+                        <>
+                          <View>
+                            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                              DUE MONTH
+                            </Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                              {MONTHS.map((m, idx) => (
+                                <Pressable
+                                  key={m}
+                                  onPress={() => setDueMonth(idx + 1)}
+                                  accessibilityRole="radio"
+                                  accessibilityLabel={m}
+                                  accessibilityState={{ checked: dueMonth === idx + 1 }}
+                                  style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dueMonth === idx + 1 ? P.brand : P.card }}
+                                >
+                                  <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dueMonth === idx + 1 ? P.white : P.ink2 }}>{m}</Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                          </View>
+                          <View>
+                            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                              DUE DAY OF MONTH
+                            </Text>
+                            <TextInput
+                              value={dueDay}
+                              onChangeText={setDueDay}
+                              placeholder="15"
+                              placeholderTextColor={P.muted}
+                              keyboardType="number-pad"
+                              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                            />
+                          </View>
+                        </>
+                      )}
+
                       <View>
                         <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          DUE DAY OF MONTH
+                          NOTES (OPTIONAL)
                         </Text>
                         <TextInput
-                          value={dueDay}
-                          onChangeText={setDueDay}
-                          placeholder="15"
+                          value={notes}
+                          onChangeText={setNotes}
+                          placeholder="Add any details..."
                           placeholderTextColor={P.muted}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dueDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                         />
                       </View>
-                    </>
-                  )}
 
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      NOTES (OPTIONAL)
-                    </Text>
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="Add any details..."
-                      placeholderTextColor={P.muted}
-                      style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                    />
-                  </View>
+                      {formError && (
+                        <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.error }}>{formError}</Text>
+                      )}
 
-                  {formError && (
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.error }}>{formError}</Text>
-                  )}
-
-                  <View style={{ flexDirection: "row", gap: 10, paddingTop: 8 }}>
-                    <Pressable onPress={onClose} disabled={saving} style={{ flex: 1, height: 50, borderRadius: 12, borderWidth: 1, borderColor: P.line, alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.ink2 }}>Cancel</Text>
-                    </Pressable>
-                    <Pressable onPress={handleSubmit} disabled={saving} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: P.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.6 : 1 }}>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.white }}>{saving ? "Saving…" : isEdit ? "Save Changes" : "Add Obligation"}</Text>
-                    </Pressable>
-                  </View>
-                </ScrollView>
+                      <View style={{ flexDirection: "row", gap: 10, paddingTop: 8 }}>
+                        <Pressable onPress={onClose} disabled={saving} style={{ flex: 1, height: 50, borderRadius: 12, borderWidth: 1, borderColor: P.line, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.ink2 }}>Cancel</Text>
+                        </Pressable>
+                        <Pressable onPress={handleSubmit} disabled={saving} style={{ flex: 1, height: 50, borderRadius: 12, backgroundColor: P.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.6 : 1 }}>
+                          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.white }}>{saving ? "Saving…" : isEdit ? "Save Changes" : "Add Obligation"}</Text>
+                        </Pressable>
+                      </View>
+                    </ScrollView>
+                  </>
+                )}
               </View>
             </Pressable>
           </KeyboardAvoidingView>
