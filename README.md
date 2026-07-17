@@ -295,3 +295,24 @@ odin/
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json
 ```
+
+### Recurring Transaction Engine
+
+The recurring engine is an idempotent SQL function (`odin.run_recurring_transaction_engine`) that scans active templates and posts occurrences and transactions. It is exposed via:
+
+```
+POST /odin/api/recurring/run
+```
+
+**Authentication:** The endpoint rejects user Bearer tokens (403). Call with `x-cron-secret` header matching the `RECURRING_CRON_SECRET` env var.
+
+**Cron setup:** Configure a Supabase scheduled function (or external cron) to hit this endpoint hourly:
+
+```bash
+curl -X POST https://your-api.com/odin/api/recurring/run \
+  -H "x-cron-secret: ${RECURRING_CRON_SECRET}" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Optional payload: `{ "payload": { "as_of": "2024-01-15", "limit": 200 } }`
