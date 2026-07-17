@@ -49,6 +49,8 @@ const config = {
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
+    // Local API uses http:// (emulator 10.0.2.2 / LAN IP). Required for Android 9+.
+    usesCleartextTraffic: true,
   },
   web: {
     bundler: "metro",
