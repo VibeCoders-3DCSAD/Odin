@@ -26,12 +26,20 @@ const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function dueSummary(o: FinancialObligation): string {
   const parts: string[] = [];
   if (o.dueDayOfMonth != null) {
-    parts.push(`day ${o.dueDayOfMonth}`);
-    if (o.dueSecondDayOfMonth != null) parts.push(`+ ${o.dueSecondDayOfMonth}`);
+    if (o.dueSecondDayOfMonth != null) {
+      parts.push(`${o.dueDayOfMonth} & ${o.dueSecondDayOfMonth}`);
+    } else {
+      parts.push(`day ${o.dueDayOfMonth}`);
+    }
   }
   if (o.dueDayOfWeek != null) {
-    parts.push(DOW[o.dueDayOfWeek] ?? String(o.dueDayOfWeek));
-    if (o.dueSecondDayOfWeek != null) parts.push(`+ ${DOW[o.dueSecondDayOfWeek]}`);
+    const a = DOW[o.dueDayOfWeek] ?? String(o.dueDayOfWeek);
+    if (o.dueSecondDayOfWeek != null) {
+      const b = DOW[o.dueSecondDayOfWeek] ?? String(o.dueSecondDayOfWeek);
+      parts.push(`${a} & ${b}`);
+    } else {
+      parts.push(a);
+    }
   }
   if (o.dueMonth != null) parts.push(`month ${o.dueMonth}`);
   return parts.join(" · ");
