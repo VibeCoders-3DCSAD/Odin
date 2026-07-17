@@ -38,33 +38,47 @@ ALTER TABLE recurring_transaction_occurrences
   ADD COLUMN IF NOT EXISTS deleted boolean NOT NULL DEFAULT false;
 
 -- Sync triggers on ledger tables
-CREATE TRIGGER financial_accounts_sync_bump
-  BEFORE UPDATE ON financial_accounts
-  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'financial_accounts_sync_bump') THEN
+  CREATE TRIGGER financial_accounts_sync_bump
+    BEFORE UPDATE ON financial_accounts
+    FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+END IF; END $$;
 
-CREATE TRIGGER transactions_sync_bump
-  BEFORE UPDATE ON transactions
-  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'transactions_sync_bump') THEN
+  CREATE TRIGGER transactions_sync_bump
+    BEFORE UPDATE ON transactions
+    FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+END IF; END $$;
 
-CREATE TRIGGER transaction_line_items_sync_bump
-  BEFORE UPDATE ON transaction_line_items
-  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'transaction_line_items_sync_bump') THEN
+  CREATE TRIGGER transaction_line_items_sync_bump
+    BEFORE UPDATE ON transaction_line_items
+    FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+END IF; END $$;
 
-CREATE TRIGGER transaction_templates_sync_bump
-  BEFORE UPDATE ON transaction_templates
-  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'transaction_templates_sync_bump') THEN
+  CREATE TRIGGER transaction_templates_sync_bump
+    BEFORE UPDATE ON transaction_templates
+    FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+END IF; END $$;
 
-CREATE TRIGGER transaction_drafts_sync_bump
-  BEFORE UPDATE ON transaction_drafts
-  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'transaction_drafts_sync_bump') THEN
+  CREATE TRIGGER transaction_drafts_sync_bump
+    BEFORE UPDATE ON transaction_drafts
+    FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+END IF; END $$;
 
-CREATE TRIGGER recurring_transaction_templates_sync_bump
-  BEFORE UPDATE ON recurring_transaction_templates
-  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'recurring_transaction_templates_sync_bump') THEN
+  CREATE TRIGGER recurring_transaction_templates_sync_bump
+    BEFORE UPDATE ON recurring_transaction_templates
+    FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+END IF; END $$;
 
-CREATE TRIGGER recurring_transaction_occurrences_sync_bump
-  BEFORE UPDATE ON recurring_transaction_occurrences
-  FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'recurring_transaction_occurrences_sync_bump') THEN
+  CREATE TRIGGER recurring_transaction_occurrences_sync_bump
+    BEFORE UPDATE ON recurring_transaction_occurrences
+    FOR EACH ROW EXECUTE FUNCTION bump_sync_columns();
+END IF; END $$;
 
 -- Indexes for sync pull performance (no WHERE deleted=false — pull must include tombstones)
 CREATE INDEX IF NOT EXISTS idx_financial_accounts_updated_at
