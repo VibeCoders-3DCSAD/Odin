@@ -206,11 +206,11 @@ function _nextSemiMonthly(from: Date, day1: number, day2: number, monthStep: num
   return _clampDate(y + Math.floor(totalMonths / 12), totalMonths % 12, day1);
 }
 
-export function computeNextOccurrenceDate(template: RecurringTemplateRow): string | null {
+export function computeNextOccurrenceDate(template: RecurringTemplateRow, asOf?: Date): string | null {
   const base = template.last_generated_date
     ? new Date(template.last_generated_date + "T00:00:00")
     : new Date(template.starts_on + "T00:00:00");
-  const today = new Date();
+  const today = asOf ?? new Date();
   today.setHours(0, 0, 0, 0);
 
   if (base > today) return null;
@@ -334,8 +334,23 @@ export async function createRecurringTemplate(
       input.subcategory_id ?? null, input.source_account_id ?? null, input.destination_account_id ?? null,
       input.frequency, input.interval_count ?? 1,
       input.day_of_month ?? null, input.second_day_of_month ?? null, input.day_of_week ?? null,
-      input.starts_on, input.ends_on ?? null, input.starts_on,
-      input.notes ?? null, ts, ts,
+      input.starts_on, input.ends_on ?? null,
+   computeNextOccurrenceDate({
+     id, user_id: userId, transaction_type: input.transaction_type,
+     status: "active", name: input.name.trim(), amount_centavos: input.amount_centavos,
+     subcategory_id: input.subcategory_id ?? null,
+     source_account_id: input.source_account_id ?? null,
+     destination_account_id: input.destination_account_id ?? null,
+     frequency: input.frequency, interval_count: input.interval_count ?? 1,
+     day_of_month: input.day_of_month ?? null,
+     second_day_of_month: input.second_day_of_month ?? null,
+     day_of_week: input.day_of_week ?? null,
+     custom_rule: "", starts_on: input.starts_on, ends_on: input.ends_on ?? null,
+     next_occurrence_date: null, last_generated_date: null,
+     reminder_enabled: 0, reminder_days_before: 0, notes: input.notes ?? null,
+     version: 0, deleted: 0, created_at: "", updated_at: "", last_synced_at: null,
+   }, new Date(input.starts_on + "T00:00:00")),
+   input.notes ?? null, ts, ts,
     );
 
     const operation = await enqueueOperation(db, {
