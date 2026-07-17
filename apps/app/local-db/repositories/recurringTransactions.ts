@@ -169,6 +169,43 @@ function mapOccurrence(row: OccurrenceRow): RecurringOccurrence {
   };
 }
 
+function _clampDate(year: number, month: number, day: number): Date {
+  return new Date(year, month, Math.min(day, new Date(year, month + 1, 0).getDate()));
+}
+
+function _toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function _nextDayOfWeek(from: Date, targetDow: number, intervalCount: number): Date {
+  const curDow = from.getDay();
+  let delta = (targetDow - curDow + 7) % 7;
+  if (delta === 0) delta = 7 * intervalCount;
+  const d = new Date(from);
+  d.setDate(d.getDate() + delta);
+  return d;
+}
+
+function _nextDayOfMonth(from: Date, dayOfMonth: number, monthStep: number): Date {
+  const y = from.getFullYear();
+  const m = from.getMonth();
+  const target = _clampDate(y, m, dayOfMonth);
+  if (from.getTime() < target.getTime()) return target;
+  const totalMonths = m + monthStep;
+  return _clampDate(y + Math.floor(totalMonths / 12), totalMonths % 12, dayOfMonth);
+}
+
+function _nextSemiMonthly(from: Date, day1: number, day2: number, monthStep: number): Date {
+  const y = from.getFullYear();
+  const m = from.getMonth();
+  const first = _clampDate(y, m, day1);
+  const second = _clampDate(y, m, day2);
+  if (from.getTime() < first.getTime()) return first;
+  if (from.getTime() < second.getTime()) return second;
+  const totalMonths = m + monthStep;
+  return _clampDate(y + Math.floor(totalMonths / 12), totalMonths % 12, day1);
+}
+
 export function computeNextOccurrenceDate(template: RecurringTemplateRow): string | null {
   const base = template.last_generated_date
     ? new Date(template.last_generated_date + "T00:00:00")
@@ -176,22 +213,59 @@ export function computeNextOccurrenceDate(template: RecurringTemplateRow): strin
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  if (base > today) return null;
+
   let candidate = new Date(base);
 
-  // ponytail: simple forward search, replace with schedule library if needed
   for (let iteration = 0; iteration < 100; iteration++) {
-    if (template.frequency === "daily") {
+    const freq = template.frequency;
+    const dom = template.day_of_month;
+    const sdom = template.second_day_of_month;
+    const dow = template.day_of_week;
+
+    if (freq === "daily") {
       candidate.setDate(candidate.getDate() + template.interval_count);
-    } else if (template.frequency === "weekly") {
-      candidate.setDate(candidate.getDate() + 7 * template.interval_count);
-    } else if (template.frequency === "monthly") {
-      candidate.setMonth(candidate.getMonth() + template.interval_count);
-    } else if (template.frequency === "quarterly") {
-      candidate.setMonth(candidate.getMonth() + 3 * template.interval_count);
-    } else if (template.frequency === "yearly") {
-      candidate.setFullYear(candidate.getFullYear() + template.interval_count);
+    } else if (freq === "weekly") {
+      candidate = dow !== null && dow !== undefined
+        ? _nextDayOfWeek(candidate, dow, template.interval_count)
+        : new Date(candidate.getTime() + 7 * template.interval_count * 86400000);
+    } else if (freq === "biweekly") {
+      candidate = dow !== null && dow !== undefined
+        ? _nextDayOfWeek(candidate, dow, 2 * template.interval_count)
+        : new Date(candidate.getTime() + 14 * template.interval_count * 86400000);
+    } else if (freq === "semi_monthly") {
+      if (dom !== null && sdom !== null) {
+        candidate = _nextSemiMonthly(candidate, dom, sdom, 1);
+      } else {
+        return null;
+      }
+    } else if (freq === "monthly") {
+      if (dom !== null && sdom !== null) {
+        candidate = _nextSemiMonthly(candidate, dom, sdom, template.interval_count);
+      } else if (dom !== null) {
+        candidate = _nextDayOfMonth(candidate, dom, template.interval_count);
+      } else {
+        candidate.setMonth(candidate.getMonth() + template.interval_count);
+      }
+    } else if (freq === "quarterly") {
+      if (dom !== null) {
+        candidate = _nextDayOfMonth(candidate, dom, 3 * template.interval_count);
+      } else {
+        candidate.setMonth(candidate.getMonth() + 3 * template.interval_count);
+      }
+    } else if (freq === "yearly") {
+      if (dom !== null) {
+        candidate = _nextDayOfMonth(candidate, dom, 12 * template.interval_count);
+      } else {
+        const origM = candidate.getMonth();
+        const origD = candidate.getDate();
+        candidate.setFullYear(candidate.getFullYear() + template.interval_count);
+        if (origM === 1 && origD === 29 && candidate.getMonth() !== 1) {
+          candidate.setMonth(2, 0);
+        }
+      }
     } else {
-      return null; // custom not supported yet
+      return null;
     }
 
     if (template.ends_on) {
@@ -199,9 +273,7 @@ export function computeNextOccurrenceDate(template: RecurringTemplateRow): strin
       if (candidate > endDate) return null;
     }
 
-    if (candidate >= today) {
-      return `${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, "0")}-${String(candidate.getDate()).padStart(2, "0")}`;
-    }
+    if (candidate >= today) return _toDateStr(candidate);
   }
 
   return null;

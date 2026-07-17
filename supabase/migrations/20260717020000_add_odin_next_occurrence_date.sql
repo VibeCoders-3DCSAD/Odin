@@ -9,6 +9,10 @@ AS $$
          - 1;
 $$;
 
+-- ponytail: text param instead of odin_recurring_frequency enum
+-- because the JS helper uses 'daily' which isn't in the enum.
+-- The schema constrains the actual table column; this helper
+-- is intentionally more permissive for parity testing.
 CREATE OR REPLACE FUNCTION odin.next_occurrence_date(
     starts_on date,
     last_generated date,
@@ -90,7 +94,25 @@ BEGIN
                     RETURN NULL;
                 END IF;
             WHEN 'monthly' THEN
-                IF day_of_month IS NOT NULL THEN
+                IF day_of_month IS NOT NULL AND second_day_of_month IS NOT NULL THEN
+                    DECLARE
+                        month_start date := date_trunc('month', candidate)::date;
+                        m_days int := EXTRACT(DAY FROM month_start + interval '1 month - 1 day')::int;
+                        dom_date date := month_start + LEAST(day_of_month, m_days) - 1;
+                        sdom_date date := month_start + LEAST(second_day_of_month, m_days) - 1;
+                    BEGIN
+                        IF candidate < dom_date THEN
+                            candidate := dom_date;
+                        ELSIF candidate < sdom_date THEN
+                            candidate := sdom_date;
+                        ELSE
+                            candidate := odin._clamp_day(
+                                (month_start + make_interval(months => interval_count))::date,
+                                day_of_month
+                            );
+                        END IF;
+                    END;
+                ELSIF day_of_month IS NOT NULL THEN
                     DECLARE
                         month_start date := date_trunc('month', candidate)::date;
                         this_month_day date := odin._clamp_day(candidate, day_of_month);
@@ -218,5 +240,12 @@ BEGIN
     -- monthly interval_count > 1, already on day_of_month: from Apr 30 (+2 months → Jun 30)
     ASSERT odin.next_occurrence_date('2024-04-30', NULL, 'monthly', 2, 31, NULL, NULL, NULL, '2024-04-30') = '2024-06-30',
         'monthly interval2 day31 next failed: expected 2024-06-30';
+
+    -- monthly with both day_of_month and second_day_of_month: from Jan 10, next is 15th
+    ASSERT odin.next_occurrence_date('2024-01-10', NULL, 'monthly', 1, 1, 15, NULL, NULL, '2024-01-10') = '2024-01-15',
+        'monthly dom+sdom from 10th failed: expected 2024-01-15';
+    -- monthly with both day_of_month and second_day_of_month: from Jan 16, past both, go to Feb 1
+    ASSERT odin.next_occurrence_date('2024-01-16', NULL, 'monthly', 1, 1, 15, NULL, NULL, '2024-01-16') = '2024-02-01',
+        'monthly dom+sdom from 16th failed: expected 2024-02-01';
 END;
 $$;

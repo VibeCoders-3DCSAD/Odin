@@ -61,27 +61,29 @@ describe("computeNextOccurrenceDate", () => {
     expect(computeNextOccurrenceDate(tpl)).toBe("2024-01-03");
   });
 
-  it("handles monthly with day 31 month-end clamp", () => {
+  it("handles monthly day 31 month-end clamp", () => {
     setNow("2024-01-20");
-    const tpl = makeTemplate({ frequency: "monthly", interval_count: 1, starts_on: "2024-01-15" });
-    expect(computeNextOccurrenceDate(tpl)).toBe("2024-02-15");
+    const tpl = makeTemplate({
+      frequency: "monthly", interval_count: 1, starts_on: "2024-01-15", day_of_month: 31,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-01-31");
   });
 
-  it("handles weekly with day_of_week (ignored by JS)", () => {
+  it("handles weekly day_of_week", () => {
     setNow("2024-07-17");
-    const tpl = makeTemplate({ frequency: "weekly", interval_count: 1, starts_on: "2024-07-17", day_of_week: 1 });
-    expect(computeNextOccurrenceDate(tpl)).toBe("2024-07-24");
+    const tpl = makeTemplate({
+      frequency: "weekly", interval_count: 1, starts_on: "2024-07-17", day_of_week: 1,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-07-22");
   });
 
-  it("handles yearly Feb 29 leap year (JS overflows to Mar 1)", () => {
-    setNow("2024-12-01");
+  it("handles yearly Feb 29 leap year fallback", () => {
+    setNow("2025-02-01");
     const tpl = makeTemplate({ frequency: "yearly", interval_count: 1, starts_on: "2024-02-29" });
-    const result = computeNextOccurrenceDate(tpl);
-    expect(result).not.toBeNull();
-    expect(result).toMatch(/^2025-0[23]-0?1$/);
+    expect(computeNextOccurrenceDate(tpl)).toBe("2025-02-28");
   });
 
-  it("handles ends_on cutoff", () => {
+  it("handles ends_on cutoff returning null", () => {
     setNow("2024-01-20");
     const tpl = makeTemplate({
       frequency: "daily", interval_count: 2, starts_on: "2024-01-01", ends_on: "2024-01-04",
@@ -89,7 +91,7 @@ describe("computeNextOccurrenceDate", () => {
     expect(computeNextOccurrenceDate(tpl)).toBeNull();
   });
 
-  it("handles last_generated_date override", () => {
+  it("honors last_generated_date over starts_on", () => {
     setNow("2024-01-20");
     const tpl = makeTemplate({
       frequency: "daily", interval_count: 1, starts_on: "2024-01-01", last_generated_date: "2024-01-15",
@@ -105,21 +107,90 @@ describe("computeNextOccurrenceDate", () => {
     expect(computeNextOccurrenceDate(tpl)).toBe("2024-01-05");
   });
 
-  it("handles quarterly", () => {
-    setNow("2024-05-01");
-    const tpl = makeTemplate({ frequency: "quarterly", interval_count: 1, starts_on: "2024-02-15" });
-    expect(computeNextOccurrenceDate(tpl)).toBe("2024-05-15");
+  it("handles quarterly day_of_month", () => {
+    setNow("2024-04-15");
+    const tpl = makeTemplate({
+      frequency: "quarterly", interval_count: 1, starts_on: "2024-04-15", day_of_month: 31,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-04-30");
   });
 
-  it("handles custom (returns null)", () => {
+  it("handles quarterly day_of_month (next quarter)", () => {
+    setNow("2024-04-30");
+    const tpl = makeTemplate({
+      frequency: "quarterly", interval_count: 1, starts_on: "2024-04-30", day_of_month: 31,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-07-31");
+  });
+
+  it("handles custom frequency (returns null)", () => {
     setNow("2024-01-01");
     const tpl = makeTemplate({ frequency: "custom", starts_on: "2024-01-01" });
     expect(computeNextOccurrenceDate(tpl)).toBeNull();
   });
 
-  it("returns null when base > now", () => {
+  it("returns null when starts_on is after today", () => {
     setNow("2024-01-01");
-    const tpl = makeTemplate({ frequency: "daily", interval_count: 1, starts_on: "2025-01-01" });
-    expect(computeNextOccurrenceDate(tpl)).toBe("2025-01-02");
+    const tpl = makeTemplate({ frequency: "daily", interval_count: 1, starts_on: "2024-06-01" });
+    expect(computeNextOccurrenceDate(tpl)).toBeNull();
+  });
+
+  it("handles biweekly day_of_week", () => {
+    setNow("2024-07-18");
+    const tpl = makeTemplate({
+      frequency: "biweekly", interval_count: 1, starts_on: "2024-07-17", day_of_week: 1,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-07-22");
+  });
+
+  it("handles semi_monthly on 1st and 15th from Jan 10", () => {
+    setNow("2024-01-10");
+    const tpl = makeTemplate({
+      frequency: "semi_monthly", interval_count: 1, starts_on: "2024-01-10",
+      day_of_month: 1, second_day_of_month: 15,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-01-15");
+  });
+
+  it("handles semi_monthly on 1st and 15th from Jan 16 (next month)", () => {
+    setNow("2024-01-16");
+    const tpl = makeTemplate({
+      frequency: "semi_monthly", interval_count: 1, starts_on: "2024-01-16",
+      day_of_month: 1, second_day_of_month: 15,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-02-01");
+  });
+
+  it("handles monthly with both day_of_month and second_day_of_month", () => {
+    setNow("2024-01-10");
+    const tpl = makeTemplate({
+      frequency: "monthly", interval_count: 1, starts_on: "2024-01-10",
+      day_of_month: 1, second_day_of_month: 15,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-01-15");
+  });
+
+  it("handles yearly day_of_month", () => {
+    setNow("2024-04-15");
+    const tpl = makeTemplate({
+      frequency: "yearly", interval_count: 1, starts_on: "2024-04-15", day_of_month: 31,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-04-30");
+  });
+
+  it("handles monthly interval_count > 1 with day_of_month", () => {
+    setNow("2024-01-20");
+    const tpl = makeTemplate({
+      frequency: "monthly", interval_count: 2, starts_on: "2024-01-15", day_of_month: 31,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-01-31");
+  });
+
+  it("handles monthly interval_count > 1 already on target day", () => {
+    setNow("2024-04-30");
+    const tpl = makeTemplate({
+      frequency: "monthly", interval_count: 2, starts_on: "2024-04-30", day_of_month: 31,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-06-30");
   });
 });
