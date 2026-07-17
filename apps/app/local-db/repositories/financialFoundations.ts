@@ -1280,6 +1280,7 @@ export async function automateObligation(
   overrides?: {
     frequency?: ObligationFrequency;
     dayOfMonth?: number | null;
+    secondDayOfMonth?: number | null;
     dayOfWeek?: number | null;
     startDate?: string;
   },
@@ -1293,7 +1294,7 @@ export async function automateObligation(
   let freq = overrides?.frequency ?? obligation.frequency;
   let intervalCount = 1;
   let dayOfMonth = overrides?.dayOfMonth !== undefined ? overrides.dayOfMonth : (obligation.dueDayOfMonth ?? undefined);
-  let secondDayOfMonth = obligation.dueSecondDayOfMonth ?? undefined;
+  let secondDayOfMonth = overrides?.secondDayOfMonth !== undefined ? overrides.secondDayOfMonth : (obligation.dueSecondDayOfMonth ?? undefined);
   let dayOfWeek = overrides?.dayOfWeek !== undefined ? overrides.dayOfWeek : (obligation.dueDayOfWeek ?? undefined);
 
   if (freq === "biweekly") {

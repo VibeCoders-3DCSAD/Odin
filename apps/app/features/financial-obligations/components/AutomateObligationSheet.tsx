@@ -38,6 +38,7 @@ type Props = {
 export default function AutomateObligationSheet({ visible, obligation, subcategories, userId, deviceId, onClose, onComplete }: Props) {
   const [frequency, setFrequency] = useState<ObligationFrequency>("monthly");
   const [dayOfMonth, setDayOfMonth] = useState("");
+  const [secondDayOfMonth, setSecondDayOfMonth] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState<number | null>(null);
   const [startDate, setStartDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -47,17 +48,23 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
     if (obligation) {
       setFrequency(obligation.frequency);
       setDayOfMonth(obligation.dueDayOfMonth != null ? String(obligation.dueDayOfMonth) : "");
+      setSecondDayOfMonth(obligation.dueSecondDayOfMonth != null ? String(obligation.dueSecondDayOfMonth) : "");
       setDayOfWeek(obligation.dueDayOfWeek);
       setStartDate(new Date().toISOString().split("T")[0] ?? "");
       setFormError(null);
     }
   }, [obligation]);
 
-  const showDayOfMonth = frequency === "monthly" || frequency === "semi_monthly" || frequency === "quarterly" || frequency === "yearly";
+  const showDayOfMonth = frequency === "monthly" || frequency === "semi_monthly";
   const showDayOfWeek = frequency === "weekly" || frequency === "biweekly";
+  const showSecondDayOfMonth = frequency === "semi_monthly";
 
   const dayInvalid = dayOfMonth.trim() !== "" && (() => {
     const n = parseInt(dayOfMonth, 10);
+    return isNaN(n) || n < 1 || n > 31;
+  })();
+  const secondDayInvalid = secondDayOfMonth.trim() !== "" && (() => {
+    const n = parseInt(secondDayOfMonth, 10);
     return isNaN(n) || n < 1 || n > 31;
   })();
 
@@ -68,6 +75,7 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
     const errors: string[] = [];
     if (!startDate.trim()) errors.push("Start date is required.");
     if (showDayOfMonth && dayOfMonth.trim() && dayInvalid) errors.push("Day must be 1-31.");
+    if (showSecondDayOfMonth && secondDayOfMonth.trim() && secondDayInvalid) errors.push("Second day must be 1-31.");
 
     if (errors.length > 0) { setFormError(errors.join("\n")); return; }
 
@@ -76,6 +84,7 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
       await automateObligation(userId, deviceId, obligation.id, {
         frequency,
         dayOfMonth: showDayOfMonth ? (dayOfMonth.trim() ? parseInt(dayOfMonth, 10) : null) : undefined,
+        secondDayOfMonth: showSecondDayOfMonth ? (secondDayOfMonth.trim() ? parseInt(secondDayOfMonth, 10) : null) : undefined,
         dayOfWeek: showDayOfWeek ? dayOfWeek : undefined,
         startDate: startDate.trim() || undefined,
       });
@@ -144,6 +153,22 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
                         placeholderTextColor={P.muted}
                         keyboardType="number-pad"
                         style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
+                      />
+                    </View>
+                  )}
+
+                  {showSecondDayOfMonth && (
+                    <View>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                        SECOND DAY OF MONTH
+                      </Text>
+                      <TextInput
+                        value={secondDayOfMonth}
+                        onChangeText={setSecondDayOfMonth}
+                        placeholder="15"
+                        placeholderTextColor={P.muted}
+                        keyboardType="number-pad"
+                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: secondDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                       />
                     </View>
                   )}
