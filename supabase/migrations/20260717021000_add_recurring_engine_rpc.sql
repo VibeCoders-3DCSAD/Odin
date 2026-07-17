@@ -10,6 +10,7 @@ CREATE OR REPLACE FUNCTION odin.run_recurring_transaction_engine(
     out_status text
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = odin, public
 AS $$
 DECLARE
