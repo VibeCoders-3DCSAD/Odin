@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Dimensions,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,7 +12,6 @@ import {
 import {
   automateObligation,
   type FinancialObligation,
-  type ObligationFrequency,
 } from "../../../local-db/repositories/financialFoundations";
 import type { Subcategory } from "../../../local-db/repositories/taxonomy";
 
@@ -23,7 +21,21 @@ const P = {
   line: "#EAEAE6", error: "#D9001F", card: "#F1F0EB", white: "#FFFFFF",
 };
 
-const FREQUENCIES: readonly ObligationFrequency[] = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function dueSummary(o: FinancialObligation): string {
+  const parts: string[] = [];
+  if (o.dueDayOfMonth != null) {
+    parts.push(`day ${o.dueDayOfMonth}`);
+    if (o.dueSecondDayOfMonth != null) parts.push(`+ ${o.dueSecondDayOfMonth}`);
+  }
+  if (o.dueDayOfWeek != null) {
+    parts.push(DOW[o.dueDayOfWeek] ?? String(o.dueDayOfWeek));
+    if (o.dueSecondDayOfWeek != null) parts.push(`+ ${DOW[o.dueSecondDayOfWeek]}`);
+  }
+  if (o.dueMonth != null) parts.push(`month ${o.dueMonth}`);
+  return parts.join(" · ");
+}
 
 type Props = {
   visible: boolean;
@@ -36,57 +48,30 @@ type Props = {
 };
 
 export default function AutomateObligationSheet({ visible, obligation, subcategories, userId, deviceId, onClose, onComplete }: Props) {
-  const [frequency, setFrequency] = useState<ObligationFrequency>("monthly");
-  const [dayOfMonth, setDayOfMonth] = useState("");
-  const [secondDayOfMonth, setSecondDayOfMonth] = useState("");
-  const [dayOfWeek, setDayOfWeek] = useState<number | null>(null);
   const [startDate, setStartDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (obligation) {
-      setFrequency(obligation.frequency);
-      setDayOfMonth(obligation.dueDayOfMonth != null ? String(obligation.dueDayOfMonth) : "");
-      setSecondDayOfMonth(obligation.dueSecondDayOfMonth != null ? String(obligation.dueSecondDayOfMonth) : "");
-      setDayOfWeek(obligation.dueDayOfWeek);
       setStartDate(new Date().toISOString().split("T")[0] ?? "");
       setFormError(null);
     }
   }, [obligation]);
 
-  const showDayOfMonth = frequency === "monthly" || frequency === "semi_monthly";
-  const showDayOfWeek = frequency === "weekly" || frequency === "biweekly";
-  const showSecondDayOfMonth = frequency === "semi_monthly";
-
-  const dayInvalid = dayOfMonth.trim() !== "" && (() => {
-    const n = parseInt(dayOfMonth, 10);
-    return isNaN(n) || n < 1 || n > 31;
-  })();
-  const secondDayInvalid = secondDayOfMonth.trim() !== "" && (() => {
-    const n = parseInt(secondDayOfMonth, 10);
-    return isNaN(n) || n < 1 || n > 31;
-  })();
-
   const handleSubmit = async () => {
     if (!obligation) return;
     setFormError(null);
 
-    const errors: string[] = [];
-    if (!startDate.trim()) errors.push("Start date is required.");
-    if (showDayOfMonth && dayOfMonth.trim() && dayInvalid) errors.push("Day must be 1-31.");
-    if (showSecondDayOfMonth && secondDayOfMonth.trim() && secondDayInvalid) errors.push("Second day must be 1-31.");
-
-    if (errors.length > 0) { setFormError(errors.join("\n")); return; }
+    if (!startDate.trim()) {
+      setFormError("Start date is required.");
+      return;
+    }
 
     setSaving(true);
     try {
       await automateObligation(userId, deviceId, obligation.id, {
-        frequency,
-        dayOfMonth: showDayOfMonth ? (dayOfMonth.trim() ? parseInt(dayOfMonth, 10) : null) : undefined,
-        secondDayOfMonth: showSecondDayOfMonth ? (secondDayOfMonth.trim() ? parseInt(secondDayOfMonth, 10) : null) : undefined,
-        dayOfWeek: showDayOfWeek ? dayOfWeek : undefined,
-        startDate: startDate.trim() || undefined,
+        startDate: startDate.trim(),
       });
       onComplete();
       onClose();
@@ -100,6 +85,7 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
   if (!obligation) return null;
 
   const subName = subcategories.find((s) => s.id === obligation.subcategoryId)?.label ?? obligation.subcategoryId;
+  const summary = dueSummary(obligation);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -118,79 +104,19 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
                     Create a recurring expense template from "{obligation.name}"
                   </Text>
 
-                  <View style={{ padding: 12, borderRadius: 12, backgroundColor: P.card, borderWidth: 1, borderColor: P.line, gap: 6 }}>
+                  <View style={{ padding: 12, borderRadius: 12, backgroundColor: P.card, borderWidth: 1, borderColor: P.line, gap: 4 }}>
                     <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: "600", color: P.muted }}>FROM OBLIGATION</Text>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: P.ink }}>{obligation.name}</Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.ink2 }}>{subName} · ₱{(obligation.amountCentavos / 100).toFixed(2)}</Text>
-                  </View>
-
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      FREQUENCY
-                    </Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                      {FREQUENCIES.map((f) => (
-                        <Pressable
-                          key={f}
-                          onPress={() => setFrequency(f)}
-                          style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: frequency === f ? P.brand : P.card }}
-                        >
-                          <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: frequency === f ? P.white : P.ink2 }}>{f}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {showDayOfMonth && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        DAY OF MONTH
-                      </Text>
-                      <TextInput
-                        value={dayOfMonth}
-                        onChangeText={setDayOfMonth}
-                        placeholder="15"
-                        placeholderTextColor={P.muted}
-                        keyboardType="number-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                      />
-                    </View>
-                  )}
-
-                  {showSecondDayOfMonth && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        SECOND DAY OF MONTH
-                      </Text>
-                      <TextInput
-                        value={secondDayOfMonth}
-                        onChangeText={setSecondDayOfMonth}
-                        placeholder="15"
-                        placeholderTextColor={P.muted}
-                        keyboardType="number-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: secondDayInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                      />
-                    </View>
-                  )}
-
-                  {showDayOfWeek && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        DAY OF WEEK
-                      </Text>
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => (
-                          <Pressable
-                            key={day}
-                            onPress={() => setDayOfWeek(idx)}
-                            style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: dayOfWeek === idx ? P.brand : P.card }}
-                          >
-                            <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: dayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
-                          </Pressable>
-                        ))}
+                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 6 }}>
+                      <View style={{ backgroundColor: P.brand, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 11, color: P.white }}>{obligation.frequency}</Text>
                       </View>
+                      {summary ? (
+                        <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.ink2 }}>{summary}</Text>
+                      ) : null}
                     </View>
-                  )}
+                  </View>
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
