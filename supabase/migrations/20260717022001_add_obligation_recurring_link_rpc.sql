@@ -93,7 +93,7 @@ BEGIN
         'f1000000-0000-0000-0000-000000000001', v_user_id,
         v_subcategory_id,
         'Test Obligation', 'active', 50000,
-        'monthly', 15, CURRENT_DATE,
+        'monthly'::odin_recurring_frequency, 15, CURRENT_DATE,
         '{}', 1, false, now(), now()
     );
 
