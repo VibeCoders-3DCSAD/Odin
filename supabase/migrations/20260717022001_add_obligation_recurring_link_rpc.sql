@@ -41,7 +41,7 @@ BEGIN
         v_template_id, v_obligation.user_id, 'expense', 'active',
         v_obligation.name, v_obligation.amount_centavos,
         v_obligation.subcategory_id, NULL, NULL,
-        v_obligation.frequency::text, 1,
+        v_obligation.frequency, 1,
         v_obligation.due_day_of_month, v_obligation.due_second_day_of_month,
         v_obligation.due_day_of_week, '{}', CURRENT_DATE, v_obligation.ends_on,
         v_next_date,
