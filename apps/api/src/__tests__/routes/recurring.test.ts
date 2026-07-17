@@ -135,3 +135,99 @@ describe("POST /odin/api/recurring/run", () => {
     expect(mockRpc).toHaveBeenCalledWith("run_recurring_transaction_engine", {});
   });
 });
+
+describe("POST /odin/api/recurring/run/me", () => {
+  const validUserId = "00000000-0000-0000-0000-000000000001";
+
+  beforeEach(() => {
+    mockRpc.mockReset();
+    mockGetUser.mockReset();
+  });
+
+  it("returns 200 and scoped engine results for valid Bearer token", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: validUserId } },
+      error: null,
+    });
+    mockRpc.mockResolvedValue({
+      data: [
+        { out_user_id: validUserId, out_occ_date: "2024-01-15", out_status: "posted" },
+      ],
+      error: null,
+    });
+
+    const response = await request(app)
+      .post("/odin/api/recurring/run/me")
+      .set("authorization", "Bearer valid-token");
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload.engineResults).toHaveLength(1);
+    expect(response.body.payload.engineResults[0]).toMatchObject({
+      out_user_id: validUserId,
+      out_occ_date: "2024-01-15",
+      out_status: "posted",
+    });
+  });
+
+  it("returns 401 when no Bearer token", async () => {
+    const response = await request(app).post("/odin/api/recurring/run/me");
+
+    expect(response.status).toBe(401);
+    expect(response.body.message).toMatch(/bearer/i);
+  });
+
+  it("returns 401 when Bearer token is empty", async () => {
+    const response = await request(app)
+      .post("/odin/api/recurring/run/me")
+      .set("authorization", "Bearer ");
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 401 when token is invalid or expired", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+      error: null,
+    });
+
+    const response = await request(app)
+      .post("/odin/api/recurring/run/me")
+      .set("authorization", "Bearer expired-token");
+
+    expect(response.status).toBe(401);
+    expect(response.body.message).toMatch(/invalid|expired/i);
+  });
+
+  it("scopes RPC call to the authenticated user", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: validUserId } },
+      error: null,
+    });
+    mockRpc.mockResolvedValue({ data: [], error: null });
+
+    await request(app)
+      .post("/odin/api/recurring/run/me")
+      .set("authorization", "Bearer valid-token");
+
+    expect(mockRpc).toHaveBeenCalledWith("run_recurring_transaction_engine", {
+      p_user_id: validUserId,
+    });
+  });
+
+  it("returns 500 when the RPC call fails", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: validUserId } },
+      error: null,
+    });
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: new Error("RPC timeout"),
+    });
+
+    const response = await request(app)
+      .post("/odin/api/recurring/run/me")
+      .set("authorization", "Bearer valid-token");
+
+    expect(response.status).toBe(500);
+  });
+});
