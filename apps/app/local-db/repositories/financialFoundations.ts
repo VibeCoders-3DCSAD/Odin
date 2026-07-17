@@ -23,7 +23,6 @@ type FinancialAccountRow = {
   archived_at: string | null;
   deleted_at: string | null;
   sort_order: number;
-  notes: string | null;
   metadata: string;
   version: number;
   deleted: number;
@@ -113,7 +112,6 @@ export type FinancialAccount = {
   openedOn: string | null;
   archivedAt: string | null;
   sortOrder: number;
-  notes: string | null;
 };
 
 export type IncomeType = "stable" | "variable";
@@ -186,7 +184,6 @@ export type CreateFinancialAccountInput = {
   institutionName?: string | null;
   openedOn?: string | null;
   sortOrder?: number;
-  notes?: string | null;
 };
 
 export type UpdateFinancialAccountInput = {
@@ -200,7 +197,6 @@ export type UpdateFinancialAccountInput = {
   openedOn?: string | null;
   archivedAt?: string | null;
   sortOrder?: number;
-  notes?: string | null;
 };
 
 export type CreateIncomeSourceInput = {
@@ -293,7 +289,6 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
     openedOn: row.opened_on,
     archivedAt: row.archived_at,
     sortOrder: row.sort_order,
-    notes: row.notes,
   };
 }
 
@@ -465,7 +460,6 @@ export async function createFinancialAccount(
     institution_name: input.institutionName ?? null,
     opened_on: input.openedOn ?? null,
     sort_order: input.sortOrder ?? 0,
-    notes: input.notes ?? null,
   };
 
   let result: { account: FinancialAccount; operation: SyncOperation };
@@ -475,8 +469,8 @@ export async function createFinancialAccount(
       `INSERT INTO financial_accounts
         (id, user_id, name, kind, status, opening_balance_centavos, current_balance_centavos,
          credit_limit_centavos, include_in_dashboard_balance, institution_name, opened_on,
-         sort_order, notes, metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+         sort_order, metadata, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
       userId,
       input.name,
@@ -488,7 +482,6 @@ export async function createFinancialAccount(
       input.institutionName ?? null,
       input.openedOn ?? null,
       input.sortOrder ?? 0,
-      input.notes ?? null,
       ts,
       ts,
     );
@@ -544,7 +537,6 @@ export async function updateFinancialAccount(
   if (input.openedOn !== undefined) { changedFields.push("opened_on"); payload.opened_on = input.openedOn; }
   if (input.archivedAt !== undefined) { changedFields.push("archived_at"); payload.archived_at = input.archivedAt; }
   if (input.sortOrder !== undefined) { changedFields.push("sort_order"); payload.sort_order = input.sortOrder; }
-  if (input.notes !== undefined) { changedFields.push("notes"); payload.notes = input.notes; }
 
   if (changedFields.length === 0) {
     const existing = await getFinancialAccount(userId, id);
@@ -575,7 +567,6 @@ export async function updateFinancialAccount(
     if (input.openedOn !== undefined) { setClauses.push("opened_on = ?"); params.push(input.openedOn); }
     if (input.archivedAt !== undefined) { setClauses.push("archived_at = ?"); params.push(input.archivedAt); }
     if (input.sortOrder !== undefined) { setClauses.push("sort_order = ?"); params.push(input.sortOrder); }
-    if (input.notes !== undefined) { setClauses.push("notes = ?"); params.push(input.notes); }
 
     setClauses.push("updated_at = ?"); params.push(ts);
     setClauses.push("version = version + 1");
