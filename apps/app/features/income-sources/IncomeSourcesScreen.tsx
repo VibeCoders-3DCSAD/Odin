@@ -81,9 +81,20 @@ export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRe
   }, [userId]);
   useEffect(() => { load(); }, [load]);
 
-  const totalMonthly = sources
-    .filter((s) => s.frequency === "monthly")
-    .reduce((s, i) => s + (i.expectedAmountCentavos ?? 0), 0);
+  const MONTHLY_MULTIPLIER: Record<string, number> = {
+    weekly: 4.33,
+    biweekly: 2.17,
+    semi_monthly: 2,
+    monthly: 1,
+    irregular: 1,
+    custom: 1,
+  };
+
+  const totalMonthly = sources.reduce((sum, s) => {
+    const amount = s.expectedAmountCentavos ?? 0;
+    const multiplier = MONTHLY_MULTIPLIER[s.frequency] ?? 1;
+    return sum + Math.round(amount * multiplier);
+  }, 0);
 
   const handleCreate = async (input: CreateIncomeSourceInput) => {
     await createIncomeSource(userId, deviceId, input);
