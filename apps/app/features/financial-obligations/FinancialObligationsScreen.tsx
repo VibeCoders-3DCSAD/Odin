@@ -22,7 +22,6 @@ import {
   ShieldCheck,
   Gear,
   LinkSimple,
-  LinkBreak,
 } from "phosphor-react-native";
 import {
   listFinancialObligations,
@@ -36,7 +35,7 @@ import {
 } from "../../local-db/repositories/financialFoundations";
 import { listCategoryGroups, listCategories, listSubcategories, type Category, type CategoryGroup, type Subcategory } from "../../local-db/repositories/taxonomy";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
-import { listRecurringTemplates, type RecurringTemplate } from "../../local-db/repositories/recurringTransactions";
+import { listRecurringTemplates, deleteRecurringTemplate, type RecurringTemplate } from "../../local-db/repositories/recurringTransactions";
 import { linkObligationToRecurringTemplate } from "../../local-db/repositories/financialFoundations";
 import AutomateObligationSheet from "./components/AutomateObligationSheet";
 
@@ -88,7 +87,7 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack, o
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editing, setEditing] = useState<FinancialObligation | null>(null);
   const [automateTarget, setAutomateTarget] = useState<FinancialObligation | null>(null);
-  const [pendingActions, setPendingActions] = useState<Record<string, "automating" | "unlinking">>({});
+  const [pendingActions, setPendingActions] = useState<Record<string, "automating" | "deleting">>({});
   const [defaultFrequency, setDefaultFrequency] = useState<ObligationFrequency>("monthly");
 
   const load = useCallback(async () => {
@@ -132,13 +131,17 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack, o
   };
 
   const handleUnlink = (o: FinancialObligation) => {
-    Alert.alert(`Unlink "${o.name}"?`, "The recurring template will stay active but this obligation will no longer be linked to it.", [
+    const templateId = o.recurringTemplateId;
+    if (!templateId) return;
+
+    Alert.alert(`Delete "${o.name}" Recurring?`, "The automated transaction and its link to this obligation will be deleted. This does not delete past transactions.", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Unlink", style: "destructive", onPress: async () => {
-          setPendingActions((prev) => ({ ...prev, [o.id]: "unlinking" }));
+        text: "Delete", style: "destructive", onPress: async () => {
+          setPendingActions((prev) => ({ ...prev, [o.id]: "deleting" }));
           try {
             await linkObligationToRecurringTemplate(userId, deviceId, o.id, null);
+            await deleteRecurringTemplate(userId, deviceId, templateId);
             await load();
             onSyncRequested?.();
           } finally {
@@ -195,15 +198,15 @@ export default function FinancialObligationsScreen({ userId, deviceId, onBack, o
               <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: P.line }}>
                 <LinkSimple size={14} color={P.brandMedium} style={{ marginRight: 6 }} />
                 <Text style={{ flex: 1, fontSize: 12, fontFamily: "Manrope", color: P.ink2 }}>
-                  Linked: {linkedTemplate.name}{linkedTemplate.next_occurrence_date ? ` · next ${linkedTemplate.next_occurrence_date}` : ""}
+                  Automated: {linkedTemplate.name}{linkedTemplate.next_occurrence_date ? ` · next ${linkedTemplate.next_occurrence_date}` : ""}
                 </Text>
                 <TouchableOpacity
                   onPress={() => handleUnlink(o)}
-                  disabled={action === "unlinking"}
+                  disabled={action === "deleting"}
                   hitSlop={8}
-                  style={{ padding: 4, opacity: action === "unlinking" ? 0.5 : 1 }}
+                  style={{ padding: 4, opacity: action === "deleting" ? 0.5 : 1 }}
                 >
-                  <LinkBreak size={14} color={P.error} weight="bold" />
+                  <TrashSimple size={14} color={P.error} />
                 </TouchableOpacity>
               </View>
             ) : (
