@@ -97,11 +97,7 @@ export default function AutomateObligationSheet({ visible, obligation, subcatego
                 <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: P.line, alignSelf: "center", marginTop: 10 }} />
                 <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled" bounces={false}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
-                    Automate This Obligation
-                  </Text>
-
-                  <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted }}>
-                    Create a recurring expense template from "{obligation.name}"
+                    Automate "{obligation.name}"
                   </Text>
 
                   <View style={{ padding: 12, borderRadius: 12, backgroundColor: P.card, borderWidth: 1, borderColor: P.line, gap: 4 }}>
