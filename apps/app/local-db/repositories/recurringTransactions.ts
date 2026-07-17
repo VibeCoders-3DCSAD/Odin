@@ -169,7 +169,7 @@ function mapOccurrence(row: OccurrenceRow): RecurringOccurrence {
   };
 }
 
-function computeNextOccurrenceDate(template: RecurringTemplateRow): string | null {
+export function computeNextOccurrenceDate(template: RecurringTemplateRow): string | null {
   const base = template.last_generated_date
     ? new Date(template.last_generated_date + "T00:00:00")
     : new Date(template.starts_on + "T00:00:00");
