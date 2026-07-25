@@ -27,8 +27,10 @@ BEGIN
     v_as_of := COALESCE(p_as_of, CURRENT_DATE);
     v_limit := COALESCE(p_limit, 200);
 
-    IF auth.uid() IS NOT NULL AND p_user_id IS NOT NULL AND p_user_id <> auth.uid() THEN
-        RAISE EXCEPTION 'Not authorized' USING ERRCODE = '42501';
+    IF auth.uid() IS NOT NULL THEN
+        IF p_user_id IS NULL OR p_user_id <> auth.uid() THEN
+            RAISE EXCEPTION 'Not authorized' USING ERRCODE = '42501';
+        END IF;
     END IF;
 
     FOR v_template IN
@@ -153,3 +155,5 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION odin.run_recurring_transaction_engine(date, int, uuid) FROM authenticated;

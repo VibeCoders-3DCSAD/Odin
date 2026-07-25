@@ -7,8 +7,8 @@ import { runEngine, ENGINE_ERRORS } from "../services/recurringService.js";
 const router = Router();
 
 function timingSafeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a.normalize(), "utf-8");
-  const bufB = Buffer.from(b.normalize(), "utf-8");
+  const bufA = Buffer.from(a, "utf-8");
+  const bufB = Buffer.from(b, "utf-8");
   if (bufA.length !== bufB.length) {
     crypto.timingSafeEqual(bufA, bufA);
     return false;

@@ -12,6 +12,10 @@ DECLARE
     v_template_id uuid;
     v_next_date date;
 BEGIN
+    IF auth.uid() IS NULL OR p_user_id IS NULL OR p_user_id <> auth.uid() THEN
+        RAISE EXCEPTION 'Not authorized' USING ERRCODE = '42501';
+    END IF;
+
     SELECT * INTO v_obligation
     FROM financial_obligations
     WHERE id = p_obligation_id
@@ -144,3 +148,5 @@ BEGIN
 
     RAISE NOTICE 'All odin.create_recurring_template_from_obligation tests passed';
 END $$;
+
+REVOKE EXECUTE ON FUNCTION odin.create_recurring_template_from_obligation(uuid, uuid) FROM authenticated;
