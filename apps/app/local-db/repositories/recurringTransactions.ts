@@ -301,6 +301,7 @@ export async function createRecurringTemplate(
   userId: string,
   deviceId: string,
   input: CreateRecurringInput,
+  existingDb?: SQLite.SQLiteDatabase,
 ): Promise<{ template: RecurringTemplate; operation: SyncOperation }> {
   if (!input.name?.trim()) throw new LocalDbError("VALIDATION_ERROR", "name is required");
   if (!(VALID_TYPES as readonly string[]).includes(input.transaction_type)) {
@@ -314,13 +315,13 @@ export async function createRecurringTemplate(
   }
   if (!input.starts_on) throw new LocalDbError("VALIDATION_ERROR", "starts_on is required");
 
-  const db = await getDb();
+  const db = existingDb ?? await getDb();
   const id = randomUUID();
   const ts = now();
 
   let result: { template: RecurringTemplate; operation: SyncOperation };
 
-  await db.withTransactionAsync(async () => {
+  const work = async () => {
     await db.runAsync(
       `INSERT INTO recurring_transaction_templates
         (id, user_id, transaction_type, status, name, amount_centavos,
@@ -368,7 +369,10 @@ export async function createRecurringTemplate(
       "SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ?", userId, id,
     );
     result = { template: mapRecurringTemplate(row!), operation };
-  });
+  };
+
+  if (existingDb) await work();
+  else await db.withTransactionAsync(work);
 
   return result!;
 }
@@ -378,13 +382,14 @@ export async function updateRecurringTemplate(
   deviceId: string,
   id: string,
   input: UpdateRecurringInput,
+  existingDb?: SQLite.SQLiteDatabase,
 ): Promise<{ template: RecurringTemplate; operation: SyncOperation }> {
-  const db = await getDb();
+  const db = existingDb ?? await getDb();
   const ts = now();
 
   let result: { template: RecurringTemplate; operation: SyncOperation };
 
-  await db.withTransactionAsync(async () => {
+  const work = async () => {
     const current = await db.getFirstAsync<RecurringTemplateRow>(
       "SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ? AND deleted = 0",
       userId, id,
@@ -441,7 +446,10 @@ export async function updateRecurringTemplate(
       "SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ?", userId, id,
     );
     result = { template: mapRecurringTemplate(row!), operation };
-  });
+  };
+
+  if (existingDb) await work();
+  else await db.withTransactionAsync(work);
 
   return result!;
 }
@@ -450,13 +458,14 @@ export async function deleteRecurringTemplate(
   userId: string,
   deviceId: string,
   id: string,
+  existingDb?: SQLite.SQLiteDatabase,
 ): Promise<{ template: RecurringTemplate; operation: SyncOperation }> {
-  const db = await getDb();
+  const db = existingDb ?? await getDb();
   const ts = now();
 
   let result: { template: RecurringTemplate; operation: SyncOperation };
 
-  await db.withTransactionAsync(async () => {
+  const work = async () => {
     const current = await db.getFirstAsync<RecurringTemplateRow>(
       "SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ? AND deleted = 0",
       userId, id,
@@ -483,7 +492,10 @@ export async function deleteRecurringTemplate(
       "SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ?", userId, id,
     );
     result = { template: mapRecurringTemplate(row!), operation };
-  });
+  };
+
+  if (existingDb) await work();
+  else await db.withTransactionAsync(work);
 
   return result!;
 }

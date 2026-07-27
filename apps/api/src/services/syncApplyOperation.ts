@@ -570,7 +570,7 @@ async function validateTaxonomyCreatePayload(
     requireString(sanitized, "name");
     requirePositiveInteger(sanitized, "amount_centavos");
     requireString(sanitized, "frequency");
-    if (!["daily", "weekly", "monthly", "quarterly", "yearly", "custom"].includes(sanitized.frequency as string)) {
+    if (!["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(sanitized.frequency as string)) {
       throw new Error("frequency must be a valid schedule");
     }
     requireString(sanitized, "starts_on");

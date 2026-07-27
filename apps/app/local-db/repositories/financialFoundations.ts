@@ -372,6 +372,7 @@ async function assertAccessibleIncomeDestinationAndCategory(
 }
 
 async function syncIncomeSourceRecurringTemplate(
+  db: SQLite.SQLiteDatabase,
   userId: string,
   deviceId: string,
   source: {
@@ -408,11 +409,11 @@ async function syncIncomeSourceRecurringTemplate(
   };
 
   if (source.recurringTemplateId) {
-    await updateRecurringTemplate(userId, deviceId, source.recurringTemplateId, recurringInput);
+    await updateRecurringTemplate(userId, deviceId, source.recurringTemplateId, recurringInput, db);
     return source.recurringTemplateId;
   }
 
-  const { template } = await createRecurringTemplate(userId, deviceId, recurringInput);
+  const { template } = await createRecurringTemplate(userId, deviceId, recurringInput, db);
   return template.id;
 }
 
@@ -826,28 +827,10 @@ export async function createIncomeSource(
   const id = randomUUID();
   const ts = now();
   await assertAccessibleIncomeDestinationAndCategory(db, userId, input.destinationAccountId, input.subcategoryId);
-
-  const recurringTemplateId = await syncIncomeSourceRecurringTemplate(userId, deviceId, {
-    id,
-    recurringTemplateId: null,
-    name: input.name,
-    frequency: input.frequency,
-    destinationAccountId: input.destinationAccountId,
-    subcategoryId: input.subcategoryId,
-    expectedAmountCentavos: input.expectedAmountCentavos ?? null,
-    minAmountCentavos: input.minAmountCentavos ?? null,
-    maxAmountCentavos: input.maxAmountCentavos ?? null,
-    paydayDayOfMonth: input.paydayDayOfMonth ?? null,
-    paydaySecondDayOfMonth: input.paydaySecondDayOfMonth ?? null,
-    paydayDayOfWeek: input.paydayDayOfWeek ?? null,
-    nextExpectedDate: input.nextExpectedDate ?? null,
-    notes: input.notes ?? null,
-  });
   const payload: Record<string, unknown> = {
     name: input.name,
     income_type: input.incomeType,
     frequency: input.frequency,
-    recurring_template_id: recurringTemplateId,
     destination_account_id: input.destinationAccountId,
     subcategory_id: input.subcategoryId,
     expected_amount_centavos: input.expectedAmountCentavos ?? null,
@@ -866,6 +849,24 @@ export async function createIncomeSource(
   let result: { source: IncomeSource; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
+    const recurringTemplateId = await syncIncomeSourceRecurringTemplate(db, userId, deviceId, {
+      id,
+      recurringTemplateId: null,
+      name: input.name,
+      frequency: input.frequency,
+      destinationAccountId: input.destinationAccountId,
+      subcategoryId: input.subcategoryId,
+      expectedAmountCentavos: input.expectedAmountCentavos ?? null,
+      minAmountCentavos: input.minAmountCentavos ?? null,
+      maxAmountCentavos: input.maxAmountCentavos ?? null,
+      paydayDayOfMonth: input.paydayDayOfMonth ?? null,
+      paydaySecondDayOfMonth: input.paydaySecondDayOfMonth ?? null,
+      paydayDayOfWeek: input.paydayDayOfWeek ?? null,
+      nextExpectedDate: input.nextExpectedDate ?? null,
+      notes: input.notes ?? null,
+    });
+
+    payload.recurring_template_id = recurringTemplateId;
     await db.runAsync(
       `INSERT INTO income_sources
         (id, user_id, recurring_template_id, destination_account_id, subcategory_id, name, income_type, frequency, expected_amount_centavos, min_amount_centavos,
@@ -1004,7 +1005,7 @@ export async function updateIncomeSource(
     }
     await assertAccessibleIncomeDestinationAndCategory(db, userId, effectiveDestinationAccountId, effectiveSubcategoryId);
 
-    const recurringTemplateId = await syncIncomeSourceRecurringTemplate(userId, deviceId, {
+    const recurringTemplateId = await syncIncomeSourceRecurringTemplate(db, userId, deviceId, {
       id,
       recurringTemplateId: existing.recurring_template_id,
       name: input.name ?? existing.name,
@@ -1098,7 +1099,7 @@ export async function deleteIncomeSource(
 
     if (existing.recurring_template_id) {
       const { deleteRecurringTemplate } = await import("./recurringTransactions");
-      await deleteRecurringTemplate(userId, deviceId, existing.recurring_template_id);
+      await deleteRecurringTemplate(userId, deviceId, existing.recurring_template_id, db);
     }
 
     await db.runAsync(
