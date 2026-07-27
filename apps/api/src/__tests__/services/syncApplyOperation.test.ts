@@ -163,6 +163,8 @@ describe("prepareOperation — income_sources create", () => {
     name: "Freelance Work",
     income_type: "variable",
     frequency: "monthly",
+    destination_account_id: "33333333-3333-3333-3333-333333333333",
+    subcategory_id: "44444444-4444-4444-4444-444444444444",
     expected_amount_centavos: 1500000,
     min_amount_centavos: 500000,
     max_amount_centavos: 3000000,
@@ -170,6 +172,21 @@ describe("prepareOperation — income_sources create", () => {
     next_expected_date: "2026-08-15",
     is_active: true,
   };
+
+  beforeEach(() => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "financial_accounts") {
+        return createMockQuery({ data: { id: validCreatePayload.destination_account_id }, error: null });
+      }
+      if (table === "subcategories") {
+        return createMockQuery({ data: { id: validCreatePayload.subcategory_id }, error: null });
+      }
+      if (table === "recurring_transaction_templates") {
+        return createMockQuery({ data: null, error: null });
+      }
+      throw new Error(`unexpected table lookup: ${table}`);
+    });
+  });
 
   function op(overrides: Record<string, unknown> = {}): Operation {
     return {
@@ -186,6 +203,18 @@ describe("prepareOperation — income_sources create", () => {
   it("creates a valid income source", async () => {
     const result = await prepareOperation(mockClient, validUserId, op());
     expect(result.payload).toMatchObject({ name: "Freelance Work" });
+  });
+
+  it("rejects missing destination_account_id", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op({ destination_account_id: undefined })),
+    ).rejects.toThrow("destination_account_id is required");
+  });
+
+  it("rejects missing subcategory_id", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op({ subcategory_id: undefined })),
+    ).rejects.toThrow("subcategory_id is required");
   });
 
   it("rejects missing name", async () => {
@@ -228,6 +257,60 @@ describe("prepareOperation — income_sources create", () => {
     await expect(
       prepareOperation(mockClient, validUserId, op({ payday_day_of_week: 7 })),
     ).rejects.toThrow("payday_day_of_week must be between 0 and 6");
+  });
+});
+
+describe("prepareOperation — recurring_transaction_templates create", () => {
+  const validCreatePayload: Record<string, unknown> = {
+    transaction_type: "income",
+    name: "Salary recurring",
+    amount_centavos: 500000,
+    frequency: "biweekly",
+    interval_count: 1,
+    day_of_week: 5,
+    starts_on: "2026-08-01",
+    destination_account_id: "33333333-3333-3333-3333-333333333333",
+    subcategory_id: "44444444-4444-4444-4444-444444444444",
+  };
+
+  function op(overrides: Record<string, unknown> = {}): Operation {
+    return {
+      operation_id: "op-recurring-1",
+      entity: "recurring_transaction_templates",
+      record_id: "recurring-rec-1",
+      operation_type: "create",
+      base_version: null,
+      changed_fields: Object.keys(validCreatePayload),
+      payload: { ...validCreatePayload, ...overrides },
+    };
+  }
+
+  beforeEach(() => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "financial_accounts") {
+        return createMockQuery({ data: { id: validCreatePayload.destination_account_id }, error: null });
+      }
+      if (table === "subcategories") {
+        return createMockQuery({ data: { id: validCreatePayload.subcategory_id }, error: null });
+      }
+      throw new Error(`unexpected table lookup: ${table}`);
+    });
+  });
+
+  it("accepts recurring template create in the allowlist", async () => {
+    const result = await prepareOperation(mockClient, validUserId, op());
+    expect(result.entity).toBe("recurring_transaction_templates");
+    expect(result.payload).toMatchObject({ frequency: "biweekly" });
+  });
+
+  it("accepts semi_monthly recurring frequency", async () => {
+    const result = await prepareOperation(mockClient, validUserId, op({
+      frequency: "semi_monthly",
+      day_of_month: 15,
+      second_day_of_month: 30,
+      day_of_week: undefined,
+    }));
+    expect(result.payload).toMatchObject({ frequency: "semi_monthly" });
   });
 });
 

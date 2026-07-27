@@ -14,10 +14,13 @@ import {
 } from "react-native";
 import {
   CurrencyDollar,
+  CaretRight,
   PencilSimple,
   Plus,
+  Tag,
   TrashSimple,
   TrendUp,
+  Wallet,
 } from "phosphor-react-native";
 import {
   listIncomeSources,
@@ -29,6 +32,9 @@ import {
   type IncomeType,
   type IncomeFrequency,
 } from "../../local-db/repositories/financialFoundations";
+import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialAccounts";
+import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
+import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
 
 const P = {
   shell: "#fcf8f0", brand: "#013220", brandMedium: "#0E6D46",
@@ -38,8 +44,6 @@ const P = {
 
 const INCOME_TYPES: readonly IncomeType[] = ["stable", "variable"];
 const FREQUENCIES: readonly IncomeFrequency[] = ["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"];
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function formatPeso(centavos: number): string {
   const pesos = centavos / 100;
@@ -151,15 +155,17 @@ export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRe
           </View>
         ))
       )}
-      <IncomeFormSheet visible={sheetVisible} editing={editing} onClose={() => { setSheetVisible(false); setEditing(null); }} onSubmit={editing ? handleUpdate : handleCreate} />
+      <IncomeFormSheet userId={userId} visible={sheetVisible} editing={editing} onClose={() => { setSheetVisible(false); setEditing(null); }} onSubmit={editing ? handleUpdate : handleCreate} />
     </>
   );
 }
 
-function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boolean; editing: IncomeSource | null; onClose: () => void; onSubmit: (input: CreateIncomeSourceInput) => Promise<void> }) {
+function IncomeFormSheet({ userId, visible, editing, onClose, onSubmit }: { userId: string; visible: boolean; editing: IncomeSource | null; onClose: () => void; onSubmit: (input: CreateIncomeSourceInput) => Promise<void> }) {
   const [name, setName] = useState("");
   const [incomeType, setIncomeType] = useState<IncomeType>("stable");
   const [frequency, setFrequency] = useState<IncomeFrequency>("monthly");
+  const [destinationAccountId, setDestinationAccountId] = useState("");
+  const [subcategoryId, setSubcategoryId] = useState("");
   const [expected, setExpected] = useState("");
   const [min, setMin] = useState("");
   const [max, setMax] = useState("");
@@ -171,15 +177,46 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [accountPickerOpen, setAccountPickerOpen] = useState(false);
+  const [subcategoryPickerOpen, setSubcategoryPickerOpen] = useState(false);
   const isEdit = editing !== null;
 
   const paydayMonthInvalid = paydayDayOfMonth.trim() !== "" && parseDayOfMonth(paydayDayOfMonth) === null;
   const paydaySecondMonthInvalid = paydaySecondDayOfMonth.trim() !== "" && parseDayOfMonth(paydaySecondDayOfMonth) === null;
   const intervalInvalid = intervalDays.trim() !== "" && (isNaN(parseInt(intervalDays, 10)) || parseInt(intervalDays, 10) < 1);
+  const scheduleValue: RecurringScheduleValue = {
+    frequency,
+    intervalCount: "1",
+    dayOfMonth: paydayDayOfMonth,
+    secondDayOfMonth: paydaySecondDayOfMonth,
+    dayOfWeek: paydayDayOfWeek,
+    secondDayOfWeek: paydaySecondDayOfWeek,
+    monthOfYear: null,
+    estimatedIntervalDays: intervalDays,
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSupportData() {
+      const [accountRows, subcategoryRows] = await Promise.all([
+        listFinancialAccounts(userId, "active"),
+        listSubcategories(userId, undefined, "income"),
+      ]);
+      if (cancelled) return;
+      setAccounts(accountRows);
+      setSubcategories(subcategoryRows);
+    }
+    loadSupportData().catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
 
   useEffect(() => {
     if (editing) {
       setName(editing.name); setIncomeType(editing.incomeType); setFrequency(editing.frequency);
+      setDestinationAccountId(editing.destinationAccountId ?? "");
+      setSubcategoryId(editing.subcategoryId ?? "");
       setExpected(editing.expectedAmountCentavos != null ? String(editing.expectedAmountCentavos / 100) : "");
       setMin(editing.minAmountCentavos != null ? String(editing.minAmountCentavos / 100) : "");
       setMax(editing.maxAmountCentavos != null ? String(editing.maxAmountCentavos / 100) : "");
@@ -191,6 +228,7 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
       setNotes(editing.notes ?? "");
     } else {
       setName(""); setIncomeType("stable"); setFrequency("monthly");
+      setDestinationAccountId(""); setSubcategoryId("");
       setExpected(""); setMin(""); setMax("");
       setPaydayDayOfMonth(""); setPaydaySecondDayOfMonth("");
       setPaydayDayOfWeek(null); setPaydaySecondDayOfWeek(null); setIntervalDays(""); setNotes("");
@@ -207,6 +245,8 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
     const errors: string[] = [];
 
     if (!name.trim()) errors.push("Name is required.");
+    if (!destinationAccountId) errors.push("Destination account is required.");
+    if (!subcategoryId) errors.push("Income category is required.");
 
     const e = parseSafeCents(expected);
     const mn = parseSafeCents(min);
@@ -243,6 +283,8 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
         name: name.trim(),
         incomeType,
         frequency,
+        destinationAccountId,
+        subcategoryId,
         expectedAmountCentavos: e,
         minAmountCentavos: mn,
         maxAmountCentavos: mx,
@@ -292,6 +334,36 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                      DESTINATION ACCOUNT <Text style={{ color: P.error }}>*</Text>
+                    </Text>
+                    <Pressable onPress={() => setAccountPickerOpen(true)} style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: P.card }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                        <Wallet size={16} color={P.muted} />
+                        <Text numberOfLines={1} style={{ fontFamily: "Manrope", fontSize: 14, color: destinationAccountId ? P.ink : P.muted, flex: 1 }}>
+                          {destinationAccountId ? accounts.find((account) => account.id === destinationAccountId)?.name ?? "Select account" : "Select account"}
+                        </Text>
+                      </View>
+                      <CaretRight size={14} color={P.muted} />
+                    </Pressable>
+                  </View>
+
+                  <View>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
+                      INCOME CATEGORY <Text style={{ color: P.error }}>*</Text>
+                    </Text>
+                    <Pressable onPress={() => setSubcategoryPickerOpen(true)} style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: P.card }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                        <Tag size={16} color={P.muted} />
+                        <Text numberOfLines={1} style={{ fontFamily: "Manrope", fontSize: 14, color: subcategoryId ? P.ink : P.muted, flex: 1 }}>
+                          {subcategoryId ? subcategories.find((subcategory) => subcategory.id === subcategoryId)?.label ?? "Select category" : "Select category"}
+                        </Text>
+                      </View>
+                      <CaretRight size={14} color={P.muted} />
+                    </Pressable>
+                  </View>
+
+                  <View>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
                       TYPE <Text style={{ color: P.error }}>*</Text>
                     </Text>
                     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -310,31 +382,21 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
                     </View>
                   </View>
 
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      FREQUENCY <Text style={{ color: P.error }}>*</Text>
-                    </Text>
-                    {incomeType === "variable" ? (
-                      <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.ink, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: P.brand }}>
-                        <Text style={{ color: P.white, fontWeight: "600" }}>irregular</Text>
-                      </Text>
-                    ) : (
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {FREQUENCIES.map((f) => (
-                          <Pressable
-                            key={f}
-                            onPress={() => setFrequency(f)}
-                            accessibilityRole="radio"
-                            accessibilityLabel={f}
-                            accessibilityState={{ checked: frequency === f }}
-                            style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: frequency === f ? P.brand : P.card }}
-                          >
-                            <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: frequency === f ? P.white : P.ink2 }}>{f}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </View>
+                  <RecurringScheduleFields
+                    frequencies={incomeType === "variable" ? ["irregular"] : FREQUENCIES}
+                    value={scheduleValue}
+                    onChange={(next) => {
+                      setFrequency(next.frequency as IncomeFrequency);
+                      setPaydayDayOfMonth(next.dayOfMonth);
+                      setPaydaySecondDayOfMonth(next.secondDayOfMonth);
+                      setPaydayDayOfWeek(next.dayOfWeek);
+                      setPaydaySecondDayOfWeek(next.secondDayOfWeek);
+                      setIntervalDays(next.estimatedIntervalDays);
+                    }}
+                    dayOfMonthError={paydayMonthInvalid}
+                    secondDayOfMonthError={paydaySecondMonthInvalid}
+                    estimatedIntervalError={intervalInvalid}
+                  />
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
@@ -378,114 +440,6 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
                     />
                   </View>
 
-                  {frequency === "monthly" && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        PAYDAY (DAY OF MONTH)
-                      </Text>
-                      <TextInput
-                        value={paydayDayOfMonth}
-                        onChangeText={setPaydayDayOfMonth}
-                        placeholder="15"
-                        placeholderTextColor={P.muted}
-                        keyboardType="number-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: paydayMonthInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                      />
-                    </View>
-                  )}
-
-                  {frequency === "semi_monthly" && (
-                    <>
-                      <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          1ST PAYDAY (DAY OF MONTH)
-                        </Text>
-                        <TextInput
-                          value={paydayDayOfMonth}
-                          onChangeText={setPaydayDayOfMonth}
-                          placeholder="15"
-                          placeholderTextColor={P.muted}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: paydayMonthInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                        />
-                      </View>
-                      <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          2ND PAYDAY (DAY OF MONTH)
-                        </Text>
-                        <TextInput
-                          value={paydaySecondDayOfMonth}
-                          onChangeText={setPaydaySecondDayOfMonth}
-                          placeholder="30"
-                          placeholderTextColor={P.muted}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: paydaySecondMonthInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                        />
-                      </View>
-                    </>
-                  )}
-
-                  {showDayOfWeek && (
-                    <>
-                      <View>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                          {frequency === "biweekly" ? "1ST PAYDAY (DAY OF WEEK)" : "PAYDAY (DAY OF WEEK)"}
-                        </Text>
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                          {WEEKDAYS.map((day, idx) => (
-                            <Pressable
-                              key={day}
-                              onPress={() => setPaydayDayOfWeek(idx)}
-                              accessibilityRole="radio"
-                              accessibilityLabel={day}
-                              accessibilityState={{ checked: paydayDayOfWeek === idx }}
-                              style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: paydayDayOfWeek === idx ? P.brand : P.card }}
-                            >
-                              <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: paydayDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      </View>
-                      {frequency === "biweekly" && (
-                        <View>
-                          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                            2ND PAYDAY (DAY OF WEEK)
-                          </Text>
-                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                            {WEEKDAYS.map((day, idx) => (
-                              <Pressable
-                                key={day}
-                                onPress={() => setPaydaySecondDayOfWeek(idx)}
-                                accessibilityRole="radio"
-                                accessibilityLabel={day}
-                                accessibilityState={{ checked: paydaySecondDayOfWeek === idx }}
-                                style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: paydaySecondDayOfWeek === idx ? P.brand : P.card }}
-                              >
-                                <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: paydaySecondDayOfWeek === idx ? P.white : P.ink2 }}>{day}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        </View>
-                      )}
-                    </>
-                  )}
-
-                  {frequency === "irregular" && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        ESTIMATED EVERY (DAYS)
-                      </Text>
-                      <TextInput
-                        value={intervalDays}
-                        onChangeText={setIntervalDays}
-                        placeholder="e.g. 45"
-                        placeholderTextColor={P.muted}
-                        keyboardType="number-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: intervalInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                      />
-                    </View>
-                  )}
-
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
                       NOTES (OPTIONAL)
@@ -522,6 +476,56 @@ function IncomeFormSheet({ visible, editing, onClose, onSubmit }: { visible: boo
                     </Pressable>
                   </View>
                 </ScrollView>
+
+                <Modal visible={accountPickerOpen} transparent animationType="slide" onRequestClose={() => setAccountPickerOpen(false)}>
+                  <Pressable onPress={() => setAccountPickerOpen(false)} style={{ flex: 1 }}>
+                    <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
+                      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
+                        <Pressable onPress={() => {}}>
+                          <View style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.7 }}>
+                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: P.line, alignSelf: "center", marginTop: 10 }} />
+                            <ScrollView contentContainerStyle={{ padding: 22, gap: 12 }}>
+                              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>Select Destination Account</Text>
+                              {accounts.map((account) => {
+                                const selected = account.id === destinationAccountId;
+                                return (
+                                  <Pressable key={account.id} onPress={() => { setDestinationAccountId(account.id); setAccountPickerOpen(false); }} style={{ padding: 14, borderRadius: 12, borderWidth: 1, borderColor: selected ? P.brand : P.line, backgroundColor: selected ? P.brand : P.card }}>
+                                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: selected ? P.white : P.ink }}>{account.name}</Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </ScrollView>
+                          </View>
+                        </Pressable>
+                      </KeyboardAvoidingView>
+                    </View>
+                  </Pressable>
+                </Modal>
+
+                <Modal visible={subcategoryPickerOpen} transparent animationType="slide" onRequestClose={() => setSubcategoryPickerOpen(false)}>
+                  <Pressable onPress={() => setSubcategoryPickerOpen(false)} style={{ flex: 1 }}>
+                    <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
+                      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
+                        <Pressable onPress={() => {}}>
+                          <View style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.7 }}>
+                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: P.line, alignSelf: "center", marginTop: 10 }} />
+                            <ScrollView contentContainerStyle={{ padding: 22, gap: 12 }}>
+                              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>Select Income Category</Text>
+                              {subcategories.map((subcategory) => {
+                                const selected = subcategory.id === subcategoryId;
+                                return (
+                                  <Pressable key={subcategory.id} onPress={() => { setSubcategoryId(subcategory.id); setSubcategoryPickerOpen(false); }} style={{ padding: 14, borderRadius: 12, borderWidth: 1, borderColor: selected ? P.brand : P.line, backgroundColor: selected ? P.brand : P.card }}>
+                                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: selected ? P.white : P.ink }}>{subcategory.label}</Text>
+                                  </Pressable>
+                                );
+                              })}
+                            </ScrollView>
+                          </View>
+                        </Pressable>
+                      </KeyboardAvoidingView>
+                    </View>
+                  </Pressable>
+                </Modal>
               </View>
             </Pressable>
           </KeyboardAvoidingView>

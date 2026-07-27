@@ -24,6 +24,7 @@ import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
 import FinancialObligationsScreen from "../features/financial-obligations/FinancialObligationsScreen";
+import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../features/recurring-transactions/RecurringTransactionsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import { useConnectivityStore } from "../services/connectivity";
@@ -71,6 +72,8 @@ type Page =
   | "insurance"
   | "assistant"
   | "add-transaction"
+  | "add-recurring-transaction"
+  | "recurring-transactions"
   | "categories"
   | "financial-accounts"
   | "income-sources"
@@ -130,6 +133,7 @@ type DrawerItem = {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   badge?: string;
+  child?: boolean;
 };
 
 type DrawerSection = {
@@ -147,6 +151,7 @@ const drawerSections: DrawerSection[] = [
       { page: "financial-obligations", icon: "calendar-check-outline", label: "Obligations" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
+      { page: "recurring-transactions", icon: "repeat", label: "Recurring Transactions", child: true },
       { page: "history", icon: "clock-outline", label: "History" },
       { page: "settings", icon: "cog-outline", label: "Settings" },
     ],
@@ -172,6 +177,7 @@ const drawerSections: DrawerSection[] = [
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
   transactions: { title: "Transactions", subtitle: "Your transaction history" },
+  "recurring-transactions": { title: "Recurring Transactions", subtitle: "Manage recurring templates" },
   history: { title: "History", subtitle: "Past activity" },
   "spending-forecast": { title: "Spending Forecast", subtitle: "Predictive insights" },
   "anomaly-alerts": { title: "Anomaly Alerts", subtitle: "Unusual activity detected" },
@@ -181,6 +187,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
+  "add-recurring-transaction": { title: "Add Recurring Transaction", subtitle: "Create a recurring template" },
   categories: { title: "Categories", subtitle: "Manage your categories" },
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
@@ -746,8 +753,16 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onClose={() => setCurrentPage(transactionReturnPage)} />;
     }
 
+    if (currentPage === "add-recurring-transaction") {
+      return <AddRecurringTransactionScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("recurring-transactions")} onSyncRequested={handleSync} />;
+    }
+
     if (currentPage === "transactions") {
       return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} />;
+    }
+
+    if (currentPage === "recurring-transactions") {
+      return <RecurringTransactionsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("transactions")} onSyncRequested={handleSync} onCreateRequested={() => setCurrentPage("add-recurring-transaction")} />;
     }
 
     if (currentPage === "categories") {
@@ -1178,6 +1193,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                         className={`flex-row items-center gap-3 px-4 py-3 rounded-xl ${
                           active ? "bg-white/12" : ""
                         }`}
+                        style={item.child ? { marginLeft: 16 } : undefined}
                       >
                         <MaterialCommunityIcons
                           color={active ? "white" : "rgba(255,255,255,0.6)"}

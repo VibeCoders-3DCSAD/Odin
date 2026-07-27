@@ -18,6 +18,8 @@ RETURNS TABLE (
   conflicted_fields text[]
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = odin, public
 AS $$
 DECLARE
   v_user_id uuid := auth.uid();
@@ -116,10 +118,11 @@ BEGIN
         p_payload->>'institution_name', (p_payload->>'opened_on')::date, COALESCE((p_payload->>'sort_order')::integer, 0), '{}'::jsonb, v_now, 1, false);
 
     ELSIF p_entity = 'income_sources' THEN
-      INSERT INTO income_sources (id, user_id, name, income_type, frequency, expected_amount_centavos, min_amount_centavos, max_amount_centavos,
+      INSERT INTO income_sources (id, user_id, recurring_template_id, destination_account_id, subcategory_id, name, income_type, frequency, expected_amount_centavos, min_amount_centavos, max_amount_centavos,
         payday_day_of_month, payday_second_day_of_month, payday_day_of_week, next_expected_date, estimated_interval_days,
         payday_second_day_of_week, is_active, notes, metadata, updated_at, version, deleted)
-      VALUES (p_record_id, v_user_id, p_payload->>'name', (p_payload->>'income_type')::odin_income_type, (p_payload->>'frequency')::odin_income_frequency,
+      VALUES (p_record_id, v_user_id, (p_payload->>'recurring_template_id')::uuid, (p_payload->>'destination_account_id')::uuid, (p_payload->>'subcategory_id')::uuid,
+        p_payload->>'name', (p_payload->>'income_type')::odin_income_type, (p_payload->>'frequency')::odin_income_frequency,
         (p_payload->>'expected_amount_centavos')::bigint, (p_payload->>'min_amount_centavos')::bigint, (p_payload->>'max_amount_centavos')::bigint,
         (p_payload->>'payday_day_of_month')::integer, (p_payload->>'payday_second_day_of_month')::integer, (p_payload->>'payday_day_of_week')::integer,
         (p_payload->>'next_expected_date')::date, (p_payload->>'estimated_interval_days')::integer, (p_payload->>'payday_second_day_of_week')::integer,
@@ -331,6 +334,9 @@ BEGIN
       RETURN;
     END IF;
     UPDATE income_sources SET
+      recurring_template_id = CASE WHEN p_payload ? 'recurring_template_id' THEN (p_payload->>'recurring_template_id')::uuid ELSE recurring_template_id END,
+      destination_account_id = CASE WHEN p_payload ? 'destination_account_id' THEN (p_payload->>'destination_account_id')::uuid ELSE destination_account_id END,
+      subcategory_id = CASE WHEN p_payload ? 'subcategory_id' THEN (p_payload->>'subcategory_id')::uuid ELSE subcategory_id END,
       name = CASE WHEN p_payload ? 'name' THEN p_payload->>'name' ELSE name END,
       income_type = CASE WHEN p_payload ? 'income_type' THEN (p_payload->>'income_type')::odin_income_type ELSE income_type END,
       frequency = CASE WHEN p_payload ? 'frequency' THEN (p_payload->>'frequency')::odin_income_frequency ELSE frequency END,

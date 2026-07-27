@@ -37,6 +37,9 @@ type IncomeSourceRow = {
   name: string;
   income_type: string;
   frequency: string;
+  recurring_template_id: string | null;
+  destination_account_id: string | null;
+  subcategory_id: string | null;
   expected_amount_centavos: number | null;
   min_amount_centavos: number | null;
   max_amount_centavos: number | null;
@@ -129,6 +132,9 @@ export type IncomeSource = {
   name: string;
   incomeType: IncomeType;
   frequency: IncomeFrequency;
+  recurringTemplateId: string | null;
+  destinationAccountId: string | null;
+  subcategoryId: string | null;
   expectedAmountCentavos: number | null;
   minAmountCentavos: number | null;
   maxAmountCentavos: number | null;
@@ -203,6 +209,8 @@ export type CreateIncomeSourceInput = {
   name: string;
   incomeType: IncomeType;
   frequency: IncomeFrequency;
+  destinationAccountId: string;
+  subcategoryId: string;
   expectedAmountCentavos?: number | null;
   minAmountCentavos?: number | null;
   maxAmountCentavos?: number | null;
@@ -220,6 +228,9 @@ export type UpdateIncomeSourceInput = {
   name?: string;
   incomeType?: IncomeType;
   frequency?: IncomeFrequency;
+  recurringTemplateId?: string | null;
+  destinationAccountId?: string | null;
+  subcategoryId?: string | null;
   expectedAmountCentavos?: number | null;
   minAmountCentavos?: number | null;
   maxAmountCentavos?: number | null;
@@ -298,6 +309,9 @@ function mapIncomeSource(row: IncomeSourceRow): IncomeSource {
     name: row.name,
     incomeType: row.income_type as IncomeType,
     frequency: row.frequency as IncomeFrequency,
+    recurringTemplateId: row.recurring_template_id,
+    destinationAccountId: row.destination_account_id,
+    subcategoryId: row.subcategory_id,
     expectedAmountCentavos: row.expected_amount_centavos,
     minAmountCentavos: row.min_amount_centavos,
     maxAmountCentavos: row.max_amount_centavos,
@@ -310,6 +324,97 @@ function mapIncomeSource(row: IncomeSourceRow): IncomeSource {
     isActive: row.is_active === 1,
     notes: row.notes,
   };
+}
+
+function todayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getIncomeRecurringFrequency(frequency: IncomeFrequency): import("./recurringTransactions").CreateRecurringInput["frequency"] {
+  return frequency === "irregular" ? "custom" : frequency;
+}
+
+function resolveIncomeRecurringAmount(input: {
+  expectedAmountCentavos?: number | null;
+  minAmountCentavos?: number | null;
+  maxAmountCentavos?: number | null;
+}): number {
+  const amount = input.expectedAmountCentavos ?? input.maxAmountCentavos ?? input.minAmountCentavos ?? null;
+  if (amount === null || amount <= 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "income sources need an amount to create a linked recurring transaction");
+  }
+  return amount;
+}
+
+async function assertAccessibleIncomeDestinationAndCategory(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  destinationAccountId: string,
+  subcategoryId: string,
+): Promise<void> {
+  const account = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM financial_accounts WHERE user_id = ? AND id = ? AND deleted = 0 AND status = 'active'",
+    userId,
+    destinationAccountId,
+  );
+  if (!account) {
+    throw new LocalDbError("VALIDATION_ERROR", "destinationAccountId does not reference an accessible active account");
+  }
+
+  const subcategory = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND kind = 'income' AND deleted = 0 AND is_active = 1",
+    userId,
+    subcategoryId,
+  );
+  if (!subcategory) {
+    throw new LocalDbError("VALIDATION_ERROR", "subcategoryId does not reference an accessible active income subcategory");
+  }
+}
+
+async function syncIncomeSourceRecurringTemplate(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  source: {
+    id: string;
+    recurringTemplateId: string | null;
+    name: string;
+    frequency: IncomeFrequency;
+    destinationAccountId: string;
+    subcategoryId: string;
+    expectedAmountCentavos: number | null;
+    minAmountCentavos: number | null;
+    maxAmountCentavos: number | null;
+    paydayDayOfMonth: number | null;
+    paydaySecondDayOfMonth: number | null;
+    paydayDayOfWeek: number | null;
+    nextExpectedDate: string | null;
+    notes: string | null;
+  },
+): Promise<string> {
+  const { createRecurringTemplate, updateRecurringTemplate } = await import("./recurringTransactions");
+
+  const recurringInput = {
+    transaction_type: "income" as const,
+    name: source.name,
+    amount_centavos: resolveIncomeRecurringAmount(source),
+    frequency: getIncomeRecurringFrequency(source.frequency),
+    day_of_month: source.paydayDayOfMonth ?? undefined,
+    second_day_of_month: source.paydaySecondDayOfMonth ?? undefined,
+    day_of_week: source.paydayDayOfWeek ?? undefined,
+    starts_on: source.nextExpectedDate ?? todayDate(),
+    subcategory_id: source.subcategoryId,
+    destination_account_id: source.destinationAccountId,
+    notes: source.notes ?? undefined,
+  };
+
+  if (source.recurringTemplateId) {
+    await updateRecurringTemplate(userId, deviceId, source.recurringTemplateId, recurringInput, db);
+    return source.recurringTemplateId;
+  }
+
+  const { template } = await createRecurringTemplate(userId, deviceId, recurringInput, db);
+  return template.id;
 }
 
 function mapObligation(row: FinancialObligationRow): FinancialObligation {
@@ -682,8 +787,8 @@ export async function createIncomeSource(
   deviceId: string,
   input: CreateIncomeSourceInput,
 ): Promise<{ source: IncomeSource; operation: SyncOperation }> {
-  if (!input.name || !input.incomeType || !input.frequency) {
-    throw new LocalDbError("VALIDATION_ERROR", "name, incomeType, and frequency are required");
+  if (!input.name || !input.incomeType || !input.frequency || !input.destinationAccountId || !input.subcategoryId) {
+    throw new LocalDbError("VALIDATION_ERROR", "name, incomeType, frequency, destinationAccountId, and subcategoryId are required");
   }
   if (!VALID_INCOME_TYPES.includes(input.incomeType)) {
     throw new LocalDbError("VALIDATION_ERROR", `incomeType must be one of: ${VALID_INCOME_TYPES.join(", ")}`);
@@ -721,10 +826,13 @@ export async function createIncomeSource(
   const db = await getDb();
   const id = randomUUID();
   const ts = now();
+  await assertAccessibleIncomeDestinationAndCategory(db, userId, input.destinationAccountId, input.subcategoryId);
   const payload: Record<string, unknown> = {
     name: input.name,
     income_type: input.incomeType,
     frequency: input.frequency,
+    destination_account_id: input.destinationAccountId,
+    subcategory_id: input.subcategoryId,
     expected_amount_centavos: input.expectedAmountCentavos ?? null,
     min_amount_centavos: input.minAmountCentavos ?? null,
     max_amount_centavos: input.maxAmountCentavos ?? null,
@@ -741,14 +849,35 @@ export async function createIncomeSource(
   let result: { source: IncomeSource; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
+    const recurringTemplateId = await syncIncomeSourceRecurringTemplate(db, userId, deviceId, {
+      id,
+      recurringTemplateId: null,
+      name: input.name,
+      frequency: input.frequency,
+      destinationAccountId: input.destinationAccountId,
+      subcategoryId: input.subcategoryId,
+      expectedAmountCentavos: input.expectedAmountCentavos ?? null,
+      minAmountCentavos: input.minAmountCentavos ?? null,
+      maxAmountCentavos: input.maxAmountCentavos ?? null,
+      paydayDayOfMonth: input.paydayDayOfMonth ?? null,
+      paydaySecondDayOfMonth: input.paydaySecondDayOfMonth ?? null,
+      paydayDayOfWeek: input.paydayDayOfWeek ?? null,
+      nextExpectedDate: input.nextExpectedDate ?? null,
+      notes: input.notes ?? null,
+    });
+
+    payload.recurring_template_id = recurringTemplateId;
     await db.runAsync(
       `INSERT INTO income_sources
-        (id, user_id, name, income_type, frequency, expected_amount_centavos, min_amount_centavos,
-         max_amount_centavos, payday_day_of_month, payday_second_day_of_month, payday_day_of_week,
-         next_expected_date, estimated_interval_days, payday_second_day_of_week, is_active, notes, metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+        (id, user_id, recurring_template_id, destination_account_id, subcategory_id, name, income_type, frequency, expected_amount_centavos, min_amount_centavos,
+          max_amount_centavos, payday_day_of_month, payday_second_day_of_month, payday_day_of_week,
+          next_expected_date, estimated_interval_days, payday_second_day_of_week, is_active, notes, metadata, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
       userId,
+      recurringTemplateId,
+      input.destinationAccountId,
+      input.subcategoryId,
       input.name,
       input.incomeType,
       input.frequency,
@@ -832,6 +961,9 @@ export async function updateIncomeSource(
   if (input.name !== undefined) { changedFields.push("name"); payload.name = input.name; }
   if (input.incomeType !== undefined) { changedFields.push("income_type"); payload.income_type = input.incomeType; }
   if (input.frequency !== undefined) { changedFields.push("frequency"); payload.frequency = input.frequency; }
+  if (input.recurringTemplateId !== undefined) { changedFields.push("recurring_template_id"); payload.recurring_template_id = input.recurringTemplateId; }
+  if (input.destinationAccountId !== undefined) { changedFields.push("destination_account_id"); payload.destination_account_id = input.destinationAccountId; }
+  if (input.subcategoryId !== undefined) { changedFields.push("subcategory_id"); payload.subcategory_id = input.subcategoryId; }
   if (input.expectedAmountCentavos !== undefined) { changedFields.push("expected_amount_centavos"); payload.expected_amount_centavos = input.expectedAmountCentavos; }
   if (input.minAmountCentavos !== undefined) { changedFields.push("min_amount_centavos"); payload.min_amount_centavos = input.minAmountCentavos; }
   if (input.maxAmountCentavos !== undefined) { changedFields.push("max_amount_centavos"); payload.max_amount_centavos = input.maxAmountCentavos; }
@@ -863,8 +995,35 @@ export async function updateIncomeSource(
 
     const effectiveMin = input.minAmountCentavos !== undefined ? input.minAmountCentavos : existing.min_amount_centavos;
     const effectiveMax = input.maxAmountCentavos !== undefined ? input.maxAmountCentavos : existing.max_amount_centavos;
+    const effectiveDestinationAccountId = input.destinationAccountId !== undefined ? input.destinationAccountId : existing.destination_account_id;
+    const effectiveSubcategoryId = input.subcategoryId !== undefined ? input.subcategoryId : existing.subcategory_id;
     if (effectiveMin !== null && effectiveMax !== null && effectiveMin! > effectiveMax!) {
       throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be <= maxAmountCentavos");
+    }
+    if (!effectiveDestinationAccountId || !effectiveSubcategoryId) {
+      throw new LocalDbError("VALIDATION_ERROR", "destinationAccountId and subcategoryId are required");
+    }
+    await assertAccessibleIncomeDestinationAndCategory(db, userId, effectiveDestinationAccountId, effectiveSubcategoryId);
+
+    const recurringTemplateId = await syncIncomeSourceRecurringTemplate(db, userId, deviceId, {
+      id,
+      recurringTemplateId: existing.recurring_template_id,
+      name: input.name ?? existing.name,
+      frequency: (input.frequency ?? existing.frequency) as IncomeFrequency,
+      destinationAccountId: effectiveDestinationAccountId,
+      subcategoryId: effectiveSubcategoryId,
+      expectedAmountCentavos: input.expectedAmountCentavos !== undefined ? input.expectedAmountCentavos : existing.expected_amount_centavos,
+      minAmountCentavos: input.minAmountCentavos !== undefined ? input.minAmountCentavos : existing.min_amount_centavos,
+      maxAmountCentavos: input.maxAmountCentavos !== undefined ? input.maxAmountCentavos : existing.max_amount_centavos,
+      paydayDayOfMonth: input.paydayDayOfMonth !== undefined ? input.paydayDayOfMonth : existing.payday_day_of_month,
+      paydaySecondDayOfMonth: input.paydaySecondDayOfMonth !== undefined ? input.paydaySecondDayOfMonth : existing.payday_second_day_of_month,
+      paydayDayOfWeek: input.paydayDayOfWeek !== undefined ? input.paydayDayOfWeek : existing.payday_day_of_week,
+      nextExpectedDate: input.nextExpectedDate !== undefined ? input.nextExpectedDate : existing.next_expected_date,
+      notes: input.notes !== undefined ? input.notes : existing.notes,
+    });
+    if (existing.recurring_template_id !== recurringTemplateId) {
+      changedFields.push("recurring_template_id");
+      payload.recurring_template_id = recurringTemplateId;
     }
 
     const setClauses: string[] = [];
@@ -873,6 +1032,8 @@ export async function updateIncomeSource(
     if (input.name !== undefined) { setClauses.push("name = ?"); params.push(input.name); }
     if (input.incomeType !== undefined) { setClauses.push("income_type = ?"); params.push(input.incomeType); }
     if (input.frequency !== undefined) { setClauses.push("frequency = ?"); params.push(input.frequency); }
+    if (input.destinationAccountId !== undefined) { setClauses.push("destination_account_id = ?"); params.push(input.destinationAccountId); }
+    if (input.subcategoryId !== undefined) { setClauses.push("subcategory_id = ?"); params.push(input.subcategoryId); }
     if (input.expectedAmountCentavos !== undefined) { setClauses.push("expected_amount_centavos = ?"); params.push(input.expectedAmountCentavos); }
     if (input.minAmountCentavos !== undefined) { setClauses.push("min_amount_centavos = ?"); params.push(input.minAmountCentavos); }
     if (input.maxAmountCentavos !== undefined) { setClauses.push("max_amount_centavos = ?"); params.push(input.maxAmountCentavos); }
@@ -884,6 +1045,7 @@ export async function updateIncomeSource(
     if (input.estimatedIntervalDays !== undefined) { setClauses.push("estimated_interval_days = ?"); params.push(input.estimatedIntervalDays); }
     if (input.isActive !== undefined) { setClauses.push("is_active = ?"); params.push(boolToInt(input.isActive)); }
     if (input.notes !== undefined) { setClauses.push("notes = ?"); params.push(input.notes); }
+    setClauses.push("recurring_template_id = ?"); params.push(recurringTemplateId);
 
     setClauses.push("updated_at = ?"); params.push(ts);
     setClauses.push("version = version + 1");
@@ -934,6 +1096,11 @@ export async function deleteIncomeSource(
       id,
     );
     if (!existing) throw new LocalDbError("NOT_FOUND", "income source not found");
+
+    if (existing.recurring_template_id) {
+      const { deleteRecurringTemplate } = await import("./recurringTransactions");
+      await deleteRecurringTemplate(userId, deviceId, existing.recurring_template_id, db);
+    }
 
     await db.runAsync(
       `UPDATE income_sources

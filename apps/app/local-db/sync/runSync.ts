@@ -47,6 +47,12 @@ type QueueRow = {
   created_at: string;
 };
 
+type IncomeSourceSyncFields = {
+  recurring_template_id: string | null;
+  destination_account_id: string | null;
+  subcategory_id: string | null;
+};
+
 
 export async function runSync(
   userId: string,
@@ -108,6 +114,8 @@ async function pushQueue(
 
   if (rows.length === 0) return { pushed: 0, errors: 0 };
 
+  await repairIncomeSourceSyncRows(db, rows);
+
   const operations = rows.map((r) => ({
     operation_id: r.operation_id,
     entity: r.entity,
@@ -163,6 +171,66 @@ async function pushQueue(
   }
 
   return { pushed, errors };
+}
+
+async function repairIncomeSourceSyncRows(
+  db: SQLite.SQLiteDatabase,
+  rows: QueueRow[],
+): Promise<void> {
+  for (const row of rows) {
+    if (row.entity !== "income_sources") continue;
+    if (row.operation_type !== "create" && row.operation_type !== "update") continue;
+
+    const payload = JSON.parse(row.payload) as Record<string, unknown>;
+    const changedFields = JSON.parse(row.changed_fields) as string[];
+
+    const needsRepair =
+      payload.destination_account_id == null ||
+      payload.subcategory_id == null ||
+      payload.recurring_template_id == null;
+
+    if (!needsRepair) continue;
+
+    const localRow = await db.getFirstAsync<IncomeSourceSyncFields>(
+      `SELECT recurring_template_id, destination_account_id, subcategory_id
+       FROM income_sources WHERE id = ?`,
+      row.record_id,
+    );
+
+    if (!localRow) continue;
+
+    let touched = false;
+
+    if (payload.destination_account_id == null && localRow.destination_account_id) {
+      payload.destination_account_id = localRow.destination_account_id;
+      if (!changedFields.includes("destination_account_id")) changedFields.push("destination_account_id");
+      touched = true;
+    }
+
+    if (payload.subcategory_id == null && localRow.subcategory_id) {
+      payload.subcategory_id = localRow.subcategory_id;
+      if (!changedFields.includes("subcategory_id")) changedFields.push("subcategory_id");
+      touched = true;
+    }
+
+    if (payload.recurring_template_id == null && localRow.recurring_template_id) {
+      payload.recurring_template_id = localRow.recurring_template_id;
+      if (!changedFields.includes("recurring_template_id")) changedFields.push("recurring_template_id");
+      touched = true;
+    }
+
+    if (!touched) continue;
+
+    row.payload = JSON.stringify(payload);
+    row.changed_fields = JSON.stringify(changedFields);
+
+    await db.runAsync(
+      "UPDATE sync_queue SET payload = ?, changed_fields = ? WHERE operation_id = ?",
+      row.payload,
+      row.changed_fields,
+      row.operation_id,
+    );
+  }
 }
 
 async function bumpQueueAttempts(

@@ -136,6 +136,9 @@ const INCOME_SOURCE_CREATE_FIELDS = new Set([
   "name",
   "income_type",
   "frequency",
+  "recurring_template_id",
+  "destination_account_id",
+  "subcategory_id",
   "expected_amount_centavos",
   "min_amount_centavos",
   "max_amount_centavos",
@@ -153,6 +156,9 @@ const INCOME_SOURCE_UPDATE_FIELDS = new Set([
   "name",
   "income_type",
   "frequency",
+  "recurring_template_id",
+  "destination_account_id",
+  "subcategory_id",
   "expected_amount_centavos",
   "min_amount_centavos",
   "max_amount_centavos",
@@ -297,6 +303,8 @@ async function validateCreatePayload(
     requireString(sanitized, "name");
     requireString(sanitized, "income_type");
     requireString(sanitized, "frequency");
+    requireString(sanitized, "destination_account_id");
+    requireString(sanitized, "subcategory_id");
     const validTypes = ["stable", "variable"];
     if (!validTypes.includes(sanitized.income_type as string)) {
       throw new Error(`income_type must be one of: ${validTypes.join(", ")}`);
@@ -316,12 +324,25 @@ async function validateCreatePayload(
     optionalNumber(sanitized, "estimated_interval_days");
     optionalBoolean(sanitized, "is_active");
     optionalString(sanitized, "notes");
+    optionalString(sanitized, "recurring_template_id");
     validateNonNegative(sanitized, ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"]);
     validateMinMaxOrdering(sanitized, "min_amount_centavos", "max_amount_centavos");
     validateDayRange(sanitized, "payday_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_day_of_week", 0, 6);
     validateDayRange(sanitized, "payday_second_day_of_week", 0, 6);
+    await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
+    if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
+      const { data: template, error: templateErr } = await supabase
+        .from("recurring_transaction_templates")
+        .select("id")
+        .eq("id", sanitized.recurring_template_id as string)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
+      if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
+    }
     return Promise.resolve(sanitized);
   }
 
@@ -381,6 +402,75 @@ async function validateCreatePayload(
       if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
     }
 
+    return sanitized;
+  }
+
+  if (entity === "transaction_templates") {
+    assertOnlyAllowed(payload, TEMPLATE_FIELDS);
+    const sanitized = sanitizePayload(payload, TEMPLATE_FIELDS);
+    requireString(sanitized, "transaction_type");
+    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
+      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+    }
+    requireString(sanitized, "name");
+    if (sanitized.amount_centavos != null) {
+      requirePositiveInteger(sanitized, "amount_centavos");
+    }
+    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
+    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    return sanitized;
+  }
+
+  if (entity === "transaction_drafts") {
+    assertOnlyAllowed(payload, DRAFT_FIELDS);
+    const sanitized = sanitizePayload(payload, DRAFT_FIELDS);
+    requireString(sanitized, "client_draft_id");
+    if (!sanitized.payload || typeof sanitized.payload !== "object") {
+      throw new Error("payload must be an object");
+    }
+    return sanitized;
+  }
+
+  if (entity === "recurring_transaction_templates") {
+    assertOnlyAllowed(payload, RECURRING_TEMPLATE_FIELDS);
+    const sanitized = sanitizePayload(payload, RECURRING_TEMPLATE_FIELDS);
+    requireString(sanitized, "transaction_type");
+    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
+      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+    }
+    requireString(sanitized, "name");
+    requirePositiveInteger(sanitized, "amount_centavos");
+    requireString(sanitized, "frequency");
+    if (!["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(sanitized.frequency as string)) {
+      throw new Error("frequency must be a valid schedule");
+    }
+    requireString(sanitized, "starts_on");
+    if (sanitized.interval_count != null) {
+      if (typeof sanitized.interval_count !== "number" || !Number.isInteger(sanitized.interval_count) || (sanitized.interval_count as number) <= 0) {
+        throw new Error("interval_count must be a positive integer");
+      }
+    }
+    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
+    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    return sanitized;
+  }
+
+  if (entity === "recurring_transaction_occurrences") {
+    assertOnlyAllowed(payload, RECURRING_OCCURRENCE_FIELDS);
+    const sanitized = sanitizePayload(payload, RECURRING_OCCURRENCE_FIELDS);
+    requireString(sanitized, "recurring_template_id");
+    requireString(sanitized, "scheduled_date");
+    const { data: template, error: templateErr } = await supabase
+      .from("recurring_transaction_templates")
+      .select("id")
+      .eq("id", sanitized.recurring_template_id as string)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (templateErr) throw new Error(`recurring template validation failed: ${templateErr.message}`);
+    if (!template) throw new Error("recurring template not found or inaccessible");
     return sanitized;
   }
 
@@ -549,7 +639,7 @@ async function validateTaxonomyCreatePayload(
     requireString(sanitized, "name");
     requirePositiveInteger(sanitized, "amount_centavos");
     requireString(sanitized, "frequency");
-    if (!["daily", "weekly", "monthly", "quarterly", "yearly", "custom"].includes(sanitized.frequency as string)) {
+    if (!["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(sanitized.frequency as string)) {
       throw new Error("frequency must be a valid schedule");
     }
     requireString(sanitized, "starts_on");
@@ -685,7 +775,7 @@ async function validateUpdatePayload(
       continue;
     }
 
-    if (key === "slug" || key === "subcategory_id") {
+    if (key === "slug" || key === "subcategory_id" || key === "source_account_id" || key === "destination_account_id") {
       if (typeof value !== "string") throw new Error(`${key} must be a string`);
       continue;
     }
@@ -746,6 +836,10 @@ async function validateUpdatePayload(
       } else if (entity === "financial_obligations") {
         if (!["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
           throw new Error("frequency must be a valid obligation frequency");
+        }
+      } else if (entity === "recurring_transaction_templates") {
+        if (!["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
+          throw new Error("frequency must be a valid recurring frequency");
         }
       }
       continue;
@@ -823,6 +917,22 @@ async function validateUpdatePayload(
     }
     if (typeof sanitized.payday_second_day_of_week === "number" && ((sanitized.payday_second_day_of_week as number) < 0 || (sanitized.payday_second_day_of_week as number) > 6)) {
       throw new Error("payday_second_day_of_week must be between 0 and 6");
+    }
+    if (sanitized.destination_account_id && typeof sanitized.destination_account_id === "string") {
+      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id);
+    }
+    if (sanitized.subcategory_id && typeof sanitized.subcategory_id === "string") {
+      await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id, "income");
+    }
+    if (sanitized.recurring_template_id && typeof sanitized.recurring_template_id === "string") {
+      const { data: template, error: templateErr } = await supabase
+        .from("recurring_transaction_templates")
+        .select("id")
+        .eq("id", sanitized.recurring_template_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
+      if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
     }
   } else if (entity === "financial_obligations") {
     if (typeof sanitized.amount_centavos === "number" && (sanitized.amount_centavos as number) < 0) {

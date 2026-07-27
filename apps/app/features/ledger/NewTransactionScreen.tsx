@@ -22,6 +22,7 @@ import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
+import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
 
 const palette = {
   shell: "#fcf8f0",
@@ -74,10 +75,16 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [formError, setFormError] = useState<string | null>(null);
   const [accountPickerMode, setAccountPickerMode] = useState<"source" | "dest" | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringFreq, setRecurringFreq] = useState("monthly");
-  const [recurringInterval, setRecurringInterval] = useState("");
-  const [recurringDayOfMonth, setRecurringDayOfMonth] = useState("");
-  const [recurringDayOfWeek, setRecurringDayOfWeek] = useState("");
+  const [recurringSchedule, setRecurringSchedule] = useState<RecurringScheduleValue>({
+    frequency: "monthly",
+    intervalCount: "1",
+    dayOfMonth: "",
+    secondDayOfMonth: "",
+    dayOfWeek: null,
+    secondDayOfWeek: null,
+    monthOfYear: null,
+    estimatedIntervalDays: "",
+  });
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   const { accounts, groups, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
@@ -323,17 +330,18 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       }
 
       if (!isEdit && isRecurring) {
-        const freqInterval = parseInt(recurringInterval, 10);
-        const dom = parseInt(recurringDayOfMonth, 10);
-        const dow = parseInt(recurringDayOfWeek, 10);
+        const freqInterval = parseInt(recurringSchedule.intervalCount, 10);
+        const dom = parseInt(recurringSchedule.dayOfMonth, 10);
+        const secondDom = parseInt(recurringSchedule.secondDayOfMonth, 10);
         await createRecurringTemplate(userId, deviceId, {
           transaction_type: txType,
           name: description.trim() || `${txType} recurring`,
           amount_centavos: centavos,
-          frequency: recurringFreq,
+          frequency: recurringSchedule.frequency,
           interval_count: Number.isInteger(freqInterval) && freqInterval > 0 ? freqInterval : undefined,
           day_of_month: Number.isInteger(dom) && dom >= 1 && dom <= 31 ? dom : undefined,
-          day_of_week: Number.isInteger(dow) && dow >= 0 && dow <= 6 ? dow : undefined,
+          second_day_of_month: Number.isInteger(secondDom) && secondDom >= 1 && secondDom <= 31 ? secondDom : undefined,
+          day_of_week: recurringSchedule.dayOfWeek != null ? recurringSchedule.dayOfWeek : undefined,
           starts_on: dateStr,
           subcategory_id: effectiveSubcategoryId || undefined,
           source_account_id: sourceAccountId || undefined,
@@ -766,72 +774,12 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                 </View>
 
                 {isRecurring ? (
-                  <View style={{ gap: 14 }}>
-                    {renderFieldLabel("FREQUENCY")}
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                      {(["daily", "weekly", "monthly", "quarterly", "yearly"] as const).map((f) => (
-                        <Pressable
-                          key={f}
-                          onPress={() => setRecurringFreq(f)}
-                          accessibilityRole="radio"
-                          accessibilityLabel={f}
-                          accessibilityState={{ checked: recurringFreq === f }}
-                          style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: recurringFreq === f ? palette.brand : palette.card }}
-                        >
-                          <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: recurringFreq === f ? "#fff" : palette.ink2 }}>{f}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    {recurringFreq === "monthly" ? (
-                      <View>
-                        {renderFieldLabel("DAY OF MONTH")}
-                        <TextInput
-                          value={recurringDayOfMonth}
-                          onChangeText={setRecurringDayOfMonth}
-                          placeholder="e.g. 15"
-                          placeholderTextColor={palette.mut}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: "#e8deca", paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.softCard }}
-                        />
-                      </View>
-                    ) : null}
-
-                    {recurringFreq === "weekly" ? (
-                      <View>
-                        {renderFieldLabel("DAY OF WEEK")}
-                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => (
-                            <Pressable
-                              key={day}
-                              onPress={() => setRecurringDayOfWeek(String(idx))}
-                              accessibilityRole="radio"
-                              accessibilityLabel={day}
-                              accessibilityState={{ checked: recurringDayOfWeek === String(idx) }}
-                              style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: recurringDayOfWeek === String(idx) ? palette.brand : palette.card }}
-                            >
-                              <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: recurringDayOfWeek === String(idx) ? "#fff" : palette.ink2 }}>{day}</Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      </View>
-                    ) : null}
-
-                    <View>
-                      {renderFieldLabel("EVERY (INTERVAL)")}
-                      <TextInput
-                        value={recurringInterval}
-                        onChangeText={setRecurringInterval}
-                        placeholder="1"
-                        placeholderTextColor={palette.mut}
-                        keyboardType="number-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: "#e8deca", paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.softCard }}
-                      />
-                      <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 4 }}>
-                        Repeat every N {recurringFreq}(s)
-                      </Text>
-                    </View>
-                  </View>
+                  <RecurringScheduleFields
+                    frequencies={["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly"]}
+                    value={recurringSchedule}
+                    onChange={setRecurringSchedule}
+                    showIntervalCount
+                  />
                 ) : null}
               </>
             ) : null}
