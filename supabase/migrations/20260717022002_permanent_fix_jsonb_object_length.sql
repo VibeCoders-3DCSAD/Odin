@@ -18,6 +18,8 @@ RETURNS TABLE (
   conflicted_fields text[]
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = odin, public
 AS $$
 DECLARE
   v_user_id uuid := auth.uid();
