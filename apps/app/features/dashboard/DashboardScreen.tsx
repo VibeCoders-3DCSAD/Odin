@@ -91,54 +91,39 @@ function getPreviousMonthName(): string {
   return d.toLocaleDateString("en-US", { month: "short" });
 }
 
-// --- Donut chart using border technique (4 segments max) ---
-function DonutChart({ segments, total, centerLabel }: { segments: { label: string; value: number; color: string }[]; total: number; centerLabel?: string }) {
+// ponytail: proportional stacked bar — border-based donut can't do unequal arcs without SVG
+function SpendingBar({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
   if (total === 0 || segments.length === 0) {
     return (
-      <View style={{ width: 96, height: 96, borderRadius: 48, borderWidth: 14, borderColor: P.line, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: P.mut }}>₱0</Text>
-      </View>
+      <View style={{ height: 10, borderRadius: 5, backgroundColor: P.line }} />
     );
   }
 
   const top4 = segments.slice(0, 4);
   const remainder = total - top4.reduce((s, x) => s + x.value, 0);
-  const arcs = [...top4];
-  if (remainder > 0) arcs.push({ label: "Other", value: remainder, color: P.mut });
-
-  const circumference = 2 * Math.PI * 15.9;
-  let accumulated = 0;
+  const bars = [...top4];
+  if (remainder > 0) bars.push({ label: "Other", value: remainder, color: P.mut });
 
   return (
-    <View style={{ position: "relative", width: 96, height: 96 }}>
-      {arcs.map((arc, i) => {
-        const pct = arc.value / total;
-        const dashLen = pct * 100;
-        const offset = -(accumulated / total) * 100;
-        accumulated += arc.value;
+    <View style={{ flexDirection: "row", height: 10, borderRadius: 5, overflow: "hidden" }}>
+      {bars.map((bar, i) => {
+        const pct = (bar.value / total) * 100;
         return (
           <View
             key={i}
             style={{
-              position: "absolute",
-              width: 96,
-              height: 96,
-              borderRadius: 48,
-              borderWidth: 14,
-              borderColor: "transparent",
-              borderTopColor: i === 0 ? arc.color : "transparent",
-              borderRightColor: i === 1 ? arc.color : "transparent",
-              borderBottomColor: i === 2 ? arc.color : "transparent",
-              borderLeftColor: i === 3 ? arc.color : "transparent",
-              transform: [{ rotate: `${offset * 3.6}deg` }],
+              width: `${pct}%`,
+              height: "100%",
+              backgroundColor: bar.color,
+              // ponytail: first segment gets left radius, last gets right
+              borderTopLeftRadius: i === 0 ? 5 : 0,
+              borderBottomLeftRadius: i === 0 ? 5 : 0,
+              borderTopRightRadius: i === bars.length - 1 ? 5 : 0,
+              borderBottomRightRadius: i === bars.length - 1 ? 5 : 0,
             }}
           />
         );
       })}
-      <View style={{ position: "absolute", inset: 14, borderRadius: 34, backgroundColor: P.card, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>{centerLabel ?? formatPesoCompact(total * 100)}</Text>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 9, color: P.mut }}>Total</Text>
-      </View>
     </View>
   );
 }
@@ -306,7 +291,7 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
         <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 6 }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 18, color: "rgba(255,255,255,0.7)", marginRight: 4 }}>PHP</Text>
           <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 34, color: P.white, letterSpacing: -0.02 }}>
-            {Math.abs(s.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            {(s.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </Text>
         </View>
         {incomeDelta && (
@@ -382,17 +367,20 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
           <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12.5, color: P.aqua700 }}>View all</Text>
         </Pressable>
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 18, borderRadius: 18, backgroundColor: P.card, borderWidth: 1, borderColor: P.line, padding: 16 }}>
-        <DonutChart
+      <View style={{ gap: 9, borderRadius: 18, backgroundColor: P.card, borderWidth: 1, borderColor: P.line, padding: 16 }}>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>{formatPesoCompact(s.currentMonthExpenseCentavos)}</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12, color: P.mut }}>total</Text>
+        </View>
+        <SpendingBar
           segments={s.categorySpending.slice(0, 4).map((c, i) => ({
             label: c.category_label,
             value: c.total_centavos,
             color: SPENDING_COLORS[i] ?? P.mut,
           }))}
           total={s.currentMonthExpenseCentavos}
-          centerLabel={formatPesoCompact(s.currentMonthExpenseCentavos)}
         />
-        <View style={{ flex: 1, gap: 9 }}>
+        <View style={{ gap: 9 }}>
           {s.categorySpending.slice(0, 4).map((c, i) => {
             const pct = s.currentMonthExpenseCentavos > 0
               ? Math.round((c.total_centavos / s.currentMonthExpenseCentavos) * 100)
