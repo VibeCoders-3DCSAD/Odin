@@ -35,6 +35,16 @@ const P = {
   white: "#FFFFFF",
 };
 
+const EMPTY_SUMMARY: DashboardSummary = {
+  currentBalanceCentavos: 0,
+  currentMonthIncomeCentavos: 0,
+  currentMonthExpenseCentavos: 0,
+  previousMonthIncomeCentavos: 0,
+  previousMonthExpenseCentavos: 0,
+  recentTransactions: [],
+  categorySpending: [],
+};
+
 const SPENDING_COLORS = [P.brand, P.aqua600, "#8B7355", P.aqua300, P.sun500, P.monza600];
 
 type Props = {
@@ -226,26 +236,28 @@ function TrendChart({ data, startingBalance }: { data: DailyTrend[]; startingBal
 }
 
 export default function DashboardScreen({ userId, onNavigate }: Props) {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary>(EMPTY_SUMMARY);
   const [trends, setTrends] = useState<DailyTrend[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, DashboardSnapshotWithMeta | null>>({});
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const [s, t, snap] = await Promise.all([
-        getDashboardSummary(userId),
-        getDailyTrends(userId),
-        getAllSnapshots(userId),
-      ]);
+      const s = await getDashboardSummary(userId).catch(() => EMPTY_SUMMARY);
       setSummary(s);
+    } catch {}
+
+    try {
+      const t = await getDailyTrends(userId).catch(() => []);
       setTrends(t);
+    } catch {}
+
+    try {
+      const snap = await getAllSnapshots(userId).catch(() => ({}));
       setSnapshots(snap);
-    } catch {
-      // silently degrade to zeros
-    } finally {
-      setLoading(false);
-    }
+    } catch {}
+
+    setLoading(false);
   }, [userId]);
 
   useEffect(() => { load(); }, [load]);
@@ -258,7 +270,7 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
     );
   }
 
-  const s = summary!;
+  const s = summary;
   const prevMonthName = getPreviousMonthName();
   const incomeDelta = deltaPercent(s.currentMonthIncomeCentavos, s.previousMonthIncomeCentavos);
   const expenseDelta = deltaPercent(s.currentMonthExpenseCentavos, s.previousMonthExpenseCentavos);
@@ -317,7 +329,7 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
           <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 9 }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: P.mut, marginRight: 3 }}>PHP</Text>
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
-              {s.currentMonthIncomeCentavos.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              {Math.abs(s.currentMonthIncomeCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </Text>
           </View>
           {incomeDelta && (
@@ -335,7 +347,7 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
           <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 9 }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: P.mut, marginRight: 3 }}>PHP</Text>
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
-              {s.currentMonthExpenseCentavos.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              {Math.abs(s.currentMonthExpenseCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </Text>
           </View>
           {expenseDelta && (
@@ -442,14 +454,19 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
       {/* Budget Health */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24, marginBottom: 12 }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: P.ink }}>Budget Health</Text>
-        {budgetItems.length > 0 && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 100, backgroundColor: P.aqua50 }}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: P.aqua600 }} />
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: P.aqua800 }}>
-              {budgetStatus === "on_track" ? "On Track" : budgetStatus === "warning" ? "Caution" : "Over"}
-            </Text>
-          </View>
-        )}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          {budgetSnap?.stale && (
+            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 11, color: P.mut }}>Cached</Text>
+          )}
+          {budgetItems.length > 0 && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 100, backgroundColor: P.aqua50 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: P.aqua600 }} />
+              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: P.aqua800 }}>
+                {budgetStatus === "on_track" ? "On Track" : budgetStatus === "warning" ? "Caution" : "Over"}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
       {budgetItems.length > 0 ? (
         <View style={{ gap: 14 }}>
@@ -482,9 +499,14 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
         <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: P.aqua600, justifyContent: "center", alignItems: "center", flexShrink: 0 }}>
           <Sparkle size={16} color={P.white} weight="fill" />
         </View>
-        <Text style={{ flex: 1, fontFamily: "Manrope", fontSize: 12.5, lineHeight: 18, color: P.ink2 }}>
-          {forecastText ?? "Sync to get personalized spending forecasts and insights."}
-        </Text>
+        <View style={{ flex: 1 }}>
+          {forecastSnap?.stale && (
+            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 10, color: P.mut, marginBottom: 2 }}>Cached</Text>
+          )}
+          <Text style={{ fontFamily: "Manrope", fontSize: 12.5, lineHeight: 18, color: P.ink2 }}>
+            {forecastText ?? "Sync to get personalized spending forecasts and insights."}
+          </Text>
+        </View>
       </View>
     </View>
   );
