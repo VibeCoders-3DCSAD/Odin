@@ -51,6 +51,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "expected_amount_centavos", "min_amount_centavos", "max_amount_centavos",
     "payday_day_of_month", "payday_second_day_of_month", "payday_day_of_week",
     "payday_second_day_of_week", "next_expected_date", "estimated_interval_days",
+    "destination_account_id", "subcategory_id", "recurring_template_id",
     "is_active", "notes", "metadata", "version",
     "deleted", "created_at", "updated_at", "last_synced_at",
   ]),

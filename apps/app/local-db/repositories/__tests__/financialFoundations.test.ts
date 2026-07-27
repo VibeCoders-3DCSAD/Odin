@@ -336,3 +336,126 @@ describe("financial obligation recurring template validation", () => {
     expect(db.runAsync).not.toHaveBeenCalled();
   });
 });
+
+describe("income source recurring linkage", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockInitDatabase.mockReset();
+    mockEnqueueOperation.mockReset();
+    mockRandomUUID.mockReset();
+    mockEnqueueOperation.mockResolvedValue({ operation_id: "sync-1" });
+  });
+
+  test("createIncomeSource also creates a linked recurring template", async () => {
+    mockRandomUUID.mockReturnValueOnce("income-1").mockReturnValueOnce("template-1");
+    const templateRow = {
+      id: "template-1", user_id: "user-1", transaction_type: "income", status: "active", name: "Salary",
+      amount_centavos: 50000, subcategory_id: "subcategory-1", source_account_id: null, destination_account_id: "account-1",
+      frequency: "monthly", interval_count: 1, day_of_month: 15, second_day_of_month: null, day_of_week: null,
+      custom_rule: "", starts_on: "2026-01-15", ends_on: null, next_occurrence_date: null, last_generated_date: null,
+      reminder_enabled: 0, reminder_days_before: 0, notes: null, version: 1, deleted: 0,
+      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const sourceRow = {
+      id: "income-1", user_id: "user-1", recurring_template_id: "template-1", destination_account_id: "account-1", subcategory_id: "subcategory-1",
+      name: "Salary", income_type: "stable", frequency: "monthly", expected_amount_centavos: 50000, min_amount_centavos: null, max_amount_centavos: null,
+      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, payday_second_day_of_week: null, next_expected_date: null,
+      estimated_interval_days: null, is_active: 1, notes: null, metadata: "{}", version: 1, deleted: 0,
+      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const db = createDbMock(jest.fn(async (sql: string) => {
+      if (sql.includes("FROM financial_accounts")) return { id: "account-1" };
+      if (sql.includes("FROM subcategories")) return { id: "subcategory-1" };
+      if (sql.includes("SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ?")) return templateRow;
+      if (sql.includes("SELECT * FROM income_sources WHERE id = ?")) return sourceRow;
+      return null;
+    }));
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { createIncomeSource } = await import("../financialFoundations");
+    const result = await createIncomeSource("user-1", "device-1", {
+      name: "Salary",
+      incomeType: "stable",
+      frequency: "monthly",
+      destinationAccountId: "account-1",
+      subcategoryId: "subcategory-1",
+      expectedAmountCentavos: 50000,
+      paydayDayOfMonth: 15,
+    });
+
+    expect(result.source.recurringTemplateId).toBe("template-1");
+    expect(db.runAsync).toHaveBeenCalled();
+    expect(mockEnqueueOperation).toHaveBeenCalledTimes(2);
+  });
+
+  test("updateIncomeSource also updates its linked recurring template", async () => {
+    const existing = {
+      id: "income-1", user_id: "user-1", recurring_template_id: "template-1", destination_account_id: "account-1", subcategory_id: "subcategory-1",
+      name: "Salary", income_type: "stable", frequency: "monthly", expected_amount_centavos: 50000, min_amount_centavos: null, max_amount_centavos: null,
+      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, payday_second_day_of_week: null, next_expected_date: null,
+      estimated_interval_days: null, is_active: 1, notes: null, metadata: "{}", version: 3, deleted: 0,
+      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const recurringCurrent = {
+      id: "template-1", user_id: "user-1", transaction_type: "income", status: "active", name: "Salary",
+      amount_centavos: 50000, subcategory_id: "subcategory-1", source_account_id: null, destination_account_id: "account-1",
+      frequency: "monthly", interval_count: 1, day_of_month: 15, second_day_of_month: null, day_of_week: null,
+      custom_rule: "", starts_on: "2026-01-15", ends_on: null, next_occurrence_date: null, last_generated_date: null,
+      reminder_enabled: 0, reminder_days_before: 0, notes: null, version: 2, deleted: 0,
+      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const updatedSource = { ...existing, expected_amount_centavos: 60000, version: 4 };
+    const db = createDbMock(jest.fn(async (sql: string) => {
+      if (sql.includes("SELECT * FROM income_sources WHERE user_id = ? AND id = ? AND deleted = 0")) return existing;
+      if (sql.includes("FROM financial_accounts")) return { id: "account-1" };
+      if (sql.includes("FROM subcategories")) return { id: "subcategory-1" };
+      if (sql.includes("SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ? AND deleted = 0")) return recurringCurrent;
+      if (sql.includes("SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ?")) return recurringCurrent;
+      if (sql.includes("SELECT * FROM income_sources WHERE id = ?")) return updatedSource;
+      return null;
+    }));
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { updateIncomeSource } = await import("../financialFoundations");
+    const result = await updateIncomeSource("user-1", "device-1", "income-1", {
+      expectedAmountCentavos: 60000,
+      destinationAccountId: "account-1",
+      subcategoryId: "subcategory-1",
+    });
+
+    expect(result.source.expectedAmountCentavos).toBe(60000);
+    expect(mockEnqueueOperation).toHaveBeenCalledTimes(2);
+  });
+
+  test("deleteIncomeSource also deletes its linked recurring template", async () => {
+    const existing = {
+      id: "income-1", user_id: "user-1", recurring_template_id: "template-1", destination_account_id: "account-1", subcategory_id: "subcategory-1",
+      name: "Salary", income_type: "stable", frequency: "monthly", expected_amount_centavos: 50000, min_amount_centavos: null, max_amount_centavos: null,
+      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, payday_second_day_of_week: null, next_expected_date: null,
+      estimated_interval_days: null, is_active: 1, notes: null, metadata: "{}", version: 3, deleted: 0,
+      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const deletedTemplate = {
+      id: "template-1", user_id: "user-1", transaction_type: "income", status: "deleted", name: "Salary",
+      amount_centavos: 50000, subcategory_id: "subcategory-1", source_account_id: null, destination_account_id: "account-1",
+      frequency: "monthly", interval_count: 1, day_of_month: 15, second_day_of_month: null, day_of_week: null,
+      custom_rule: "", starts_on: "2026-01-15", ends_on: null, next_occurrence_date: null, last_generated_date: null,
+      reminder_enabled: 0, reminder_days_before: 0, notes: null, version: 4, deleted: 1,
+      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const deletedSource = { ...existing, deleted: 1, is_active: 0, version: 4 };
+    const db = createDbMock(jest.fn(async (sql: string) => {
+      if (sql.includes("SELECT * FROM income_sources WHERE user_id = ? AND id = ? AND deleted = 0")) return existing;
+      if (sql.includes("SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ? AND deleted = 0")) return { ...deletedTemplate, deleted: 0, status: "active", version: 3 };
+      if (sql.includes("SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND id = ?")) return deletedTemplate;
+      if (sql.includes("SELECT * FROM income_sources WHERE id = ?")) return deletedSource;
+      return null;
+    }));
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { deleteIncomeSource } = await import("../financialFoundations");
+    await deleteIncomeSource("user-1", "device-1", "income-1");
+
+    expect(mockEnqueueOperation).toHaveBeenCalledTimes(2);
+  });
+});

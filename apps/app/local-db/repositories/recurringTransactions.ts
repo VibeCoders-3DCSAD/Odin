@@ -118,7 +118,7 @@ export type UpdateRecurringInput = {
 };
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
-const VALID_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"] as const;
+const VALID_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"] as const;
 const VALID_RECURRING_STATUSES = ["active", "paused", "completed", "deleted"] as const;
 const VALID_OCCURRENCE_STATUSES = ["scheduled", "posted", "skipped", "failed"] as const;
 

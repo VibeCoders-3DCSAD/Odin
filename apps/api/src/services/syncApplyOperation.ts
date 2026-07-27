@@ -136,6 +136,9 @@ const INCOME_SOURCE_CREATE_FIELDS = new Set([
   "name",
   "income_type",
   "frequency",
+  "recurring_template_id",
+  "destination_account_id",
+  "subcategory_id",
   "expected_amount_centavos",
   "min_amount_centavos",
   "max_amount_centavos",
@@ -153,6 +156,9 @@ const INCOME_SOURCE_UPDATE_FIELDS = new Set([
   "name",
   "income_type",
   "frequency",
+  "recurring_template_id",
+  "destination_account_id",
+  "subcategory_id",
   "expected_amount_centavos",
   "min_amount_centavos",
   "max_amount_centavos",
@@ -297,6 +303,8 @@ async function validateCreatePayload(
     requireString(sanitized, "name");
     requireString(sanitized, "income_type");
     requireString(sanitized, "frequency");
+    requireString(sanitized, "destination_account_id");
+    requireString(sanitized, "subcategory_id");
     const validTypes = ["stable", "variable"];
     if (!validTypes.includes(sanitized.income_type as string)) {
       throw new Error(`income_type must be one of: ${validTypes.join(", ")}`);
@@ -316,12 +324,25 @@ async function validateCreatePayload(
     optionalNumber(sanitized, "estimated_interval_days");
     optionalBoolean(sanitized, "is_active");
     optionalString(sanitized, "notes");
+    optionalString(sanitized, "recurring_template_id");
     validateNonNegative(sanitized, ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"]);
     validateMinMaxOrdering(sanitized, "min_amount_centavos", "max_amount_centavos");
     validateDayRange(sanitized, "payday_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_day_of_week", 0, 6);
     validateDayRange(sanitized, "payday_second_day_of_week", 0, 6);
+    await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+    await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
+    if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
+      const { data: template, error: templateErr } = await supabase
+        .from("recurring_transaction_templates")
+        .select("id")
+        .eq("id", sanitized.recurring_template_id as string)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
+      if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
+    }
     return Promise.resolve(sanitized);
   }
 
@@ -747,6 +768,10 @@ async function validateUpdatePayload(
         if (!["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
           throw new Error("frequency must be a valid obligation frequency");
         }
+      } else if (entity === "recurring_transaction_templates") {
+        if (!["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
+          throw new Error("frequency must be a valid recurring frequency");
+        }
       }
       continue;
     }
@@ -823,6 +848,22 @@ async function validateUpdatePayload(
     }
     if (typeof sanitized.payday_second_day_of_week === "number" && ((sanitized.payday_second_day_of_week as number) < 0 || (sanitized.payday_second_day_of_week as number) > 6)) {
       throw new Error("payday_second_day_of_week must be between 0 and 6");
+    }
+    if (sanitized.destination_account_id && typeof sanitized.destination_account_id === "string") {
+      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id);
+    }
+    if (sanitized.subcategory_id && typeof sanitized.subcategory_id === "string") {
+      await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id, "income");
+    }
+    if (sanitized.recurring_template_id && typeof sanitized.recurring_template_id === "string") {
+      const { data: template, error: templateErr } = await supabase
+        .from("recurring_transaction_templates")
+        .select("id")
+        .eq("id", sanitized.recurring_template_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
+      if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
     }
   } else if (entity === "financial_obligations") {
     if (typeof sanitized.amount_centavos === "number" && (sanitized.amount_centavos as number) < 0) {
