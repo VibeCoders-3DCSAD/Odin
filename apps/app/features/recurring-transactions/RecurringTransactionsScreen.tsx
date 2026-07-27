@@ -504,10 +504,8 @@ function RecurringTemplateFormModal({
     }
   }
 
-  const formBody = (
-    <View style={{ backgroundColor: palette.shell, flex: 1, ...(presentation === "modal" ? { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.92 } : {}) }}>
-      {presentation === "modal" ? <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} /> : null}
-      <ScrollView contentContainerStyle={{ padding: 22, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" bounces={false}>
+  const formContent = (
+    <ScrollView contentContainerStyle={{ padding: 22, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" bounces={false}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
                     {isEdit ? "Edit Recurring Transaction" : "Add Recurring Transaction"}
                   </Text>
@@ -686,8 +684,11 @@ function RecurringTemplateFormModal({
                       </View>
                     </>
                   )}
-      </ScrollView>
+    </ScrollView>
+  );
 
+  const overlayModals = (
+    <>
       {showDatePicker ? (
         <DateTimePicker
           value={showDatePicker === "start" ? draft.startsOn : draft.endsOn ?? draft.startsOn}
@@ -762,29 +763,42 @@ function RecurringTemplateFormModal({
           </View>
         </Pressable>
       </Modal>
+    </>
+  );
+
+  const sheetBody = (
+    <View style={{ backgroundColor: palette.shell, flex: 1, ...(presentation === "modal" ? { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.92 } : {}) }}>
+      {presentation === "modal" ? <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} /> : null}
+      {formContent}
     </View>
   );
 
   if (presentation === "screen") {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: palette.shell }}>
-        {formBody}
-      </KeyboardAvoidingView>
+      <>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: palette.shell }}>
+          {sheetBody}
+        </KeyboardAvoidingView>
+        {overlayModals}
+      </>
     );
   }
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
-            <Pressable onPress={() => {}}>
-              {formBody}
-            </Pressable>
-          </KeyboardAvoidingView>
-        </View>
-      </Pressable>
-    </Modal>
+    <>
+      <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+        <Pressable onPress={onClose} style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
+              <Pressable onPress={() => {}}>
+                {sheetBody}
+              </Pressable>
+            </KeyboardAvoidingView>
+          </View>
+        </Pressable>
+      </Modal>
+      {overlayModals}
+    </>
   );
 }
 
