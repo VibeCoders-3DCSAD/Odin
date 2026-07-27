@@ -25,6 +25,7 @@ import FinancialAccountsScreen from "../features/financial-accounts/FinancialAcc
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
 import FinancialObligationsScreen from "../features/financial-obligations/FinancialObligationsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
+import DashboardScreen from "../features/dashboard/DashboardScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
@@ -763,6 +764,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "financial-obligations") {
       return <FinancialObligationsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
+    }
+
+    if (currentPage === "dashboard") {
+      return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNavigate={setCurrentPage as (page: string) => void} />;
     }
 
     const meta = pageMeta[currentPage];
