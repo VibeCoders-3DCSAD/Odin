@@ -414,7 +414,7 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
       {/* Recent */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24, marginBottom: 10 }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: P.ink }}>Recent</Text>
-        <Pressable onPress={() => onNavigate("history")}>
+        <Pressable onPress={() => onNavigate("transactions")}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12.5, color: P.aqua700 }}>View all</Text>
         </Pressable>
       </View>
