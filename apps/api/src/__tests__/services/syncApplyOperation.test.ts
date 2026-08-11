@@ -586,6 +586,71 @@ describe("prepareOperation — financial_obligations update", () => {
 });
 
 // ---------------------------------------------------------------------------
+// recurring_transaction_templates — create and update
+// ---------------------------------------------------------------------------
+
+describe("prepareOperation — recurring_transaction_templates ownership", () => {
+  const payload = {
+    transaction_type: "income",
+    name: "Salary",
+    amount_centavos: 50000,
+    frequency: "monthly",
+    starts_on: "2026-08-15",
+    subcategory_id: "subcategory-1",
+    destination_account_id: "account-1",
+  };
+
+  function op(operationType: "create" | "update", overrides: Record<string, unknown> = {}): Operation {
+    return {
+      operation_id: "op-1",
+      entity: "recurring_transaction_templates",
+      record_id: "template-1",
+      operation_type: operationType,
+      base_version: operationType === "update" ? 1 : null,
+      changed_fields: Object.keys({ ...payload, ...overrides }),
+      payload: { ...payload, ...overrides },
+    };
+  }
+
+  beforeEach(() => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "recurring_transaction_templates") {
+        return createMockQuery({ data: { id: "template-1", transaction_type: "income" }, error: null });
+      }
+      if (table === "subcategories") return createMockQuery({ data: { id: "subcategory-1" }, error: null });
+      if (table === "financial_accounts") return createMockQuery({ data: { id: "account-1" }, error: null });
+      throw new Error(`unexpected table lookup: ${table}`);
+    });
+  });
+
+  it("requires the transaction type's matching subcategory kind on create", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("create")),
+    ).resolves.toMatchObject({ payload });
+  });
+
+  it("rejects a transfer subcategory on create", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("create", { transaction_type: "transfer" })),
+    ).rejects.toThrow("transfer templates cannot have a subcategory_id");
+  });
+
+  it("checks ownership of foreign keys on update", async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "recurring_transaction_templates") {
+        return createMockQuery({ data: { id: "template-1", transaction_type: "income" }, error: null });
+      }
+      if (table === "subcategories") return createMockQuery({ data: { id: "subcategory-1" }, error: null });
+      return createMockQuery({ data: null, error: null });
+    });
+
+    await expect(
+      prepareOperation(mockClient, validUserId, op("update", { destination_account_id: "other-account" })),
+    ).rejects.toThrow("account not found or inaccessible");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // delete — all entities
 // ---------------------------------------------------------------------------
 

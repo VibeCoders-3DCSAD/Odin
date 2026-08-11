@@ -451,7 +451,11 @@ async function validateCreatePayload(
         throw new Error("interval_count must be a positive integer");
       }
     }
-    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
+    const transactionType = sanitized.transaction_type as string;
+    if (sanitized.subcategory_id) {
+      if (transactionType === "transfer") throw new Error("transfer templates cannot have a subcategory_id");
+      await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, transactionType);
+    }
     if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
     if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
     return sanitized;
@@ -710,6 +714,19 @@ async function validateUpdatePayload(
   const sanitized = sanitizePayload(payload, allowedFields);
 
   for (const [key, value] of Object.entries(sanitized)) {
+    if (entity === "recurring_transaction_templates") {
+      if (key === "transaction_type") {
+        if (typeof value !== "string" || !VALID_TRANSACTION_TYPES.includes(value)) {
+          throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
+        }
+        continue;
+      }
+      if (key === "subcategory_id" || key === "source_account_id" || key === "destination_account_id") {
+        if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+        continue;
+      }
+    }
+
     if (entity === "financial_accounts") {
       if (key === "name" || key === "institution_name" || key === "opened_on" || key === "archived_at" || key === "notes") {
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
@@ -881,6 +898,31 @@ async function validateUpdatePayload(
     }
     if (dst && typeof dst === "string") {
       await verifyAccountOwnership(supabase, userId, dst);
+    }
+  }
+
+  if (entity === "recurring_transaction_templates") {
+    const { data: current, error } = await supabase
+      .from("recurring_transaction_templates")
+      .select("id, transaction_type")
+      .eq("id", recordId)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw new Error(`recurring template lookup failed: ${error.message}`);
+    if (!current) throw new Error("recurring template not found or inaccessible");
+
+    const transactionType = (sanitized.transaction_type ?? current.transaction_type) as string;
+    const subcategoryId = sanitized.subcategory_id;
+    if (subcategoryId !== undefined && subcategoryId !== null) {
+      if (transactionType === "transfer") throw new Error("transfer templates cannot have a subcategory_id");
+      await verifySubcategoryOwnership(supabase, userId, subcategoryId as string, transactionType);
+    }
+    for (const accountField of ["source_account_id", "destination_account_id"] as const) {
+      const accountId = sanitized[accountField];
+      if (accountId !== undefined && accountId !== null) {
+        await verifyAccountOwnership(supabase, userId, accountId as string);
+      }
     }
   }
 
