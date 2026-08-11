@@ -30,7 +30,7 @@ type AuthResponse = {
       refresh_token?: string;
     };
     user?: { id?: string };
-    profile?: { id?: string };
+    profile?: { id?: string; is_first_logged_in?: boolean };
     onboarding?: { status?: string };
     privacy_settings?: { personalization_enabled?: boolean };
     activation?: {
@@ -52,6 +52,7 @@ type AuthenticatedState = {
   userId?: string;
   profileId?: string;
   onboardingStatus?: string;
+  isFirstLoggedIn?: boolean;
 };
 
 type GoogleAuthConfig = {
@@ -382,7 +383,7 @@ export default function AuthExperience({
 
   function buildAuthState(
     accessToken: string, provider: AuthProvider,
-    payload?: { session?: { refresh_token?: string }; user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } },
+    payload?: { session?: { refresh_token?: string }; user?: { id?: string }; profile?: { id?: string; is_first_logged_in?: boolean }; onboarding?: { status?: string } },
     refreshToken?: string,
   ) {
     return {
@@ -392,6 +393,7 @@ export default function AuthExperience({
       userId: payload?.user?.id,
       profileId: payload?.profile?.id,
       onboardingStatus: payload?.onboarding?.status,
+      isFirstLoggedIn: payload?.profile?.is_first_logged_in,
     };
   }
 

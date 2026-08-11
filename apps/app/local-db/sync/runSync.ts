@@ -10,7 +10,7 @@ const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001"
 const REQUEST_TIMEOUT = 10_000;
 const MAX_SYNC_ATTEMPTS = 3;
 
-let syncRunning = false;
+const syncPromises = new Map<string, Promise<SyncResult>>();
 
 type TableCursor = { ts: string; id: string };
 
@@ -25,6 +25,7 @@ type SyncResult = {
   pushed: number;
   pulled: number;
   errors: number;
+  successful: boolean;
 };
 
 type RunSyncOptions = {
@@ -60,38 +61,68 @@ export async function runSync(
   accessToken: string,
   options: RunSyncOptions = {},
 ): Promise<SyncResult> {
-  if (!userId || !accessToken || !deviceId) {
-    return { pushed: 0, pulled: 0, errors: 0 };
-  }
-  if (syncRunning) return { pushed: 0, pulled: 0, errors: 0 };
+  const syncKey = `${userId}:${deviceId}`;
+  const existing = syncPromises.get(syncKey);
+  if (existing) return existing;
 
-  syncRunning = true;
+  const syncPromise = runSyncInternal(userId, deviceId, accessToken, options);
+  syncPromises.set(syncKey, syncPromise);
   try {
-    const db = await initDatabase();
-
-    const cursors = await loadCursors(db, userId);
-
-    try {
-      await ensureDeviceRegistered(db, userId, deviceId, accessToken);
-    } catch {
-      return { pushed: 0, pulled: 0, errors: 0 };
-    }
-
-    const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken, options.maxAttempts);
-
-    const { pulled, cursors: newCursors } = await pullAndApply(
-      db,
-      userId,
-      accessToken,
-      cursors,
-    );
-
-    await saveCursors(db, userId, deviceId, newCursors);
-
-    return { pushed, pulled, errors };
+    return await syncPromise;
   } finally {
-    syncRunning = false;
+    if (syncPromises.get(syncKey) === syncPromise) syncPromises.delete(syncKey);
   }
+}
+
+async function runSyncInternal(
+  userId: string,
+  deviceId: string,
+  accessToken: string,
+  options: RunSyncOptions,
+): Promise<SyncResult> {
+  if (!userId || !accessToken || !deviceId) {
+    return { pushed: 0, pulled: 0, errors: 0, successful: false };
+  }
+
+  const db = await initDatabase();
+
+  const cursors = await loadCursors(db, userId);
+  await resetTaxonomyCursorsIfEmpty(db, userId, cursors);
+
+  try {
+    await ensureDeviceRegistered(db, userId, deviceId, accessToken);
+  } catch {
+    return { pushed: 0, pulled: 0, errors: 0, successful: false };
+  }
+
+  const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken, options.maxAttempts);
+
+  const { pulled, cursors: newCursors, successful: pullSuccessful } = await pullAndApply(
+    db,
+    userId,
+    accessToken,
+    cursors,
+  );
+
+  await saveCursors(db, userId, deviceId, newCursors);
+
+  return { pushed, pulled, errors, successful: pullSuccessful && errors === 0 };
+}
+
+async function resetTaxonomyCursorsIfEmpty(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  cursors: Record<string, TableCursor>,
+): Promise<void> {
+  const row = await db.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM categories WHERE user_id = ? AND deleted = 0",
+    userId,
+  );
+  if ((row?.count ?? 0) > 0) return;
+
+  delete cursors.category_groups;
+  delete cursors.categories;
+  delete cursors.subcategories;
 }
 
 async function pushQueue(
@@ -260,7 +291,7 @@ async function pullAndApply(
   userId: string,
   accessToken: string,
   cursors: Record<string, TableCursor>,
-): Promise<{ pulled: number; cursors: Record<string, TableCursor> }> {
+): Promise<{ pulled: number; cursors: Record<string, TableCursor>; successful: boolean }> {
   let response: Response;
   try {
     response = await fetchWithTimeout(
@@ -270,18 +301,21 @@ async function pullAndApply(
       },
     );
   } catch {
-    return { pulled: 0, cursors };
+    return { pulled: 0, cursors, successful: false };
   }
 
-  if (!response.ok) return { pulled: 0, cursors };
+  if (!response.ok) return { pulled: 0, cursors, successful: false };
 
   const body = await response.json();
   const payload = body?.payload as {
     cursors: Record<string, TableCursor>;
     changes: Record<string, Record<string, unknown>[]>;
+    successful: boolean;
   } | null;
 
-  if (!payload?.changes) return { pulled: 0, cursors: payload?.cursors ?? cursors };
+  if (!payload?.changes) {
+    return { pulled: 0, cursors: payload?.cursors ?? cursors, successful: false };
+  }
 
   let pulled = 0;
 
@@ -291,12 +325,21 @@ async function pullAndApply(
 
     for (const row of rows) {
       const normalized = normalizePullRow(table, row as Record<string, unknown>, userId);
-      await applyPullRow(db, table, normalized);
-      pulled++;
+      try {
+        await applyPullRow(db, table, normalized);
+        pulled++;
+      } catch (error) {
+        console.error("[sync/pull] local apply failed", {
+          table,
+          recordId: row.id,
+          reason: error instanceof Error ? error.message : "unknown error",
+        });
+        throw error;
+      }
     }
   }
 
-  return { pulled, cursors: payload.cursors };
+  return { pulled, cursors: payload.cursors, successful: payload.successful !== false };
 }
 
 

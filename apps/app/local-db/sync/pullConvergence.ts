@@ -2,6 +2,8 @@ import * as SQLite from "expo-sqlite";
 
 type PullRow = Record<string, unknown>;
 
+const TAXONOMY_TABLES = new Set(["category_groups", "categories", "subcategories"]);
+
 export interface PullDb {
   getFirstAsync<T>(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<T | null>;
   runAsync(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<SQLite.SQLiteRunResult>;
@@ -13,6 +15,7 @@ export const SYNCED_TABLES = [
   "subcategories",
   "financial_accounts",
   "transactions",
+  "transaction_line_items",
   "transaction_templates",
   "transaction_drafts",
   "recurring_transaction_templates",
@@ -70,6 +73,11 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "subcategory_id", "source_account_id", "destination_account_id",
     "recurring_template_id", "merchant_name", "counterparty_name",
     "notes", "client_mutation_id", "metadata", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
+  transaction_line_items: new Set([
+    "id", "transaction_id", "user_id", "subcategory_id", "item_label", "quantity",
+    "amount_centavos", "notes", "sort_order", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
   transaction_templates: new Set([
@@ -145,8 +153,8 @@ export async function applyPullRow(
   const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
 
-  const existing = await db.getFirstAsync<{ version: number }>(
-    `SELECT version FROM "${table}" WHERE id = ?`,
+  const existing = await db.getFirstAsync<{ version: number; user_id: string }>(
+    `SELECT version, user_id FROM "${table}" WHERE id = ?`,
     recordId,
   );
 
@@ -160,6 +168,19 @@ export async function applyPullRow(
     await db.runAsync(
       `INSERT INTO "${table}" (${columns}) VALUES (${placeholders})`,
       ...values,
+    );
+    return;
+  }
+
+  // System taxonomy IDs are shared by the server, but local rows are user-scoped.
+  // Reassign a reused system row before applying the normal version check.
+  if (TAXONOMY_TABLES.has(table) && existing.user_id !== undefined && existing.user_id !== row.user_id) {
+    const columns = Object.keys(row);
+    const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
+    await db.runAsync(
+      `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
+      ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
+      recordId,
     );
     return;
   }
@@ -185,6 +206,14 @@ export async function applyPullRow(
     } else if (table === "transaction_drafts") {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, status = 'discarded', version = ?,
+         updated_at = ? WHERE id = ?`,
+        rowVersion,
+        now,
+        recordId,
+      );
+    } else if (table === "transaction_line_items") {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, version = ?,
          updated_at = ? WHERE id = ?`,
         rowVersion,
         now,

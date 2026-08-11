@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -52,6 +52,7 @@ type Group = {
 type TaxonomyScreenProps = {
   userId: string;
   deviceId: string;
+  syncVersion?: number;
   onBack: () => void;
 };
 
@@ -355,11 +356,10 @@ function assembleNested(
   return localGroups.map((g) => ({ ...g, categories: catsByGroup.get(g.id) ?? [] }));
 }
 
-export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScreenProps) {
+export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBack }: TaxonomyScreenProps) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const fetched = useRef(false);
 
   const [viewingCategoryId, setViewingCategoryId] = useState<string | null>(null);
   const [viewingCategoryLabel, setViewingCategoryLabel] = useState("");
@@ -392,10 +392,8 @@ export default function TaxonomyScreen({ userId, deviceId, onBack }: TaxonomyScr
   }, [userId]);
 
   useEffect(() => {
-    if (fetched.current) return;
-    fetched.current = true;
     load();
-  }, [load]);
+  }, [load, syncVersion]);
 
   useEffect(() => {
     if (!viewingCategoryId) return;

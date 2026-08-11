@@ -50,7 +50,7 @@ async function bootstrapSession(accessToken: string) {
       signal: controller.signal,
     });
     const body = await response.json().catch(() => ({})) as {
-      payload?: { user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } };
+      payload?: { user?: { id?: string }; profile?: { id?: string; is_first_logged_in?: boolean }; onboarding?: { status?: string } };
       message?: string;
     };
     if (!response.ok) throw new Error(body.message ?? "Failed to restore session.");
@@ -153,6 +153,7 @@ export default function App() {
           userId: payload?.user?.id,
           profileId: payload?.profile?.id,
           onboardingStatus: payload?.onboarding?.status,
+          isFirstLoggedIn: payload?.profile?.is_first_logged_in,
         };
         await saveAuthSession(restored);
         if (!cancelled) setAuthenticated(restored);
@@ -215,6 +216,7 @@ export default function App() {
               accessToken={authenticated.accessToken}
               userId={authenticated.userId ?? ""}
               deviceId={deviceId}
+              isFirstLoggedIn={authenticated.isFirstLoggedIn}
               onLoggedOut={handleLoggedOut}
               signOut={async () => { await GoogleSignin.signOut(); }}
             />
