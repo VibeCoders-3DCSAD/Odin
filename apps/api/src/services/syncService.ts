@@ -131,9 +131,10 @@ export async function pullChanges(
   supabase: SupabaseClient,
   userId: string,
   cursors: PullCursors,
-): Promise<{ cursors: PullCursors; changes: PullChanges; successful: boolean }> {
+): Promise<{ cursors: PullCursors; changes: PullChanges; has_more: Record<string, boolean>; successful: boolean }> {
   const changes: PullChanges = {};
   const newCursors: PullCursors = {};
+  const hasMore: Record<string, boolean> = {};
   let successful = true;
 
   for (const table of SYNCED_TABLES) {
@@ -178,11 +179,13 @@ export async function pullChanges(
       successful = false;
       console.error("sync pull error for table", table, error);
       newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
+      hasMore[table] = false;
       continue;
     }
 
     if (data && data.length > 0) {
       changes[table] = data;
+      hasMore[table] = data.length === 500;
 
       const lastRow = data[data.length - 1] as Record<string, unknown>;
       newCursors[table] = {
@@ -191,10 +194,11 @@ export async function pullChanges(
       };
     } else {
       newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
+      hasMore[table] = false;
     }
   }
 
-  return { cursors: newCursors, changes, successful };
+  return { cursors: newCursors, changes, has_more: hasMore, successful };
 }
 
 export async function registerDevice(

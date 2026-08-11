@@ -45,4 +45,27 @@ describe("runSync concurrency", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
+
+  it("limits pagination to three pull pages per sync", async () => {
+    const fetchMock = jest.fn(async (url: string) => {
+      if (url.includes("register-device")) return { ok: true };
+      return {
+        ok: true,
+        json: async () => ({
+          payload: {
+            changes: {},
+            cursors: {},
+            has_more: { transactions: true },
+            successful: true,
+          },
+        }),
+      };
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const result = await runSync("user-c", "device-c", "token-c");
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(result.hasMore).toBe(true);
+  });
 });

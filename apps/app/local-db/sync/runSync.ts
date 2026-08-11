@@ -9,6 +9,8 @@ import {
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
 const MAX_SYNC_ATTEMPTS = 3;
+const MAX_PULL_PAGES_PER_SYNC = 3;
+const PULL_PAGE_DELAY_MS = 100;
 
 const syncPromises = new Map<string, Promise<SyncResult>>();
 
@@ -26,6 +28,7 @@ type SyncResult = {
   pulled: number;
   errors: number;
   successful: boolean;
+  hasMore: boolean;
 };
 
 type RunSyncOptions = {
@@ -81,32 +84,53 @@ async function runSyncInternal(
   options: RunSyncOptions,
 ): Promise<SyncResult> {
   if (!userId || !accessToken || !deviceId) {
-    return { pushed: 0, pulled: 0, errors: 0, successful: false };
+    return { pushed: 0, pulled: 0, errors: 0, successful: false, hasMore: false };
   }
 
   const db = await initDatabase();
 
-  const cursors = await loadCursors(db, userId);
+  const syncState = await loadSyncState(db, userId);
+  const cursors = syncState.cursors;
   await resetTaxonomyCursorsIfEmpty(db, userId, cursors);
 
   try {
     await ensureDeviceRegistered(db, userId, deviceId, accessToken);
   } catch {
-    return { pushed: 0, pulled: 0, errors: 0, successful: false };
+    return { pushed: 0, pulled: 0, errors: 0, successful: false, hasMore: syncState.pullPending };
   }
 
   const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken, options.maxAttempts);
 
-  const { pulled, cursors: newCursors, successful: pullSuccessful } = await pullAndApply(
-    db,
-    userId,
-    accessToken,
-    cursors,
-  );
+  let pulled = 0;
+  let pullSuccessful = true;
+  let hasMore = syncState.pullPending;
 
-  await saveCursors(db, userId, deviceId, newCursors);
+  for (let page = 0; page < MAX_PULL_PAGES_PER_SYNC; page++) {
+    const previousHasMore = hasMore;
+    let result: Awaited<ReturnType<typeof pullAndApply>>;
 
-  return { pushed, pulled, errors, successful: pullSuccessful && errors === 0 };
+    try {
+      result = await pullAndApply(db, userId, accessToken, cursors);
+    } catch {
+      pullSuccessful = false;
+      hasMore = true;
+      break;
+    }
+
+    pulled += result.pulled;
+    pullSuccessful = pullSuccessful && result.successful;
+    Object.assign(cursors, result.cursors);
+    hasMore = result.successful ? result.hasMore : previousHasMore || result.hasMore;
+
+    if (!result.successful || !result.hasMore) break;
+    if (page < MAX_PULL_PAGES_PER_SYNC - 1) {
+      await new Promise((resolve) => setTimeout(resolve, PULL_PAGE_DELAY_MS));
+    }
+  }
+
+  await saveCursors(db, userId, deviceId, cursors, hasMore);
+
+  return { pushed, pulled, errors, successful: pullSuccessful && errors === 0, hasMore };
 }
 
 async function resetTaxonomyCursorsIfEmpty(
@@ -291,7 +315,7 @@ async function pullAndApply(
   userId: string,
   accessToken: string,
   cursors: Record<string, TableCursor>,
-): Promise<{ pulled: number; cursors: Record<string, TableCursor>; successful: boolean }> {
+): Promise<{ pulled: number; cursors: Record<string, TableCursor>; successful: boolean; hasMore: boolean }> {
   let response: Response;
   try {
     response = await fetchWithTimeout(
@@ -301,20 +325,21 @@ async function pullAndApply(
       },
     );
   } catch {
-    return { pulled: 0, cursors, successful: false };
+    return { pulled: 0, cursors, successful: false, hasMore: false };
   }
 
-  if (!response.ok) return { pulled: 0, cursors, successful: false };
+  if (!response.ok) return { pulled: 0, cursors, successful: false, hasMore: false };
 
   const body = await response.json();
   const payload = body?.payload as {
     cursors: Record<string, TableCursor>;
     changes: Record<string, Record<string, unknown>[]>;
+    has_more?: Record<string, boolean>;
     successful: boolean;
   } | null;
 
   if (!payload?.changes) {
-    return { pulled: 0, cursors: payload?.cursors ?? cursors, successful: false };
+    return { pulled: 0, cursors: payload?.cursors ?? cursors, successful: false, hasMore: false };
   }
 
   let pulled = 0;
@@ -339,23 +364,26 @@ async function pullAndApply(
     }
   }
 
-  return { pulled, cursors: payload.cursors, successful: payload.successful !== false };
+  const hasMore = payload.has_more
+    ? Object.values(payload.has_more).some(Boolean)
+    : Object.values(payload.changes).some((rows) => rows.length === 500);
+
+  return { pulled, cursors: payload.cursors, successful: payload.successful !== false, hasMore };
 }
 
-
-async function loadCursors(
+async function loadSyncState(
   db: SQLite.SQLiteDatabase,
   userId: string,
-): Promise<Record<string, TableCursor>> {
-  const row = await db.getFirstAsync<{ pull_cursor: string | null }>(
-    "SELECT pull_cursor FROM sync_state WHERE user_id = ?",
+): Promise<{ cursors: Record<string, TableCursor>; pullPending: boolean }> {
+  const row = await db.getFirstAsync<{ pull_cursor: string | null; pull_pending: number | null }>(
+    "SELECT pull_cursor, pull_pending FROM sync_state WHERE user_id = ?",
     userId,
   );
-  if (!row?.pull_cursor) return {};
+  if (!row?.pull_cursor) return { cursors: {}, pullPending: row?.pull_pending === 1 };
   try {
-    return JSON.parse(row.pull_cursor);
+    return { cursors: JSON.parse(row.pull_cursor), pullPending: row.pull_pending === 1 };
   } catch {
-    return {};
+    return { cursors: {}, pullPending: row.pull_pending === 1 };
   }
 }
 
@@ -364,14 +392,16 @@ async function saveCursors(
   userId: string,
   deviceId: string,
   cursors: Record<string, TableCursor>,
+  pullPending: boolean,
 ): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO sync_state
-     (user_id, device_id, pull_cursor, last_sync_at)
-     VALUES (?, ?, ?, ?)`,
+     (user_id, device_id, pull_cursor, pull_pending, last_sync_at)
+     VALUES (?, ?, ?, ?, ?)`,
     userId,
     deviceId,
     JSON.stringify(cursors),
+    pullPending ? 1 : 0,
     new Date().toISOString(),
   );
 }

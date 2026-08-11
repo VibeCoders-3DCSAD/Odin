@@ -209,6 +209,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncVersion, setSyncVersion] = useState(0);
+  const [syncPending, setSyncPending] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [queueCount, setQueueCount] = useState(0);
   const [syncDetailsVisible, setSyncDetailsVisible] = useState(false);
@@ -443,6 +444,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
       lastAutoSyncAt.current = Date.now();
       const result = await runSync(userId, deviceId, accessToken, { maxAttempts: MAX_SYNC_ATTEMPTS });
       await refreshQueueCount();
+      setSyncPending(result.hasMore);
 
       if (isFirstLoggedIn && !firstLoginCompleted.current && result.successful) {
         await completeFirstLogin(accessToken);
@@ -477,7 +479,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
     const reconnected = online && !wasOnline.current;
     const autoSyncDue = Date.now() - lastAutoSyncAt.current >= AUTO_SYNC_MS;
 
-    if (online && (retryable > 0 || (isFirstLoggedIn && !firstLoginCompleted.current)) && (reconnected || autoSyncDue)) {
+    if (online && (retryable > 0 || syncPending || (isFirstLoggedIn && !firstLoginCompleted.current)) && (reconnected || autoSyncDue)) {
       await syncNow(false);
     }
 
@@ -510,7 +512,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
     tickSyncStatus().catch(() => {});
     const interval = setInterval(() => { tickSyncStatus().catch(() => {}); }, SYNC_STATUS_POLL_MS);
     return () => clearInterval(interval);
-  }, [userId, deviceId, accessToken]);
+  }, [userId, deviceId, accessToken, syncPending]);
 
   function openDrawer() {
     setDrawerOpen(true);
