@@ -65,7 +65,8 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   const { default: m012 } = await import("./migrations/012_ledger_tables");
   const { default: m013 } = await import("./migrations/013_dashboard_snapshots");
   const { default: m014 } = await import("./migrations/014_income_source_recurring_links");
-  return getDatabase([m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014]);
+  const { default: m015 } = await import("./migrations/015_sync_pending");
+  return getDatabase([m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015]);
 }
 
 export function closeDatabase(): Promise<void> {

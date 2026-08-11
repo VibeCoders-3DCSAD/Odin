@@ -30,6 +30,7 @@ import DashboardScreen from "../features/dashboard/DashboardScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
+import { completeFirstLogin } from "../services/firstLogin";
 import { initDatabase } from "../local-db/client";
 import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
@@ -84,6 +85,7 @@ type MobileShellProps = {
   accessToken: string;
   userId: string;
   deviceId: string;
+  isFirstLoggedIn?: boolean;
   onLoggedOut: () => void;
   signOut?: () => Promise<void>;
 };
@@ -195,7 +197,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
-export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, signOut }: MobileShellProps) {
+export default function MobileShell({ accessToken, userId, deviceId, isFirstLoggedIn, onLoggedOut, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -206,6 +208,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [settingsSubPage, setSettingsSubPage] = useState(false);
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncVersion, setSyncVersion] = useState(0);
+  const [syncPending, setSyncPending] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [queueCount, setQueueCount] = useState(0);
   const [syncDetailsVisible, setSyncDetailsVisible] = useState(false);
@@ -233,6 +237,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const syncInFlight = useRef(false);
   const lastAutoSyncAt = useRef(0);
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstLoginCompleted = useRef(false);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -420,7 +425,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   async function syncNow(showMessage: boolean) {
-    if (syncInFlight.current || !userId || !deviceId || !accessToken) return;
+    if (syncInFlight.current || !userId || !deviceId || !accessToken) return null;
 
     syncInFlight.current = true;
     setSyncing(true);
@@ -433,22 +438,32 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           setSyncMessage("No internet connection");
           clearSyncMessageSoon();
         }
-        return;
+        return null;
       }
 
       lastAutoSyncAt.current = Date.now();
       const result = await runSync(userId, deviceId, accessToken, { maxAttempts: MAX_SYNC_ATTEMPTS });
       await refreshQueueCount();
+      setSyncPending(result.hasMore);
+
+      if (isFirstLoggedIn && !firstLoginCompleted.current && result.successful) {
+        await completeFirstLogin(accessToken);
+        firstLoginCompleted.current = true;
+      }
+
+      if (result.pulled > 0) setSyncVersion((value) => value + 1);
 
       if (showMessage && result.errors > 0) {
         setSyncMessage(`${result.errors} item(s) could not be synced`);
         clearSyncMessageSoon();
       }
+      return result;
     } catch {
       if (showMessage) {
         setSyncMessage("Sync failed");
         clearSyncMessageSoon();
       }
+      return null;
     } finally {
       syncInFlight.current = false;
       setSyncing(false);
@@ -464,7 +479,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     const reconnected = online && !wasOnline.current;
     const autoSyncDue = Date.now() - lastAutoSyncAt.current >= AUTO_SYNC_MS;
 
-    if (online && retryable > 0 && (reconnected || autoSyncDue)) {
+    if (online && (retryable > 0 || syncPending || (isFirstLoggedIn && !firstLoginCompleted.current)) && (reconnected || autoSyncDue)) {
       await syncNow(false);
     }
 
@@ -497,7 +512,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     tickSyncStatus().catch(() => {});
     const interval = setInterval(() => { tickSyncStatus().catch(() => {}); }, SYNC_STATUS_POLL_MS);
     return () => clearInterval(interval);
-  }, [userId, deviceId, accessToken]);
+  }, [userId, deviceId, accessToken, syncPending]);
 
   function openDrawer() {
     setDrawerOpen(true);
@@ -766,7 +781,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     if (currentPage === "financial-accounts") {

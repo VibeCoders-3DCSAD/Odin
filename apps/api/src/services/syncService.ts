@@ -37,6 +37,7 @@ const SYNCED_TABLES = [
   "subcategories",
   "financial_accounts",
   "transactions",
+  "transaction_line_items",
   "income_sources",
   "financial_obligations",
   "transaction_templates",
@@ -130,9 +131,11 @@ export async function pullChanges(
   supabase: SupabaseClient,
   userId: string,
   cursors: PullCursors,
-): Promise<{ cursors: PullCursors; changes: PullChanges }> {
+): Promise<{ cursors: PullCursors; changes: PullChanges; has_more: Record<string, boolean>; successful: boolean }> {
   const changes: PullChanges = {};
   const newCursors: PullCursors = {};
+  const hasMore: Record<string, boolean> = {};
+  let successful = true;
 
   for (const table of SYNCED_TABLES) {
     const query = supabase
@@ -147,6 +150,7 @@ export async function pullChanges(
     } else if (
       table === "financial_accounts" ||
       table === "transactions" ||
+      table === "transaction_line_items" ||
       table === "income_sources" ||
       table === "financial_obligations" ||
       table === "transaction_templates" ||
@@ -172,13 +176,16 @@ export async function pullChanges(
     const { data, error } = await query;
 
     if (error) {
+      successful = false;
       console.error("sync pull error for table", table, error);
       newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
+      hasMore[table] = false;
       continue;
     }
 
     if (data && data.length > 0) {
       changes[table] = data;
+      hasMore[table] = data.length === 500;
 
       const lastRow = data[data.length - 1] as Record<string, unknown>;
       newCursors[table] = {
@@ -187,10 +194,11 @@ export async function pullChanges(
       };
     } else {
       newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
+      hasMore[table] = false;
     }
   }
 
-  return { cursors: newCursors, changes };
+  return { cursors: newCursors, changes, has_more: hasMore, successful };
 }
 
 export async function registerDevice(
