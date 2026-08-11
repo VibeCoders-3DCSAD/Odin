@@ -601,14 +601,16 @@ describe("prepareOperation — recurring_transaction_templates ownership", () =>
   };
 
   function op(operationType: "create" | "update", overrides: Record<string, unknown> = {}): Operation {
+    const operationPayload: Record<string, unknown> = { ...payload, ...overrides };
+    if (operationType === "update") delete operationPayload.transaction_type;
     return {
       operation_id: "op-1",
       entity: "recurring_transaction_templates",
       record_id: "template-1",
       operation_type: operationType,
       base_version: operationType === "update" ? 1 : null,
-      changed_fields: Object.keys({ ...payload, ...overrides }),
-      payload: { ...payload, ...overrides },
+      changed_fields: Object.keys(operationPayload),
+      payload: operationPayload,
     };
   }
 
@@ -631,8 +633,27 @@ describe("prepareOperation — recurring_transaction_templates ownership", () =>
 
   it("rejects a transfer subcategory on create", async () => {
     await expect(
-      prepareOperation(mockClient, validUserId, op("create", { transaction_type: "transfer" })),
+      prepareOperation(mockClient, validUserId, op("create", {
+        transaction_type: "transfer",
+        source_account_id: "source-account",
+        destination_account_id: "destination-account",
+      })),
     ).rejects.toThrow("transfer templates cannot have a subcategory_id");
+  });
+
+  it("rejects a recurring-template update of transaction_type", async () => {
+    const update = op("update");
+    update.payload.transaction_type = "expense";
+    update.changed_fields.push("transaction_type");
+    await expect(
+      prepareOperation(mockClient, validUserId, update),
+    ).rejects.toThrow("transaction_type is immutable");
+  });
+
+  it("rejects an income template without its required destination account", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("create", { destination_account_id: undefined })),
+    ).rejects.toThrow("destination_account_id is required");
   });
 
   it("checks ownership of foreign keys on update", async () => {

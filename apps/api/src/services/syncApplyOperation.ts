@@ -223,6 +223,10 @@ const RECURRING_TEMPLATE_FIELDS = new Set([
   "starts_on", "ends_on", "subcategory_id", "source_account_id", "destination_account_id", "notes",
 ]);
 
+const RECURRING_TEMPLATE_UPDATE_FIELDS = new Set(
+  [...RECURRING_TEMPLATE_FIELDS].filter((field) => field !== "transaction_type"),
+);
+
 const RECURRING_OCCURRENCE_FIELDS = new Set([
   "recurring_template_id", "scheduled_date", "generated_transaction_id",
 ]);
@@ -452,6 +456,10 @@ async function validateCreatePayload(
       }
     }
     const transactionType = sanitized.transaction_type as string;
+    optionalString(sanitized, "subcategory_id");
+    optionalString(sanitized, "source_account_id");
+    optionalString(sanitized, "destination_account_id");
+    validateRecurringTemplateShape(sanitized, transactionType);
     if (sanitized.subcategory_id) {
       if (transactionType === "transfer") throw new Error("transfer templates cannot have a subcategory_id");
       await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, transactionType);
@@ -703,7 +711,10 @@ async function validateUpdatePayload(
   } else if (entity === "transaction_drafts") {
     allowedFields = DRAFT_FIELDS;
   } else if (entity === "recurring_transaction_templates") {
-    allowedFields = RECURRING_TEMPLATE_FIELDS;
+    if (Object.prototype.hasOwnProperty.call(payload, "transaction_type")) {
+      throw new Error("transaction_type is immutable for recurring transaction templates");
+    }
+    allowedFields = RECURRING_TEMPLATE_UPDATE_FIELDS;
   } else if (entity === "recurring_transaction_occurrences") {
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else {
@@ -715,12 +726,6 @@ async function validateUpdatePayload(
 
   for (const [key, value] of Object.entries(sanitized)) {
     if (entity === "recurring_transaction_templates") {
-      if (key === "transaction_type") {
-        if (typeof value !== "string" || !VALID_TRANSACTION_TYPES.includes(value)) {
-          throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
-        }
-        continue;
-      }
       if (key === "subcategory_id" || key === "source_account_id" || key === "destination_account_id") {
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
         continue;
@@ -912,7 +917,7 @@ async function validateUpdatePayload(
     if (error) throw new Error(`recurring template lookup failed: ${error.message}`);
     if (!current) throw new Error("recurring template not found or inaccessible");
 
-    const transactionType = (sanitized.transaction_type ?? current.transaction_type) as string;
+    const transactionType = current.transaction_type as string;
     const subcategoryId = sanitized.subcategory_id;
     if (subcategoryId !== undefined && subcategoryId !== null) {
       if (transactionType === "transfer") throw new Error("transfer templates cannot have a subcategory_id");
@@ -1121,6 +1126,31 @@ function requirePositiveInteger(payload: Record<string, unknown>, field: string)
   if (typeof v !== "number" || !Number.isInteger(v) || v <= 0) {
     throw new Error(`${field} must be a positive integer`);
   }
+}
+
+function validateRecurringTemplateShape(payload: Record<string, unknown>, transactionType: string): void {
+  const source = payload.source_account_id;
+  const destination = payload.destination_account_id;
+  const subcategory = payload.subcategory_id;
+
+  if (transactionType === "income") {
+    requireString(payload, "destination_account_id");
+    requireString(payload, "subcategory_id");
+    if (source !== undefined && source !== null) throw new Error("income templates cannot have a source_account_id");
+    return;
+  }
+
+  if (transactionType === "expense") {
+    requireString(payload, "source_account_id");
+    requireString(payload, "subcategory_id");
+    if (destination !== undefined && destination !== null) throw new Error("expense templates cannot have a destination_account_id");
+    return;
+  }
+
+  requireString(payload, "source_account_id");
+  requireString(payload, "destination_account_id");
+  if (source === destination) throw new Error("transfer templates require distinct source and destination accounts");
+  if (subcategory !== undefined && subcategory !== null) throw new Error("transfer templates cannot have a subcategory_id");
 }
 
 function optionalFiniteInteger(payload: Record<string, unknown>, field: string): void {
