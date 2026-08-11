@@ -909,7 +909,7 @@ async function validateUpdatePayload(
   if (entity === "recurring_transaction_templates") {
     const { data: current, error } = await supabase
       .from("recurring_transaction_templates")
-      .select("id, transaction_type")
+      .select("id, transaction_type, subcategory_id, source_account_id, destination_account_id")
       .eq("id", recordId)
       .eq("user_id", userId)
       .eq("deleted", false)
@@ -918,6 +918,7 @@ async function validateUpdatePayload(
     if (!current) throw new Error("recurring template not found or inaccessible");
 
     const transactionType = current.transaction_type as string;
+    validateRecurringTemplateShape({ ...current, ...sanitized }, transactionType);
     const subcategoryId = sanitized.subcategory_id;
     if (subcategoryId !== undefined && subcategoryId !== null) {
       if (transactionType === "transfer") throw new Error("transfer templates cannot have a subcategory_id");

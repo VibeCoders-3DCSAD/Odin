@@ -617,7 +617,10 @@ describe("prepareOperation — recurring_transaction_templates ownership", () =>
   beforeEach(() => {
     mockFrom.mockImplementation((table: string) => {
       if (table === "recurring_transaction_templates") {
-        return createMockQuery({ data: { id: "template-1", transaction_type: "income" }, error: null });
+        return createMockQuery({ data: {
+          id: "template-1", transaction_type: "income", subcategory_id: "subcategory-1",
+          source_account_id: null, destination_account_id: "account-1",
+        }, error: null });
       }
       if (table === "subcategories") return createMockQuery({ data: { id: "subcategory-1" }, error: null });
       if (table === "financial_accounts") return createMockQuery({ data: { id: "account-1" }, error: null });
@@ -656,10 +659,19 @@ describe("prepareOperation — recurring_transaction_templates ownership", () =>
     ).rejects.toThrow("destination_account_id is required");
   });
 
+  it("rejects an update that clears an effective required field", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("update", { destination_account_id: null })),
+    ).rejects.toThrow("destination_account_id is required");
+  });
+
   it("checks ownership of foreign keys on update", async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === "recurring_transaction_templates") {
-        return createMockQuery({ data: { id: "template-1", transaction_type: "income" }, error: null });
+        return createMockQuery({ data: {
+          id: "template-1", transaction_type: "income", subcategory_id: "subcategory-1",
+          source_account_id: null, destination_account_id: "account-1",
+        }, error: null });
       }
       if (table === "subcategories") return createMockQuery({ data: { id: "subcategory-1" }, error: null });
       return createMockQuery({ data: null, error: null });
