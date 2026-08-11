@@ -339,8 +339,12 @@ function resolveIncomeRecurringAmount(input: {
   minAmountCentavos?: number | null;
   maxAmountCentavos?: number | null;
 }): number {
-  const amount = input.expectedAmountCentavos ?? input.maxAmountCentavos ?? input.minAmountCentavos ?? null;
-  if (amount === null || amount <= 0) {
+  const amount = [
+    input.expectedAmountCentavos,
+    input.maxAmountCentavos,
+    input.minAmountCentavos,
+  ].find((value): value is number => value != null && value > 0);
+  if (amount === undefined) {
     throw new LocalDbError("VALIDATION_ERROR", "income sources need an amount to create a linked recurring transaction");
   }
   return amount;
@@ -810,6 +814,7 @@ export async function createIncomeSource(
   if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
     throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be <= maxAmountCentavos");
   }
+  resolveIncomeRecurringAmount(input);
   if (input.paydayDayOfMonth !== undefined && input.paydayDayOfMonth !== null && (input.paydayDayOfMonth < 1 || input.paydayDayOfMonth > 31)) {
     throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfMonth must be between 1 and 31");
   }

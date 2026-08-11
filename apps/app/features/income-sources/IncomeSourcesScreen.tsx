@@ -255,6 +255,9 @@ function IncomeFormSheet({ userId, visible, editing, onClose, onSubmit }: { user
     if (expected.trim() && e === null) errors.push("Expected Amount must be a valid number.");
     if (min.trim() && mn === null) errors.push("Min Amount must be a valid number.");
     if (max.trim() && mx === null) errors.push("Max Amount must be a valid number.");
+    if (![e, mn, mx].some((amount) => amount !== null && amount > 0)) {
+      errors.push("At least one amount greater than zero is required.");
+    }
     if (mn !== null && mx !== null && mn > mx) errors.push("Min must be <= max.");
 
     if ((frequency === "monthly" || frequency === "semi_monthly") && paydayDayOfMonth.trim()) {
