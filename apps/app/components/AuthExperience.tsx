@@ -5,12 +5,12 @@ import {
   Image,
   KeyboardAvoidingView,
   Pressable,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { getConsents } from "../features/governance/api";
 import PrivacyConsentScreen from "../features/governance/PrivacyConsentScreen";
 import { isOnline } from "../lib/network";
