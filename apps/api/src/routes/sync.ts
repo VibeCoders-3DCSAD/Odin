@@ -100,6 +100,7 @@ router.get(
 
       console.log("[sync/pull] done", { userId, ...changeSummary });
 
+      response.set("Cache-Control", "no-store");
       response.status(200).json({ payload: result });
     } catch (error) {
       next(error);
