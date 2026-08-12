@@ -856,7 +856,6 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
             />
           </View>
           <View className="flex-row items-center gap-3">
-            <MaterialCommunityIcons color={palette.ink2} name="magnify" size={20} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={queueCount > 0 ? `${queueCount} unsynced changes` : "Synced"}
@@ -888,7 +887,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
         </ScrollView>
 
         {/* Bottom toolbar */}
-        <View className="absolute bottom-0 left-0 right-0 items-center">
+        <View className="absolute bottom-0 left-0 right-0 items-center px-4 pb-4">
           <View
             style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell }}
             className="w-full px-6 pt-2 pb-[6px] flex-row items-end justify-between border-t border-[#EAEAE6]"
@@ -1175,7 +1174,12 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
           style={{ transform: [{ translateX: drawerAnim }], backgroundColor: palette.brand }}
           className="absolute top-0 left-0 bottom-0"
         >
-          <View style={{ width: DRAWER_WIDTH }} className="flex-1 py-8 px-6">
+          <ScrollView
+            style={{ width: DRAWER_WIDTH }}
+            className="flex-1"
+            contentContainerClassName="flex-grow px-6 pt-12 pb-8"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Drawer header */}
             <View className="flex-row items-center gap-3 mb-10">
               <Image
@@ -1246,7 +1250,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
                 </View>
               </View>
             </View>
-          </View>
+          </ScrollView>
         </Animated.View>
       ) : null}
     </View>

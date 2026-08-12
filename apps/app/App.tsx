@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./global.css";
 
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow";
@@ -30,44 +31,46 @@ export default function App() {
   };
 
   return (
-    <ToastProvider>
-      {authenticated ? (
-        authenticated.onboardingStatus === "submitted" ? (
+    <SafeAreaProvider>
+      <ToastProvider>
+        {authenticated ? (
+          authenticated.onboardingStatus === "submitted" ? (
+            <>
+              <MobileShell
+                accessToken={authenticated.accessToken}
+                userId={authenticated.userId ?? ""}
+                deviceId={deviceId}
+                isFirstLoggedIn={authenticated.isFirstLoggedIn}
+                onLoggedOut={() => setAuthenticated(null)}
+              />
+              <StatusBar style="dark" />
+            </>
+          ) : (
+            <>
+              <OnboardingFlow
+                accessToken={authenticated.accessToken}
+                userId={authenticated.userId ?? ""}
+                onComplete={handleOnboardingComplete}
+              />
+              <StatusBar style="dark" />
+            </>
+          )
+        ) : (
           <>
-            <MobileShell
-              accessToken={authenticated.accessToken}
-              userId={authenticated.userId ?? ""}
-              deviceId={deviceId}
-              isFirstLoggedIn={authenticated.isFirstLoggedIn}
+            <AuthExperience
+              google={{}}
+              isPasswordRecovery={isPasswordRecovery}
+              isResolvingRecoveryToken={isResolvingRecoveryToken}
+              recoveryRefreshToken={recoveryRefreshToken ?? undefined}
+              recoveryToken={recoveryToken ?? undefined}
+              verificationToken={verificationToken ?? undefined}
+              onAuthenticated={(state) => setAuthenticated(state)}
               onLoggedOut={() => setAuthenticated(null)}
             />
             <StatusBar style="dark" />
           </>
-        ) : (
-          <>
-            <OnboardingFlow
-              accessToken={authenticated.accessToken}
-              userId={authenticated.userId ?? ""}
-              onComplete={handleOnboardingComplete}
-            />
-            <StatusBar style="dark" />
-          </>
-        )
-      ) : (
-        <>
-          <AuthExperience
-            google={{}}
-            isPasswordRecovery={isPasswordRecovery}
-            isResolvingRecoveryToken={isResolvingRecoveryToken}
-            recoveryRefreshToken={recoveryRefreshToken ?? undefined}
-            recoveryToken={recoveryToken ?? undefined}
-            verificationToken={verificationToken ?? undefined}
-            onAuthenticated={(state) => setAuthenticated(state)}
-            onLoggedOut={() => setAuthenticated(null)}
-          />
-          <StatusBar style="dark" />
-        </>
-      )}
-    </ToastProvider>
+        )}
+      </ToastProvider>
+    </SafeAreaProvider>
   );
 }
