@@ -14,6 +14,7 @@ import { listTransactions, deleteTransaction, type TransactionFilters } from "..
 import { listSubcategories } from "../../local-db/repositories/taxonomy";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
+import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
 
@@ -195,6 +196,15 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
 
   const filterActive = showFilters || activeFilterCount > 0;
 
+  const totals = useMemo(() => transactions.reduce(
+    (result, tx) => {
+      if (tx.transaction_type === "income") result.income += tx.amount_centavos;
+      if (tx.transaction_type === "expense") result.expenses += tx.amount_centavos;
+      return result;
+    },
+    { income: 0, expenses: 0 },
+  ), [transactions]);
+
   if (editTarget) {
     return (
       <NewTransactionScreen
@@ -248,6 +258,17 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         </Pressable>
       </View>
 
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <View style={{ flex: 1, borderRadius: 14, backgroundColor: "#edfff8", borderWidth: 1, borderColor: "#d4f5e7", padding: 12 }}>
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.success, marginBottom: 3 }}>Income</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.success }}>+P{formatAmount(totals.income)}</Text>
+        </View>
+        <View style={{ flex: 1, borderRadius: 14, backgroundColor: "#fff0f2", borderWidth: 1, borderColor: "#ffdce2", padding: 12 }}>
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error, marginBottom: 3 }}>Expenses</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.error }}>-P{formatAmount(totals.expenses)}</Text>
+        </View>
+      </View>
+
       {/* Transaction list */}
       {loading ? (
         <ActivityIndicator color={palette.brand} style={{ marginTop: 40 }} />
@@ -269,48 +290,46 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         grouped.map((group) => (
           <View key={group.date}>
             <Text style={{
-              fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut,
-              marginTop: 12, marginBottom: 8,
+              fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: palette.mut,
+              letterSpacing: 0.4, marginTop: 12, marginBottom: 7,
             }}>
-              {group.date}
+              {group.date.toUpperCase()}
             </Text>
             {group.items.map((tx) => (
-              <Pressable
+              <View
                 key={tx.id}
-                onPress={() => setEditTarget(tx)}
-                onLongPress={() => setDeleteTarget(tx)}
                 style={{
-                  borderRadius: 12, borderWidth: 1, borderColor: palette.line,
-                  backgroundColor: palette.card, padding: 14, marginBottom: 6,
-                  flexDirection: "row", alignItems: "center", gap: 12,
+                  paddingVertical: 8, paddingHorizontal: 2, marginBottom: 2,
+                  flexDirection: "row", alignItems: "center", gap: 10,
                 }}
               >
                 <View style={{
-                  width: 40, height: 40, borderRadius: 20,
-                  backgroundColor: TYPE_COLORS[tx.transaction_type] ?? palette.mut,
-                  alignItems: "center", justifyContent: "center",
+                  width: 34, height: 34, borderRadius: 10,
+                  backgroundColor: `${TYPE_COLORS[tx.transaction_type] ?? palette.mut}20`,
+                  alignItems: "center", justifyContent: "center", marginRight: 2,
                 }}>
-                  <Text style={{ fontSize: 10, color: "#fff", fontWeight: "700" }}>
-                    {tx.transaction_type === "transfer" ? "TR" : tx.transaction_type.charAt(0).toUpperCase()}
+                  <Text style={{ fontSize: 10, color: TYPE_COLORS[tx.transaction_type] ?? palette.mut, fontWeight: "800" }}>
+                    {tx.transaction_type === "transfer" ? "TR" : tx.transaction_type === "income" ? "+" : "-"}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.ink }} numberOfLines={1}>
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }} numberOfLines={1}>
                     {getLabel(tx)}
                   </Text>
-                  <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut }} numberOfLines={1}>
-                    {getAccountLabel(tx)}
+                  <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut }} numberOfLines={1}>
+                    {[tx.subcategory_id ? subcategoryMap[tx.subcategory_id] : "", getAccountLabel(tx)].filter(Boolean).join(" · ") || "Uncategorized"}
                   </Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={{
-                    fontFamily: "Manrope", fontWeight: "700", fontSize: 14,
+                    fontFamily: "Manrope", fontWeight: "800", fontSize: 13.5,
                     color: amountColor(tx),
                   }}>
                     {typePrefix(tx)}P{formatAmount(tx.amount_centavos)}
                   </Text>
                 </View>
-              </Pressable>
+                <KebabTooltip onEdit={() => setEditTarget(tx)} onDelete={() => setDeleteTarget(tx)} />
+              </View>
             ))}
           </View>
         ))
