@@ -285,7 +285,10 @@ export async function listRecurringTemplates(userId: string): Promise<RecurringT
     "SELECT * FROM recurring_transaction_templates WHERE user_id = ? AND deleted = 0 AND status IN ('active', 'paused') ORDER BY next_occurrence_date",
     userId,
   );
-  return rows.map(mapRecurringTemplate);
+  return rows.map((row) => ({
+    ...mapRecurringTemplate(row),
+    next_occurrence_date: computeNextOccurrenceDate(row),
+  }));
 }
 
 export async function getRecurringTemplate(userId: string, id: string): Promise<RecurringTemplate | null> {
@@ -423,6 +426,22 @@ export async function updateRecurringTemplate(
     }
 
     if (updates.length > 0) {
+      if (changedFields.some((field) => ["frequency", "interval_count", "day_of_month", "second_day_of_month", "day_of_week", "starts_on", "ends_on"].includes(field))) {
+        const nextOccurrenceDate = computeNextOccurrenceDate({
+          ...current,
+          frequency: input.frequency ?? current.frequency,
+          interval_count: input.interval_count ?? current.interval_count,
+          day_of_month: input.day_of_month !== undefined ? input.day_of_month : current.day_of_month,
+          second_day_of_month: input.second_day_of_month !== undefined ? input.second_day_of_month : current.second_day_of_month,
+          day_of_week: input.day_of_week !== undefined ? input.day_of_week : current.day_of_week,
+          starts_on: input.starts_on ?? current.starts_on,
+          ends_on: input.ends_on !== undefined ? input.ends_on : current.ends_on,
+          last_generated_date: null,
+        }, new Date());
+        updates.push("next_occurrence_date = ?");
+        params.push(nextOccurrenceDate);
+        changedFields.push("next_occurrence_date");
+      }
       updates.push("updated_at = ?");
       params.push(ts);
       updates.push("version = version + 1");

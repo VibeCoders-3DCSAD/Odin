@@ -14,8 +14,9 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { CalendarBlank, CaretRight, PencilSimple, Plus, Repeat, TrashSimple, Wallet } from "phosphor-react-native";
+import { ArrowLeft, CalendarBlank, CaretRight, PencilSimple, Plus, Repeat, TrashSimple, Wallet } from "phosphor-react-native";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
+import KebabMenu from "../../components/KebabMenu";
 import { useToast } from "../../components/Toast";
 import type { FinancialAccount } from "../../local-db/repositories/financialAccounts";
 import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
@@ -40,8 +41,11 @@ const palette = {
 } as const;
 
 const TX_TYPES = ["expense", "income", "transfer"] as const;
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 type TransactionType = (typeof TX_TYPES)[number];
+
+type Filter = "active" | "due-soon" | "upcoming";
 
 type Props = {
   userId: string;
@@ -98,6 +102,42 @@ function parseDayOfMonth(raw: string): number | null {
   return value;
 }
 
+function daysUntil(date: string | null): number {
+  if (!date) return Infinity;
+  const dateOnly = date.slice(0, 10);
+  const target = new Date(`${dateOnly}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+
+function isUpcoming(date: string | null): boolean {
+  if (!date) return false;
+  const days = daysUntil(date);
+  return days >= 0 && days <= 3;
+}
+
+function formatListAmount(centavos: number, type: string): string {
+  const sign = type === "income" ? "+" : type === "expense" ? "-" : "";
+  return `${sign}PHP ${Math.abs(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatNextDate(date: string | null): string {
+  if (!date) return "No upcoming date";
+  const days = daysUntil(date);
+  if (days <= 0) return "Due today";
+  if (days === 1) return "Next: tomorrow";
+  if (days <= 3) return `Next: in ${days} days`;
+  return `Next: ${new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+function formatSchedule(template: RecurringTemplate): string {
+  if ((template.frequency === "weekly" || template.frequency === "biweekly") && template.day_of_week != null) {
+    return `${template.frequency} · ${WEEKDAYS[template.day_of_week] ?? "scheduled"}`;
+  }
+  return `${template.frequency} · ${template.day_of_month ? `${template.day_of_month}th` : "scheduled"}`;
+}
+
 function makeDefaultFormState(): FormState {
   return {
     id: null,
@@ -150,6 +190,8 @@ export default function RecurringTransactionsScreen({ userId, deviceId, onBack, 
   const [obligations, setObligations] = useState<FinancialObligation[]>([]);
   const [loading, setLoading] = useState(true);
   const [formState, setFormState] = useState<FormState | null>(null);
+  const [filter, setFilter] = useState<Filter>("active");
+  const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -177,6 +219,18 @@ export default function RecurringTransactionsScreen({ userId, deviceId, onBack, 
     return map;
   }, [obligations]);
 
+  const counts = useMemo(() => ({
+    active: templates.filter((template) => template.status !== "paused").length,
+    dueSoon: templates.filter((template) => template.status !== "paused" && daysUntil(template.next_occurrence_date) >= 2 && daysUntil(template.next_occurrence_date) <= 3).length,
+  }), [templates]);
+
+  const visibleTemplates = templates.filter((template) => {
+    if (template.status === "paused") return false;
+    if (filter === "due-soon") return daysUntil(template.next_occurrence_date) >= 2 && daysUntil(template.next_occurrence_date) <= 3;
+    if (filter === "upcoming") return isUpcoming(template.next_occurrence_date);
+    return true;
+  });
+
   async function handleDelete(template: RecurringTemplate) {
     const linkedObligation = obligationMap.get(template.id) ?? null;
     Alert.alert(
@@ -201,14 +255,40 @@ export default function RecurringTransactionsScreen({ userId, deviceId, onBack, 
     );
   }
 
+  if (formState) {
+    return (
+      <RecurringTemplateFormModal
+        visible
+        userId={userId}
+        deviceId={deviceId}
+        formState={formState}
+        onClose={() => setFormState(null)}
+        onSaved={async () => {
+          setFormState(null);
+          await load();
+          onSyncRequested?.();
+        }}
+        presentation="screen"
+      />
+    );
+  }
+
   return (
     <>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <Text style={{ fontSize: 18, fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Recurring Transactions</Text>
         <TouchableOpacity onPress={() => onCreateRequested ? onCreateRequested() : setFormState(makeDefaultFormState())} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}>
           <Plus size={18} color={palette.white} weight="bold" />
         </TouchableOpacity>
       </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 18 }}>
+        {([["active", `Active ${counts.active}`], ["due-soon", `Due Soon ${counts.dueSoon}`], ["upcoming", "Upcoming"]] as const).map(([key, label]) => (
+          <Pressable key={key} onPress={() => setFilter(key)} accessibilityRole="radio" accessibilityState={{ selected: filter === key }} style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 22, backgroundColor: filter === key ? palette.brand : "transparent", borderWidth: filter === key ? 0 : 1, borderColor: palette.line }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: filter === key ? palette.white : palette.ink }}>{label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
 
       {loading ? (
         <View style={{ paddingVertical: 40, alignItems: "center" }}>
@@ -221,50 +301,49 @@ export default function RecurringTransactionsScreen({ userId, deviceId, onBack, 
           <Text style={{ marginTop: 4, fontSize: 13, fontFamily: "Manrope", color: palette.mut }}>Tap + to add your first recurring template</Text>
         </View>
       ) : (
-        templates.map((template) => {
-          const linkedObligation = obligationMap.get(template.id) ?? null;
+        visibleTemplates.length === 0 ? (
+          <Text style={{ color: palette.mut, fontFamily: "Manrope", textAlign: "center", marginTop: 40 }}>No recurring transactions here</Text>
+        ) : visibleTemplates.map((template) => {
+          const dueSoon = daysUntil(template.next_occurrence_date) >= 2 && daysUntil(template.next_occurrence_date) <= 3;
           return (
-            <View key={template.id} style={{ backgroundColor: palette.white, borderRadius: 12, marginBottom: 8, padding: 12, borderWidth: 1, borderColor: palette.line }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: palette.card, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-                  <Repeat size={22} color={palette.brand} weight="fill" />
-                </View>
+            <Pressable
+              key={template.id}
+              onPress={() => setExpandedTemplates((current) => {
+                const next = new Set(current);
+                if (next.has(template.id)) next.delete(template.id); else next.add(template.id);
+                return next;
+              })}
+              accessibilityRole="button"
+              accessibilityLabel={`${template.name} recurring transaction`}
+              style={{ backgroundColor: "#FFFCF6", borderRadius: 16, marginBottom: 8, padding: 14, borderWidth: 1, borderColor: palette.line, position: "relative" }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: dueSoon ? "#FFF0D8" : "#D9F9EA", marginRight: 12 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "600", color: palette.ink }}>{template.name}</Text>
-                  <Text style={{ fontSize: 12, fontFamily: "Manrope", color: palette.mut, marginTop: 2 }}>
-                    {template.transaction_type} · {template.frequency} · {formatPeso(template.amount_centavos)}
-                    {template.next_occurrence_date ? ` · next ${template.next_occurrence_date}` : ""}
-                  </Text>
-                  {linkedObligation ? (
-                    <Text style={{ fontSize: 12, fontFamily: "Manrope", color: palette.brand, marginTop: 4 }}>
-                      Linked obligation: {linkedObligation.name}
-                    </Text>
-                  ) : null}
+                  <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 34 }}>
+                    <Text numberOfLines={1} style={{ flex: 1, fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.ink }}>{template.name}</Text>
+                    <View style={{ marginLeft: 8, backgroundColor: dueSoon ? "#FFF0D8" : "#D9F9EA", borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 }}>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: dueSoon ? "#C25E00" : palette.successTint }}>{dueSoon ? "Due soon" : "Active"}</Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>{formatSchedule(template)}</Text>
                 </View>
-                <TouchableOpacity onPress={() => setFormState(buildEditFormState(template))} hitSlop={8} style={{ padding: 6 }}>
-                  <PencilSimple size={16} color={palette.mut} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDelete(template)} hitSlop={8} style={{ padding: 6, marginLeft: 4 }}>
-                  <TrashSimple size={16} color={palette.error} />
-                </TouchableOpacity>
               </View>
-            </View>
+              <View style={{ position: "absolute", top: 8, right: 8 }}><KebabMenu kebabDirection="vertical" tooltipLocation="bottomRight" onEdit={() => setFormState(buildEditFormState(template))} onDelete={() => handleDelete(template)} /></View>
+              {expandedTemplates.has(template.id) ? (
+                <>
+                  <View style={{ height: 1, backgroundColor: palette.line, marginTop: 12, marginBottom: 12 }} />
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut }}>{formatNextDate(template.next_occurrence_date)}</Text>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: template.transaction_type === "income" ? palette.successTint : palette.ink }}>{formatListAmount(template.amount_centavos, template.transaction_type)}</Text>
+                  </View>
+                </>
+              ) : null}
+            </Pressable>
           );
         })
       )}
 
-      <RecurringTemplateFormModal
-        visible={formState !== null}
-        userId={userId}
-        deviceId={deviceId}
-        formState={formState}
-        onClose={() => setFormState(null)}
-        onSaved={async () => {
-          setFormState(null);
-          await load();
-          onSyncRequested?.();
-        }}
-      />
     </>
   );
 }
@@ -506,6 +585,19 @@ function RecurringTemplateFormModal({
 
   const formContent = (
     <ScrollView contentContainerStyle={{ padding: 22, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" bounces={false}>
+                  {presentation === "screen" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Back to recurring transactions"
+                      onPress={onClose}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}
+                    >
+                      <ArrowLeft size={18} color={palette.ink} weight="bold" />
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.mut }}>
+                        Recurring Transactions
+                      </Text>
+                    </Pressable>
+                  ) : null}
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
                     {isEdit ? "Edit Recurring Transaction" : "Add Recurring Transaction"}
                   </Text>
