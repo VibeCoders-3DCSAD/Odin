@@ -183,7 +183,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   history: { title: "History", subtitle: "Past activity" },
   "spending-forecast": { title: "Spending Forecast", subtitle: "Predictive insights" },
   "anomaly-alerts": { title: "Anomaly Alerts", subtitle: "Unusual activity detected" },
-  "budget-advice": { title: "Budget Advice", subtitle: "Smart suggestions" },
+  "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
   "debt-manager": { title: "Debt Manager", subtitle: "Manage liabilities" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },

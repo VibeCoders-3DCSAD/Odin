@@ -1,8 +1,8 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 
-type CategorySpending = {
-  category_label: string;
+type CategoryGroupSpending = {
+  category_group_label: string;
   total_centavos: number;
 };
 
@@ -13,7 +13,7 @@ type DashboardSummary = {
   previousMonthIncomeCentavos: number;
   previousMonthExpenseCentavos: number;
   recentTransactions: DashboardTransaction[];
-  categorySpending: CategorySpending[];
+  categoryGroupSpending: CategoryGroupSpending[];
 };
 
 type DashboardTransaction = {
@@ -69,7 +69,7 @@ function getPreviousMonthRange(): { start: string; end: string } {
 export async function getDashboardSummary(userId: string): Promise<DashboardSummary> {
   const db = await getDb();
 
-  const [balance, currentMonth, previousMonth, recentTransactions, catSpend] = await Promise.all([
+  const [balance, currentMonth, previousMonth, recentTransactions, categoryGroupSpend] = await Promise.all([
     db.getFirstAsync<{ total: number | null }>(
       `SELECT SUM(current_balance_centavos) AS total
        FROM financial_accounts
@@ -109,17 +109,16 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
       userId,
       RECENT_LIMIT,
     ),
-    db.getAllAsync<CategorySpending>(
-      `SELECT COALESCE(g.label, 'Other') AS category_label, SUM(t.amount_centavos) AS total_centavos
+    db.getAllAsync<CategoryGroupSpending>(
+      `SELECT COALESCE(g.label, 'Other') AS category_group_label, SUM(t.amount_centavos) AS total_centavos
        FROM transactions t
        LEFT JOIN subcategories s ON t.subcategory_id = s.id
        LEFT JOIN categories c ON s.category_id = c.id
        LEFT JOIN category_groups g ON c.category_group_id = g.id
        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
          AND t.transaction_date >= ? AND t.transaction_date <= ?
-       GROUP BY g.label
-       ORDER BY total_centavos DESC
-       LIMIT 6`,
+       GROUP BY COALESCE(g.id, 'other'), COALESCE(g.label, 'Other')
+       ORDER BY total_centavos DESC`,
       userId,
       getCurrentMonthRange().start,
       getCurrentMonthRange().end,
@@ -133,7 +132,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     previousMonthIncomeCentavos: previousMonth?.income ?? 0,
     previousMonthExpenseCentavos: previousMonth?.expense ?? 0,
     recentTransactions: recentTransactions ?? [],
-    categorySpending: catSpend ?? [],
+    categoryGroupSpending: categoryGroupSpend ?? [],
   };
 }
 
@@ -173,4 +172,4 @@ export function _resetDbCacheForTesting(): void {
   dbPromise = null;
 }
 
-export type { DashboardSummary, DashboardTransaction, CategorySpending, DailyTrend };
+export type { DashboardSummary, DashboardTransaction, CategoryGroupSpending, DailyTrend };

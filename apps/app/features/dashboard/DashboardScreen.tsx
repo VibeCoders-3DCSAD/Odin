@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, Pressable, ActivityIndicator, Image } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -20,7 +21,7 @@ const P = {
   mut: "#6B7A6F",
   line: "#EAEAE6",
   error: "#D9001F",
-  card: "#F1F0EB",
+  card: "#F8EFDC",
   aqua50: "#EFFEF7",
   aqua100: "#D4F7E5",
   aqua300: "#7cf9c4",
@@ -42,7 +43,7 @@ const EMPTY_SUMMARY: DashboardSummary = {
   previousMonthIncomeCentavos: 0,
   previousMonthExpenseCentavos: 0,
   recentTransactions: [],
-  categorySpending: [],
+  categoryGroupSpending: [],
 };
 
 const SPENDING_COLORS = [P.brand, P.aqua600, "#8B7355", P.aqua300, P.sun500, P.monza600];
@@ -91,39 +92,83 @@ function getPreviousMonthName(): string {
   return d.toLocaleDateString("en-US", { month: "short" });
 }
 
-// ponytail: proportional stacked bar — border-based donut can't do unequal arcs without SVG
-function SpendingBar({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
-  if (total === 0 || segments.length === 0) {
-    return (
-      <View style={{ height: 10, borderRadius: 5, backgroundColor: P.line }} />
-    );
-  }
+function EmptyDashboard({ onNavigate }: { onNavigate: (page: string) => void }) {
+  return (
+    <View style={{ alignItems: "center", paddingTop: 4 }}>
+      <View style={{ width: "100%", minHeight: 105, borderRadius: 22, backgroundColor: P.brand, padding: 18, overflow: "hidden" }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: "rgba(255,255,255,0.72)" }}>Available Balance</Text>
+        <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 7 }}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 14, color: "rgba(255,255,255,0.7)", marginRight: 3 }}>PHP</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 24, color: P.white }}>0</Text>
+        </View>
+        <Text style={{ fontFamily: "Manrope", fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 6 }}>Add your first account to get started</Text>
+      </View>
 
-  const top4 = segments.slice(0, 4);
-  const remainder = total - top4.reduce((s, x) => s + x.value, 0);
-  const bars = [...top4];
-  if (remainder > 0) bars.push({ label: "Other", value: remainder, color: P.mut });
+      <View style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: P.aqua50, justifyContent: "center", alignItems: "center", marginTop: 66 }}>
+        <Image source={require("../../assets/odin-logo.png")} accessibilityLabel="Odin logo" style={{ width: 46, height: 46, resizeMode: "contain" }} />
+      </View>
+      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 17, color: P.ink, marginTop: 22 }}>Welcome to Odin</Text>
+      <Text style={{ maxWidth: 270, fontFamily: "Manrope", fontSize: 11.5, lineHeight: 17, color: P.mut, textAlign: "center", marginTop: 7 }}>
+        Log your first transaction or set up a budget and your dashboard will come to life.
+      </Text>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add transaction"
+        onPress={() => onNavigate("add-transaction")}
+        style={{ width: "100%", minHeight: 40, borderRadius: 11, backgroundColor: P.brand, alignItems: "center", justifyContent: "center", marginTop: 22 }}
+      >
+        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.white }}>Add transaction</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Set up a budget"
+        onPress={() => onNavigate("budget-advice")}
+        style={{ width: "100%", minHeight: 40, borderRadius: 11, borderWidth: 1, borderColor: P.line, alignItems: "center", justifyContent: "center", marginTop: 9 }}
+      >
+        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2 }}>Set up a budget</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function SpendingPie({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
+  const size = 104;
+  const strokeWidth = 11;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
 
   return (
-    <View style={{ flexDirection: "row", height: 10, borderRadius: 5, overflow: "hidden" }}>
-      {bars.map((bar, i) => {
-        const pct = (bar.value / total) * 100;
-        return (
-          <View
-            key={i}
-            style={{
-              width: `${pct}%`,
-              height: "100%",
-              backgroundColor: bar.color,
-              // ponytail: first segment gets left radius, last gets right
-              borderTopLeftRadius: i === 0 ? 5 : 0,
-              borderBottomLeftRadius: i === 0 ? 5 : 0,
-              borderTopRightRadius: i === bars.length - 1 ? 5 : 0,
-              borderBottomRightRadius: i === bars.length - 1 ? 5 : 0,
-            }}
-          />
-        );
-      })}
+    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke={P.line} strokeWidth={strokeWidth} fill="none" />
+        {total > 0 && segments.map((segment) => {
+          const length = (segment.value / total) * circumference;
+          const circle = (
+            <Circle
+              key={segment.label}
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={segment.color}
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${length} ${circumference - length}`}
+              strokeDashoffset={-offset}
+              strokeLinecap="butt"
+              fill="none"
+              rotation="-90"
+              origin={`${size / 2}, ${size / 2}`}
+            />
+          );
+          offset += length;
+          return circle;
+        })}
+      </Svg>
+      <View style={{ position: "absolute", alignItems: "center" }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: P.ink }}>{formatPesoCompact(total)}</Text>
+        <Text style={{ fontFamily: "Manrope", fontSize: 9, color: P.mut, marginTop: 1 }}>Total</Text>
+      </View>
     </View>
   );
 }
@@ -259,6 +304,20 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
   const prevMonthName = getPreviousMonthName();
   const incomeDelta = deltaPercent(s.currentMonthIncomeCentavos, s.previousMonthIncomeCentavos);
   const expenseDelta = deltaPercent(s.currentMonthExpenseCentavos, s.previousMonthExpenseCentavos);
+  const categoryGroupExpenseTotal = s.categoryGroupSpending.reduce((sum, group) => sum + group.total_centavos, 0);
+  const visibleSpending = s.categoryGroupSpending.slice(0, 4);
+  const hiddenSpendingTotal = s.categoryGroupSpending.slice(4).reduce((sum, group) => sum + group.total_centavos, 0);
+  const spendingGroups = hiddenSpendingTotal > 0
+    ? [...visibleSpending, { category_group_label: "Other", total_centavos: hiddenSpendingTotal }]
+    : visibleSpending;
+
+  const isEmpty = s.currentBalanceCentavos === 0
+    && s.currentMonthIncomeCentavos === 0
+    && s.currentMonthExpenseCentavos === 0
+    && s.recentTransactions.length === 0
+    && s.categoryGroupSpending.length === 0;
+
+  if (isEmpty) return <EmptyDashboard onNavigate={onNavigate} />;
 
   // Budget health from snapshot
   const budgetSnap = snapshots.budget_health as (DashboardSnapshotWithMeta & { payload_json: string }) | null;
@@ -285,12 +344,12 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
   return (
     <View>
       {/* Balance card */}
-      <View style={{ borderRadius: 24, backgroundColor: P.brand, padding: 24, position: "relative", overflow: "hidden" }}>
+      <View style={{ minHeight: 161, borderRadius: 24, backgroundColor: P.brand, padding: 24, position: "relative", overflow: "hidden" }}>
         <View style={{ position: "absolute", right: -26, top: -26, width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(65, 237, 164, 0.13)" }} />
         <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "rgba(255,255,255,0.72)" }}>Available Balance</Text>
-        <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 7 }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 18, color: "rgba(255,255,255,0.7)", marginRight: 4 }}>PHP</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 34, color: P.white, letterSpacing: -0.02 }}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 34, color: P.white, letterSpacing: -0.5 }}>
             {(s.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </Text>
         </View>
@@ -304,10 +363,10 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
 
       {/* Income / Expense cards */}
       <View style={{ flexDirection: "row", gap: 11, marginTop: 14 }}>
-        <View style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: P.card, borderWidth: 1, borderColor: P.line }}>
+        <View style={{ flex: 1, minHeight: 106, padding: 14, borderRadius: 16, backgroundColor: P.card, borderWidth: 1, borderColor: P.line }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12, color: P.mut }}>Income</Text>
-            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: P.aqua50, justifyContent: "center", alignItems: "center" }}>
+            <View style={{ width: 25, height: 25, borderRadius: 13, backgroundColor: P.aqua100, justifyContent: "center", alignItems: "center" }}>
               <ArrowDownLeft size={13} color={P.aqua700} weight="bold" />
             </View>
           </View>
@@ -322,10 +381,10 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
           )}
         </View>
 
-        <View style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: P.card, borderWidth: 1, borderColor: P.line }}>
+        <View style={{ flex: 1, minHeight: 106, padding: 14, borderRadius: 16, backgroundColor: P.card, borderWidth: 1, borderColor: P.line }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12, color: P.mut }}>Expenses</Text>
-            <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: P.monza100, justifyContent: "center", alignItems: "center" }}>
+            <View style={{ width: 25, height: 25, borderRadius: 13, backgroundColor: "#FFDDE3", justifyContent: "center", alignItems: "center" }}>
               <ArrowUpRight size={13} color={P.monza600} weight="bold" />
             </View>
           </View>
@@ -367,33 +426,29 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
           <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12.5, color: P.aqua700 }}>View all</Text>
         </Pressable>
       </View>
-      <View style={{ gap: 9, borderRadius: 18, backgroundColor: P.card, borderWidth: 1, borderColor: P.line, padding: 16 }}>
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>{formatPesoCompact(s.currentMonthExpenseCentavos)}</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12, color: P.mut }}>total</Text>
-        </View>
-        <SpendingBar
-          segments={s.categorySpending.slice(0, 4).map((c, i) => ({
-            label: c.category_label,
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 18, backgroundColor: P.card, borderWidth: 1, borderColor: P.line, padding: 16 }}>
+        <SpendingPie
+          segments={spendingGroups.map((c, i) => ({
+            label: c.category_group_label,
             value: c.total_centavos,
             color: SPENDING_COLORS[i] ?? P.mut,
           }))}
-          total={s.currentMonthExpenseCentavos}
+          total={categoryGroupExpenseTotal}
         />
-        <View style={{ gap: 9 }}>
-          {s.categorySpending.slice(0, 4).map((c, i) => {
-            const pct = s.currentMonthExpenseCentavos > 0
-              ? Math.round((c.total_centavos / s.currentMonthExpenseCentavos) * 100)
+        <View style={{ flex: 1, gap: 10 }}>
+          {spendingGroups.map((c, i) => {
+            const pct = categoryGroupExpenseTotal > 0
+              ? Math.round((c.total_centavos / categoryGroupExpenseTotal) * 100)
               : 0;
             return (
-              <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: SPENDING_COLORS[i] ?? P.mut }} />
-                <Text style={{ flex: 1, fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: P.ink2 }}>{c.category_label}</Text>
-                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: P.ink }}>{pct}%</Text>
+              <View key={c.category_group_label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: SPENDING_COLORS[i] ?? P.mut }} />
+                <Text style={{ flex: 1, fontFamily: "Manrope", fontWeight: "500", fontSize: 12.5, color: P.ink2 }} numberOfLines={1}>{c.category_group_label}</Text>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12.5, color: P.ink }}>{pct}%</Text>
               </View>
             );
           })}
-          {s.categorySpending.length === 0 && (
+          {s.categoryGroupSpending.length === 0 && (
             <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.mut }}>No expenses this month</Text>
           )}
         </View>
