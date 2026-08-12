@@ -283,7 +283,7 @@ export default function RecurringTransactionsScreen({ userId, deviceId, onBack, 
     <>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <Text style={{ fontSize: 18, fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Recurring Transactions</Text>
-        <TouchableOpacity onPress={() => onCreateRequested ? onCreateRequested() : setFormState(makeDefaultFormState())} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}>
+        <TouchableOpacity onPress={() => onCreateRequested ? onCreateRequested() : setFormState(makeDefaultFormState())} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}>
           <Plus size={18} color={palette.white} weight="bold" />
         </TouchableOpacity>
       </View>
