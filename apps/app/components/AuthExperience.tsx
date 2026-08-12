@@ -69,7 +69,7 @@ type AuthExperienceProps = {
   recoveryRefreshToken?: string;
   recoveryToken?: string;
   verificationToken?: string;
-  onAuthenticated: (state: AuthenticatedState) => void;
+  onAuthenticated: (state: AuthenticatedState) => boolean | Promise<boolean>;
   onLoggedOut: () => void;
 };
 
@@ -501,8 +501,7 @@ export default function AuthExperience({
       const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
       const hasGranted = existing?.some((c) => c.status === "granted");
       if (hasGranted) {
-        setAuthenticated(authState);
-        onAuthenticated(authState);
+        if (await onAuthenticated(authState)) setAuthenticated(authState);
         setPendingVerificationEmail(null);
       } else {
         setPendingAuthState(authState);
@@ -716,8 +715,7 @@ export default function AuthExperience({
       const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
       const hasGranted = existing?.some((c) => c.status === "granted");
       if (hasGranted) {
-        setAuthenticated(authState);
-        onAuthenticated(authState);
+        if (await onAuthenticated(authState)) setAuthenticated(authState);
         setPendingVerificationEmail(null);
       } else {
         setPendingAuthState(authState);
@@ -1132,10 +1130,9 @@ export default function AuthExperience({
     <PrivacyConsentScreen
       visible={showConsent}
       accessToken={pendingAuthState.accessToken}
-      onComplete={() => {
+      onComplete={async () => {
         setShowConsent(false);
-        setAuthenticated(pendingAuthState);
-        onAuthenticated(pendingAuthState);
+        if (await onAuthenticated(pendingAuthState)) setAuthenticated(pendingAuthState);
         setPendingAuthState(null);
       }}
       onDismiss={() => {
