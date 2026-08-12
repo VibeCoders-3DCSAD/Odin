@@ -312,6 +312,23 @@ describe("prepareOperation — recurring_transaction_templates create", () => {
     }));
     expect(result.payload).toMatchObject({ frequency: "semi_monthly" });
   });
+
+  it("accepts recurring calendar fields on create", async () => {
+    const result = await prepareOperation(mockClient, validUserId, op({
+      frequency: "monthly",
+      interval_count: 2,
+      day_of_month: 31,
+      starts_on: "2026-08-01",
+      ends_on: "2027-08-01",
+    }));
+    expect(result.payload).toMatchObject({ day_of_month: 31, interval_count: 2 });
+  });
+
+  it("rejects an out-of-range recurring calendar field on create", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op({ day_of_month: 32 })),
+    ).rejects.toThrow("day_of_month must be between 1 and 31");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -618,8 +635,9 @@ describe("prepareOperation — recurring_transaction_templates ownership", () =>
     mockFrom.mockImplementation((table: string) => {
       if (table === "recurring_transaction_templates") {
         return createMockQuery({ data: {
-          id: "template-1", transaction_type: "income", subcategory_id: "subcategory-1",
-          source_account_id: null, destination_account_id: "account-1",
+           id: "template-1", transaction_type: "income", subcategory_id: "subcategory-1",
+           source_account_id: null, destination_account_id: "account-1",
+           starts_on: "2026-08-15", ends_on: "2026-09-15",
         }, error: null });
       }
       if (table === "subcategories") return createMockQuery({ data: { id: "subcategory-1" }, error: null });
@@ -669,8 +687,9 @@ describe("prepareOperation — recurring_transaction_templates ownership", () =>
     mockFrom.mockImplementation((table: string) => {
       if (table === "recurring_transaction_templates") {
         return createMockQuery({ data: {
-          id: "template-1", transaction_type: "income", subcategory_id: "subcategory-1",
-          source_account_id: null, destination_account_id: "account-1",
+           id: "template-1", transaction_type: "income", subcategory_id: "subcategory-1",
+           source_account_id: null, destination_account_id: "account-1",
+           starts_on: "2026-08-15", ends_on: "2026-09-15",
         }, error: null });
       }
       if (table === "subcategories") return createMockQuery({ data: { id: "subcategory-1" }, error: null });
@@ -680,6 +699,36 @@ describe("prepareOperation — recurring_transaction_templates ownership", () =>
     await expect(
       prepareOperation(mockClient, validUserId, op("update", { destination_account_id: "other-account" })),
     ).rejects.toThrow("account not found or inaccessible");
+  });
+
+  it("accepts recurring calendar fields and interval on update", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("update", {
+        frequency: "weekly",
+        interval_count: 2,
+        day_of_week: 1,
+      })),
+    ).resolves.toMatchObject({
+      payload: { frequency: "weekly", interval_count: 2, day_of_week: 1 },
+    });
+  });
+
+  it("rejects an out-of-range recurring day_of_week on update", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("update", { day_of_week: 7 })),
+    ).rejects.toThrow("day_of_week must be between 0 and 6");
+  });
+
+  it("rejects a non-positive recurring amount on update", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("update", { amount_centavos: 0 })),
+    ).rejects.toThrow("amount_centavos must be a positive integer");
+  });
+
+  it("validates a partial recurring date update against the stored date", async () => {
+    await expect(
+      prepareOperation(mockClient, validUserId, op("update", { starts_on: "2026-10-01" })),
+    ).rejects.toThrow("starts_on must be <= ends_on");
   });
 });
 

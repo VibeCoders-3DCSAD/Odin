@@ -440,7 +440,6 @@ export async function updateRecurringTemplate(
         }, new Date());
         updates.push("next_occurrence_date = ?");
         params.push(nextOccurrenceDate);
-        changedFields.push("next_occurrence_date");
       }
       updates.push("updated_at = ?");
       params.push(ts);

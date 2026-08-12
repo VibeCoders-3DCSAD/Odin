@@ -15,6 +15,7 @@ import syncRoutes from "./routes/sync.js";
 import recurringRoutes from "./routes/recurring.js";
 
 const app = express();
+app.disable("etag");
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());

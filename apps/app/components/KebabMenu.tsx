@@ -11,12 +11,13 @@ export type KebabAction = {
 type Props = {
   kebabDirection?: "horizontal" | "vertical";
   tooltipLocation?: "topRight" | "bottomRight" | "topLeft" | "bottomLeft";
+  disabled?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
   actions?: KebabAction[];
 };
 
-export default function KebabMenu({ kebabDirection = "vertical", tooltipLocation = "bottomRight", onEdit, onDelete, actions }: Props) {
+export default function KebabMenu({ kebabDirection = "vertical", tooltipLocation = "bottomRight", disabled = false, onEdit, onDelete, actions }: Props) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef<View>(null);
@@ -31,7 +32,9 @@ export default function KebabMenu({ kebabDirection = "vertical", tooltipLocation
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="More actions"
+        accessibilityState={{ disabled }}
         ref={buttonRef}
+        disabled={disabled}
         onPress={(event) => {
           event.stopPropagation();
           buttonRef.current?.measureInWindow((x, y, width, height) => {
@@ -56,7 +59,7 @@ export default function KebabMenu({ kebabDirection = "vertical", tooltipLocation
           });
         }}
         hitSlop={8}
-        style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}
+        style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.45 : 1 }}
       >
         {kebabDirection === "vertical" ? <DotsThreeVertical size={22} color="#6B7A6F" weight="bold" /> : <DotsThree size={22} color="#6B7A6F" weight="bold" />}
       </Pressable>

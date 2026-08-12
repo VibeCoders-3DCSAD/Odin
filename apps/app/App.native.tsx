@@ -4,7 +4,7 @@ import "./global.css";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, View } from "react-native";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow";
@@ -109,6 +109,30 @@ export default function App() {
   useEffect(() => { startConnectivityPolling(); }, []);
 
   useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        clearAuthSession().catch(() => {});
+        return;
+      }
+
+      if (event !== "TOKEN_REFRESHED" || !session?.access_token) return;
+
+      setAuthenticated((current) => {
+        if (!current) return current;
+        const refreshed = {
+          ...current,
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token ?? current.refreshToken,
+        };
+        saveAuthSession(refreshed).catch(() => {});
+        return refreshed;
+      });
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
     GoogleSignin.configure({
       webClientId: googleWebClientId,
       iosClientId: googleIosClientId,
@@ -169,8 +193,21 @@ export default function App() {
   }, [isPasswordRecovery, isResolvingRecoveryToken]);
 
   async function handleAuthenticated(state: AuthenticatedState) {
+    if (state.refreshToken) {
+      const { error } = await supabase.auth.setSession({
+        access_token: state.accessToken,
+        refresh_token: state.refreshToken,
+      });
+      if (error) {
+        await clearAuthSession();
+        setAuthenticated(null);
+        Alert.alert("Sign-in failed", "We couldn't establish a secure session. Please sign in again.");
+        return false;
+      }
+    }
     setAuthenticated(state);
     await saveAuthSession(state);
+    return true;
   }
 
   async function handleLoggedOut() {

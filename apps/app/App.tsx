@@ -64,7 +64,10 @@ export default function App() {
               recoveryRefreshToken={recoveryRefreshToken ?? undefined}
               recoveryToken={recoveryToken ?? undefined}
               verificationToken={verificationToken ?? undefined}
-              onAuthenticated={(state) => setAuthenticated(state)}
+              onAuthenticated={(state) => {
+                setAuthenticated(state);
+                return true;
+              }}
               onLoggedOut={() => setAuthenticated(null)}
             />
             <StatusBar style="dark" />

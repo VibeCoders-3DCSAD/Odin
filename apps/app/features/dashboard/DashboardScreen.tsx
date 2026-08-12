@@ -11,6 +11,7 @@ import { getDashboardSummary, getDailyTrends } from "../../local-db/repositories
 import type { DashboardSummary, DailyTrend } from "../../local-db/repositories/dashboardSummary";
 import { getAllSnapshots } from "../../local-db/repositories/dashboardSnapshots";
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
+import AvailableBalanceCard from "../../components/AvailableBalanceCard";
 
 const P = {
   shell: "#fcf8f0",
@@ -344,22 +345,11 @@ export default function DashboardScreen({ userId, onNavigate }: Props) {
   return (
     <View>
       {/* Balance card */}
-      <View style={{ minHeight: 161, borderRadius: 24, backgroundColor: P.brand, padding: 24, position: "relative", overflow: "hidden" }}>
-        <View style={{ position: "absolute", right: -26, top: -26, width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(65, 237, 164, 0.13)" }} />
-        <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "rgba(255,255,255,0.72)" }}>Available Balance</Text>
-        <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 7 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 18, color: "rgba(255,255,255,0.7)", marginRight: 4 }}>PHP</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 34, color: P.white, letterSpacing: -0.5 }}>
-            {(s.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-          </Text>
-        </View>
-        {incomeDelta && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14, paddingVertical: 6, paddingHorizontal: 11, borderRadius: 100, backgroundColor: "rgba(255,255,255,0.13)", alignSelf: "flex-start" }}>
-            <TrendUp size={14} color={P.aqua300} weight="bold" />
-            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.white }}>{incomeDelta} vs last month</Text>
-          </View>
-        )}
-      </View>
+      <AvailableBalanceCard
+        amount={(s.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+        detail={incomeDelta ? `${incomeDelta} vs last month` : undefined}
+        detailPill
+      />
 
       {/* Income / Expense cards */}
       <View style={{ flexDirection: "row", gap: 11, marginTop: 14 }}>

@@ -20,8 +20,6 @@ import {
   PiggyBank,
   Plus,
   Question,
-  TrashSimple,
-  PencilSimple,
   Wallet,
 } from "phosphor-react-native";
 import {
@@ -34,6 +32,8 @@ import {
   type CreateFinancialAccountInput,
   type UpdateFinancialAccountInput,
 } from "../../local-db/repositories/financialFoundations";
+import KebabTooltip from "../../components/KebabTooltip";
+import AvailableBalanceCard from "../../components/AvailableBalanceCard";
 
 const P = {
   shell: "#fcf8f0",
@@ -151,16 +151,18 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
 
   return (
     <>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <Text style={{ fontSize: 18, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>Financial Accounts</Text>
-        <TouchableOpacity onPress={() => { setEditingAccount(null); setSheetVisible(true); }} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: P.brand, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <Text style={{ fontSize: 20, fontFamily: "Manrope", fontWeight: "800", color: P.ink }}>Accounts</Text>
+        <TouchableOpacity onPress={() => { setEditingAccount(null); setSheetVisible(true); }} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: P.brand, alignItems: "center", justifyContent: "center" }}>
           <Plus size={18} color={P.white} weight="bold" />
         </TouchableOpacity>
       </View>
-      <View style={{ backgroundColor: P.brand, borderRadius: 14, padding: 18, marginBottom: 16 }}>
-        <Text style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: "600", color: "#41EDA4", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Total Cash Position</Text>
-        <Text style={{ fontSize: 28, fontFamily: "Manrope", fontWeight: "700", color: P.white }}>{formatPeso(totalCash)}</Text>
-      </View>
+      <AvailableBalanceCard
+        label="Total cash position"
+        amount={formatPeso(totalCash).replace("₱", "")}
+        detail={`Across ${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`}
+        marginBottom={14}
+      />
       {loading ? null : accounts.length === 0 ? (
         <View style={{ alignItems: "center", paddingTop: 40 }}>
           <Wallet size={40} color={P.muted} />
@@ -175,23 +177,26 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
           const iconColor = negative ? P.error : P.brandMedium;
 
           return (
-            <View key={a.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: P.white, borderRadius: 12, marginBottom: 8, padding: 12, borderWidth: 1, borderColor: negative ? P.error : P.line }}>
-              <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: tileBg, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+            <View key={a.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: negative ? "#FFF1F3" : P.shell, borderRadius: 15, marginBottom: 9, padding: 13, borderWidth: 1, borderColor: negative ? "#FFB9C2" : P.line }}>
+              <View style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: negative ? "#FFF9F0" : tileBg, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                 {kindIcon(a.kind, 22, iconColor)}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "600", color: P.ink }}>{a.name}</Text>
-                <Text style={{ fontSize: 12, fontFamily: "Manrope", color: P.muted, marginTop: 2 }}>
-                  {KIND_LABELS[a.kind] ?? a.kind}{negative ? " · Negative balance" : ""}
+                <Text numberOfLines={1} style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>{a.name}</Text>
+                <Text style={{ fontSize: 10.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 2 }}>
+                  {negative ? "Negative balance" : KIND_LABELS[a.kind] ?? a.kind}
                 </Text>
               </View>
-              <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "600", color: amountColor, marginRight: 8 }}>{formatPeso(a.currentBalanceCentavos)}</Text>
-              <TouchableOpacity onPress={() => { setEditingAccount(a); setSheetVisible(true); }} hitSlop={8} style={{ padding: 6 }}>
-                <PencilSimple size={16} color={P.muted} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDelete(a)} hitSlop={8} style={{ padding: 6, marginLeft: 4 }}>
-                <TrashSimple size={16} color={P.error} />
-              </TouchableOpacity>
+              <View style={{ alignItems: "flex-end", marginRight: 2 }}>
+                <Text style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "800", color: amountColor }}>{formatPeso(a.currentBalanceCentavos)}</Text>
+                <Text style={{ fontSize: 9.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 1 }}>PHP</Text>
+              </View>
+              <KebabTooltip
+                kebabDirection="horizontal"
+                tooltipLocation="bottomRight"
+                onEdit={() => { setEditingAccount(a); setSheetVisible(true); }}
+                onDelete={() => handleDelete(a)}
+              />
             </View>
           );
         })

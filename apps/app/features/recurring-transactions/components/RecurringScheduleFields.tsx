@@ -40,7 +40,9 @@ type Props = {
   frequencies: readonly RecurringScheduleFrequency[];
   value: RecurringScheduleValue;
   onChange: (next: RecurringScheduleValue) => void;
+  showInterval?: boolean;
   showIntervalCount?: boolean;
+  frequencyLabel?: string;
   dayOfMonthError?: boolean;
   secondDayOfMonthError?: boolean;
   estimatedIntervalError?: boolean;
@@ -62,11 +64,14 @@ export default function RecurringScheduleFields({
   frequencies,
   value,
   onChange,
+  showInterval = false,
   showIntervalCount = false,
+  frequencyLabel = "FREQUENCY",
   dayOfMonthError = false,
   secondDayOfMonthError = false,
   estimatedIntervalError = false,
 }: Props) {
+  const shouldShowInterval = showInterval || showIntervalCount;
   const showDayOfMonth = value.frequency === "monthly" || value.frequency === "semi_monthly" || value.frequency === "quarterly" || value.frequency === "yearly";
   const showDayOfWeek = value.frequency === "weekly" || value.frequency === "biweekly";
   const showEstimatedIntervalDays = value.frequency === "irregular";
@@ -74,21 +79,22 @@ export default function RecurringScheduleFields({
   return (
     <View style={{ gap: 16 }}>
       <View>
-        {renderLabel("FREQUENCY")}
+        {renderLabel(frequencyLabel)}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {frequencies.map((frequency) => {
             const selected = value.frequency === frequency;
+            const label = frequency === "semi_monthly" ? "semi monthly" : frequency;
             return (
               <Pressable
                 key={frequency}
                 onPress={() => onChange(updateValue(value, { frequency }))}
                 accessibilityRole="radio"
-                accessibilityLabel={frequency}
+                accessibilityLabel={label}
                 accessibilityState={{ checked: selected }}
                 style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: selected ? palette.brand : palette.card }}
               >
                 <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: selected ? palette.white : palette.ink2 }}>
-                  {frequency}
+                  {label}
                 </Text>
               </Pressable>
             );
@@ -96,18 +102,30 @@ export default function RecurringScheduleFields({
         </View>
       </View>
 
-      {showIntervalCount ? (
+      {shouldShowInterval && value.frequency !== "semi_monthly" && value.frequency !== "biweekly" ? (
         <View>
-          {renderLabel("EVERY (INTERVAL)")}
-          <TextInput
-            value={value.intervalCount}
-            onChangeText={(intervalCount) => onChange(updateValue(value, { intervalCount }))}
-            placeholder="1"
-            placeholderTextColor={palette.muted}
-            keyboardType="number-pad"
-            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
-          />
+          {renderLabel("REPEAT EVERY")}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <TextInput
+              value={value.intervalCount}
+              onChangeText={(intervalCount) => onChange(updateValue(value, { intervalCount }))}
+              placeholder="1"
+              placeholderTextColor={palette.muted}
+              keyboardType="number-pad"
+              accessibilityLabel="Repeat interval"
+              style={{ width: 72, height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+            />
+            <Text style={{ fontFamily: "Manrope", fontSize: 14, color: palette.ink2 }}>
+              {value.frequency === "daily" ? "day(s)" : value.frequency === "weekly" ? "week(s)" : value.frequency === "monthly" ? "month(s)" : value.frequency === "quarterly" ? "quarter(s)" : "year(s)"}
+            </Text>
+          </View>
         </View>
+      ) : null}
+
+      {shouldShowInterval && value.frequency === "biweekly" ? (
+        <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.muted }}>
+          Repeats every 2 weeks
+        </Text>
       ) : null}
 
       {value.frequency === "monthly" ? (
