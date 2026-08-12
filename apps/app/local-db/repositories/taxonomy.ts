@@ -212,8 +212,7 @@ function subcategoryFailureMessage(action: "created" | "updated" | "deleted", la
 export async function listCategoryGroups(userId: string): Promise<CategoryGroup[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<CategoryGroupRow>(
-    "SELECT * FROM category_groups WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
-    userId,
+    "SELECT * FROM category_groups WHERE deleted = 0 AND is_active = 1 ORDER BY sort_order",
   );
   return rows.map(mapCategoryGroup);
 }
@@ -225,14 +224,14 @@ export async function listCategories(
   const db = await getDb();
   if (categoryGroupId) {
     const rows = await db.getAllAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
+      "SELECT * FROM categories WHERE (user_id = ? OR is_system = 1) AND deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
       userId,
       categoryGroupId,
     );
     return rows.map(mapCategory);
   }
   const rows = await db.getAllAsync<CategoryRow>(
-    "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
+    "SELECT * FROM categories WHERE (user_id = ? OR is_system = 1) AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
     userId,
   );
   return rows.map(mapCategory);
@@ -241,7 +240,7 @@ export async function listCategories(
 export async function getCategory(userId: string, id: string): Promise<Category | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<CategoryRow>(
-    "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+    "SELECT * FROM categories WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0",
     userId,
     id,
   );
@@ -254,7 +253,7 @@ export async function listSubcategories(
   kind?: "income" | "expense" | "transfer_adjustment",
 ): Promise<Subcategory[]> {
   const db = await getDb();
-  let sql = "SELECT * FROM subcategories WHERE user_id = ? AND deleted = 0 AND is_active = 1";
+  let sql = "SELECT * FROM subcategories WHERE (user_id = ? OR is_system = 1) AND deleted = 0 AND is_active = 1";
   const params: SQLite.SQLiteBindValue[] = [userId];
 
   if (categoryId) {
@@ -274,7 +273,7 @@ export async function listSubcategories(
 export async function getSubcategory(userId: string, id: string): Promise<Subcategory | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<SubcategoryRow>(
-    "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
+    "SELECT * FROM subcategories WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0",
     userId,
     id,
   );
@@ -299,8 +298,7 @@ export async function createCategory(
 
   await db.withTransactionAsync(async () => {
     const groupRow = await db.getFirstAsync<CategoryGroupRow>(
-      "SELECT id FROM category_groups WHERE user_id = ? AND id = ? AND deleted = 0",
-      userId,
+      "SELECT id FROM category_groups WHERE id = ? AND deleted = 0",
       input.category_group_id,
     );
     if (!groupRow) {
