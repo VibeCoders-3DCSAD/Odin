@@ -50,3 +50,4 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 supabase/.branches/
+docs/superpowers/
