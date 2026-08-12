@@ -18,9 +18,7 @@ import {
   CaretDown,
   CaretRight,
   MagnifyingGlass,
-  PencilSimple,
   Plus,
-  TrashSimple,
   ArrowLeft,
   Globe,
 } from "phosphor-react-native";
@@ -35,6 +33,7 @@ import {
 } from "../../local-db/repositories/taxonomy";
 import CategoryFormScreen from "./CategoryFormScreen";
 import SubcategoryFormScreen from "./SubcategoryFormScreen";
+import KebabTooltip from "../../components/KebabTooltip";
 
 type Subcategory = RepoSubcategory;
 type Category = RepoCategory & { subcategories?: Subcategory[] };
@@ -147,37 +146,15 @@ function CategoryRow({
             </Text>
           )}
         </View>
-        <CaretRight size={14} weight="bold" color={palette.mut} />
       </Pressable>
-
-      {!isSystem && (
-        <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Edit ${category.label}`}
-            onPress={() => { onEdit(category); }}
-            hitSlop={8}
-            disabled={isMutating}
-            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
-          >
-            <PencilSimple size={14} color={palette.aqua700} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Delete ${category.label}`}
-            onPress={() => { onDelete(category); }}
-            hitSlop={8}
-            disabled={isMutating}
-            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
-          >
-            {isMutating ? (
-              <ActivityIndicator size="small" color={palette.error} />
-            ) : (
-              <TrashSimple size={14} color={palette.error} />
-            )}
-          </Pressable>
-        </>
-      )}
+      <KebabTooltip
+        kebabDirection="horizontal"
+        tooltipLocation="bottomRight"
+        disabled={isSystem || hasProtectedDefault || isMutating}
+        onEdit={() => onEdit(category)}
+        onDelete={() => onDelete(category)}
+      />
+      <CaretRight size={14} weight="bold" color={palette.mut} />
     </View>
   );
 }
@@ -303,32 +280,13 @@ function SubcategoryRow({
           {sub.description}
         </Text>
       </View>
-      {!isSystem && (
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Edit ${sub.label}`}
-            onPress={() => onEdit(sub)}
-            disabled={isMutating}
-            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: palette.aqua50, alignItems: "center", justifyContent: "center" }}
-          >
-            <PencilSimple size={14} color={palette.aqua700} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Delete ${sub.label}`}
-            onPress={() => onDelete(sub)}
-            disabled={isMutating}
-            style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#FFF0F2", alignItems: "center", justifyContent: "center" }}
-          >
-            {isMutating ? (
-              <ActivityIndicator size="small" color={palette.error} />
-            ) : (
-              <TrashSimple size={14} color={palette.error} />
-            )}
-          </Pressable>
-        </View>
-      )}
+      <KebabTooltip
+        kebabDirection="horizontal"
+        tooltipLocation="bottomRight"
+        disabled={isSystem || isProtected || isMutating}
+        onEdit={() => onEdit(sub)}
+        onDelete={() => onDelete(sub)}
+      />
     </View>
   );
 }
@@ -504,7 +462,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
   if (viewingCategoryId) {
     return (
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
-        <View style={{ paddingHorizontal: 22, paddingTop: 12 }}>
+        <View style={{ paddingTop: 0 }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to categories"
@@ -547,7 +505,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
           </View>
         </View>
 
-        <View style={{ paddingHorizontal: 22, paddingTop: 20 }}>
+        <View style={{ paddingTop: 20 }}>
           {loading ? (
             <ActivityIndicator color={palette.aqua600} style={{ marginTop: 40 }} />
           ) : viewingSubs.length === 0 ? (
@@ -589,7 +547,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
-      <View style={{ paddingHorizontal: 22, paddingTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <View style={{ paddingTop: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
           Categories
         </Text>
@@ -603,7 +561,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
         </Pressable>
       </View>
 
-      <View style={{ paddingHorizontal: 22, paddingTop: 16 }}>
+      <View style={{ paddingTop: 16 }}>
         <View
           style={{
             height: 46,
@@ -627,7 +585,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
         </View>
       </View>
 
-      <View style={{ paddingHorizontal: 22, paddingTop: 16, gap: 12 }}>
+      <View style={{ paddingTop: 16, gap: 12 }}>
         {loading ? (
           <ActivityIndicator color={palette.aqua600} style={{ marginTop: 40 }} />
         ) : error ? (
