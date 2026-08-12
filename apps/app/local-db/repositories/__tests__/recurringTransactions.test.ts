@@ -77,6 +77,14 @@ describe("computeNextOccurrenceDate", () => {
     expect(computeNextOccurrenceDate(tpl)).toBe("2024-07-22");
   });
 
+  it("does not mark a Sunday schedule due today on Wednesday", () => {
+    setNow("2024-07-17");
+    const tpl = makeTemplate({
+      frequency: "weekly", interval_count: 1, starts_on: "2024-07-14", day_of_week: 0,
+    });
+    expect(computeNextOccurrenceDate(tpl)).toBe("2024-07-21");
+  });
+
   it("handles yearly Feb 29 leap year fallback", () => {
     setNow("2025-02-01");
     const tpl = makeTemplate({ frequency: "yearly", interval_count: 1, starts_on: "2024-02-29" });
