@@ -15,10 +15,8 @@ import {
 import {
   CurrencyDollar,
   CaretRight,
-  PencilSimple,
   Plus,
   Tag,
-  TrashSimple,
   TrendUp,
   Wallet,
 } from "phosphor-react-native";
@@ -34,6 +32,8 @@ import {
 } from "../../local-db/repositories/financialFoundations";
 import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialAccounts";
 import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
+import KebabTooltip from "../../components/KebabTooltip";
+import AvailableBalanceCard from "../../components/AvailableBalanceCard";
 import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
 
 const P = {
@@ -122,14 +122,16 @@ export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRe
     <>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <Text style={{ fontSize: 18, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>Income Sources</Text>
-        <TouchableOpacity onPress={() => { setEditing(null); setSheetVisible(true); }} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: P.brand, alignItems: "center", justifyContent: "center" }}>
+        <TouchableOpacity onPress={() => { setEditing(null); setSheetVisible(true); }} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: P.brand, alignItems: "center", justifyContent: "center" }}>
           <Plus size={18} color={P.white} weight="bold" />
         </TouchableOpacity>
       </View>
-      <View style={{ backgroundColor: P.brand, borderRadius: 14, padding: 18, marginBottom: 16 }}>
-        <Text style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: "600", color: "#41EDA4", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>Total Monthly Income</Text>
-        <Text style={{ fontSize: 28, fontFamily: "Manrope", fontWeight: "700", color: P.white }}>{formatPeso(totalMonthly)}</Text>
-      </View>
+      <AvailableBalanceCard
+        label="Total monthly income"
+        amount={formatPeso(totalMonthly).replace("₱", "")}
+        detail={`${sources.length} ${sources.length === 1 ? "income source" : "income sources"}`}
+        marginBottom={16}
+      />
       {loading ? null : sources.length === 0 ? (
         <View style={{ alignItems: "center", paddingTop: 40 }}>
           <TrendUp size={40} color={P.muted} />
@@ -146,12 +148,12 @@ export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRe
               <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "600", color: P.ink }}>{s.name}</Text>
               <Text style={{ fontSize: 12, fontFamily: "Manrope", color: P.muted, marginTop: 2 }}>{s.incomeType} · {s.frequency}{s.expectedAmountCentavos != null ? ` · ${formatPeso(s.expectedAmountCentavos)}` : ""}</Text>
             </View>
-            <TouchableOpacity onPress={() => { setEditing(s); setSheetVisible(true); }} hitSlop={8} style={{ padding: 6 }}>
-              <PencilSimple size={16} color={P.muted} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(s)} hitSlop={8} style={{ padding: 6, marginLeft: 4 }}>
-              <TrashSimple size={16} color={P.error} />
-            </TouchableOpacity>
+            <KebabTooltip
+              kebabDirection="horizontal"
+              tooltipLocation="bottomRight"
+              onEdit={() => { setEditing(s); setSheetVisible(true); }}
+              onDelete={() => handleDelete(s)}
+            />
           </View>
         ))
       )}
