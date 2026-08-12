@@ -321,7 +321,10 @@ async function pullAndApply(
     response = await fetchWithTimeout(
       `${API_BASE}/odin/api/sync/pull?cursors=${encodeURIComponent(JSON.stringify(cursors))}`,
       {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Cache-Control": "no-cache",
+        },
       },
     );
   } catch {
