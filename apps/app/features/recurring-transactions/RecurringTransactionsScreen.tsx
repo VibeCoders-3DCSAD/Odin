@@ -102,6 +102,11 @@ function parseDayOfMonth(raw: string): number | null {
   return value;
 }
 
+function parseInterval(raw: string): number | null {
+  const value = Number(raw.trim());
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
 function daysUntil(date: string | null): number {
   if (!date) return Infinity;
   const dateOnly = date.slice(0, 10);
@@ -135,7 +140,8 @@ function formatSchedule(template: RecurringTemplate): string {
   if ((template.frequency === "weekly" || template.frequency === "biweekly") && template.day_of_week != null) {
     return `${template.frequency} · ${WEEKDAYS[template.day_of_week] ?? "scheduled"}`;
   }
-  return `${template.frequency} · ${template.day_of_month ? `${template.day_of_month}th` : "scheduled"}`;
+  const frequency = template.frequency === "semi_monthly" ? "semi monthly" : template.frequency;
+  return `${frequency} · ${template.day_of_month ? `${template.day_of_month}th` : "scheduled"}`;
 }
 
 function makeDefaultFormState(): FormState {
@@ -544,6 +550,12 @@ function RecurringTemplateFormModal({
       setFormError("Day of month must be between 1 and 31");
       return;
     }
+
+    const intervalCount = parseInterval(draft.schedule.intervalCount);
+    if (!intervalCount) {
+      setFormError("Repeat interval must be a positive whole number");
+      return;
+    }
     if (draft.schedule.secondDayOfMonth.trim() !== "" && secondDayOfMonth === null) {
       setFormError("Second day of month must be between 1 and 31");
       return;
@@ -554,7 +566,7 @@ function RecurringTemplateFormModal({
       name: draft.description.trim() || `${draft.txType} recurring`,
       amount_centavos: centavos,
       frequency: draft.schedule.frequency,
-      interval_count: Number.parseInt(draft.schedule.intervalCount, 10) > 0 ? Number.parseInt(draft.schedule.intervalCount, 10) : undefined,
+      interval_count: draft.schedule.frequency === "biweekly" ? 1 : intervalCount,
       day_of_month: dayOfMonth ?? undefined,
       second_day_of_month: secondDayOfMonth ?? undefined,
       day_of_week: draft.schedule.dayOfWeek ?? undefined,
@@ -738,7 +750,8 @@ function RecurringTemplateFormModal({
                         frequencies={["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly"]}
                         value={draft.schedule}
                         onChange={(schedule) => setDraft((current) => ({ ...current, schedule }))}
-                        showIntervalCount
+                        showInterval
+                        frequencyLabel="REPEAT"
                         dayOfMonthError={dayOfMonthError}
                         secondDayOfMonthError={secondDayOfMonthError}
                       />

@@ -450,11 +450,19 @@ async function validateCreatePayload(
       throw new Error("frequency must be a valid schedule");
     }
     requireString(sanitized, "starts_on");
+    optionalString(sanitized, "ends_on");
     if (sanitized.interval_count != null) {
       if (typeof sanitized.interval_count !== "number" || !Number.isInteger(sanitized.interval_count) || (sanitized.interval_count as number) <= 0) {
         throw new Error("interval_count must be a positive integer");
       }
     }
+    optionalNumber(sanitized, "day_of_month");
+    optionalNumber(sanitized, "second_day_of_month");
+    optionalNumber(sanitized, "day_of_week");
+    validateDayRange(sanitized, "day_of_month", 1, 31);
+    validateDayRange(sanitized, "second_day_of_month", 1, 31);
+    validateDayRange(sanitized, "day_of_week", 0, 6);
+    validateDateOrdering(sanitized, "starts_on", "ends_on");
     const transactionType = sanitized.transaction_type as string;
     optionalString(sanitized, "subcategory_id");
     optionalString(sanitized, "source_account_id");
@@ -730,6 +738,30 @@ async function validateUpdatePayload(
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
         continue;
       }
+
+      if (key === "interval_count") {
+        requirePositiveInteger(sanitized, key);
+        continue;
+      }
+
+      if (key === "amount_centavos") {
+        requirePositiveInteger(sanitized, key);
+        continue;
+      }
+
+      if (key === "day_of_month" || key === "second_day_of_month") {
+        if (value !== null && (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 31)) {
+          throw new Error(`${key} must be between 1 and 31 or null`);
+        }
+        continue;
+      }
+
+      if (key === "day_of_week") {
+        if (value !== null && (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 6)) {
+          throw new Error("day_of_week must be between 0 and 6 or null");
+        }
+        continue;
+      }
     }
 
     if (entity === "financial_accounts") {
@@ -909,7 +941,7 @@ async function validateUpdatePayload(
   if (entity === "recurring_transaction_templates") {
     const { data: current, error } = await supabase
       .from("recurring_transaction_templates")
-      .select("id, transaction_type, subcategory_id, source_account_id, destination_account_id")
+      .select("id, transaction_type, subcategory_id, source_account_id, destination_account_id, starts_on, ends_on")
       .eq("id", recordId)
       .eq("user_id", userId)
       .eq("deleted", false)
@@ -917,6 +949,7 @@ async function validateUpdatePayload(
     if (error) throw new Error(`recurring template lookup failed: ${error.message}`);
     if (!current) throw new Error("recurring template not found or inaccessible");
 
+    validateDateOrdering({ ...current, ...sanitized }, "starts_on", "ends_on");
     const transactionType = current.transaction_type as string;
     validateRecurringTemplateShape({ ...current, ...sanitized }, transactionType);
     const subcategoryId = sanitized.subcategory_id;
