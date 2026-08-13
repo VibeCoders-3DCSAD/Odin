@@ -22,6 +22,8 @@ export const SYNCED_TABLES = [
   "recurring_transaction_occurrences",
   "income_sources",
   "financial_obligations",
+  "budgets",
+  "budget_allocations",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -107,6 +109,15 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "skipped_at", "failure_reason", "metadata",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
+  budgets: new Set([
+    "id", "user_id", "status", "allocation_method", "period_kind", "period_start", "period_end",
+    "budget_period_days", "total_amount_minor", "surplus_handling", "deficit_handling",
+    "allow_deficit_planning", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  budget_allocations: new Set([
+    "id", "user_id", "budget_id", "category_id", "subcategory_id", "allocated_amount_minor",
+    "restriction_level", "version", "deleted", "created_at", "updated_at",
+  ]),
 };
 
 export function normalizePullRow(
@@ -134,10 +145,28 @@ export function normalizePullRow(
     } else if (col === "metadata") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else if (table === "budgets" && col === "period_kind") {
+      normalized[col] = String(row[col] ?? "").toUpperCase();
+    } else if (table === "budgets" && col === "allocation_method") {
+      normalized[col] = "MANUAL";
+    } else if (table === "budgets" && col === "total_amount_minor") {
+      normalized[col] = row.total_amount_centavos;
+    } else if (table === "budgets" && col === "surplus_handling") {
+      normalized[col] = "LEAVE_UNALLOCATED";
+    } else if (table === "budgets" && col === "deficit_handling") {
+      normalized[col] = "BLOCK_ACTIVATION";
+    } else if (table === "budget_allocations" && col === "allocated_amount_minor") {
+      normalized[col] = row.allocated_amount_centavos;
+    } else if (table === "budget_allocations" && col === "restriction_level") {
+      normalized[col] = "OPEN";
     } else {
       const val = row[col];
       normalized[col] = typeof val === "boolean" ? (val ? 1 : 0) : val;
     }
+  }
+
+  if (table === "budget_allocations" && normalized.category_id == null && normalized.subcategory_id != null) {
+    normalized.category_id = row.category_id ?? null;
   }
 
   return normalized;
@@ -212,6 +241,22 @@ export async function applyPullRow(
         recordId,
       );
     } else if (table === "transaction_line_items") {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, version = ?,
+         updated_at = ? WHERE id = ?`,
+        rowVersion,
+        now,
+        recordId,
+      );
+    } else if (table === "budgets") {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
+         updated_at = ? WHERE id = ?`,
+        rowVersion,
+        now,
+        recordId,
+      );
+    } else if (table === "budget_allocations") {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, version = ?,
          updated_at = ? WHERE id = ?`,

@@ -27,6 +27,7 @@ import FinancialObligationsScreen from "../features/financial-obligations/Financ
 import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../features/recurring-transactions/RecurringTransactionsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
+import BudgetingScreen from "../features/budgeting/BudgetingScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
@@ -68,6 +69,7 @@ type Page =
   | "spending-forecast"
   | "anomaly-alerts"
   | "budget-advice"
+  | "budgeting"
   | "savings-goals"
   | "debt-manager"
   | "insurance"
@@ -132,7 +134,7 @@ function sleep(ms: number) {
 
 type DrawerItem = {
   page: Page;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap | "phosphor-wallet";
   label: string;
   badge?: string;
   child?: boolean;
@@ -153,6 +155,7 @@ const drawerSections: DrawerSection[] = [
       { page: "financial-obligations", icon: "calendar-check-outline", label: "Obligations" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
+      { page: "budgeting", icon: "phosphor-wallet", label: "Budgeting" },
       { page: "recurring-transactions", icon: "repeat", label: "Recurring Transactions", child: true },
       { page: "history", icon: "clock-outline", label: "History" },
       { page: "settings", icon: "cog-outline", label: "Settings" },
@@ -184,6 +187,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   "spending-forecast": { title: "Spending Forecast", subtitle: "Predictive insights" },
   "anomaly-alerts": { title: "Anomaly Alerts", subtitle: "Unusual activity detected" },
   "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
+  budgeting: { title: "Budgeting", subtitle: "Plan your money" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
   "debt-manager": { title: "Debt Manager", subtitle: "Manage liabilities" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
@@ -796,6 +800,10 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
       return <FinancialObligationsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
     }
 
+    if (currentPage === "budgeting") {
+      return <BudgetingScreen userId={userId} />;
+    }
+
     if (currentPage === "dashboard") {
       return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNavigate={setCurrentPage as (page: string) => void} />;
     }
@@ -1214,11 +1222,15 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
                         }`}
                         style={item.child ? { marginLeft: 16 } : undefined}
                       >
-                        <MaterialCommunityIcons
-                          color={active ? "white" : "rgba(255,255,255,0.6)"}
-                          name={item.icon}
-                          size={20}
-                        />
+                        {item.icon === "phosphor-wallet" ? (
+                          <Wallet color={active ? "white" : "rgba(255,255,255,0.6)"} size={20} weight="regular" />
+                        ) : (
+                          <MaterialCommunityIcons
+                            color={active ? "white" : "rgba(255,255,255,0.6)"}
+                            name={item.icon}
+                            size={20}
+                          />
+                        )}
                         <Text
                           className={`flex-1 text-sm ${
                             active ? "text-white font-medium" : "text-white/60"
