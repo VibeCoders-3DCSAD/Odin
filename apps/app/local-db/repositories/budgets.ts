@@ -56,6 +56,14 @@ export type Budget = {
   allocations: BudgetAllocation[];
 };
 
+export type BudgetTrackingAllocation = BudgetAllocation & {
+  actualAmountMinor: number;
+};
+
+export type BudgetTracking = Omit<Budget, "allocations"> & {
+  allocations: BudgetTrackingAllocation[];
+};
+
 export type CreateBudgetInput = {
   periodKind: PeriodKind;
   periodStart: string;
@@ -174,6 +182,37 @@ export async function listBudgetDrafts(userId: string): Promise<Budget[]> {
 
 export async function getBudgetDraft(userId: string, id: string): Promise<Budget | null> {
   return readBudget(await getDb(), userId, id);
+}
+
+export async function getBudgetDraftTracking(userId: string, id: string): Promise<BudgetTracking | null> {
+  const db = await getDb();
+  const budget = await readBudget(db, userId, id);
+  if (!budget) return null;
+
+  const rows = await db.getAllAsync<{ id: string; actual_amount_minor: number }>(
+    `SELECT ba.id, COALESCE(SUM(t.amount_centavos), 0) AS actual_amount_minor
+       FROM budget_allocations ba
+       LEFT JOIN subcategories s ON s.id = ba.subcategory_id OR s.category_id = ba.category_id
+       LEFT JOIN transactions t ON t.user_id = ? AND t.subcategory_id = s.id
+         AND t.transaction_type = 'expense' AND t.status = 'posted' AND t.deleted = 0
+         AND t.transaction_date >= ? AND t.transaction_date <= ?
+      WHERE ba.user_id = ? AND ba.budget_id = ? AND ba.deleted = 0
+      GROUP BY ba.id
+      ORDER BY ba.rowid`,
+    userId,
+    budget.periodStart,
+    budget.periodEnd,
+    userId,
+    id,
+  );
+  const actualByAllocation = new Map(rows.map((row) => [row.id, row.actual_amount_minor]));
+  return {
+    ...budget,
+    allocations: budget.allocations.map((allocation) => ({
+      ...allocation,
+      actualAmountMinor: actualByAllocation.get(allocation.id) ?? 0,
+    })),
+  };
 }
 
 export async function createBudgetDraft(
