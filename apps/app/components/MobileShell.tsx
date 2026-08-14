@@ -801,7 +801,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
     }
 
     if (currentPage === "budgeting") {
-      return <BudgetingScreen userId={userId} />;
+      return <BudgetingScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} />;
     }
 
     if (currentPage === "dashboard") {
