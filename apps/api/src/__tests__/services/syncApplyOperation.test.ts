@@ -138,6 +138,26 @@ describe("prepareOperation — budgets create", () => {
       },
     })).rejects.toThrow("MONTHLY budgets must end on the last day of the start month");
   });
+
+  it("accepts a valid budget update payload", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-update-1",
+      entity: "budgets",
+      record_id: "budget-1",
+      operation_type: "update",
+      base_version: 1,
+      changed_fields: ["periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations"],
+      payload: {
+        periodKind: "CUSTOM",
+        periodStart: "2026-08-01",
+        periodEnd: "2026-08-10",
+        budget_period_days: 10,
+        totalAmountMinor: 1000,
+        allocations: [{ id: "allocation-1", categoryId: "cat-1", amountMinor: 100 }],
+      },
+    });
+    expect(result.payload).toMatchObject({ periodKind: "CUSTOM", totalAmountMinor: 1000 });
+  });
 });
 
 // ---------------------------------------------------------------------------
