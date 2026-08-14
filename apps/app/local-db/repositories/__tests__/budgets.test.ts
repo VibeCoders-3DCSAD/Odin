@@ -103,4 +103,53 @@ describe("budget drafts repository", () => {
     expect(result.budget.allocatedAmountMinor).toBe(100);
     expect(result.budget.unallocatedAmountMinor).toBe(900);
   });
+
+  test("tracks category and subcategory allocations independently", async () => {
+    const budgetRow = {
+      id: "budget-1", user_id: "user-1", status: "draft", allocation_method: "MANUAL",
+      period_kind: "CUSTOM", period_start: "2026-08-01", period_end: "2026-08-10",
+      budget_period_days: 10, total_amount_minor: 1000, surplus_handling: "LEAVE_UNALLOCATED",
+      deficit_handling: "BLOCK_ACTIVATION", allow_deficit_planning: 0, version: 1, deleted: 0,
+    };
+    const allocationRows = [
+      { id: "allocation-category", budget_id: "budget-1", category_id: "category-1", subcategory_id: null, allocated_amount_minor: 100 },
+      { id: "allocation-subcategory", budget_id: "budget-1", category_id: null, subcategory_id: "subcategory-1", allocated_amount_minor: 200 },
+    ];
+    const db = createDbMock(jest.fn(async (sql: string) => sql.includes("FROM budgets") ? budgetRow : null), jest.fn(async (sql: string) => {
+      if (sql.includes("budget_allocations") && sql.includes("actual_amount_minor")) return [
+        { id: "allocation-category", actual_amount_minor: 75 },
+        { id: "allocation-subcategory", actual_amount_minor: 25 },
+      ];
+      return sql.includes("budget_allocations") ? allocationRows : [];
+    }));
+    mockInitDatabase.mockResolvedValue(db);
+    const { getBudgetDraftTracking } = await import("../budgets");
+
+    const result = await getBudgetDraftTracking("user-1", "budget-1");
+    const trackingCall = db.getAllAsync.mock.calls.find(([sql]) => sql.includes("actual_amount_minor"));
+    const trackingQuery = trackingCall?.[0] as string;
+
+    expect(result?.allocations.map(({ id, actualAmountMinor }) => ({ id, actualAmountMinor }))).toEqual([
+      { id: "allocation-category", actualAmountMinor: 75 },
+      { id: "allocation-subcategory", actualAmountMinor: 25 },
+    ]);
+    expect(trackingQuery).toContain("t.transaction_type = 'expense'");
+    expect(trackingQuery).toContain("s.user_id = ?");
+    expect(trackingQuery).toContain("s.kind = 'expense'");
+    expect(trackingQuery).toContain("s.is_active = 1");
+    expect(trackingQuery).toContain("c.user_id = ? OR c.is_system = 1");
+    expect(trackingQuery).toContain("t.transaction_date >= ? AND t.transaction_date <= ?");
+    expect(trackingCall?.slice(1)).toEqual([
+      "user-1",
+      "2026-08-01",
+      "2026-08-10",
+      "user-1",
+      "user-1",
+      "user-1",
+      "user-1",
+      "budget-1",
+      "user-1",
+      "user-1",
+    ]);
+  });
 });
