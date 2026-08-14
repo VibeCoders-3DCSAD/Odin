@@ -54,7 +54,7 @@ DECLARE
 BEGIN
   IF v_user_id IS NULL THEN RAISE EXCEPTION 'authentication required'; END IF;
   IF p_entity <> 'budgets' THEN RAISE EXCEPTION 'entity % is not a budget entity', p_entity; END IF;
-  IF p_operation_type NOT IN ('create', 'delete') THEN
+  IF p_operation_type NOT IN ('create', 'update', 'delete') THEN
     RAISE EXCEPTION 'budget operation_type % is not supported', p_operation_type;
   END IF;
 
@@ -117,6 +117,59 @@ BEGIN
         v_category_id, v_subcategory_id, (v_item->>'amountMinor')::bigint, false, '{}'::jsonb
       );
     END LOOP;
+  ELSIF p_operation_type = 'update' THEN
+    SELECT version, deleted INTO v_current_version, v_deleted FROM budgets
+    WHERE id = p_record_id AND user_id = v_user_id FOR UPDATE;
+    IF v_current_version IS NULL OR v_deleted THEN RAISE EXCEPTION 'budget not found or inaccessible'; END IF;
+    IF p_base_version IS NOT NULL AND p_base_version <> v_current_version THEN
+      UPDATE applied_operations SET result = jsonb_build_object(
+        'status', 'conflict', 'current_version', v_current_version,
+        'conflicted_fields', to_jsonb(p_changed_fields)
+      ) WHERE operation_id = p_operation_id;
+      RETURN QUERY SELECT 'conflict'::text, 'budget version changed'::text, v_current_version, p_changed_fields;
+      RETURN;
+    END IF;
+    UPDATE budgets SET
+      period_kind = CASE p_payload->>'periodKind'
+        WHEN 'WEEKLY' THEN 'weekly'::odin_budget_period_kind
+        WHEN 'MONTHLY' THEN 'monthly'::odin_budget_period_kind
+        WHEN 'CUSTOM' THEN 'custom'::odin_budget_period_kind
+        WHEN 'INCOME_CYCLE' THEN 'income_cycle'::odin_budget_period_kind
+      END,
+      period_start = (p_payload->>'periodStart')::date,
+      period_end = (p_payload->>'periodEnd')::date,
+      budget_period_days = (p_payload->>'budget_period_days')::integer,
+      total_amount_centavos = (p_payload->>'totalAmountMinor')::bigint,
+      updated_at = now(), version = version + 1
+    WHERE id = p_record_id AND user_id = v_user_id;
+    UPDATE budget_allocations SET deleted = true, updated_at = now(), version = version + 1
+    WHERE budget_id = p_record_id AND user_id = v_user_id AND deleted = false;
+    FOR v_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_payload->'allocations', '[]'::jsonb)) LOOP
+      v_subcategory_id := NULLIF(v_item->>'subcategoryId', '')::uuid;
+      v_category_id := NULLIF(v_item->>'categoryId', '')::uuid;
+      IF v_subcategory_id IS NOT NULL THEN
+        SELECT category_id INTO v_category_id FROM subcategories
+        WHERE id = v_subcategory_id AND deleted = false AND is_active = true
+          AND (user_id IS NULL OR user_id = v_user_id) AND kind = 'expense';
+      END IF;
+      IF v_category_id IS NULL THEN RAISE EXCEPTION 'allocation category is not accessible'; END IF;
+      IF v_subcategory_id IS NULL THEN
+        PERFORM 1 FROM categories WHERE id = v_category_id AND deleted = false AND is_active = true
+          AND (user_id IS NULL OR user_id = v_user_id);
+        IF NOT FOUND THEN RAISE EXCEPTION 'allocation category is not accessible'; END IF;
+      END IF;
+      v_allocation_id := NULLIF(v_item->>'id', '')::uuid;
+      IF v_allocation_id IS NULL THEN v_allocation_id := gen_random_uuid(); END IF;
+      INSERT INTO budget_allocations (
+        id, user_id, budget_id, allocation_scope, category_id, subcategory_id,
+        allocated_amount_centavos, is_protected_snapshot, metadata
+      ) VALUES (
+        v_allocation_id, v_user_id, p_record_id,
+        CASE WHEN v_subcategory_id IS NULL THEN 'category' ELSE 'subcategory' END::odin_allocation_scope,
+        v_category_id, v_subcategory_id, (v_item->>'amountMinor')::bigint, false, '{}'::jsonb
+      );
+    END LOOP;
+    v_current_version := v_current_version + 1;
   ELSE
     SELECT version, deleted INTO v_current_version, v_deleted FROM budgets
     WHERE id = p_record_id AND user_id = v_user_id FOR UPDATE;
@@ -127,9 +180,9 @@ BEGIN
     END IF;
   END IF;
 
-  UPDATE applied_operations SET result = jsonb_build_object('status', 'applied', 'current_version', 1)
+  UPDATE applied_operations SET result = jsonb_build_object('status', 'applied', 'current_version', COALESCE(v_current_version, 1))
   WHERE operation_id = p_operation_id;
-  RETURN QUERY SELECT 'applied'::text, NULL::text, 1, NULL::text[];
+  RETURN QUERY SELECT 'applied'::text, NULL::text, COALESCE(v_current_version, 1), NULL::text[];
 END;
 $$;
 

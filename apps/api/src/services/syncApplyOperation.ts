@@ -237,6 +237,10 @@ const BUDGET_CREATE_FIELDS = new Set([
   "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning",
 ]);
 
+const BUDGET_UPDATE_FIELDS = new Set([
+  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
+]);
+
 export async function prepareOperation(
   supabase: SupabaseClient,
   userId: string,
@@ -417,39 +421,10 @@ async function validateCreatePayload(
 
   if (entity === "budgets") {
     assertOnlyAllowed(payload, BUDGET_CREATE_FIELDS);
-    if (!VALID_BUDGET_PERIOD_KINDS.includes(payload.periodKind as string)) {
-      throw new Error("periodKind must be WEEKLY, MONTHLY, CUSTOM, or INCOME_CYCLE");
+    if (payload.status !== "draft" || payload.allocation_method !== "MANUAL") {
+      throw new Error("only manual draft budgets can sync");
     }
-    requireDateString(payload, "periodStart");
-    requireDateString(payload, "periodEnd");
-    const periodDays = inclusiveDays(payload.periodStart as string, payload.periodEnd as string);
-    if (periodDays <= 0) throw new Error("periodEnd must be on or after periodStart");
-    if (payload.periodKind === "WEEKLY" && periodDays !== 7) throw new Error("WEEKLY budgets must span 7 days");
-    if (payload.periodKind === "MONTHLY") {
-      const start = parseDateString(payload.periodStart as string);
-      const expectedEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
-      if (payload.periodEnd !== expectedEnd.toISOString().slice(0, 10)) {
-        throw new Error("MONTHLY budgets must end on the last day of the start month");
-      }
-    }
-    if (payload.periodKind === "CUSTOM" && periodDays > 366) throw new Error("CUSTOM budgets cannot exceed 366 days");
-    if (payload.budget_period_days !== periodDays) throw new Error("budget_period_days must match the inclusive date range");
-    requirePositiveInteger(payload, "totalAmountMinor");
-    if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
-    let allocated = 0;
-    for (const allocation of payload.allocations) {
-      if (!allocation || typeof allocation !== "object") throw new Error("allocations must contain objects");
-      const value = allocation as Record<string, unknown>;
-      if ((!value.categoryId && !value.subcategoryId) || (value.categoryId && value.subcategoryId)) {
-        throw new Error("each allocation must reference one category or subcategory");
-      }
-      requirePositiveInteger(value, "amountMinor");
-      allocated += value.amountMinor as number;
-      if (value.categoryId) await verifyCategoryOwnership(supabase, userId, value.categoryId as string);
-      if (value.subcategoryId) await verifySubcategoryOwnership(supabase, userId, value.subcategoryId as string, "expense");
-    }
-    if (allocated > (payload.totalAmountMinor as number)) throw new Error("allocations cannot exceed the budget total");
-    return payload;
+    return validateBudgetPayload(supabase, userId, payload, BUDGET_CREATE_FIELDS);
   }
 
   if (entity === "transaction_templates") {
@@ -737,6 +712,53 @@ async function validateTaxonomyCreatePayload(
   throw new Error(`Unknown entity for create: ${entity}`);
 }
 
+async function validateBudgetPayload(
+  supabase: SupabaseClient,
+  userId: string,
+  payload: Record<string, unknown>,
+  allowedFields: Set<string>,
+): Promise<Record<string, unknown>> {
+  assertOnlyAllowed(payload, allowedFields);
+  if (!VALID_BUDGET_PERIOD_KINDS.includes(payload.periodKind as string)) {
+    throw new Error("periodKind must be WEEKLY, MONTHLY, CUSTOM, or INCOME_CYCLE");
+  }
+  requireDateString(payload, "periodStart");
+  requireDateString(payload, "periodEnd");
+  const periodDays = inclusiveDays(payload.periodStart as string, payload.periodEnd as string);
+  if (periodDays <= 0) throw new Error("periodEnd must be on or after periodStart");
+  if (payload.periodKind === "WEEKLY" && periodDays !== 7) throw new Error("WEEKLY budgets must span 7 days");
+  if (payload.periodKind === "MONTHLY") {
+    const start = parseDateString(payload.periodStart as string);
+    const nextMonthDays = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 2, 0)).getUTCDate();
+    const expectedEnd = new Date(Date.UTC(
+      start.getUTCFullYear(),
+      start.getUTCMonth() + 1,
+      Math.min(start.getUTCDate(), nextMonthDays),
+    ));
+    if (payload.periodEnd !== expectedEnd.toISOString().slice(0, 10)) {
+      throw new Error("MONTHLY budgets must cover one month from the start date");
+    }
+  }
+  if (payload.periodKind === "CUSTOM" && periodDays > 366) throw new Error("CUSTOM budgets cannot exceed 366 days");
+  if (payload.budget_period_days !== periodDays) throw new Error("budget_period_days must match the inclusive date range");
+  requirePositiveInteger(payload, "totalAmountMinor");
+  if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
+  let allocated = 0;
+  for (const allocation of payload.allocations) {
+    if (!allocation || typeof allocation !== "object") throw new Error("allocations must contain objects");
+    const value = allocation as Record<string, unknown>;
+    if ((!value.categoryId && !value.subcategoryId) || (value.categoryId && value.subcategoryId)) {
+      throw new Error("each allocation must reference one category or subcategory");
+    }
+    requirePositiveInteger(value, "amountMinor");
+    allocated += value.amountMinor as number;
+    if (value.categoryId) await verifyCategoryOwnership(supabase, userId, value.categoryId as string);
+    if (value.subcategoryId) await verifySubcategoryOwnership(supabase, userId, value.subcategoryId as string, "expense");
+  }
+  if (allocated > (payload.totalAmountMinor as number)) throw new Error("allocations cannot exceed the budget total");
+  return payload;
+}
+
 async function validateUpdatePayload(
   supabase: SupabaseClient,
   userId: string,
@@ -768,6 +790,8 @@ async function validateUpdatePayload(
     allowedFields = RECURRING_TEMPLATE_UPDATE_FIELDS;
   } else if (entity === "recurring_transaction_occurrences") {
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
+  } else if (entity === "budgets") {
+    return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS);
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
