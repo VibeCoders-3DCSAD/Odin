@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CaretLeft, CaretRight } from "phosphor-react-native";
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { listCategories, listCategoryGroups, listSubcategories, type Category, type CategoryGroup, type Subcategory } from "../local-db/repositories/taxonomy";
 
 const palette = {
@@ -30,12 +30,13 @@ type Props = {
   emptyMessage?: string;
 };
 
-type ModalProps = {
-  visible: boolean;
+type PageProps = {
   userId: string;
   kind: "income" | "expense";
   initialSubcategoryId?: string;
-  onSelect: (subcategory: Subcategory) => void;
+  initialCategoryId?: string;
+  allowCategorySelection?: boolean;
+  onSelect: (selection: Subcategory | Category) => void;
   onClose: () => void;
 };
 
@@ -238,7 +239,7 @@ export function CategorySelectorTree({ groups, categories, subcategories, select
   );
 }
 
-function CategorySelectorModal({ visible, userId, kind, initialSubcategoryId, onSelect, onClose }: ModalProps) {
+function CategorySelectorPage({ userId, kind, initialSubcategoryId, initialCategoryId, allowCategorySelection = false, onSelect, onClose }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -246,7 +247,6 @@ function CategorySelectorModal({ visible, userId, kind, initialSubcategoryId, on
   const [selection, setSelection] = useState<CategorySelection>({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
 
   useEffect(() => {
-    if (!visible) return;
     let cancelled = false;
 
     async function load() {
@@ -274,6 +274,12 @@ function CategorySelectorModal({ visible, userId, kind, initialSubcategoryId, on
           categoryId: initialCategory?.id ?? null,
           subcategoryId: initialSubcategory?.id ?? null,
         });
+      } else if (initialCategoryId) {
+        const initialCategory = localCategories.find((item) => item.id === initialCategoryId) ?? null;
+        const initialGroup = initialCategory
+          ? localGroups.find((item) => item.id === initialCategory.category_group_id) ?? null
+          : null;
+        setSelection({ tier: "category", groupId: initialGroup?.id ?? null, categoryId: initialCategory?.id ?? null, subcategoryId: null });
       } else {
         setSelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
       }
@@ -291,70 +297,55 @@ function CategorySelectorModal({ visible, userId, kind, initialSubcategoryId, on
     return () => {
       cancelled = true;
     };
-  }, [visible, userId, kind, initialSubcategoryId]);
+  }, [userId, kind, initialSubcategoryId, initialCategoryId]);
 
   const selectedSubcategory = selection.subcategoryId
     ? subcategories.find((item) => item.id === selection.subcategoryId) ?? null
     : null;
+  const selectedCategory = selection.categoryId
+    ? categories.find((item) => item.id === selection.categoryId) ?? null
+    : null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
-          <Pressable onPress={() => {}}>
-            <View style={{ backgroundColor: "#fcf8f0", borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "88%" }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
-              <View style={{ padding: 22, gap: 16 }}>
-                <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
-                  Select subcategory
-                </Text>
-                {loading ? (
-                  <View style={{ alignItems: "center", paddingVertical: 30 }}>
-                    <ActivityIndicator color={palette.ink2} />
-                  </View>
-                ) : (
-                  <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
-                    <CategorySelectorTree
-                      groups={groups}
-                      categories={categories}
-                      subcategories={subcategories}
-                      selection={selection}
-                      onSelect={setSelection}
-                      emptyMessage="No categories found."
-                    />
-                  </ScrollView>
-                )}
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <Pressable onPress={onClose} style={{ flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: palette.line, alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>
-                      Cancel
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      if (selectedSubcategory) onSelect(selectedSubcategory);
-                    }}
-                    disabled={!selectedSubcategory}
-                    style={{ flex: 1, height: 48, borderRadius: 12, backgroundColor: palette.successTint, alignItems: "center", justifyContent: "center", opacity: selectedSubcategory ? 1 : 0.5 }}
-                  >
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: "#fff" }}>
-                      Use selection
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-          </Pressable>
+    <View style={{ flex: 1, backgroundColor: "#fcf8f0", padding: 22 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back" style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}>
+          <CaretLeft color={palette.ink2} size={18} weight="bold" />
+        </Pressable>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
+          {allowCategorySelection ? "Select category or subcategory" : "Select subcategory"}
+        </Text>
+      </View>
+      {loading ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator color={palette.ink2} />
         </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingBottom: 18 }} showsVerticalScrollIndicator={false}>
+          <CategorySelectorTree
+            groups={groups}
+            categories={categories}
+            subcategories={subcategories}
+            selection={selection}
+            onSelect={setSelection}
+            emptyMessage="No categories found."
+          />
+        </ScrollView>
+      )}
+      <Pressable
+        onPress={() => {
+           if (selectedSubcategory) onSelect(selectedSubcategory);
+           else if (allowCategorySelection && selectedCategory) onSelect(selectedCategory);
+         }}
+        disabled={!selectedSubcategory && !(allowCategorySelection && selectedCategory)}
+        style={{ height: 50, borderRadius: 14, backgroundColor: palette.successTint, alignItems: "center", justifyContent: "center", opacity: selectedSubcategory || (allowCategorySelection && selectedCategory) ? 1 : 0.5, marginTop: 12 }}
+      >
+        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: "#fff" }}>
+          Use selection
+        </Text>
       </Pressable>
-    </Modal>
+    </View>
   );
 }
 
-export default function CategorySelector(props: Props | ModalProps) {
-  if ("visible" in props) {
-    return <CategorySelectorModal {...props} />;
-  }
-
-  return <CategorySelectorTree {...props} />;
-}
+export default CategorySelectorPage;

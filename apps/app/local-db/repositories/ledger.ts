@@ -159,7 +159,7 @@ async function verifySubcategoryOwnership(
   kind?: string,
 ): Promise<void> {
   // ponytail: query subcategories inline, skip full repo import
-  let sql = "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0";
+  let sql = "SELECT id FROM subcategories WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0 AND is_active = 1";
   const params: SQLite.SQLiteBindValue[] = [userId, subcategoryId];
   if (kind) {
     sql += " AND kind = ?";

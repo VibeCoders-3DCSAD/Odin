@@ -44,6 +44,8 @@ const SYNCED_TABLES = [
   "transaction_drafts",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
+  "budgets",
+  "budget_allocations",
 ] as const;
 
 export async function pushOperations(
@@ -57,7 +59,7 @@ export async function pushOperations(
   for (const op of operations) {
     try {
       const prepared = await prepareOperation(supabase, userId, op);
-      const { data, error } = await supabase.rpc("apply_sync_operation", {
+      const { data, error } = await supabase.rpc(prepared.entity === "budgets" ? "apply_budget_sync_operation" : "apply_sync_operation", {
         p_operation_id: prepared.operation_id,
         p_device_id: deviceId,
         p_entity: prepared.entity,
@@ -157,6 +159,8 @@ export async function pullChanges(
       table === "transaction_drafts" ||
       table === "recurring_transaction_templates" ||
       table === "recurring_transaction_occurrences"
+      || table === "budgets"
+      || table === "budget_allocations"
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);

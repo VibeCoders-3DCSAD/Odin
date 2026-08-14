@@ -48,7 +48,7 @@ describe("prepareOperation — entity allowlist", () => {
     ).rejects.toThrow("entity 'unknown_table' is not in the sync allowlist");
   });
 
-  it.each(["categories", "subcategories", "financial_accounts", "income_sources", "financial_obligations"])(
+  it.each(["categories", "subcategories", "financial_accounts", "income_sources", "financial_obligations", "budgets"])(
     "accepts entity '%s'",
     async (entity) => {
       // Delete is the simplest operation — no payload validation needed.
@@ -65,6 +65,99 @@ describe("prepareOperation — entity allowlist", () => {
       expect(result.operation_type).toBe("delete");
     },
   );
+});
+
+describe("prepareOperation — budgets create", () => {
+  beforeEach(() => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "categories") return createMockQuery({ data: { id: "cat-1" }, error: null });
+      throw new Error(`unexpected table lookup: ${table}`);
+    });
+  });
+
+  it("accepts a valid user-scoped draft payload", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-1",
+      entity: "budgets",
+      record_id: "budget-1",
+      operation_type: "create",
+      base_version: null,
+      changed_fields: [],
+      payload: {
+        id: "budget-1",
+        user_id: validUserId,
+        status: "draft",
+        allocation_method: "MANUAL",
+        periodKind: "CUSTOM",
+        periodStart: "2026-08-01",
+        periodEnd: "2026-08-10",
+        budget_period_days: 10,
+        totalAmountMinor: 1000,
+        allocations: [{ id: "allocation-1", categoryId: "cat-1", amountMinor: 100 }],
+      },
+    });
+    expect(result.payload).toMatchObject({ periodKind: "CUSTOM", budget_period_days: 10 });
+  });
+
+  it("rejects a wrong inclusive period length", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-2",
+      entity: "budgets",
+      record_id: "budget-1",
+      operation_type: "create",
+      base_version: null,
+      changed_fields: [],
+      payload: {
+        status: "draft", allocation_method: "MANUAL", periodKind: "CUSTOM",
+        periodStart: "2026-08-01", periodEnd: "2026-08-10", budget_period_days: 9,
+        totalAmountMinor: 1000, allocations: [],
+      },
+    })).rejects.toThrow("budget_period_days must match the inclusive date range");
+  });
+
+  it("rejects impossible calendar dates", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-3", entity: "budgets", record_id: "budget-1",
+      operation_type: "create", base_version: null, changed_fields: [],
+      payload: {
+        status: "draft", allocation_method: "MANUAL", periodKind: "CUSTOM",
+        periodStart: "2026-02-31", periodEnd: "2026-03-02", budget_period_days: 1,
+        totalAmountMinor: 1000, allocations: [],
+      },
+    })).rejects.toThrow("periodStart must be a valid calendar date");
+  });
+
+  it("enforces the final day for monthly budgets", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-4", entity: "budgets", record_id: "budget-1",
+      operation_type: "create", base_version: null, changed_fields: [],
+      payload: {
+        status: "draft", allocation_method: "MANUAL", periodKind: "MONTHLY",
+        periodStart: "2026-02-01", periodEnd: "2026-02-27", budget_period_days: 27,
+        totalAmountMinor: 1000, allocations: [],
+      },
+    })).rejects.toThrow("MONTHLY budgets must end on the last day of the start month");
+  });
+
+  it("accepts a valid budget update payload", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-update-1",
+      entity: "budgets",
+      record_id: "budget-1",
+      operation_type: "update",
+      base_version: 1,
+      changed_fields: ["periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations"],
+      payload: {
+        periodKind: "CUSTOM",
+        periodStart: "2026-08-01",
+        periodEnd: "2026-08-10",
+        budget_period_days: 10,
+        totalAmountMinor: 1000,
+        allocations: [{ id: "allocation-1", categoryId: "cat-1", amountMinor: 100 }],
+      },
+    });
+    expect(result.payload).toMatchObject({ periodKind: "CUSTOM", totalAmountMinor: 1000 });
+  });
 });
 
 // ---------------------------------------------------------------------------
