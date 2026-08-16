@@ -1,11 +1,15 @@
 import { API_BASE_URL } from "./api";
 
+const HEALTHCHECK_TIMEOUT_MS = 10_000;
+
 export async function isOnline(): Promise<boolean> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000);
+  const timeoutId = setTimeout(() => controller.abort(), HEALTHCHECK_TIMEOUT_MS);
   try {
-    await fetch(API_BASE_URL, { method: "HEAD", signal: controller.signal });
-    return true;
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      signal: controller.signal,
+    });
+    return response.ok;
   } catch {
     return false;
   } finally {
