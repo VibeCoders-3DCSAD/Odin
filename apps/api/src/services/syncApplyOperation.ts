@@ -88,7 +88,6 @@ const FINANCIAL_ACCOUNT_CREATE_FIELDS = new Set([
   "institution_name",
   "opened_on",
   "sort_order",
-  "notes",
 ]);
 
 const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
@@ -102,7 +101,6 @@ const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
   "opened_on",
   "archived_at",
   "sort_order",
-  "notes",
 ]);
 
 const TRANSACTION_CREATE_FIELDS = new Set([
@@ -306,7 +304,6 @@ async function validateCreatePayload(
     optionalString(sanitized, "institution_name");
     optionalString(sanitized, "opened_on");
     optionalNumber(sanitized, "sort_order");
-    optionalString(sanitized, "notes");
     validateNonNegative(sanitized, ["credit_limit_centavos"]);
     return Promise.resolve(sanitized);
   }
@@ -832,7 +829,7 @@ async function validateUpdatePayload(
     }
 
     if (entity === "financial_accounts") {
-      if (key === "name" || key === "institution_name" || key === "opened_on" || key === "archived_at" || key === "notes") {
+      if (key === "name" || key === "institution_name" || key === "opened_on" || key === "archived_at") {
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
         continue;
       }

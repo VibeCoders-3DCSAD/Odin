@@ -127,7 +127,7 @@ describe("prepareOperation — budgets create", () => {
     })).rejects.toThrow("periodStart must be a valid calendar date");
   });
 
-  it("enforces the final day for monthly budgets", async () => {
+  it("enforces the same calendar day for monthly budgets", async () => {
     await expect(prepareOperation(mockClient, validUserId, {
       operation_id: "op-budget-4", entity: "budgets", record_id: "budget-1",
       operation_type: "create", base_version: null, changed_fields: [],
@@ -136,7 +136,20 @@ describe("prepareOperation — budgets create", () => {
         periodStart: "2026-02-01", periodEnd: "2026-02-27", budget_period_days: 27,
         totalAmountMinor: 1000, allocations: [],
       },
-    })).rejects.toThrow("MONTHLY budgets must end on the last day of the start month");
+    })).rejects.toThrow("MONTHLY budgets must cover one month from the start date");
+  });
+
+  it("accepts a monthly budget ending on the same day next month", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-5", entity: "budgets", record_id: "budget-1",
+      operation_type: "create", base_version: null, changed_fields: [],
+      payload: {
+        status: "draft", allocation_method: "MANUAL", periodKind: "MONTHLY",
+        periodStart: "2026-08-14", periodEnd: "2026-09-14", budget_period_days: 32,
+        totalAmountMinor: 1000, allocations: [],
+      },
+    });
+    expect(result.payload).toMatchObject({ periodStart: "2026-08-14", periodEnd: "2026-09-14" });
   });
 
   it("accepts a valid budget update payload", async () => {
