@@ -17,3 +17,7 @@
 - [Repository Standards](standards/REPOSITORY-STANDARDS.md)
 - [Design Standards](standards/design-standards.md)
 - [Frontend Design Antipattern Standards](standards/frontend-design-antipattern-standards.md)
+
+## Architecture
+
+- [Budgeting Phase 3b To 3c Handoff](architecture/budgeting-3b-to-3c-handoff.md)
