@@ -1,5 +1,6 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { AccountDeletionRequest, ConsentRecord, DataExportRequest, PrivacySettings } from "./types";
+import { hasCurrentTermsConsent } from "./constants";
 
 export async function getPrivacySettings(accessToken: string) {
   const controller = new AbortController();
@@ -80,6 +81,12 @@ export function getConsents(accessToken: string) {
   return apiFetch<{ payload?: { consents: ConsentRecord[] }; error?: string; message?: string }>(
     accessToken, "/odin/api/me?include=consents",
   );
+}
+
+export async function getCurrentTermsConsent(accessToken: string) {
+  const result = await getConsents(accessToken);
+  const consents = result.body.payload?.consents ?? [];
+  return { ...result, hasCurrentTermsConsent: hasCurrentTermsConsent(consents) };
 }
 
 export function submitConsent(

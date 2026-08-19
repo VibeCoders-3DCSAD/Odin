@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getConsents } from "../features/governance/api";
+import { getCurrentTermsConsent } from "../features/governance/api";
 import PrivacyConsentScreen from "../features/governance/PrivacyConsentScreen";
 import { isOnline } from "../lib/network";
 
@@ -30,7 +30,7 @@ type AuthResponse = {
       refresh_token?: string;
     };
     user?: { id?: string };
-    profile?: { id?: string; is_first_logged_in?: boolean };
+    profile?: { id?: string };
     onboarding?: { status?: string };
     privacy_settings?: { personalization_enabled?: boolean };
     activation?: {
@@ -52,7 +52,6 @@ type AuthenticatedState = {
   userId?: string;
   profileId?: string;
   onboardingStatus?: string;
-  isFirstLoggedIn?: boolean;
 };
 
 type GoogleAuthConfig = {
@@ -383,7 +382,7 @@ export default function AuthExperience({
 
   function buildAuthState(
     accessToken: string, provider: AuthProvider,
-    payload?: { session?: { refresh_token?: string }; user?: { id?: string }; profile?: { id?: string; is_first_logged_in?: boolean }; onboarding?: { status?: string } },
+    payload?: { session?: { refresh_token?: string }; user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } },
     refreshToken?: string,
   ) {
     return {
@@ -393,8 +392,23 @@ export default function AuthExperience({
       userId: payload?.user?.id,
       profileId: payload?.profile?.id,
       onboardingStatus: payload?.onboarding?.status,
-      isFirstLoggedIn: payload?.profile?.is_first_logged_in,
     };
+  }
+
+  async function continueAfterAuthentication(authState: AuthenticatedState) {
+    const consentsRes = await getCurrentTermsConsent(authState.accessToken);
+    if (!consentsRes.response.ok) {
+      throw new Error("Failed to check consent status. Please try again.");
+    }
+
+    if (consentsRes.hasCurrentTermsConsent) {
+      if (await onAuthenticated(authState)) setAuthenticated(authState);
+      setPendingVerificationEmail(null);
+      return;
+    }
+
+    setPendingAuthState(authState);
+    setShowConsent(true);
   }
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -494,19 +508,7 @@ export default function AuthExperience({
 
       const authState = buildAuthState(accessToken, "password", body.payload);
 
-      const consentsRes = await getConsents(accessToken);
-      if (!consentsRes.response.ok) {
-        throw new Error("Failed to check consent status. Please try again.");
-      }
-      const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
-      const hasGranted = existing?.some((c) => c.status === "granted");
-      if (hasGranted) {
-        if (await onAuthenticated(authState)) setAuthenticated(authState);
-        setPendingVerificationEmail(null);
-      } else {
-        setPendingAuthState(authState);
-        setShowConsent(true);
-      }
+      await continueAfterAuthentication(authState);
 
       resetSensitiveFields();
     } catch (error) {
@@ -569,8 +571,7 @@ export default function AuthExperience({
           ...mergedPayload,
           session: body.payload?.session,
         });
-        setPendingAuthState(authState);
-        setShowConsent(true);
+        await continueAfterAuthentication(authState);
         setNotice({ tone: "success", message: "Account created. One more step." });
       } else {
         setPendingVerificationEmail(email.trim());
@@ -708,19 +709,7 @@ export default function AuthExperience({
 
       const authState = buildAuthState(session.accessToken, "google", body.payload, session.refreshToken);
 
-      const consentsRes = await getConsents(session.accessToken);
-      if (!consentsRes.response.ok) {
-        throw new Error("Failed to check consent status. Please try again.");
-      }
-      const existing = (consentsRes.body as { payload?: { consents?: { status: string }[] } }).payload?.consents;
-      const hasGranted = existing?.some((c) => c.status === "granted");
-      if (hasGranted) {
-        if (await onAuthenticated(authState)) setAuthenticated(authState);
-        setPendingVerificationEmail(null);
-      } else {
-        setPendingAuthState(authState);
-        setShowConsent(true);
-      }
+      await continueAfterAuthentication(authState);
     } catch (error) {
       const msg = getErrorMessage(error);
       setNotice({ tone: "error", message: /Google sign-in was cancelled/i.test(msg) ? "Google login cancelled." : msg });

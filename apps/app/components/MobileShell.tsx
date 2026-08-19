@@ -31,7 +31,6 @@ import BudgetingScreen from "../features/budgeting/BudgetingScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
-import { completeFirstLogin } from "../services/firstLogin";
 import { initDatabase } from "../local-db/client";
 import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
@@ -87,7 +86,6 @@ type MobileShellProps = {
   accessToken: string;
   userId: string;
   deviceId: string;
-  isFirstLoggedIn?: boolean;
   onLoggedOut: () => void;
   signOut?: () => Promise<void>;
 };
@@ -201,7 +199,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
-export default function MobileShell({ accessToken, userId, deviceId, isFirstLoggedIn, onLoggedOut, signOut }: MobileShellProps) {
+export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -241,7 +239,6 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
   const syncInFlight = useRef(false);
   const lastAutoSyncAt = useRef(0);
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firstLoginCompleted = useRef(false);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -450,11 +447,6 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
       await refreshQueueCount();
       setSyncPending(result.hasMore);
 
-      if (isFirstLoggedIn && !firstLoginCompleted.current && result.successful) {
-        await completeFirstLogin(accessToken);
-        firstLoginCompleted.current = true;
-      }
-
       if (result.pulled > 0) setSyncVersion((value) => value + 1);
 
       if (showMessage && result.errors > 0) {
@@ -483,7 +475,7 @@ export default function MobileShell({ accessToken, userId, deviceId, isFirstLogg
     const reconnected = online && !wasOnline.current;
     const autoSyncDue = Date.now() - lastAutoSyncAt.current >= AUTO_SYNC_MS;
 
-    if (online && (retryable > 0 || syncPending || (isFirstLoggedIn && !firstLoginCompleted.current)) && (reconnected || autoSyncDue)) {
+    if (online && (retryable > 0 || syncPending) && (reconnected || autoSyncDue)) {
       await syncNow(false);
     }
 

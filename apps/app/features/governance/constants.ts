@@ -1,3 +1,16 @@
+import type { ConsentRecord } from "./types";
+
+export const TERMS_CONSENT_KIND = "terms";
+export const CURRENT_TERMS_VERSION = "2026-06";
+
+export function hasCurrentTermsConsent(consents: ConsentRecord[]) {
+  return consents.some((consent) =>
+    consent.consent_kind === TERMS_CONSENT_KIND &&
+    consent.status === "granted" &&
+    consent.version === CURRENT_TERMS_VERSION,
+  );
+}
+
 export const ERRORS = {
   TIMEOUT: "Connection timed out.",
   GENERIC: "Something went wrong.",

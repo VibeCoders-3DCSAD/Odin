@@ -40,7 +40,6 @@ export default function App() {
                 accessToken={authenticated.accessToken}
                 userId={authenticated.userId ?? ""}
                 deviceId={deviceId}
-                isFirstLoggedIn={authenticated.isFirstLoggedIn}
                 onLoggedOut={() => setAuthenticated(null)}
               />
               <StatusBar style="dark" />

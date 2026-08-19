@@ -10,11 +10,9 @@ import {
 } from "react-native";
 import { Check, ShieldCheck } from "phosphor-react-native";
 import { submitConsent } from "./api";
-import { ERRORS } from "./constants";
+import { CURRENT_TERMS_VERSION, ERRORS, TERMS_CONSENT_KIND } from "./constants";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-
-const CONSENT_VERSION = "2026-06";
 
 const MUTED = "#6B7A6F";
 const LINE = "#EAEAE6";
@@ -46,11 +44,12 @@ export default function PrivacyConsentScreen({
   accessToken,
   onComplete,
   onDismiss,
-  consentVersion = CONSENT_VERSION,
+  consentVersion = CURRENT_TERMS_VERSION,
 }: PrivacyConsentScreenProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consented, setConsented] = useState(false);
+  const [acceptedAt, setAcceptedAt] = useState<Date | null>(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   const open = useCallback(() => {
@@ -78,7 +77,7 @@ export default function PrivacyConsentScreen({
     setError(null);
     try {
       const { response } = await submitConsent(accessToken, {
-        consent_kind: "terms",
+        consent_kind: TERMS_CONSENT_KIND,
         status: "granted",
         version: consentVersion,
       });
@@ -87,6 +86,7 @@ export default function PrivacyConsentScreen({
         setSubmitting(false);
         return;
       }
+      setAcceptedAt(new Date());
       setConsented(true);
       setTimeout(() => close(onComplete), 600);
     } catch (err) {
@@ -218,13 +218,15 @@ export default function PrivacyConsentScreen({
           <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: MUTED }}>
             Policy v{consentVersion}
           </Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: MUTED }}>
-            Accepted {new Date().toLocaleDateString("en-US", {
-              month: "short", day: "numeric", year: "numeric",
-            })}, {new Date().toLocaleTimeString("en-US", {
-              hour: "numeric", minute: "2-digit", hour12: true,
-            }).toLowerCase()}
-          </Text>
+          {acceptedAt ? (
+            <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: MUTED }}>
+              Accepted {acceptedAt.toLocaleDateString("en-US", {
+                month: "short", day: "numeric", year: "numeric",
+              })}, {acceptedAt.toLocaleTimeString("en-US", {
+                hour: "numeric", minute: "2-digit", hour12: true,
+              }).toLowerCase()}
+            </Text>
+          ) : null}
         </View>
         <Pressable
           onPress={handleAgree}

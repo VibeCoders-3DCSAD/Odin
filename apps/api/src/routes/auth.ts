@@ -13,11 +13,11 @@ const router = Router();
 async function ensureProfile(
   userId: string,
   authenticatedSupabase = supabase,
-): Promise<{ id: string; is_first_logged_in: boolean }> {
+): Promise<{ id: string }> {
   const { data: profile, error: profileError } = await authenticatedSupabase
     .from("profiles")
     .upsert({ user_id: userId }, { onConflict: "user_id" })
-    .select("id, is_first_logged_in")
+    .select("id")
     .single();
 
   if (profileError || !profile) {
@@ -76,7 +76,7 @@ async function bootstrapAuthenticatedUser(
   accessToken: string,
 ): Promise<{
   user: { id: string };
-  profile: { id: string; is_first_logged_in: boolean };
+  profile: { id: string };
   onboarding: { status: string };
   privacy_settings: { personalization_enabled: boolean };
 }> {
@@ -102,7 +102,6 @@ async function bootstrapAuthenticatedUser(
     user: { id: userId },
     profile: {
       id: profile.id,
-      is_first_logged_in: profile.is_first_logged_in,
     },
     onboarding: {
       status: onboarding?.status ?? "in_progress",
@@ -376,29 +375,6 @@ router.post(
     response.status(200).json({
       payload: { updated: true },
     });
-  },
-);
-
-router.post(
-  "/first-login-complete",
-  requireAuth,
-  async (request: AuthenticatedRequest, response: Response) => {
-    const { data: profile, error } = await request.supabase!
-      .from("profiles")
-      .update({ is_first_logged_in: false })
-      .eq("user_id", request.userId!)
-      .select("user_id")
-      .maybeSingle();
-
-    if (error || !profile) {
-      response.status(500).json({
-        error: "Internal Server Error",
-        message: "Failed to complete first-login setup.",
-      });
-      return;
-    }
-
-    response.status(200).json({ payload: { is_first_logged_in: false } });
   },
 );
 

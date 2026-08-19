@@ -33,7 +33,7 @@ const mockFrom = supabase.from as jest.Mock;
 describe("POST /odin/api/auth/login", () => {
   function mockSuccessfulBootstrap() {
     const profileResult: MockQueryResult = {
-      data: { id: validProfileId, is_first_logged_in: true },
+      data: { id: validProfileId },
       error: null,
     };
     const privacyResult: MockQueryResult = {
@@ -89,7 +89,7 @@ describe("POST /odin/api/auth/login", () => {
           refresh_token: validRefreshToken,
         },
         user: { id: validUserId },
-        profile: { id: validProfileId, is_first_logged_in: true },
+        profile: { id: validProfileId },
         onboarding: { status: "in_progress" },
         privacy_settings: { personalization_enabled: true },
       },
