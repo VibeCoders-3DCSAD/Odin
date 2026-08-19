@@ -183,7 +183,7 @@ async function pushQueue(
 
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${API_BASE}/odin/api/sync/push`, {
+      response = await fetchWithTimeout(`${API_BASE}/odin/api/sync/push`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
