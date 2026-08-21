@@ -12,6 +12,7 @@ jest.mock("../../helpers", () => {
 jest.mock("../../uuid", () => ({ randomUUID: (...args: unknown[]) => mockRandomUUID(...args) }));
 
 function createDbMock(getFirstAsync: jest.Mock, getAllAsync = jest.fn()) {
+  if (!getAllAsync.getMockImplementation()) getAllAsync.mockResolvedValue([]);
   return {
     getFirstAsync,
     getAllAsync,
@@ -54,6 +55,23 @@ describe("budget drafts repository", () => {
       periodEnd: "2026-08-10",
       totalAmountMinor: 100,
       allocations: [{ categoryId: "category-1", amountMinor: 101 }],
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  test("rejects a budget that overlaps another time horizon", async () => {
+    const db = createDbMock(jest.fn(), jest.fn(async (sql: string) => (
+      sql.includes("period_start <= ?") ? [{ id: "existing-budget" }] : []
+    )));
+    mockInitDatabase.mockResolvedValue(db);
+    const { createBudgetDraft } = await import("../budgets");
+
+    await expect(createBudgetDraft("user-1", "device-1", {
+      periodKind: "CUSTOM",
+      periodStart: "2026-08-05",
+      periodEnd: "2026-08-10",
+      totalAmountMinor: 1000,
+      allocations: [],
     })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(db.runAsync).not.toHaveBeenCalled();
   });

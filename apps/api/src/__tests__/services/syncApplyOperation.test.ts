@@ -71,6 +71,7 @@ describe("prepareOperation — budgets create", () => {
   beforeEach(() => {
     mockFrom.mockImplementation((table: string) => {
       if (table === "categories") return createMockQuery({ data: { id: "cat-1" }, error: null });
+      if (table === "budgets") return createMockQuery({ data: null, error: null });
       throw new Error(`unexpected table lookup: ${table}`);
     });
   });

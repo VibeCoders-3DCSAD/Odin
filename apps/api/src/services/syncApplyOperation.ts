@@ -714,6 +714,7 @@ async function validateBudgetPayload(
   userId: string,
   payload: Record<string, unknown>,
   allowedFields: Set<string>,
+  excludeId?: string,
 ): Promise<Record<string, unknown>> {
   assertOnlyAllowed(payload, allowedFields);
   if (!VALID_BUDGET_PERIOD_KINDS.includes(payload.periodKind as string)) {
@@ -739,6 +740,18 @@ async function validateBudgetPayload(
   if (payload.periodKind === "CUSTOM" && periodDays > 366) throw new Error("CUSTOM budgets cannot exceed 366 days");
   if (payload.budget_period_days !== periodDays) throw new Error("budget_period_days must match the inclusive date range");
   requirePositiveInteger(payload, "totalAmountMinor");
+  const overlapQuery = supabase
+    .from("budgets")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("deleted", false)
+    .lte("period_start", payload.periodEnd as string)
+    .gte("period_end", payload.periodStart as string)
+    .limit(1);
+  if (excludeId) overlapQuery.neq("id", excludeId);
+  const { data: overlappingBudget, error: overlapError } = await overlapQuery.maybeSingle();
+  if (overlapError) throw new Error(`budget horizon validation failed: ${overlapError.message}`);
+  if (overlappingBudget) throw new Error("another budget already uses this time horizon");
   if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
   let allocated = 0;
   for (const allocation of payload.allocations) {
@@ -788,7 +801,7 @@ async function validateUpdatePayload(
   } else if (entity === "recurring_transaction_occurrences") {
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else if (entity === "budgets") {
-    return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS);
+    return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS, recordId);
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
