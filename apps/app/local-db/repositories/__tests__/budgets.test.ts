@@ -12,6 +12,7 @@ jest.mock("../../helpers", () => {
 jest.mock("../../uuid", () => ({ randomUUID: (...args: unknown[]) => mockRandomUUID(...args) }));
 
 function createDbMock(getFirstAsync: jest.Mock, getAllAsync = jest.fn()) {
+  if (!getAllAsync.getMockImplementation()) getAllAsync.mockResolvedValue([]);
   return {
     getFirstAsync,
     getAllAsync,
@@ -54,6 +55,23 @@ describe("budget drafts repository", () => {
       periodEnd: "2026-08-10",
       totalAmountMinor: 100,
       allocations: [{ categoryId: "category-1", amountMinor: 101 }],
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  test("rejects a second budget for the same user", async () => {
+    const db = createDbMock(jest.fn(), jest.fn(async (sql: string) => (
+      sql.includes("status != 'deleted'") ? [{ id: "existing-budget" }] : []
+    )));
+    mockInitDatabase.mockResolvedValue(db);
+    const { createBudgetDraft } = await import("../budgets");
+
+    await expect(createBudgetDraft("user-1", "device-1", {
+      periodKind: "CUSTOM",
+      periodStart: "2026-09-05",
+      periodEnd: "2026-09-10",
+      totalAmountMinor: 1000,
+      allocations: [],
     })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(db.runAsync).not.toHaveBeenCalled();
   });
@@ -102,6 +120,30 @@ describe("budget drafts repository", () => {
     expect(mockEnqueueOperation).toHaveBeenCalledWith(db, expect.objectContaining({ entity: "budgets", operationType: "create" }));
     expect(result.budget.allocatedAmountMinor).toBe(100);
     expect(result.budget.unallocatedAmountMinor).toBe(900);
+  });
+
+  test("queues budget updates with the API field names", async () => {
+    const budgetRow = {
+      id: "budget-1", user_id: "user-1", status: "draft", allocation_method: "MANUAL",
+      period_kind: "CUSTOM", period_start: "2026-08-01", period_end: "2026-08-10",
+      budget_period_days: 10, total_amount_minor: 1000, surplus_handling: "LEAVE_UNALLOCATED",
+      deficit_handling: "BLOCK_ACTIVATION", allow_deficit_planning: 0, version: 1, deleted: 0,
+    };
+    const db = createDbMock(jest.fn(async (sql: string) => {
+      if (sql.includes("FROM categories") || sql.includes("FROM budgets")) return budgetRow;
+      return null;
+    }), jest.fn(async (sql: string) => sql.includes("budget_allocations") ? [] : []));
+    mockInitDatabase.mockResolvedValue(db);
+    const { updateBudgetDraft } = await import("../budgets");
+
+    await updateBudgetDraft("user-1", "device-1", "budget-1", {
+      periodKind: "CUSTOM", periodStart: "2026-08-01", periodEnd: "2026-08-10",
+      totalAmountMinor: 1000, allocations: [{ categoryId: "category-1", amountMinor: 100 }],
+    });
+
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(db, expect.objectContaining({
+      changedFields: ["periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations"],
+    }));
   });
 
   test("tracks category and subcategory allocations independently", async () => {
