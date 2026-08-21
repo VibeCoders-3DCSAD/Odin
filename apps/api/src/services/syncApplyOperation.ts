@@ -745,6 +745,7 @@ async function validateBudgetPayload(
     .select("id")
     .eq("user_id", userId)
     .eq("deleted", false)
+    .neq("status", "deleted")
     .limit(1);
   if (excludeId) overlapQuery.neq("id", excludeId);
   const { data: existingBudget, error: overlapError } = await overlapQuery.maybeSingle();

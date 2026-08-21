@@ -100,6 +100,26 @@ describe("prepareOperation — budgets create", () => {
     expect(result.payload).toMatchObject({ periodKind: "CUSTOM", budget_period_days: 10 });
   });
 
+  it("excludes deleted budgets from the single-budget check", async () => {
+    await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-budget-deleted-check",
+      entity: "budgets",
+      record_id: "budget-1",
+      operation_type: "create",
+      base_version: null,
+      changed_fields: [],
+      payload: {
+        status: "draft", allocation_method: "MANUAL", periodKind: "CUSTOM",
+        periodStart: "2026-08-01", periodEnd: "2026-08-10", budget_period_days: 10,
+        totalAmountMinor: 1000, allocations: [],
+      },
+    });
+
+    const budgetQueryIndex = mockFrom.mock.calls.findIndex(([table]) => table === "budgets");
+    const budgetQuery = mockFrom.mock.results[budgetQueryIndex]?.value as { neq: jest.Mock };
+    expect(budgetQuery.neq).toHaveBeenCalledWith("status", "deleted");
+  });
+
   it("rejects a wrong inclusive period length", async () => {
     await expect(prepareOperation(mockClient, validUserId, {
       operation_id: "op-budget-2",
