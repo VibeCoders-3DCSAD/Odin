@@ -244,7 +244,7 @@ const BUDGET_UPDATE_FIELDS = new Set([
 ]);
 
 const DEBT_ACCOUNT_FIELDS = new Set(["name", "lender_name", "preset_key", "status", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes"]);
-const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes"]);
+const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes"]);
 
 function validateDebtStatus(payload: Record<string, unknown>, operation: "create" | "update"): void {
   if (payload.status === undefined) return;
@@ -261,6 +261,20 @@ export async function prepareOperation(
 ): Promise<PreparedOperation> {
   if (!SYNCED_ENTITIES.has(op.entity)) {
     throw new Error(`entity '${op.entity}' is not in the sync allowlist`);
+  }
+  if (op.entity === "transactions" && (op.operation_type === "update" || op.operation_type === "delete")) {
+    const { data: linkedPayment, error } = await supabase
+      .from("debt_payments")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("transaction_id", op.record_id)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw error;
+    if (linkedPayment) throw new Error("Linked debt payments must be changed from Debt Manager");
+  }
+  if (op.entity === "debt_payments" && op.operation_type !== "create") {
+    throw new Error("Debt payments can only be created through Debt Manager");
   }
 
   switch (op.operation_type) {

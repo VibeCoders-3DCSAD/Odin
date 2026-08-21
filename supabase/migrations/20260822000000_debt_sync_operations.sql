@@ -33,6 +33,12 @@ DECLARE
   v_item jsonb;
   v_rank integer := 0;
   v_debt_id uuid;
+  v_current_balance bigint;
+  v_transaction_id uuid;
+  v_transaction_type text;
+  v_transaction_amount bigint;
+  v_transaction_deleted boolean;
+  v_transaction_status text;
 BEGIN
   IF v_user_id IS NULL THEN RAISE EXCEPTION 'authentication required'; END IF;
   IF p_entity NOT IN ('debt_accounts', 'debt_payments', 'user_debt_priorities', 'debt_strategy_preferences') THEN
@@ -108,14 +114,46 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM debt_accounts WHERE id = v_debt_id AND user_id = v_user_id AND deleted = false) THEN
       RAISE EXCEPTION 'debt_account_id does not reference an accessible debt';
     END IF;
-    IF NULLIF(p_payload->>'transaction_id', '') IS NOT NULL AND NOT EXISTS (
-      SELECT 1 FROM transactions
-      WHERE id = (p_payload->>'transaction_id')::uuid AND user_id = v_user_id
-    ) THEN
-      RAISE EXCEPTION 'transaction_id does not reference an accessible transaction';
+    SELECT current_balance_centavos INTO v_current_balance FROM debt_accounts WHERE id = v_debt_id AND user_id = v_user_id FOR UPDATE;
+    v_transaction_id := NULLIF(p_payload->>'transaction_id', '')::uuid;
+    IF v_transaction_id IS NULL THEN RAISE EXCEPTION 'transaction_id is required for debt payments'; END IF;
+    SELECT transaction_type::text, amount_centavos, deleted, status::text
+      INTO v_transaction_type, v_transaction_amount, v_transaction_deleted, v_transaction_status
+    FROM transactions WHERE id = v_transaction_id AND user_id = v_user_id;
+    IF FOUND THEN
+      IF v_transaction_deleted OR v_transaction_status <> 'posted' THEN RAISE EXCEPTION 'debt payments require an active posted transaction'; END IF;
+      IF v_transaction_type <> 'expense' THEN RAISE EXCEPTION 'debt payments require an expense transaction'; END IF;
+      IF v_transaction_amount <> (p_payload->>'amount_centavos')::bigint THEN RAISE EXCEPTION 'transaction amount must match payment amount'; END IF;
+    ELSE
+      IF COALESCE(p_payload->>'linked_transaction_type', '') <> 'expense' THEN RAISE EXCEPTION 'debt payments require an expense transaction'; END IF;
+      IF NOT EXISTS (SELECT 1 FROM financial_accounts WHERE id = (p_payload->>'linked_source_account_id')::uuid AND user_id = v_user_id AND deleted = false) THEN
+        RAISE EXCEPTION 'source account does not belong to user';
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM subcategories
+        WHERE id = NULLIF(p_payload->>'linked_subcategory_id', '')::uuid
+          AND (user_id IS NULL OR user_id = v_user_id)
+          AND kind = 'expense' AND deleted = false AND is_active = true
+      ) THEN
+        RAISE EXCEPTION 'subcategory does not reference an accessible active expense subcategory';
+      END IF;
+      INSERT INTO transactions (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at, amount_centavos, subcategory_id, source_account_id, destination_account_id, merchant_name, counterparty_name, notes, metadata, updated_at, version, deleted)
+      VALUES (v_transaction_id, v_user_id, 'expense', 'posted', 'offline_sync', (p_payload->>'payment_date')::date, now(), (p_payload->>'amount_centavos')::bigint, NULLIF(p_payload->>'linked_subcategory_id', '')::uuid, (p_payload->>'linked_source_account_id')::uuid, NULL, NULL, NULL, p_payload->>'notes', '{}'::jsonb, now(), 1, false);
+    END IF;
+    IF (p_payload->>'amount_centavos')::bigint <= 0 THEN RAISE EXCEPTION 'payment amount must be positive'; END IF;
+    IF (p_payload->>'amount_centavos')::bigint > v_current_balance THEN
+      RAISE EXCEPTION 'payment exceeds current debt balance';
     END IF;
     INSERT INTO debt_payments (id, debt_account_id, user_id, transaction_id, source, payment_date, amount_centavos, principal_centavos, interest_centavos, notes, version, deleted, updated_at)
-    VALUES (p_record_id, v_debt_id, v_user_id, NULLIF(p_payload->>'transaction_id', '')::uuid, COALESCE(p_payload->>'source', 'transaction'), (p_payload->>'payment_date')::date, (p_payload->>'amount_centavos')::bigint, NULLIF(p_payload->>'principal_centavos', '')::bigint, NULLIF(p_payload->>'interest_centavos', '')::bigint, p_payload->>'notes', 1, false, now());
+    VALUES (p_record_id, v_debt_id, v_user_id, v_transaction_id, COALESCE(p_payload->>'source', 'transaction'), (p_payload->>'payment_date')::date, (p_payload->>'amount_centavos')::bigint, NULLIF(p_payload->>'principal_centavos', '')::bigint, NULLIF(p_payload->>'interest_centavos', '')::bigint, p_payload->>'notes', 1, false, now());
+    UPDATE debt_accounts
+    SET current_balance_centavos = current_balance_centavos - (p_payload->>'amount_centavos')::bigint,
+        status = CASE WHEN current_balance_centavos - (p_payload->>'amount_centavos')::bigint = 0 THEN 'paid_off' ELSE status END,
+        version = version + 1,
+        updated_at = now()
+    WHERE id = v_debt_id AND user_id = v_user_id;
+  ELSIF p_entity = 'debt_payments' THEN
+    RAISE EXCEPTION 'debt payments can only be created through Debt Manager';
   ELSIF p_entity = 'user_debt_priorities' THEN
     IF jsonb_array_length(COALESCE(p_payload->'priorities', '[]'::jsonb)) <> (
       SELECT count(DISTINCT value) FROM jsonb_array_elements_text(COALESCE(p_payload->'priorities', '[]'::jsonb)) AS items(value)

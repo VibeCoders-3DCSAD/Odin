@@ -10,6 +10,11 @@ const VALID_SORT_DIR = ["asc", "desc"] as const;
 const VALID_STATUSES = ["posted", "draft", "voided", "deleted"] as const;
 const UPDATE_FIELDS = ["amount_centavos", "subcategory_id", "source_account_id", "destination_account_id", "transaction_date", "merchant_name", "counterparty_name", "notes"] as const;
 
+async function rejectLinkedDebtPayment(db: SQLite.SQLiteDatabase, userId: string, transactionId: string): Promise<void> {
+  const linked = await db.getFirstAsync("SELECT id FROM debt_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, transactionId);
+  if (linked) throw new LocalDbError("VALIDATION_ERROR", "Linked debt payments must be changed from Debt Manager");
+}
+
 type TransactionRow = {
   id: string;
   user_id: string;
@@ -638,6 +643,7 @@ export async function updateTransaction(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
+    await rejectLinkedDebtPayment(db, userId, id);
 
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
@@ -728,6 +734,7 @@ export async function deleteTransaction(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
+    await rejectLinkedDebtPayment(db, userId, id);
 
     await reverseBalanceEffects(
       db, userId,
