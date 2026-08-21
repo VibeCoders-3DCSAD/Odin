@@ -63,7 +63,12 @@ export async function pushOperations(
   for (const op of operations) {
     try {
       const prepared = await prepareOperation(supabase, userId, op);
-      const { data, error } = await supabase.rpc(prepared.entity === "budgets" ? "apply_budget_sync_operation" : "apply_sync_operation", {
+      const rpcName = prepared.entity === "budgets"
+        ? "apply_budget_sync_operation_v2"
+        : ["debt_accounts", "debt_payments", "user_debt_priorities", "debt_strategy_preferences"].includes(prepared.entity)
+          ? "apply_debt_sync_operation"
+          : "apply_sync_operation";
+      const { data, error } = await supabase.rpc(rpcName, {
         p_operation_id: prepared.operation_id,
         p_device_id: deviceId,
         p_entity: prepared.entity,
@@ -144,11 +149,12 @@ export async function pullChanges(
   let successful = true;
 
   for (const table of SYNCED_TABLES) {
+    const cursorColumn = table === "debt_strategy_preferences" ? "user_id" : "id";
     const query = supabase
       .from(table)
       .select("*")
       .order("updated_at", { ascending: true })
-      .order("id", { ascending: true })
+      .order(cursorColumn, { ascending: true })
       .limit(500);
 
     if (table === "category_groups") {
@@ -181,7 +187,7 @@ export async function pullChanges(
     const tableCursor = cursors[table];
     if (tableCursor && tableCursor.id) {
       query.or(
-        `updated_at.gt.${tableCursor.ts},and(updated_at.eq.${tableCursor.ts},id.gt.${tableCursor.id})`,
+        `updated_at.gt.${tableCursor.ts},and(updated_at.eq.${tableCursor.ts},${cursorColumn}.gt.${tableCursor.id})`,
       );
     }
 

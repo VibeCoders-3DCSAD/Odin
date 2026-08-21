@@ -243,8 +243,16 @@ const BUDGET_UPDATE_FIELDS = new Set([
   "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debt_budget_amount_minor", "debtBudgetMinor",
 ]);
 
-const DEBT_ACCOUNT_FIELDS = new Set(["name", "lender_name", "preset_key", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes"]);
+const DEBT_ACCOUNT_FIELDS = new Set(["name", "lender_name", "preset_key", "status", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes"]);
 const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes"]);
+
+function validateDebtStatus(payload: Record<string, unknown>, operation: "create" | "update"): void {
+  if (payload.status === undefined) return;
+  const validStatuses = operation === "update" ? ["active", "archived", "paid_off"] : ["active", "archived"];
+  if (typeof payload.status !== "string" || !validStatuses.includes(payload.status)) {
+    throw new Error("status must be active or archived; deleted must use the delete operation");
+  }
+}
 
 export async function prepareOperation(
   supabase: SupabaseClient,
@@ -437,6 +445,7 @@ async function validateCreatePayload(
     const sanitized = sanitizePayload(payload, allowed);
     if (entity === "debt_accounts") {
       requireString(sanitized, "name"); requireString(sanitized, "preset_key");
+      validateDebtStatus(sanitized, "create");
       if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(sanitized.preset_key as string)) throw new Error("preset_key must be a safe slug");
       if (sanitized.preset_data !== undefined && (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data))) throw new Error("preset_data must be an object");
     }
@@ -815,7 +824,9 @@ async function validateUpdatePayload(
   } else if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
     const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
     assertOnlyAllowed(payload, allowed);
-    return sanitizePayload(payload, allowed);
+    const sanitized = sanitizePayload(payload, allowed);
+    if (entity === "debt_accounts") validateDebtStatus(sanitized, "update");
+    return sanitized;
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
