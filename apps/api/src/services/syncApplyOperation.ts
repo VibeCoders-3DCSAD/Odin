@@ -745,13 +745,11 @@ async function validateBudgetPayload(
     .select("id")
     .eq("user_id", userId)
     .eq("deleted", false)
-    .lte("period_start", payload.periodEnd as string)
-    .gte("period_end", payload.periodStart as string)
     .limit(1);
   if (excludeId) overlapQuery.neq("id", excludeId);
-  const { data: overlappingBudget, error: overlapError } = await overlapQuery.maybeSingle();
-  if (overlapError) throw new Error(`budget horizon validation failed: ${overlapError.message}`);
-  if (overlappingBudget) throw new Error("another budget already uses this time horizon");
+  const { data: existingBudget, error: overlapError } = await overlapQuery.maybeSingle();
+  if (overlapError) throw new Error(`budget uniqueness validation failed: ${overlapError.message}`);
+  if (existingBudget) throw new Error("only one budget can exist at a time");
   if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
   let allocated = 0;
   for (const allocation of payload.allocations) {

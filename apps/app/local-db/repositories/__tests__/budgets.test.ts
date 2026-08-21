@@ -59,17 +59,17 @@ describe("budget drafts repository", () => {
     expect(db.runAsync).not.toHaveBeenCalled();
   });
 
-  test("rejects a budget that overlaps another time horizon", async () => {
+  test("rejects a second budget for the same user", async () => {
     const db = createDbMock(jest.fn(), jest.fn(async (sql: string) => (
-      sql.includes("period_start <= ?") ? [{ id: "existing-budget" }] : []
+      sql.includes("status != 'deleted'") ? [{ id: "existing-budget" }] : []
     )));
     mockInitDatabase.mockResolvedValue(db);
     const { createBudgetDraft } = await import("../budgets");
 
     await expect(createBudgetDraft("user-1", "device-1", {
       periodKind: "CUSTOM",
-      periodStart: "2026-08-05",
-      periodEnd: "2026-08-10",
+      periodStart: "2026-09-05",
+      periodEnd: "2026-09-10",
       totalAmountMinor: 1000,
       allocations: [],
     })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });

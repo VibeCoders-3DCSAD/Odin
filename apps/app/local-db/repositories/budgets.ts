@@ -157,22 +157,19 @@ function validateInput(input: CreateBudgetInput): number {
   return periodDays;
 }
 
-async function assertNoOverlappingBudget(
+async function assertOnlyBudget(
   db: SQLite.SQLiteDatabase,
   userId: string,
-  periodStart: string,
-  periodEnd: string,
   excludeId?: string,
 ): Promise<void> {
   const rows = await db.getAllAsync<{ id: string }>(
     `SELECT id FROM budgets
      WHERE user_id = ? AND deleted = 0 AND status != 'deleted'
-       AND period_start <= ? AND period_end >= ?
        ${excludeId ? "AND id != ?" : ""}
      LIMIT 1`,
-    ...(excludeId ? [userId, periodEnd, periodStart, excludeId] : [userId, periodEnd, periodStart]),
+    ...(excludeId ? [userId, excludeId] : [userId]),
   );
-  if (rows.length > 0) throw new LocalDbError("VALIDATION_ERROR", "another budget already uses this time horizon");
+  if (rows.length > 0) throw new LocalDbError("VALIDATION_ERROR", "only one budget can exist at a time");
 }
 
 async function readBudget(db: SQLite.SQLiteDatabase, userId: string, id: string): Promise<Budget | null> {
@@ -284,7 +281,7 @@ export async function createBudgetDraft(
   let result: { budget: Budget; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
-    await assertNoOverlappingBudget(db, userId, input.periodStart, input.periodEnd);
+    await assertOnlyBudget(db, userId);
     for (const allocation of input.allocations) {
       const id = allocation.categoryId ?? allocation.subcategoryId;
       if (!id) throw new LocalDbError("VALIDATION_ERROR", "allocation reference is required");
@@ -347,7 +344,7 @@ export async function updateBudgetDraft(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Budget draft not found");
-    await assertNoOverlappingBudget(db, userId, input.periodStart, input.periodEnd, id);
+    await assertOnlyBudget(db, userId, id);
 
     for (const allocation of input.allocations) {
       const referenceId = allocation.categoryId ?? allocation.subcategoryId;
