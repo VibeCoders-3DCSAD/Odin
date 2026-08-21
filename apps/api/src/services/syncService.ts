@@ -46,6 +46,10 @@ const SYNCED_TABLES = [
   "recurring_transaction_occurrences",
   "budgets",
   "budget_allocations",
+  "debt_accounts",
+  "debt_payments",
+  "user_debt_priorities",
+  "debt_strategy_preferences",
 ] as const;
 
 export async function pushOperations(
@@ -161,6 +165,10 @@ export async function pullChanges(
       table === "recurring_transaction_occurrences"
       || table === "budgets"
       || table === "budget_allocations"
+      || table === "debt_accounts"
+      || table === "debt_payments"
+      || table === "user_debt_priorities"
+      || table === "debt_strategy_preferences"
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);

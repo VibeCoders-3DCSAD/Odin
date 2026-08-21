@@ -17,6 +17,7 @@ type BudgetRow = {
   period_end: string;
   budget_period_days: number;
   total_amount_minor: number;
+  debt_budget_amount_minor: number;
   surplus_handling: "LEAVE_UNALLOCATED";
   deficit_handling: "BLOCK_ACTIVATION";
   allow_deficit_planning: number;
@@ -51,6 +52,7 @@ export type Budget = {
   periodEnd: string;
   budgetPeriodDays: number;
   totalAmountMinor: number;
+  debtBudgetMinor: number;
   allocatedAmountMinor: number;
   unallocatedAmountMinor: number;
   allocations: BudgetAllocation[];
@@ -69,6 +71,7 @@ export type CreateBudgetInput = {
   periodStart: string;
   periodEnd: string;
   totalAmountMinor: number;
+  debtBudgetMinor?: number;
   allocations: Array<{
     categoryId?: string | null;
     subcategoryId?: string | null;
@@ -99,8 +102,9 @@ function mapBudget(row: BudgetRow, allocations: AllocationRow[]): Budget {
     periodEnd: row.period_end,
     budgetPeriodDays: row.budget_period_days,
     totalAmountMinor: row.total_amount_minor,
-    allocatedAmountMinor,
-    unallocatedAmountMinor: row.total_amount_minor - allocatedAmountMinor,
+    debtBudgetMinor: row.debt_budget_amount_minor ?? 0,
+    allocatedAmountMinor: allocatedAmountMinor + (row.debt_budget_amount_minor ?? 0),
+    unallocatedAmountMinor: row.total_amount_minor - allocatedAmountMinor - (row.debt_budget_amount_minor ?? 0),
     allocations: mapped,
   };
 }
@@ -141,6 +145,9 @@ function validateInput(input: CreateBudgetInput): number {
   if (!Number.isInteger(input.totalAmountMinor) || input.totalAmountMinor <= 0) {
     throw new LocalDbError("VALIDATION_ERROR", "totalAmountMinor must be a positive integer");
   }
+  if (!Number.isInteger(input.debtBudgetMinor ?? 0) || (input.debtBudgetMinor ?? 0) < 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "debtBudgetMinor must be a non-negative integer");
+  }
   let total = 0;
   for (const allocation of input.allocations) {
     if ((!allocation.categoryId && !allocation.subcategoryId) || (allocation.categoryId && allocation.subcategoryId)) {
@@ -151,7 +158,8 @@ function validateInput(input: CreateBudgetInput): number {
     }
     total += allocation.amountMinor;
   }
-  if (total > input.totalAmountMinor) {
+  const debtBudget = input.periodKind === "MONTHLY" ? (input.debtBudgetMinor ?? 0) : 0;
+  if (total + debtBudget > input.totalAmountMinor) {
     throw new LocalDbError("VALIDATION_ERROR", "allocations cannot exceed the budget total");
   }
   return periodDays;
@@ -187,6 +195,15 @@ export async function listBudgetDrafts(userId: string): Promise<Budget[]> {
 
 export async function getBudgetDraft(userId: string, id: string): Promise<Budget | null> {
   return readBudget(await getDb(), userId, id);
+}
+
+export async function getCurrentBudgetDraft(userId: string, asOfDate: string): Promise<Budget | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM budgets WHERE user_id = ? AND status = 'draft' AND deleted = 0 AND period_kind = 'MONTHLY' AND period_start <= ? AND period_end >= ? ORDER BY updated_at DESC LIMIT 1",
+    userId, asOfDate, asOfDate,
+  );
+  return row ? readBudget(db, userId, row.id) : null;
 }
 
 export async function getBudgetDraftTracking(userId: string, id: string): Promise<BudgetTracking | null> {
@@ -282,10 +299,10 @@ export async function createBudgetDraft(
       `INSERT INTO budgets
         (id, user_id, status, allocation_method, period_kind, period_start, period_end,
          budget_period_days, total_amount_minor, surplus_handling, deficit_handling,
-         allow_deficit_planning, version, deleted, created_at, updated_at)
-       VALUES (?, ?, 'draft', 'MANUAL', ?, ?, ?, ?, ?, 'LEAVE_UNALLOCATED', 'BLOCK_ACTIVATION', 0, 1, 0, ?, ?)`,
+         allow_deficit_planning, debt_budget_amount_minor, version, deleted, created_at, updated_at)
+       VALUES (?, ?, 'draft', 'MANUAL', ?, ?, ?, ?, ?, 'LEAVE_UNALLOCATED', 'BLOCK_ACTIVATION', 0, ?, 1, 0, ?, ?)`,
       budgetId, userId, input.periodKind, input.periodStart, input.periodEnd, periodDays,
-      input.totalAmountMinor, timestamp, timestamp,
+       input.totalAmountMinor, input.periodKind === "MONTHLY" ? (input.debtBudgetMinor ?? 0) : 0, timestamp, timestamp,
     );
     for (const [index, allocation] of input.allocations.entries()) {
       await db.runAsync(
@@ -299,6 +316,7 @@ export async function createBudgetDraft(
     }
 
     const payload = { id: budgetId, user_id: userId, status: "draft", allocation_method: "MANUAL", ...input,
+      debt_budget_amount_minor: input.periodKind === "MONTHLY" ? (input.debtBudgetMinor ?? 0) : 0,
       budget_period_days: periodDays, surplus_handling: "LEAVE_UNALLOCATED", deficit_handling: "BLOCK_ACTIVATION",
       allow_deficit_planning: false, allocations: input.allocations.map((allocation, index) => ({ id: allocationIds[index], ...allocation })), };
     const operation = await enqueueOperation(db, {
@@ -344,9 +362,10 @@ export async function updateBudgetDraft(
     const timestamp = new Date().toISOString();
     await db.runAsync(
       `UPDATE budgets SET period_kind = ?, period_start = ?, period_end = ?, budget_period_days = ?,
-        total_amount_minor = ?, version = version + 1, updated_at = ?
+        total_amount_minor = ?, debt_budget_amount_minor = ?, version = version + 1, updated_at = ?
        WHERE user_id = ? AND id = ?`,
-      input.periodKind, input.periodStart, input.periodEnd, periodDays, input.totalAmountMinor, timestamp, userId, id,
+      input.periodKind, input.periodStart, input.periodEnd, periodDays, input.totalAmountMinor,
+      input.periodKind === "MONTHLY" ? (input.debtBudgetMinor ?? 0) : 0, timestamp, userId, id,
     );
     await db.runAsync("UPDATE budget_allocations SET deleted = 1, version = version + 1, updated_at = ? WHERE user_id = ? AND budget_id = ? AND deleted = 0", timestamp, userId, id);
     for (const [index, allocation] of input.allocations.entries()) {
@@ -368,7 +387,7 @@ export async function updateBudgetDraft(
     };
     const operation = await enqueueOperation(db, {
       userId, deviceId, entity: "budgets", recordId: id, operationType: "update", baseVersion: current.version,
-      changedFields: ["period_kind", "period_start", "period_end", "budget_period_days", "total_amount_minor", "allocations"],
+      changedFields: ["period_kind", "period_start", "period_end", "budget_period_days", "total_amount_minor", "debt_budget_amount_minor", "allocations"],
       payload, failureMessage: "This budget draft could not be updated.",
     });
     result = { budget: (await readBudget(db, userId, id))!, operation };

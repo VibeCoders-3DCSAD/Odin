@@ -28,6 +28,7 @@ import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../f
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
+import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
@@ -202,6 +203,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
 export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
+  const [debtPaymentId, setDebtPaymentId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -761,7 +763,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "add-transaction") {
-      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onClose={() => setCurrentPage(transactionReturnPage)} />;
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} debtAccountId={debtPaymentId ?? undefined} onClose={() => { setDebtPaymentId(null); setCurrentPage(transactionReturnPage); }} />;
     }
 
     if (currentPage === "add-recurring-transaction") {
@@ -794,6 +796,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "budgeting") {
       return <BudgetingScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} />;
+    }
+
+    if (currentPage === "debt-manager") {
+      return <DebtManagerScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} onPaymentRequested={(id) => { setDebtPaymentId(id); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} />;
     }
 
     if (currentPage === "dashboard") {

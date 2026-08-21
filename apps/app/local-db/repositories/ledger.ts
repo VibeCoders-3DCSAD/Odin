@@ -532,51 +532,39 @@ export async function createIncome(
   return result!;
 }
 
+export async function createExpenseInTransaction(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  input: CreateExpenseInput,
+): Promise<{ transaction: Transaction; operation: SyncOperation }> {
+  const ts = now();
+  const id = randomUUID();
+  await validateExpenseShape(db, userId, input);
+  await applyBalanceEffects(db, userId, "expense", input.source_account_id, null, input.amount_centavos);
+  const { sql, params } = buildTransactionInsert(id, userId, "expense", input, ts);
+  await db.runAsync(sql, ...params);
+  const operation = await enqueueOperation(db, {
+    userId, deviceId, entity: "transactions", recordId: id, operationType: "create",
+    baseVersion: null, changedFields: [],
+    payload: { ...input, transaction_type: "expense", destination_account_id: null },
+    failureMessage: "This expense transaction could not be created.",
+  });
+  const row = await db.getFirstAsync<TransactionRow>("SELECT * FROM transactions WHERE user_id = ? AND id = ?", userId, id);
+  return { transaction: mapTransaction(row!), operation };
+}
+
 export async function createExpense(
   userId: string,
   deviceId: string,
   input: CreateExpenseInput,
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const db = await getDb();
-  const ts = now();
-  const id = randomUUID();
 
-  let result: { transaction: Transaction; operation: SyncOperation };
+  let result!: { transaction: Transaction; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
-    await validateExpenseShape(db, userId, input);
-
-    await applyBalanceEffects(
-      db, userId, "expense", input.source_account_id, null, input.amount_centavos,
-    );
-
-    const { sql, params } = buildTransactionInsert(id, userId, "expense", input, ts);
-    await db.runAsync(sql, ...params);
-
-    const operation = await enqueueOperation(db, {
-      userId,
-      deviceId,
-      entity: "transactions",
-      recordId: id,
-      operationType: "create",
-      baseVersion: null,
-      changedFields: [],
-      payload: {
-        ...input,
-        transaction_type: "expense",
-        subcategory_id: input.subcategory_id,
-        source_account_id: input.source_account_id,
-        destination_account_id: null,
-      },
-      failureMessage: `This expense transaction could not be created.`,
-    });
-
-    const row = await db.getFirstAsync<TransactionRow>(
-      "SELECT * FROM transactions WHERE user_id = ? AND id = ?",
-      userId,
-      id,
-    );
-    result = { transaction: mapTransaction(row!), operation };
+    result = await createExpenseInTransaction(db, userId, deviceId, input);
   });
 
   return result!;

@@ -18,7 +18,10 @@ export type SyncableEntity =
   | "savings_goals"
   | "debt_accounts"
   | "alerts"
-  | "notification_preferences";
+  | "notification_preferences"
+  | "debt_payments"
+  | "user_debt_priorities"
+  | "debt_strategy_preferences";
 
 export type SyncOperation = {
   operation_id: string;

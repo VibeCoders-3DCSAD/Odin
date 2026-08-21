@@ -24,6 +24,10 @@ const SYNCED_ENTITIES = new Set([
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "budgets",
+  "debt_accounts",
+  "debt_payments",
+  "user_debt_priorities",
+  "debt_strategy_preferences",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -232,12 +236,15 @@ const RECURRING_OCCURRENCE_FIELDS = new Set([
 
 const BUDGET_CREATE_FIELDS = new Set([
   "status", "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
-  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning",
+  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning", "debt_budget_amount_minor", "debtBudgetMinor",
 ]);
 
 const BUDGET_UPDATE_FIELDS = new Set([
-  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
+  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debt_budget_amount_minor", "debtBudgetMinor",
 ]);
+
+const DEBT_ACCOUNT_FIELDS = new Set(["name", "lender_name", "preset_key", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes"]);
+const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes"]);
 
 export async function prepareOperation(
   supabase: SupabaseClient,
@@ -422,6 +429,18 @@ async function validateCreatePayload(
       throw new Error("only manual draft budgets can sync");
     }
     return validateBudgetPayload(supabase, userId, payload, BUDGET_CREATE_FIELDS);
+  }
+
+  if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
+    const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
+    assertOnlyAllowed(payload, allowed);
+    const sanitized = sanitizePayload(payload, allowed);
+    if (entity === "debt_accounts") {
+      requireString(sanitized, "name"); requireString(sanitized, "preset_key");
+      if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(sanitized.preset_key as string)) throw new Error("preset_key must be a safe slug");
+      if (sanitized.preset_data !== undefined && (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data))) throw new Error("preset_data must be an object");
+    }
+    return sanitized;
   }
 
   if (entity === "transaction_templates") {
@@ -739,6 +758,10 @@ async function validateBudgetPayload(
   if (payload.periodKind === "CUSTOM" && periodDays > 366) throw new Error("CUSTOM budgets cannot exceed 366 days");
   if (payload.budget_period_days !== periodDays) throw new Error("budget_period_days must match the inclusive date range");
   requirePositiveInteger(payload, "totalAmountMinor");
+  if (payload.debt_budget_amount_minor !== undefined) {
+    if (typeof payload.debt_budget_amount_minor !== "number" || !Number.isInteger(payload.debt_budget_amount_minor) || payload.debt_budget_amount_minor < 0) throw new Error("debt_budget_amount_minor must be a non-negative integer");
+    if (payload.periodKind !== "MONTHLY" && payload.debt_budget_amount_minor !== 0) throw new Error("debt budget requires a monthly budget");
+  }
   if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
   let allocated = 0;
   for (const allocation of payload.allocations) {
@@ -752,7 +775,7 @@ async function validateBudgetPayload(
     if (value.categoryId) await verifyCategoryOwnership(supabase, userId, value.categoryId as string);
     if (value.subcategoryId) await verifySubcategoryOwnership(supabase, userId, value.subcategoryId as string, "expense");
   }
-  if (allocated > (payload.totalAmountMinor as number)) throw new Error("allocations cannot exceed the budget total");
+  if (allocated + Number(payload.debt_budget_amount_minor ?? 0) > (payload.totalAmountMinor as number)) throw new Error("allocations and debt budget cannot exceed the budget total");
   return payload;
 }
 
@@ -789,6 +812,10 @@ async function validateUpdatePayload(
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else if (entity === "budgets") {
     return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS);
+  } else if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
+    const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
+    assertOnlyAllowed(payload, allowed);
+    return sanitizePayload(payload, allowed);
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
