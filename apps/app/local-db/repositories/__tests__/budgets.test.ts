@@ -139,10 +139,12 @@ describe("budget drafts repository", () => {
     expect(trackingQuery).toContain("s.is_active = 1");
     expect(trackingQuery).toContain("c.user_id = ? OR c.is_system = 1");
     expect(trackingQuery).toContain("t.transaction_date >= ? AND t.transaction_date <= ?");
+    expect(trackingQuery).toContain("NOT EXISTS (SELECT 1 FROM debt_payments");
     expect(trackingCall?.slice(1)).toEqual([
       "user-1",
       "2026-08-01",
       "2026-08-10",
+      "user-1",
       "user-1",
       "user-1",
       "user-1",

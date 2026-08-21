@@ -32,6 +32,7 @@ DECLARE
   v_deleted boolean;
   v_item jsonb;
   v_rank integer := 0;
+  v_existing_priority_id uuid;
   v_debt_id uuid;
   v_current_balance bigint;
   v_transaction_id uuid;
@@ -166,11 +167,25 @@ BEGIN
         RAISE EXCEPTION 'priority references an inaccessible debt';
       END IF;
     END LOOP;
-    DELETE FROM user_debt_priorities WHERE user_id = v_user_id;
+    UPDATE user_debt_priorities
+    SET priority_rank = priority_rank + 1000000, deleted = true, version = version + 1, updated_at = now()
+    WHERE user_id = v_user_id;
     FOR v_item IN SELECT * FROM jsonb_array_elements(COALESCE(p_payload->'priorities', '[]'::jsonb)) LOOP
       v_rank := v_rank + 1;
-      INSERT INTO user_debt_priorities (id, user_id, debt_account_id, priority_rank, version, deleted, updated_at)
-      VALUES (gen_random_uuid(), v_user_id, (v_item #>> '{}')::uuid, v_rank, 1, false, now());
+      SELECT id INTO v_existing_priority_id
+      FROM user_debt_priorities
+      WHERE user_id = v_user_id AND debt_account_id = (v_item #>> '{}')::uuid
+      ORDER BY deleted, updated_at DESC
+      LIMIT 1;
+      IF v_existing_priority_id IS NULL THEN
+        INSERT INTO user_debt_priorities (id, user_id, debt_account_id, priority_rank, version, deleted, updated_at)
+        VALUES (gen_random_uuid(), v_user_id, (v_item #>> '{}')::uuid, v_rank, 1, false, now());
+      ELSE
+        UPDATE user_debt_priorities
+        SET priority_rank = v_rank, deleted = false, version = version + 1, updated_at = now()
+        WHERE id = v_existing_priority_id;
+      END IF;
+      v_existing_priority_id := NULL;
     END LOOP;
   ELSIF p_entity = 'debt_strategy_preferences' THEN
     INSERT INTO debt_strategy_preferences (user_id, strategy, version, deleted, updated_at)
