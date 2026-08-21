@@ -385,7 +385,7 @@ export async function updateBudgetDraft(
     };
     const operation = await enqueueOperation(db, {
       userId, deviceId, entity: "budgets", recordId: id, operationType: "update", baseVersion: current.version,
-      changedFields: ["period_kind", "period_start", "period_end", "budget_period_days", "total_amount_minor", "allocations"],
+      changedFields: ["periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations"],
       payload, failureMessage: "This budget draft could not be updated.",
     });
     result = { budget: (await readBudget(db, userId, id))!, operation };

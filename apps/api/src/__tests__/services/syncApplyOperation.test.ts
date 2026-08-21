@@ -153,7 +153,7 @@ describe("prepareOperation — budgets create", () => {
     expect(result.payload).toMatchObject({ periodStart: "2026-08-14", periodEnd: "2026-09-14" });
   });
 
-  it("accepts a valid budget update payload", async () => {
+  it("accepts the local budget update sync field contract", async () => {
     const result = await prepareOperation(mockClient, validUserId, {
       operation_id: "op-budget-update-1",
       entity: "budgets",
