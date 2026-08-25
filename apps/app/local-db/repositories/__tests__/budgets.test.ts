@@ -58,6 +58,43 @@ describe("budget drafts repository", () => {
     expect(db.runAsync).not.toHaveBeenCalled();
   });
 
+  test("counts the debt envelope with category allocations", async () => {
+    const db = createDbMock(jest.fn());
+    mockInitDatabase.mockResolvedValue(db);
+    const { createBudgetDraft } = await import("../budgets");
+
+    await expect(createBudgetDraft("user-1", "device-1", {
+      periodKind: "MONTHLY", periodStart: "2026-08-01", periodEnd: "2026-09-01",
+      totalAmountMinor: 1000, debtBudgetMinor: 500,
+      allocations: [{ categoryId: "category-1", amountMinor: 501 }],
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  test("stores zero debt budget for non-monthly periods", async () => {
+    const budgetRow = { id: "budget-1", user_id: "user-1", status: "draft", allocation_method: "MANUAL", period_kind: "WEEKLY", period_start: "2026-08-01", period_end: "2026-08-07", budget_period_days: 7, total_amount_minor: 1000, debt_budget_amount_minor: 0, version: 1, deleted: 0 };
+    const db = createDbMock(jest.fn(async (sql: string) => sql.includes("FROM budgets") ? budgetRow : null), jest.fn(async () => []));
+    mockInitDatabase.mockResolvedValue(db);
+    const { createBudgetDraft } = await import("../budgets");
+
+    await createBudgetDraft("user-1", "device-1", {
+      periodKind: "WEEKLY", periodStart: "2026-08-01", periodEnd: "2026-08-07",
+      totalAmountMinor: 1000, debtBudgetMinor: 500, allocations: [],
+    });
+    expect(db.runAsync.mock.calls[0]).toContain(0);
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(db, expect.objectContaining({ payload: expect.objectContaining({ debt_budget_amount_minor: 0 }) }));
+  });
+
+  test("selects the latest monthly draft covering the requested date", async () => {
+    const budgetRow = { id: "budget-2", user_id: "user-1", status: "draft", allocation_method: "MANUAL", period_kind: "MONTHLY", period_start: "2026-08-01", period_end: "2026-09-01", budget_period_days: 32, total_amount_minor: 1000, debt_budget_amount_minor: 300, version: 1, deleted: 0 };
+    const db = createDbMock(jest.fn(async (sql: string) => sql.startsWith("SELECT id FROM budgets") ? { id: "budget-2" } : sql.includes("FROM budgets") ? budgetRow : null), jest.fn(async (sql: string) => sql.includes("budget_allocations") ? [] : []));
+    mockInitDatabase.mockResolvedValue(db);
+    const { getCurrentBudgetDraft } = await import("../budgets");
+
+    await expect(getCurrentBudgetDraft("user-1", "2026-08-21")).resolves.toMatchObject({ id: "budget-2", debtBudgetMinor: 300 });
+    expect(db.getFirstAsync.mock.calls[0]).toEqual(expect.arrayContaining(["user-1", "2026-08-21", "2026-08-21"]));
+  });
+
   test("validates ownership before the transactional write", async () => {
     const db = createDbMock(jest.fn(async (sql: string) => {
       if (sql.includes("FROM categories")) return null;
@@ -89,7 +126,7 @@ describe("budget drafts repository", () => {
       if (sql.includes("FROM categories")) return { id: "category-1" };
       if (sql.includes("FROM budgets")) return budgetRow;
       return null;
-    }), jest.fn(async (sql: string) => sql.includes("budget_allocations") ? [allocationRow] : []));
+    }), jest.fn(async (sql: string) => sql.includes("categories") ? [{ id: "category-1" }] : sql.includes("budget_allocations") ? [allocationRow] : []));
     mockInitDatabase.mockResolvedValue(db);
     const { createBudgetDraft } = await import("../budgets");
 
@@ -138,7 +175,7 @@ describe("budget drafts repository", () => {
     expect(trackingQuery).toContain("s.kind = 'expense'");
     expect(trackingQuery).toContain("s.is_active = 1");
     expect(trackingQuery).toContain("c.user_id = ? OR c.is_system = 1");
-    expect(trackingQuery).toContain("t.transaction_date >= ? AND t.transaction_date <= ?");
+    expect(trackingQuery).toContain("t.transaction_date >= ? AND t.transaction_date < ?");
     expect(trackingQuery).toContain("NOT EXISTS (SELECT 1 FROM debt_payments");
     expect(trackingCall?.slice(1)).toEqual([
       "user-1",

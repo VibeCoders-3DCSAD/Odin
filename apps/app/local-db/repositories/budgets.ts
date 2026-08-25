@@ -64,6 +64,7 @@ export type BudgetTrackingAllocation = BudgetAllocation & {
 
 export type BudgetTracking = Omit<Budget, "allocations"> & {
   allocations: BudgetTrackingAllocation[];
+  debtActualPaymentMinor: number;
 };
 
 export type CreateBudgetInput = {
@@ -142,6 +143,7 @@ function validateInput(input: CreateBudgetInput): number {
   if (input.periodKind === "CUSTOM" && periodDays > 366) {
     throw new LocalDbError("VALIDATION_ERROR", "CUSTOM budgets cannot exceed 366 days");
   }
+  if (input.allocations.length > 100) throw new LocalDbError("VALIDATION_ERROR", "allocations cannot contain more than 100 items");
   if (!Number.isInteger(input.totalAmountMinor) || input.totalAmountMinor <= 0) {
     throw new LocalDbError("VALIDATION_ERROR", "totalAmountMinor must be a positive integer");
   }
@@ -180,17 +182,35 @@ async function readBudget(db: SQLite.SQLiteDatabase, userId: string, id: string)
   return mapBudget(row, allocations);
 }
 
+async function validateAllocationReferences(db: SQLite.SQLiteDatabase, userId: string, allocations: CreateBudgetInput["allocations"]): Promise<void> {
+  const categoryIds = [...new Set(allocations.map((allocation) => allocation.categoryId).filter((id): id is string => Boolean(id)))];
+  const subcategoryIds = [...new Set(allocations.map((allocation) => allocation.subcategoryId).filter((id): id is string => Boolean(id)))];
+  const [categoryRows, subcategoryRows] = await Promise.all([
+    categoryIds.length ? db.getAllAsync<{ id: string }>(`SELECT id FROM categories WHERE (user_id = ? OR is_system = 1) AND id IN (${categoryIds.map(() => "?").join(",")}) AND deleted = 0 AND is_active = 1`, userId, ...categoryIds) : [],
+    subcategoryIds.length ? db.getAllAsync<{ id: string }>(`SELECT id FROM subcategories WHERE (user_id = ? OR is_system = 1) AND id IN (${subcategoryIds.map(() => "?").join(",")}) AND deleted = 0 AND is_active = 1 AND kind = 'expense'`, userId, ...subcategoryIds) : [],
+  ]);
+  const categories = categoryRows ?? [];
+  const subcategories = subcategoryRows ?? [];
+  if (categories.length !== categoryIds.length || subcategories.length !== subcategoryIds.length) throw new LocalDbError("VALIDATION_ERROR", "allocation reference is not accessible");
+}
+
 export async function listBudgetDrafts(userId: string): Promise<Budget[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<BudgetRow>(
     "SELECT * FROM budgets WHERE user_id = ? AND status = 'draft' AND deleted = 0 ORDER BY period_start DESC, created_at DESC",
     userId,
   );
-  return Promise.all(rows.map(async (row) => mapBudget(row, await db.getAllAsync<AllocationRow>(
-    "SELECT * FROM budget_allocations WHERE user_id = ? AND budget_id = ? AND deleted = 0 ORDER BY rowid",
+  const allocations = await db.getAllAsync<AllocationRow>(
+    "SELECT * FROM budget_allocations WHERE user_id = ? AND deleted = 0 ORDER BY budget_id, rowid",
     userId,
-    row.id,
-  ))));
+  );
+  const allocationsByBudget = new Map<string, AllocationRow[]>();
+  for (const allocation of allocations) {
+    const budgetAllocations = allocationsByBudget.get(allocation.budget_id) ?? [];
+    budgetAllocations.push(allocation);
+    allocationsByBudget.set(allocation.budget_id, budgetAllocations);
+  }
+  return rows.map((row) => mapBudget(row, allocationsByBudget.get(row.id) ?? []));
 }
 
 export async function getBudgetDraft(userId: string, id: string): Promise<Budget | null> {
@@ -216,7 +236,7 @@ export async function getBudgetDraftTracking(userId: string, id: string): Promis
        FROM budget_allocations ba
         LEFT JOIN transactions t ON t.user_id = ?
           AND t.transaction_type = 'expense' AND t.status = 'posted' AND t.deleted = 0
-          AND t.transaction_date >= ? AND t.transaction_date <= ?
+           AND t.transaction_date >= ? AND t.transaction_date < ?
           AND NOT EXISTS (SELECT 1 FROM debt_payments dp WHERE dp.transaction_id = t.id AND dp.user_id = ? AND dp.deleted = 0)
          AND (
            (ba.subcategory_id IS NOT NULL AND t.subcategory_id = ba.subcategory_id AND EXISTS (
@@ -263,8 +283,13 @@ export async function getBudgetDraftTracking(userId: string, id: string): Promis
     userId,
   );
   const actualByAllocation = new Map(rows.map((row) => [row.id, row.actual_amount_minor]));
+  const debtActual = await db.getFirstAsync<{ total_minor: number }>(
+    "SELECT COALESCE(SUM(amount_centavos), 0) AS total_minor FROM debt_payments WHERE user_id=? AND payment_date>=? AND payment_date<? AND deleted=0",
+    userId, budget.periodStart, budget.periodEnd,
+  );
   return {
     ...budget,
+    debtActualPaymentMinor: debtActual?.total_minor ?? 0,
     allocations: budget.allocations.map((allocation) => ({
       ...allocation,
       actualAmountMinor: actualByAllocation.get(allocation.id) ?? 0,
@@ -285,17 +310,7 @@ export async function createBudgetDraft(
   let result: { budget: Budget; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
-    for (const allocation of input.allocations) {
-      const id = allocation.categoryId ?? allocation.subcategoryId;
-      if (!id) throw new LocalDbError("VALIDATION_ERROR", "allocation reference is required");
-      const table = allocation.categoryId ? "categories" : "subcategories";
-      const accessible = await db.getFirstAsync<{ id: string }>(
-        `SELECT id FROM ${table} WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0 AND is_active = 1`,
-        userId,
-        id,
-      );
-      if (!accessible) throw new LocalDbError("VALIDATION_ERROR", `${table.slice(0, -1)} does not belong to the user`);
-    }
+    await validateAllocationReferences(db, userId, input.allocations);
 
     await db.runAsync(
       `INSERT INTO budgets
@@ -349,17 +364,7 @@ export async function updateBudgetDraft(
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Budget draft not found");
 
-    for (const allocation of input.allocations) {
-      const referenceId = allocation.categoryId ?? allocation.subcategoryId;
-      if (!referenceId) throw new LocalDbError("VALIDATION_ERROR", "allocation reference is required");
-      const table = allocation.categoryId ? "categories" : "subcategories";
-      const accessible = await db.getFirstAsync<{ id: string }>(
-        `SELECT id FROM ${table} WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0 AND is_active = 1`,
-        userId,
-        referenceId,
-      );
-      if (!accessible) throw new LocalDbError("VALIDATION_ERROR", `${table.slice(0, -1)} does not belong to the user`);
-    }
+    await validateAllocationReferences(db, userId, input.allocations);
 
     const timestamp = new Date().toISOString();
     await db.runAsync(
@@ -381,8 +386,10 @@ export async function updateBudgetDraft(
       );
     }
 
-    const payload = {
-      id, user_id: userId, status: "draft", allocation_method: "MANUAL", ...input,
+     const debtBudgetMinor = input.periodKind === "MONTHLY" ? (input.debtBudgetMinor ?? 0) : 0;
+     const payload = {
+       id, user_id: userId, status: "draft", allocation_method: "MANUAL", ...input,
+       debt_budget_amount_minor: debtBudgetMinor,
       budget_period_days: periodDays, surplus_handling: "LEAVE_UNALLOCATED", deficit_handling: "BLOCK_ACTIVATION",
       allow_deficit_planning: false,
       allocations: input.allocations.map((allocation, index) => ({ id: allocationIds[index], ...allocation })),

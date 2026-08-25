@@ -4,7 +4,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { ArrowLeft, Plus } from "phosphor-react-native";
 import { createBudgetDraft, getBudgetDraftTracking, listBudgetDrafts, updateBudgetDraft, type Budget, type BudgetTracking, type CreateBudgetInput } from "../../local-db/repositories/budgets";
 import CategorySelector from "../../components/CategorySelector";
-import { calculateProvisionalPercentage } from "./constant";
+import { calculateBudgetSpentAmount, calculateProvisionalPercentage } from "./constant";
 import { getCategory, getSubcategory } from "../../local-db/repositories/taxonomy";
 
 type Props = {
@@ -120,6 +120,24 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     }
   };
 
+  const editDraft = (draft: BudgetTracking) => {
+    setSelectedDraft(null);
+    setEditingDraftId(draft.id);
+    setShowCreate(true);
+    setPeriodKind(draft.periodKind);
+    setPeriodStart(draft.periodStart);
+    setPeriodEnd(draft.periodEnd);
+    setTotalAmount((draft.totalAmountMinor / 100).toFixed(2));
+    setDebtBudget((draft.debtBudgetMinor / 100).toFixed(2));
+    setAllocationRows(draft.allocations.map((allocation) => ({
+      id: allocation.id,
+      categoryId: allocation.categoryId,
+      subcategoryId: allocation.subcategoryId,
+      label: allocationLabels[allocation.id] ?? allocation.categoryId ?? allocation.subcategoryId ?? "",
+      amount: (allocation.amountMinor / 100).toFixed(2),
+    })));
+  };
+
   useEffect(() => {
     void loadDrafts();
   }, [loadDrafts]);
@@ -209,11 +227,18 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
             accessibilityRole="button"
             accessibilityLabel="Create budget draft"
             onPress={() => {
-              setSelectedDraft(null);
-              setAllocationLabels({});
-              setAllocationRows([emptyAllocationRow]);
-              setEditingDraftId(null);
-              setShowCreate(true);
+               setSelectedDraft(null);
+               setAllocationLabels({});
+               setAllocationRows([emptyAllocationRow]);
+               setEditingDraftId(null);
+               setPeriodKind("MONTHLY");
+               setPeriodStart("");
+               setPeriodEnd("");
+               setTotalAmount("");
+               setDebtBudget("");
+               setCreateError(null);
+               setSyncError(null);
+               setShowCreate(true);
             }}
             style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#013220", alignItems: "center", justifyContent: "center" }}
           >
@@ -300,12 +325,13 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
       ) : selectedDraft ? (
         <View>
           {(() => {
-            const spentAmount = selectedDraft.allocations.reduce((total, allocation) => total + allocation.actualAmountMinor, 0);
+            const spentAmount = calculateBudgetSpentAmount(selectedDraft.allocations.map((allocation) => allocation.actualAmountMinor), selectedDraft.debtActualPaymentMinor);
             const percentage = selectedDraft.totalAmountMinor > 0 ? Math.min((spentAmount / selectedDraft.totalAmountMinor) * 100, 100) : 0;
             return (
               <>
-                <View style={{ marginTop: 16, backgroundColor: "#F7F0E1", borderRadius: 16, padding: 16 }}>
-                  <Text style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.mut }}>Draft budget · {selectedDraft.periodStart}–{selectedDraft.periodEnd}</Text>
+                 <View style={{ marginTop: 16, backgroundColor: "#F7F0E1", borderRadius: 16, padding: 16 }}>
+                   <Pressable accessibilityRole="button" accessibilityLabel="Edit budget draft" onPress={() => editDraft(selectedDraft)} style={{ alignSelf: "flex-end" }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#0E6D46" }}>Edit</Text></Pressable>
+                   <Text style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.mut }}>Draft budget · {selectedDraft.periodStart}–{selectedDraft.periodEnd}</Text>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 28, color: formPalette.ink, marginTop: 8 }}>{formatPeso(selectedDraft.totalAmountMinor)}</Text>
                   <View accessibilityRole="progressbar" accessibilityLabel={`${percentage.toFixed(1)} percent of budget spent`} style={{ height: 6, borderRadius: 3, backgroundColor: "#E4E8E2", overflow: "hidden", marginTop: 14 }}>
                     <View style={{ width: `${percentage}%`, height: "100%", backgroundColor: "#0E6D46" }} />
@@ -315,9 +341,10 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#0E6D46" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - spentAmount, 0))} left</Text>
                   </View>
                 </View>
-                <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#EEFFF8" }}>
-                   <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - selectedDraft.allocatedAmountMinor, 0))} unallocated · {formatPeso(selectedDraft.debtBudgetMinor)} debt</Text>
-                </View>
+                 <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#EEFFF8" }}>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - selectedDraft.allocatedAmountMinor, 0))} unallocated · {formatPeso(selectedDraft.debtBudgetMinor)} debt envelope</Text>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center", marginTop: 4 }}>{formatPeso(selectedDraft.debtActualPaymentMinor)} debt payments made</Text>
+                 </View>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: formPalette.ink, marginTop: 18 }}>Categories</Text>
                 <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 22, marginTop: 10 }}>
                   <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut }}>PLANNED</Text>
