@@ -1,7 +1,7 @@
 import type { Migration } from "../client";
 
 const migration: Migration = {
-  version: 19,
+  version: 18,
   up: async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS debt_accounts (
