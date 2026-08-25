@@ -117,6 +117,10 @@ export async function pushOperations(
           conflicted_fields: result.conflicted_fields ?? undefined,
       });
     } catch (error) {
+      const activeBudgetConflict = op.entity === "budgets"
+        && op.operation_type === "create"
+        && error instanceof Error
+        && error.message === "only one budget can exist at a time";
       console.error("[sync/push] rejected", {
         userId,
         deviceId,
@@ -138,8 +142,8 @@ export async function pushOperations(
 
       results.push({
         operation_id: op.operation_id,
-        status: "rejected",
-          reason: CLIENT_SYNC_FAILURE_REASON,
+        status: activeBudgetConflict ? "conflict" : "rejected",
+        reason: activeBudgetConflict ? "active_budget_exists" : CLIENT_SYNC_FAILURE_REASON,
       });
     }
   }

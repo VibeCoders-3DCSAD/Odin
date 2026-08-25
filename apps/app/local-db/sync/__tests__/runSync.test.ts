@@ -98,4 +98,33 @@ describe("runSync concurrency", () => {
     expect(database.runAsync).toHaveBeenCalledWith("UPDATE sync_queue SET status = 'synced' WHERE operation_id = ?", "transaction-op");
     expect(database.runAsync).toHaveBeenCalledWith("UPDATE sync_queue SET status = 'synced' WHERE operation_id = ?", "payment-op");
   });
+
+  it("discards a local budget that collides with the server's active budget", async () => {
+    const budget = {
+      operation_id: "budget-op", entity: "budgets", record_id: "budget-1", operation_type: "create",
+      base_version: null, changed_fields: "[]", payload: "{}", user_id: "user-budget",
+      device_id: "device-budget", status: "pending", attempts: 0, created_at: "2026-08-01", last_error: null,
+    };
+    const database: any = createDb();
+    database.getAllAsync.mockImplementation(async (sql: string) => sql.includes("FROM sync_queue") ? [budget] : []);
+    mockInitDatabase.mockResolvedValue(database);
+    global.fetch = jest.fn(async (url: string) => url.includes("register-device")
+      ? { ok: true }
+      : url.includes("/push")
+        ? { ok: true, json: async () => ({ payload: { results: [{ operation_id: "budget-op", status: "conflict", reason: "active_budget_exists" }] } }) }
+        : { ok: true, json: async () => ({ payload: { changes: {}, cursors: {}, successful: true } }) }) as unknown as typeof fetch;
+
+    await runSync("user-budget", "device-budget", "token-budget");
+
+    expect(database.runAsync).toHaveBeenCalledWith(
+      "UPDATE budgets SET status = 'deleted', deleted = 1, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND id = ?",
+      "user-budget",
+      "budget-1",
+    );
+    expect(database.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE sync_queue SET status = 'discarded'"),
+      expect.any(String),
+      "budget-op",
+    );
+  });
 });

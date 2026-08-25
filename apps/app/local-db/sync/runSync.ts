@@ -218,6 +218,14 @@ async function pushQueue(
       pushed++;
     } else if (result.status === "conflict") {
       const metadata = JSON.stringify({ reason: result.reason ?? "conflict", currentVersion: result.current_version ?? null, conflictedFields: result.conflicted_fields ?? [] });
+      const row = rows.find((candidate) => candidate.operation_id === result.operation_id);
+      if (result.reason === "active_budget_exists" && row?.entity === "budgets" && row.operation_type === "create") {
+        await db.runAsync(
+          "UPDATE budgets SET status = 'deleted', deleted = 1, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND id = ?",
+          userId,
+          row.record_id,
+        );
+      }
       await db.runAsync(
         `UPDATE sync_queue SET status = 'discarded', discarded_at = CURRENT_TIMESTAMP,
          last_error = ? WHERE operation_id = ?`,

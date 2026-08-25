@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createMockQuery } from "../helpers/supabase.js";
 import { pushOperations } from "../../services/syncService.js";
 
 test("pushes a linked debt payment once and converges both balances", async () => {
@@ -63,4 +64,22 @@ test("returns version conflicts with metadata", async () => {
   }]);
 
   expect(result).toEqual([{ operation_id: "debt-operation-1", status: "conflict", reason: "debt version changed", current_version: 3, conflicted_fields: ["name"] }]);
+});
+
+test("classifies a second budget create as an active-budget conflict", async () => {
+  const budgetQuery = createMockQuery({ data: { id: "existing-budget" }, error: null });
+  const supabase = {
+    from: jest.fn(() => budgetQuery),
+  } as unknown as SupabaseClient;
+
+  const result = await pushOperations(supabase, "user-1", "device-1", [{
+    operation_id: "budget-operation-1", entity: "budgets", record_id: "budget-1", operation_type: "create",
+    base_version: null, changed_fields: [],
+    payload: {
+      status: "draft", allocation_method: "MANUAL", periodKind: "CUSTOM", periodStart: "2026-08-01",
+      periodEnd: "2026-08-10", budget_period_days: 10, totalAmountMinor: 1000, allocations: [],
+    },
+  }]);
+
+  expect(result).toEqual([{ operation_id: "budget-operation-1", status: "conflict", reason: "active_budget_exists" }]);
 });
