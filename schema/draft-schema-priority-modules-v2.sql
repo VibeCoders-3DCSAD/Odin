@@ -1753,6 +1753,7 @@ CREATE TABLE savings_goal_contributions (
   amount_centavos bigint NOT NULL,
   notes text,
   created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   CONSTRAINT savings_goal_contributions_amount_chk

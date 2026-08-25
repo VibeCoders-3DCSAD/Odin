@@ -76,6 +76,7 @@ export type CreateExpenseInput = {
   merchant_name?: string;
   counterparty_name?: string;
   notes?: string;
+  client_mutation_id?: string;
 };
 
 export type CreateTransferInput = {
@@ -391,21 +392,12 @@ function buildTransactionInsert(
   input: CreateIncomeInput | CreateExpenseInput | CreateTransferInput,
   ts: string,
 ): { sql: string; params: SQLite.SQLiteBindValue[] } {
-  const sourceAccountId =
-    transactionType === "expense" || transactionType === "transfer"
-      ? (input as Record<string, unknown>).source_account_id ?? null
-      : null;
-  const destinationAccountId =
-    transactionType === "income" || transactionType === "transfer"
-      ? (input as Record<string, unknown>).destination_account_id ?? null
-      : null;
-  const subcategoryId =
-    transactionType === "income" || transactionType === "expense"
-      ? (input as Record<string, unknown>).subcategory_id ?? null
-      : null;
-  const merchantName = (input as Record<string, unknown>).merchant_name ?? null;
-  const counterpartyName = (input as Record<string, unknown>).counterparty_name ?? null;
-  const notes = (input as Record<string, unknown>).notes ?? null;
+  const sourceAccountId = transactionType === "expense" || transactionType === "transfer" ? (input as CreateExpenseInput | CreateTransferInput).source_account_id : null;
+  const destinationAccountId = transactionType === "income" || transactionType === "transfer" ? (input as CreateIncomeInput | CreateTransferInput).destination_account_id : null;
+  const subcategoryId = transactionType === "income" || transactionType === "expense" ? (input as CreateIncomeInput | CreateExpenseInput).subcategory_id : null;
+  const merchantName = "merchant_name" in input ? input.merchant_name ?? null : null;
+  const counterpartyName = "counterparty_name" in input ? input.counterparty_name ?? null : null;
+  const notes = input.notes ?? null;
 
   return {
     sql: `INSERT INTO transactions
@@ -413,11 +405,11 @@ function buildTransactionInsert(
        amount_centavos, subcategory_id, source_account_id, destination_account_id,
        recurring_template_id, merchant_name, counterparty_name, notes,
        client_mutation_id, metadata, version, deleted, created_at, updated_at)
-     VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, '{}', 1, 0, ?, ?)`,
+     VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
     params: [
       id, userId, transactionType, input.transaction_date, ts,
       input.amount_centavos, subcategoryId, sourceAccountId, destinationAccountId,
-      merchantName, counterpartyName, notes, ts, ts,
+      merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null, ts, ts,
     ],
   };
 }
