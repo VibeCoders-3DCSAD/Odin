@@ -29,6 +29,7 @@ import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
 import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
+import DebtCreateScreen from "../features/debt-manager/DebtCreateScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
@@ -72,6 +73,7 @@ type Page =
   | "budgeting"
   | "savings-goals"
   | "debt-manager"
+  | "add-debt"
   | "insurance"
   | "assistant"
   | "add-transaction"
@@ -189,6 +191,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   budgeting: { title: "Budgeting", subtitle: "Plan your money" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
   "debt-manager": { title: "Debt Manager", subtitle: "Manage liabilities" },
+  "add-debt": { title: "New Debt", subtitle: "Add a debt record" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
@@ -799,7 +802,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "debt-manager") {
-      return <DebtManagerScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} onPaymentRequested={(id) => { setDebtPaymentId(id); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} />;
+      return <DebtManagerScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} onCreateRequested={() => setCurrentPage("add-debt")} onPaymentRequested={(id) => { setDebtPaymentId(id); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} />;
+    }
+
+    if (currentPage === "add-debt") {
+      return <DebtCreateScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("debt-manager")} onSaved={() => setCurrentPage("debt-manager")} />;
     }
 
     if (currentPage === "dashboard") {
