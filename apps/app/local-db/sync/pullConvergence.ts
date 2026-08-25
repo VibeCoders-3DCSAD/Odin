@@ -153,7 +153,7 @@ export function normalizePullRow(
     } else if (col === "metadata") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
-    } else if (table === "debt_accounts" && col === "preset_data") {
+    } else if (table === "debt_accounts" && (col === "preset_data" || col === "payment_schedule")) {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
     } else if (table === "budgets" && col === "period_kind") {
@@ -216,6 +216,16 @@ export async function applyPullRow(
 
   if (!existing) {
     if (rowDeleted) return;
+
+    if (table === "budgets") {
+      await db.runAsync(
+        `UPDATE budgets SET status = 'deleted', deleted = 1, version = version + 1, updated_at = ?
+         WHERE user_id = ? AND id <> ? AND deleted = 0 AND status != 'deleted'`,
+        now,
+        row.user_id as SQLite.SQLiteBindValue,
+        recordId,
+      );
+    }
 
     const columns = Object.keys(row).join(", ");
     const placeholders = Object.keys(row).map(() => "?").join(", ");
