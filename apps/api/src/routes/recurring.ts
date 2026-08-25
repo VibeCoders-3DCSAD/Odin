@@ -69,7 +69,15 @@ router.post("/run", async (request: Request, response: Response) => {
 
     response.status(200).json({ payload: result });
   } catch (error) {
-    console.error("Recurring engine run failed:", error);
+    console.error("Recurring engine run failed", {
+      operation: "recurring_engine_run",
+      method: request.method,
+      route: request.originalUrl,
+      request_id: request.header("x-request-id")?.slice(0, 128) ?? null,
+      as_of: typeof as_of === "string" ? as_of.slice(0, 32) : null,
+      limit: typeof limit === "number" ? limit : null,
+      error,
+    });
     response.status(500).json({
       error: "Internal Server Error",
       message: "Failed to run recurring transaction engine.",
@@ -101,7 +109,14 @@ router.post("/run/me", async (request: Request, response: Response) => {
 
     response.status(200).json({ payload: result });
   } catch (error) {
-    console.error("Recurring engine run/me failed:", error);
+    console.error("Recurring engine run/me failed", {
+      operation: "recurring_engine_run_me",
+      method: request.method,
+      route: request.originalUrl,
+      request_id: request.header("x-request-id")?.slice(0, 128) ?? null,
+      user_id: data.user.id,
+      error,
+    });
     response.status(500).json({
       error: "Internal Server Error",
       message: "Failed to run recurring transaction engine.",

@@ -320,7 +320,15 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     .rpc("submit_onboarding_session", { p_session_id: sessionId, p_user_id: userId });
 
   if (rpcError) {
-    console.error("submit_onboarding_session RPC error:", rpcError);
+    console.error("submit_onboarding_session RPC error", {
+      operation: "submit_onboarding_session",
+      method: request.method,
+      route: request.originalUrl,
+      request_id: request.header("x-request-id")?.slice(0, 128) ?? null,
+      user_id: userId,
+      session_id: sessionId,
+      error: rpcError,
+    });
     response.status(500).json({
       error: "Internal Server Error",
       message: ONBOARDING_ERRORS.submit_failed,
