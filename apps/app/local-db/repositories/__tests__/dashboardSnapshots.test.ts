@@ -1,8 +1,8 @@
 import { jest } from "@jest/globals";
 
-const mockRunAsync = jest.fn();
-const mockGetFirstAsync = jest.fn();
-const mockGetAllAsync = jest.fn();
+const mockRunAsync = jest.fn<(...args: any[]) => Promise<any>>();
+const mockGetFirstAsync = jest.fn<(...args: any[]) => Promise<any>>();
+const mockGetAllAsync = jest.fn<(...args: any[]) => Promise<any>>();
 
 jest.mock("expo-sqlite", () => ({
   openDatabaseAsync: jest.fn(),
@@ -153,7 +153,7 @@ describe("upsertSnapshot", () => {
     await upsertSnapshot("user-1", "savings_goals", { progress: 42 });
 
     expect(mockRunAsync).toHaveBeenCalledTimes(1);
-    const [sql, ...bindValues] = mockRunAsync.mock.calls[0];
+    const [sql, ...bindValues] = mockRunAsync.mock.calls[0]!;
     expect(sql).toContain("INSERT INTO dashboard_snapshots");
     expect(sql).toContain("ON CONFLICT(user_id, source)");
     expect(bindValues).toContain("user-1");

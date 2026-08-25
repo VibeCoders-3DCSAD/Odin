@@ -1,4 +1,6 @@
-const mockInitDatabase = jest.fn();
+import { jest } from "@jest/globals";
+
+const mockInitDatabase = jest.fn<(...args: any[]) => any>();
 
 jest.mock("../../client", () => ({
   initDatabase: (...args: unknown[]) => mockInitDatabase(...args),

@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "test": "jest --silent"
+    "test": "RUN_INTEGRATION_TESTS=true jest --silent --runInBand",
+    "test:unit": "jest --silent --runInBand --testPathIgnorePatterns=/integration/"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.57.4",

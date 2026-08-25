@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 
-const mockGetFirstAsync = jest.fn();
-const mockGetAllAsync = jest.fn();
+const mockGetFirstAsync = jest.fn<(...args: any[]) => Promise<any>>();
+const mockGetAllAsync = jest.fn<(...args: any[]) => Promise<any>>();
 
 jest.mock("expo-sqlite", () => ({
   openDatabaseAsync: jest.fn(),
@@ -83,8 +83,8 @@ describe("getDashboardSummary", () => {
     const summary = await getDashboardSummary("user-1");
 
     expect(summary.recentTransactions).toHaveLength(2);
-    expect(summary.recentTransactions[0].id).toBe("t1");
-    expect(summary.recentTransactions[1].id).toBe("t2");
+    expect(summary.recentTransactions[0]!.id).toBe("t1");
+    expect(summary.recentTransactions[1]!.id).toBe("t2");
   });
 
   it("scopes queries by user_id", async () => {
@@ -93,10 +93,10 @@ describe("getDashboardSummary", () => {
 
     await getDashboardSummary("user-42");
 
-    const balanceCall = mockGetFirstAsync.mock.calls[0];
+    const balanceCall = mockGetFirstAsync.mock.calls[0]!;
     expect(balanceCall[1]).toBe("user-42");
 
-    const recentCall = mockGetAllAsync.mock.calls[0];
+    const recentCall = mockGetAllAsync.mock.calls[0]!;
     expect(recentCall[1]).toBe("user-42");
   });
 });

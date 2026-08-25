@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 
-const mockGetAllAsync = jest.fn();
-const mockGetFirstAsync = jest.fn();
+const mockGetAllAsync = jest.fn<(...args: any[]) => Promise<any>>();
+const mockGetFirstAsync = jest.fn<(...args: any[]) => Promise<any>>();
 
 jest.mock("expo-sqlite", () => ({
   openDatabaseAsync: jest.fn(),
@@ -28,7 +28,7 @@ it("keeps system taxonomy visible when the active account changes", async () => 
   await listCategories("account-y");
   await listSubcategories("account-y");
 
-  expect(mockGetAllAsync.mock.calls[0][0]).not.toContain("user_id = ?");
-  expect(mockGetAllAsync.mock.calls[1][0]).toContain("user_id = ? OR is_system = 1");
-  expect(mockGetAllAsync.mock.calls[2][0]).toContain("user_id = ? OR is_system = 1");
+  expect(mockGetAllAsync.mock.calls[0]![0]).not.toContain("user_id = ?");
+  expect(mockGetAllAsync.mock.calls[1]![0]).toContain("user_id = ? OR is_system = 1");
+  expect(mockGetAllAsync.mock.calls[2]![0]).toContain("user_id = ? OR is_system = 1");
 });
