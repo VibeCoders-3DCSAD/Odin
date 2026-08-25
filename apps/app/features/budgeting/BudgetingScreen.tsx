@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ArrowLeft, Plus } from "phosphor-react-native";
-import { createBudgetDraft, getBudgetDraftTracking, listBudgetDrafts, updateBudgetDraft, type Budget, type BudgetTracking, type CreateBudgetInput } from "../../local-db/repositories/budgets";
+import { createBudgetDraft, deleteBudgetDraft, getBudgetDraftTracking, listBudgetDrafts, updateBudgetDraft, type Budget, type BudgetTracking, type CreateBudgetInput } from "../../local-db/repositories/budgets";
 import CategorySelector from "../../components/CategorySelector";
 import { calculateBudgetSpentAmount, calculateProvisionalPercentage } from "./constant";
 import { getCategory, getSubcategory } from "../../local-db/repositories/taxonomy";
@@ -203,6 +203,26 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     }
   };
 
+  const removeDraft = (draft: Budget) => {
+    Alert.alert("Delete budget?", "This budget and its allocations will be deleted.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => void (async () => {
+          try {
+            await deleteBudgetDraft(userId, deviceId, draft.id);
+            setSelectedDraft(null);
+            await loadDrafts();
+            await onSyncRequested?.();
+          } catch (error) {
+            setTrackingError(error instanceof Error ? error.message : "Budget could not be deleted.");
+          }
+        })(),
+      },
+    ]);
+  };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
@@ -339,6 +359,14 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                   <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.mut }}>{formatPeso(spentAmount)} spent</Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#0E6D46" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - spentAmount, 0))} left</Text>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 18, marginTop: 14 }}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Edit budget" onPress={() => void editDraft(selectedDraft)}>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#0E6D46" }}>Edit budget</Text>
+                    </Pressable>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Delete budget" onPress={() => removeDraft(selectedDraft)}>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: formPalette.error }}>Delete budget</Text>
+                    </Pressable>
                   </View>
                 </View>
                  <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#EEFFF8" }}>

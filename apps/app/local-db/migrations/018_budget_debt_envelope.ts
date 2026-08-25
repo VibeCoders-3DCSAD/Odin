@@ -1,7 +1,7 @@
 import type { Migration } from "../client";
 
 const migration: Migration = {
-  version: 17,
+  version: 18,
   up: async (db) => {
     await db.execAsync("ALTER TABLE budgets ADD COLUMN debt_budget_amount_minor integer NOT NULL DEFAULT 0;");
   },

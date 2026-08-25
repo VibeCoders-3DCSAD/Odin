@@ -167,6 +167,21 @@ function validateInput(input: CreateBudgetInput): number {
   return periodDays;
 }
 
+async function assertOnlyBudget(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  excludeId?: string,
+): Promise<void> {
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM budgets
+     WHERE user_id = ? AND deleted = 0 AND status != 'deleted'
+       ${excludeId ? "AND id != ?" : ""}
+     LIMIT 1`,
+    ...(excludeId ? [userId, excludeId] : [userId]),
+  );
+  if (rows.length > 0) throw new LocalDbError("VALIDATION_ERROR", "only one budget can exist at a time");
+}
+
 async function readBudget(db: SQLite.SQLiteDatabase, userId: string, id: string): Promise<Budget | null> {
   const row = await db.getFirstAsync<BudgetRow>(
     "SELECT * FROM budgets WHERE user_id = ? AND id = ? AND status = 'draft' AND deleted = 0",
@@ -310,6 +325,7 @@ export async function createBudgetDraft(
   let result: { budget: Budget; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
+    await assertOnlyBudget(db, userId);
     await validateAllocationReferences(db, userId, input.allocations);
 
     await db.runAsync(
@@ -363,6 +379,7 @@ export async function updateBudgetDraft(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Budget draft not found");
+    await assertOnlyBudget(db, userId, id);
 
     await validateAllocationReferences(db, userId, input.allocations);
 
@@ -396,7 +413,7 @@ export async function updateBudgetDraft(
     };
     const operation = await enqueueOperation(db, {
       userId, deviceId, entity: "budgets", recordId: id, operationType: "update", baseVersion: current.version,
-      changedFields: ["period_kind", "period_start", "period_end", "budget_period_days", "total_amount_minor", "debt_budget_amount_minor", "allocations"],
+      changedFields: ["periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "debt_budget_amount_minor", "allocations"],
       payload, failureMessage: "This budget draft could not be updated.",
     });
     result = { budget: (await readBudget(db, userId, id))!, operation };

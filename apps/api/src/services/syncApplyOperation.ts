@@ -830,6 +830,7 @@ async function validateBudgetPayload(
   userId: string,
   payload: Record<string, unknown>,
   allowedFields: Set<string>,
+  excludeId?: string,
 ): Promise<Record<string, unknown>> {
   assertOnlyAllowed(payload, allowedFields);
   if (payload.debt_budget_amount_minor === undefined && payload.debtBudgetMinor !== undefined) payload.debt_budget_amount_minor = payload.debtBudgetMinor;
@@ -861,6 +862,17 @@ async function validateBudgetPayload(
     if (typeof payload.debt_budget_amount_minor !== "number" || !Number.isInteger(payload.debt_budget_amount_minor) || payload.debt_budget_amount_minor < 0) throw new Error("debt_budget_amount_minor must be a non-negative integer");
     if (payload.periodKind !== "MONTHLY" && payload.debt_budget_amount_minor !== 0) throw new Error("debt budget requires a monthly budget");
   }
+  const overlapQuery = supabase
+    .from("budgets")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("deleted", false)
+    .neq("status", "deleted")
+    .limit(1);
+  if (excludeId) overlapQuery.neq("id", excludeId);
+  const { data: existingBudget, error: overlapError } = await overlapQuery.maybeSingle();
+  if (overlapError) throw new Error(`budget uniqueness validation failed: ${overlapError.message}`);
+  if (existingBudget) throw new Error("only one budget can exist at a time");
   if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
   if (payload.allocations.length > 100) throw new Error("allocations cannot contain more than 100 items");
   const categoryIds = payload.allocations.map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).categoryId : undefined).filter((id): id is string => typeof id === "string");
@@ -912,7 +924,7 @@ async function validateUpdatePayload(
   } else if (entity === "recurring_transaction_occurrences") {
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else if (entity === "budgets") {
-    return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS);
+    return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS, recordId);
   } else if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
     const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
     assertOnlyAllowed(payload, allowed);
