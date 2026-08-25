@@ -18,9 +18,10 @@ type TableCursor = { ts: string; id: string };
 
 type PushResultItem = {
   operation_id: string;
-  status: "applied" | "rejected" | "duplicate";
+  status: "applied" | "rejected" | "conflict" | "duplicate";
   reason?: string;
   current_version?: number;
+  conflicted_fields?: string[];
 };
 
 type SyncResult = {
@@ -161,7 +162,8 @@ async function pushQueue(
      WHERE user_id = ? AND device_id = ?
        AND status IN ('pending', 'failed')
        ${maxAttempts === undefined ? "" : "AND attempts < ?"}
-     ORDER BY created_at LIMIT 50`,
+       ORDER BY CASE WHEN entity = 'transactions' THEN 0 WHEN entity = 'debt_payments' THEN 1 ELSE 2 END,
+               created_at, operation_id LIMIT 50`,
     userId,
     deviceId,
     ...(maxAttempts === undefined ? [] : [maxAttempts]),
@@ -214,6 +216,15 @@ async function pushQueue(
         result.operation_id,
       );
       pushed++;
+    } else if (result.status === "conflict") {
+      const metadata = JSON.stringify({ reason: result.reason ?? "conflict", currentVersion: result.current_version ?? null, conflictedFields: result.conflicted_fields ?? [] });
+      await db.runAsync(
+        `UPDATE sync_queue SET status = 'discarded', discarded_at = CURRENT_TIMESTAMP,
+         last_error = ? WHERE operation_id = ?`,
+        metadata,
+        result.operation_id,
+      );
+      errors++;
     } else {
       await db.runAsync(
         `UPDATE sync_queue SET status = 'failed', attempts = attempts + 1,

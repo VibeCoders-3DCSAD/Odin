@@ -122,7 +122,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "budget_id", "category_id", "subcategory_id", "allocated_amount_minor",
     "restriction_level", "version", "deleted", "created_at", "updated_at",
   ]),
-  debt_accounts: new Set(["id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  debt_accounts: new Set(["id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   debt_payments: new Set(["id", "debt_account_id", "user_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   user_debt_priorities: new Set(["id", "user_id", "debt_account_id", "priority_rank", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   debt_strategy_preferences: new Set(["user_id", "strategy", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
@@ -151,6 +151,9 @@ export function normalizePullRow(
       const isProtected = (row.is_protected as boolean) === true;
       normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
     } else if (col === "metadata") {
+      const val = row[col];
+      normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else if (table === "debt_accounts" && col === "preset_data") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
     } else if (table === "budgets" && col === "period_kind") {
@@ -195,6 +198,16 @@ export async function applyPullRow(
   const rowVersion = (row.version as number) ?? 1;
   const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
+
+  if (table === "user_debt_priorities" && row.priority_rank !== undefined) {
+    await db.runAsync(
+      `UPDATE user_debt_priorities SET priority_rank = -priority_rank - 1000000
+       WHERE user_id = ? AND priority_rank = ? AND id <> ?`,
+      row.user_id as SQLite.SQLiteBindValue,
+      row.priority_rank as SQLite.SQLiteBindValue,
+      recordId,
+    );
+  }
 
   const existing = await db.getFirstAsync<{ version: number; user_id: string }>(
     `SELECT version, user_id FROM "${table}" WHERE ${identityWhere}`,

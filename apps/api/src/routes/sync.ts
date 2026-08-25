@@ -9,6 +9,46 @@ import {
   isDeviceActive,
 } from "../services/syncService.js";
 
+const SYNCED_CURSOR_TABLES = new Set([
+  "category_groups", "categories", "subcategories", "financial_accounts", "transactions", "transaction_line_items",
+  "income_sources", "financial_obligations", "transaction_templates", "transaction_drafts", "recurring_transaction_templates",
+  "recurring_transaction_occurrences", "budgets", "budget_allocations", "debt_accounts", "debt_payments",
+  "user_debt_priorities", "debt_strategy_preferences",
+]);
+const MAX_PUSH_OPERATIONS = 100;
+const MAX_ID_LENGTH = 128;
+const MAX_CHANGED_FIELDS = 50;
+const MAX_PAYLOAD_KEYS = 100;
+const MAX_PAYLOAD_BYTES = 256_000;
+const MAX_DEVICE_ID_LENGTH = 128;
+const isDeviceId = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= MAX_DEVICE_ID_LENGTH && /^[a-zA-Z0-9._:-]+$/.test(value);
+
+function isBoundedPayload(payload: Record<string, unknown>): boolean {
+  if (Object.keys(payload).length > MAX_PAYLOAD_KEYS || JSON.stringify(payload).length > MAX_PAYLOAD_BYTES) return false;
+  const priorities = payload.priorities;
+  return priorities === undefined || (Array.isArray(priorities) && priorities.length <= 100 && priorities.every((id) => typeof id === "string" && id.length <= MAX_ID_LENGTH));
+}
+
+function isPushOperation(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const operation = value as Record<string, unknown>;
+  return typeof operation.operation_id === "string" && operation.operation_id.length <= MAX_ID_LENGTH && typeof operation.entity === "string" && operation.entity.length <= MAX_ID_LENGTH
+    && typeof operation.record_id === "string" && operation.record_id.length <= MAX_ID_LENGTH && ["create", "update", "delete"].includes(operation.operation_type as string)
+    && (operation.base_version === null || typeof operation.base_version === "number")
+    && Array.isArray(operation.changed_fields) && operation.changed_fields.length <= MAX_CHANGED_FIELDS && operation.changed_fields.every((field) => typeof field === "string" && field.length <= MAX_ID_LENGTH)
+    && !!operation.payload && typeof operation.payload === "object" && !Array.isArray(operation.payload) && isBoundedPayload(operation.payload as Record<string, unknown>);
+}
+
+function isCursorMap(value: unknown): value is Record<string, { ts: string; id: string }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value as Record<string, unknown>).every(([table, cursor]) => {
+    if (!SYNCED_CURSOR_TABLES.has(table) || !cursor || typeof cursor !== "object") return false;
+    const item = cursor as Record<string, unknown>;
+    return typeof item.ts === "string" && !Number.isNaN(Date.parse(item.ts))
+      && typeof item.id === "string" && /^[0-9a-f-]{8,}$/i.test(item.id);
+  });
+}
+
 const router = Router();
 
 router.post(
@@ -33,7 +73,7 @@ router.post(
         operations?: unknown[];
       };
 
-      if (!device_id || typeof device_id !== "string") {
+       if (!isDeviceId(device_id)) {
         response.status(400).json({
           error: "Bad Request",
           message: "device_id is required",
@@ -41,10 +81,10 @@ router.post(
         return;
       }
 
-      if (!Array.isArray(operations) || operations.length === 0) {
+       if (!Array.isArray(operations) || operations.length === 0 || operations.length > MAX_PUSH_OPERATIONS || operations.some((operation) => !isPushOperation(operation))) {
         response.status(400).json({
           error: "Bad Request",
-          message: "operations must be a non-empty array",
+           message: `operations must contain 1-${MAX_PUSH_OPERATIONS} items`,
         });
         return;
       }
@@ -63,7 +103,7 @@ router.post(
 
       const results = await pushOperations(supabase, userId, device_id, operations as never[]);
 
-      const summary = { applied: 0, rejected: 0, duplicate: 0 };
+       const summary = { applied: 0, rejected: 0, conflict: 0, duplicate: 0 };
       for (const r of results) summary[r.status]++;
 
       console.log("[sync/push] done", { userId, device_id, ...summary });
@@ -86,7 +126,10 @@ router.get(
       let cursors: Record<string, { ts: string; id: string }> = {};
       const cursorsParam = request.query.cursors;
       if (typeof cursorsParam === "string") {
-        try { cursors = JSON.parse(cursorsParam); } catch { /* keep empty */ }
+        try {
+          const parsed: unknown = JSON.parse(cursorsParam);
+          if (isCursorMap(parsed)) cursors = parsed;
+        } catch { /* keep empty */ }
       }
 
       console.log("[sync/pull] start", { userId, cursorTables: Object.keys(cursors) });
@@ -126,7 +169,7 @@ router.post(
       }
 
       const deviceId = payload.device_id;
-      if (!deviceId || typeof deviceId !== "string") {
+       if (!isDeviceId(deviceId)) {
         response.status(400).json({
           error: "Bad Request",
           message: "device_id is required",

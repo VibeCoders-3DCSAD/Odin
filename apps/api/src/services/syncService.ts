@@ -13,13 +13,14 @@ type PushOperation = {
 
 type PushResult = {
   operation_id: string;
-  status: "applied" | "rejected" | "duplicate";
+  status: "applied" | "rejected" | "conflict" | "duplicate";
   reason?: string;
   current_version?: number;
+  conflicted_fields?: string[];
 };
 
 type RpcApplyResult = {
-  status: PushResult["status"];
+  status: PushResult["status"] | "conflict";
   reason: string | null;
   current_version: number | null;
   conflicted_fields: string[] | null;
@@ -30,6 +31,9 @@ type PullChanges = Record<string, Record<string, unknown>[]>;
 type TableCursor = { ts: string; id: string };
 
 type PullCursors = Record<string, TableCursor>;
+
+const CLIENT_SYNC_FAILURE_REASON = "Sync operation rejected";
+const EDIT_HISTORY_FAILURE_REASON = "sync_operation_rejected";
 
 const SYNCED_TABLES = [
   "category_groups",
@@ -58,11 +62,14 @@ export async function pushOperations(
   deviceId: string,
   operations: PushOperation[],
 ): Promise<PushResult[]> {
+  assertDeviceId(deviceId);
   const results: PushResult[] = [];
 
   for (const op of operations) {
+    let auditPayload: Record<string, unknown> = { redacted: true, fields: Object.keys(op.payload) };
     try {
       const prepared = await prepareOperation(supabase, userId, op);
+      auditPayload = { redacted: true, fields: Object.keys(prepared.payload) };
       const rpcName = prepared.entity === "budgets"
         ? "apply_budget_sync_operation_v2"
         : ["debt_accounts", "debt_payments", "user_debt_priorities", "debt_strategy_preferences"].includes(prepared.entity)
@@ -87,7 +94,10 @@ export async function pushOperations(
 
       if (!result) throw new Error("sync apply returned no result");
 
-      if (result.status === "rejected") {
+        const isConflict = result.status === "conflict" || (result.status === "rejected" && result.reason?.includes("version changed"));
+        const status = isConflict ? "conflict" : result.status;
+
+       if (status === "rejected" || status === "conflict") {
         console.error("[sync/push] rejected", {
           userId,
           deviceId,
@@ -101,13 +111,12 @@ export async function pushOperations(
 
       results.push({
         operation_id: op.operation_id,
-        status: result.status,
-        reason: result.reason ?? undefined,
-        current_version: typeof result.current_version === "number" ? result.current_version : undefined,
+         status,
+          reason: status === "rejected" || status === "conflict" ? result.reason ?? CLIENT_SYNC_FAILURE_REASON : undefined,
+          current_version: typeof result.current_version === "number" ? result.current_version : undefined,
+          conflicted_fields: result.conflicted_fields ?? undefined,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-
       console.error("[sync/push] rejected", {
         userId,
         deviceId,
@@ -115,7 +124,7 @@ export async function pushOperations(
         entity: op.entity,
         record_id: op.record_id,
         operation_type: op.operation_type,
-        reason: message,
+          error,
       });
 
       await supabase.from("edit_history").insert({
@@ -123,14 +132,14 @@ export async function pushOperations(
         operation_id: op.operation_id,
         entity: op.entity,
         record_id: op.record_id,
-        reason: message,
-        payload: op.payload,
+         reason: EDIT_HISTORY_FAILURE_REASON,
+        payload: auditPayload,
       });
 
       results.push({
         operation_id: op.operation_id,
         status: "rejected",
-        reason: message,
+          reason: CLIENT_SYNC_FAILURE_REASON,
       });
     }
   }
@@ -195,7 +204,12 @@ export async function pullChanges(
 
     if (error) {
       successful = false;
-      console.error("sync pull error for table", table, error);
+      console.error("[sync/pull] table failed", {
+        userId,
+        table,
+        cursor: tableCursor ?? null,
+        error,
+      });
       newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
       hasMore[table] = false;
       continue;
@@ -208,7 +222,7 @@ export async function pullChanges(
       const lastRow = data[data.length - 1] as Record<string, unknown>;
       newCursors[table] = {
         ts: (lastRow.updated_at as string) ?? tableCursor?.ts ?? new Date(0).toISOString(),
-        id: lastRow.id as string,
+        id: lastRow[cursorColumn] as string,
       };
     } else {
       newCursors[table] = tableCursor ?? { ts: new Date(0).toISOString(), id: "" };
@@ -224,6 +238,7 @@ export async function registerDevice(
   userId: string,
   deviceId: string,
 ): Promise<void> {
+  assertDeviceId(deviceId);
   const { data: existing } = await supabase
     .from("user_devices")
     .select("id")
@@ -243,6 +258,10 @@ export async function registerDevice(
       device_id: deviceId,
     });
   }
+}
+
+function assertDeviceId(deviceId: string): void {
+  if (!deviceId || deviceId.length > 128 || !/^[a-zA-Z0-9._:-]+$/.test(deviceId)) throw new Error("invalid device id");
 }
 
 export async function isDeviceActive(

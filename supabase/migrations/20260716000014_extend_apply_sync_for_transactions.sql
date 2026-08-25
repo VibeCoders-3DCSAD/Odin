@@ -638,7 +638,7 @@ BEGIN
   ---------------------------------------------------------------------------
   -- PAYLOAD CHECK
   ---------------------------------------------------------------------------
-  IF COALESCE(jsonb_object_length(p_payload), 0) = 0 THEN
+  IF p_payload IS NULL OR p_payload = '{}'::jsonb THEN
     UPDATE applied_operations
     SET result = jsonb_build_object(
       'status', 'rejected',
