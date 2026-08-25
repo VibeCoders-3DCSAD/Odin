@@ -1,4 +1,6 @@
-const mockInitDatabase = jest.fn();
+import { jest } from "@jest/globals";
+
+const mockInitDatabase = jest.fn<(...args: any[]) => any>();
 
 jest.mock("../../client", () => ({
   initDatabase: (...args: unknown[]) => mockInitDatabase(...args),
@@ -53,5 +55,22 @@ describe("ledger taxonomy validation", () => {
 
     expect(db.getFirstAsync.mock.calls.find(([sql]) => sql.includes("FROM subcategories"))?.[0])
       .toContain("user_id = ? OR is_system = 1");
+  });
+
+  test("rejects edits to transactions linked to debt payments", async () => {
+    const db = {
+      getFirstAsync: jest.fn(async (sql: string) => {
+        if (sql.includes("FROM debt_payments")) return { id: "payment-1" };
+        return { id: "transaction-1", user_id: "user-1", transaction_type: "expense", status: "posted", version: 1 };
+      }),
+      runAsync: jest.fn(),
+      withTransactionAsync: jest.fn(async (work: () => Promise<void>) => work()),
+    };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { updateTransaction } = await import("../ledger");
+
+    await expect(updateTransaction("user-1", "device-1", "transaction-1", { notes: "changed" }))
+      .rejects.toThrow("Linked debt payments must be changed from Debt Manager");
   });
 });

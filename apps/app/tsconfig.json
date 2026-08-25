@@ -3,7 +3,7 @@
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",
-    "types": ["nativewind/types"]
+    "types": ["nativewind/types", "jest"]
   },
   "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"]
 }

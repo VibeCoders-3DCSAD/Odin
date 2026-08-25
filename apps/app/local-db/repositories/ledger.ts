@@ -10,6 +10,11 @@ const VALID_SORT_DIR = ["asc", "desc"] as const;
 const VALID_STATUSES = ["posted", "draft", "voided", "deleted"] as const;
 const UPDATE_FIELDS = ["amount_centavos", "subcategory_id", "source_account_id", "destination_account_id", "transaction_date", "merchant_name", "counterparty_name", "notes"] as const;
 
+async function rejectLinkedDebtPayment(db: SQLite.SQLiteDatabase, userId: string, transactionId: string): Promise<void> {
+  const linked = await db.getFirstAsync("SELECT id FROM debt_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, transactionId);
+  if (linked) throw new LocalDbError("VALIDATION_ERROR", "Linked debt payments must be changed from Debt Manager");
+}
+
 type TransactionRow = {
   id: string;
   user_id: string;
@@ -71,6 +76,7 @@ export type CreateExpenseInput = {
   merchant_name?: string;
   counterparty_name?: string;
   notes?: string;
+  client_mutation_id?: string;
 };
 
 export type CreateTransferInput = {
@@ -386,21 +392,12 @@ function buildTransactionInsert(
   input: CreateIncomeInput | CreateExpenseInput | CreateTransferInput,
   ts: string,
 ): { sql: string; params: SQLite.SQLiteBindValue[] } {
-  const sourceAccountId =
-    transactionType === "expense" || transactionType === "transfer"
-      ? (input as Record<string, unknown>).source_account_id ?? null
-      : null;
-  const destinationAccountId =
-    transactionType === "income" || transactionType === "transfer"
-      ? (input as Record<string, unknown>).destination_account_id ?? null
-      : null;
-  const subcategoryId =
-    transactionType === "income" || transactionType === "expense"
-      ? (input as Record<string, unknown>).subcategory_id ?? null
-      : null;
-  const merchantName = (input as Record<string, unknown>).merchant_name ?? null;
-  const counterpartyName = (input as Record<string, unknown>).counterparty_name ?? null;
-  const notes = (input as Record<string, unknown>).notes ?? null;
+  const sourceAccountId = transactionType === "expense" || transactionType === "transfer" ? (input as CreateExpenseInput | CreateTransferInput).source_account_id : null;
+  const destinationAccountId = transactionType === "income" || transactionType === "transfer" ? (input as CreateIncomeInput | CreateTransferInput).destination_account_id : null;
+  const subcategoryId = transactionType === "income" || transactionType === "expense" ? (input as CreateIncomeInput | CreateExpenseInput).subcategory_id : null;
+  const merchantName = "merchant_name" in input ? input.merchant_name ?? null : null;
+  const counterpartyName = "counterparty_name" in input ? input.counterparty_name ?? null : null;
+  const notes = input.notes ?? null;
 
   return {
     sql: `INSERT INTO transactions
@@ -408,11 +405,11 @@ function buildTransactionInsert(
        amount_centavos, subcategory_id, source_account_id, destination_account_id,
        recurring_template_id, merchant_name, counterparty_name, notes,
        client_mutation_id, metadata, version, deleted, created_at, updated_at)
-     VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, '{}', 1, 0, ?, ?)`,
+     VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
     params: [
       id, userId, transactionType, input.transaction_date, ts,
       input.amount_centavos, subcategoryId, sourceAccountId, destinationAccountId,
-      merchantName, counterpartyName, notes, ts, ts,
+      merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null, ts, ts,
     ],
   };
 }
@@ -532,51 +529,39 @@ export async function createIncome(
   return result!;
 }
 
+export async function createExpenseInTransaction(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  input: CreateExpenseInput,
+): Promise<{ transaction: Transaction; operation: SyncOperation }> {
+  const ts = now();
+  const id = randomUUID();
+  await validateExpenseShape(db, userId, input);
+  await applyBalanceEffects(db, userId, "expense", input.source_account_id, null, input.amount_centavos);
+  const { sql, params } = buildTransactionInsert(id, userId, "expense", input, ts);
+  await db.runAsync(sql, ...params);
+  const operation = await enqueueOperation(db, {
+    userId, deviceId, entity: "transactions", recordId: id, operationType: "create",
+    baseVersion: null, changedFields: [],
+    payload: { ...input, transaction_type: "expense", destination_account_id: null },
+    failureMessage: "This expense transaction could not be created.",
+  });
+  const row = await db.getFirstAsync<TransactionRow>("SELECT * FROM transactions WHERE user_id = ? AND id = ?", userId, id);
+  return { transaction: mapTransaction(row!), operation };
+}
+
 export async function createExpense(
   userId: string,
   deviceId: string,
   input: CreateExpenseInput,
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const db = await getDb();
-  const ts = now();
-  const id = randomUUID();
 
-  let result: { transaction: Transaction; operation: SyncOperation };
+  let result!: { transaction: Transaction; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
-    await validateExpenseShape(db, userId, input);
-
-    await applyBalanceEffects(
-      db, userId, "expense", input.source_account_id, null, input.amount_centavos,
-    );
-
-    const { sql, params } = buildTransactionInsert(id, userId, "expense", input, ts);
-    await db.runAsync(sql, ...params);
-
-    const operation = await enqueueOperation(db, {
-      userId,
-      deviceId,
-      entity: "transactions",
-      recordId: id,
-      operationType: "create",
-      baseVersion: null,
-      changedFields: [],
-      payload: {
-        ...input,
-        transaction_type: "expense",
-        subcategory_id: input.subcategory_id,
-        source_account_id: input.source_account_id,
-        destination_account_id: null,
-      },
-      failureMessage: `This expense transaction could not be created.`,
-    });
-
-    const row = await db.getFirstAsync<TransactionRow>(
-      "SELECT * FROM transactions WHERE user_id = ? AND id = ?",
-      userId,
-      id,
-    );
-    result = { transaction: mapTransaction(row!), operation };
+    result = await createExpenseInTransaction(db, userId, deviceId, input);
   });
 
   return result!;
@@ -650,6 +635,7 @@ export async function updateTransaction(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
+    await rejectLinkedDebtPayment(db, userId, id);
 
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
@@ -740,6 +726,7 @@ export async function deleteTransaction(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
+    await rejectLinkedDebtPayment(db, userId, id);
 
     await reverseBalanceEffects(
       db, userId,

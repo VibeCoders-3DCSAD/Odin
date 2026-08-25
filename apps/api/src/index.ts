@@ -1,8 +1,12 @@
 import dotenv from "dotenv";
-import app from "./app.js";
+import { fileURLToPath } from "node:url";
 
-dotenv.config({ path: ".env" });
-dotenv.config({ path: ".env.local", override: true });
+const apiDirectory = fileURLToPath(new URL("..", import.meta.url));
+
+dotenv.config({ path: `${apiDirectory}.env` });
+dotenv.config({ path: `${apiDirectory}.env.local`, override: true });
+
+const { default: app } = await import("./app.js");
 
 const port = Number(process.env.PORT ?? 3001);
 

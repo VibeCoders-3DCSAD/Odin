@@ -33,6 +33,10 @@ BEGIN
     RAISE EXCEPTION 'authentication required';
   END IF;
 
+  IF p_device_id IS NULL OR length(p_device_id) = 0 OR length(p_device_id) > 128 OR p_device_id !~ '^[A-Za-z0-9._:-]+$' THEN
+    RAISE EXCEPTION 'invalid device id';
+  END IF;
+
   IF p_entity NOT IN (
     'categories',
     'subcategories',
@@ -157,15 +161,35 @@ BEGIN
         p_payload->>'notes', '{}'::jsonb, v_now, 1, false);
 
     ELSIF p_entity = 'transactions' THEN
-      INSERT INTO transactions (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at, amount_centavos,
-        subcategory_id, source_account_id, destination_account_id, merchant_name, counterparty_name, notes, client_mutation_id,
-        metadata, updated_at, version, deleted, created_at)
-      VALUES (p_record_id, v_user_id, (p_payload->>'transaction_type')::odin_transaction_type, 'posted',
-        COALESCE((p_payload->>'entry_source')::odin_transaction_entry_source, 'offline_sync'),
-        (p_payload->>'transaction_date')::date, v_now, (p_payload->>'amount_centavos')::bigint,
-        (p_payload->>'subcategory_id')::uuid, (p_payload->>'source_account_id')::uuid, (p_payload->>'destination_account_id')::uuid,
-        p_payload->>'merchant_name', p_payload->>'counterparty_name', p_payload->>'notes', p_payload->>'client_mutation_id',
-        '{}'::jsonb, v_now, 1, false, v_now);
+      IF EXISTS (SELECT 1 FROM transactions WHERE id = p_record_id AND user_id = v_user_id) THEN
+        IF (SELECT client_mutation_id FROM transactions WHERE id = p_record_id AND user_id = v_user_id)
+          IS DISTINCT FROM p_payload->>'client_mutation_id' THEN
+          RAISE EXCEPTION 'transaction already exists with a different mutation';
+        END IF;
+      ELSE
+        INSERT INTO transactions (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at, amount_centavos,
+          subcategory_id, source_account_id, destination_account_id, merchant_name, counterparty_name, notes, client_mutation_id,
+          metadata, updated_at, version, deleted, created_at)
+        VALUES (p_record_id, v_user_id, (p_payload->>'transaction_type')::odin_transaction_type, 'posted',
+          COALESCE((p_payload->>'entry_source')::odin_transaction_entry_source, 'offline_sync'),
+          (p_payload->>'transaction_date')::date, v_now, (p_payload->>'amount_centavos')::bigint,
+          (p_payload->>'subcategory_id')::uuid, (p_payload->>'source_account_id')::uuid, (p_payload->>'destination_account_id')::uuid,
+          p_payload->>'merchant_name', p_payload->>'counterparty_name', p_payload->>'notes', p_payload->>'client_mutation_id',
+          CASE WHEN p_payload->>'client_mutation_id' LIKE 'debt-payment:%' THEN jsonb_build_object('debt_payment_balance_debited', false) ELSE '{}'::jsonb END,
+          v_now, 1, false, v_now);
+        IF (p_payload->>'transaction_type') = 'expense' AND p_payload->>'client_mutation_id' LIKE 'debt-payment:%' THEN
+          UPDATE financial_accounts
+          SET current_balance_centavos = current_balance_centavos - (p_payload->>'amount_centavos')::bigint,
+              version = version + 1,
+              updated_at = v_now
+          WHERE id = (p_payload->>'source_account_id')::uuid AND user_id = v_user_id AND deleted = false
+            AND current_balance_centavos >= (p_payload->>'amount_centavos')::bigint;
+          IF NOT FOUND THEN RAISE EXCEPTION 'source account has insufficient balance'; END IF;
+          UPDATE transactions
+          SET metadata = jsonb_set(metadata, '{debt_payment_balance_debited}', 'true'::jsonb), updated_at = v_now, version = version + 1
+          WHERE id = p_record_id AND user_id = v_user_id;
+        END IF;
+      END IF;
 
     ELSIF p_entity = 'transaction_templates' THEN
       INSERT INTO transaction_templates (id, user_id, transaction_type, status, name, amount_centavos, subcategory_id,

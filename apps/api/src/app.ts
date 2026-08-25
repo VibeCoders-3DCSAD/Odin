@@ -18,7 +18,7 @@ const app = express();
 app.disable("etag");
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 app.use((request: Request, response: Response, next: NextFunction) => {
   const start = Date.now();
@@ -57,7 +57,7 @@ app.use("/odin/api", profileRoutes);
 app.use("/odin/api/sync", syncRoutes);
 app.use("/odin/api/recurring", recurringRoutes);
 
-app.use((error: Error, _request: Request, response: Response, _next: NextFunction) => {
+app.use((error: Error, request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };
 
   if (parseError.type === "entity.parse.failed" || error instanceof SyntaxError) {
@@ -68,7 +68,13 @@ app.use((error: Error, _request: Request, response: Response, _next: NextFunctio
     return;
   }
 
-  console.error("Unhandled error:", error);
+  console.error("Unhandled error", {
+    method: request.method,
+    route: request.originalUrl,
+    request_id: request.header("x-request-id")?.slice(0, 128) ?? null,
+    user_id: (request as Request & { userId?: string }).userId ?? null,
+    error,
+  });
   response.status(500).json({
     error: "Internal Server Error",
     message: "An unexpected error occurred",

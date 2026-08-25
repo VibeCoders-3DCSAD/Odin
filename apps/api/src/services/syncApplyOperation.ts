@@ -24,6 +24,10 @@ const SYNCED_ENTITIES = new Set([
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "budgets",
+  "debt_accounts",
+  "debt_payments",
+  "user_debt_priorities",
+  "debt_strategy_preferences",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -115,6 +119,7 @@ const TRANSACTION_CREATE_FIELDS = new Set([
   "notes",
   "entry_source",
   "recurring_template_id",
+  "client_mutation_id",
 ]);
 
 const TRANSACTION_UPDATE_FIELDS = new Set([
@@ -232,12 +237,92 @@ const RECURRING_OCCURRENCE_FIELDS = new Set([
 
 const BUDGET_CREATE_FIELDS = new Set([
   "status", "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
-  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning",
+  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning", "debt_budget_amount_minor", "debtBudgetMinor",
 ]);
 
 const BUDGET_UPDATE_FIELDS = new Set([
-  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
+  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debt_budget_amount_minor", "debtBudgetMinor",
 ]);
+
+const DEBT_ACCOUNT_FIELDS = new Set(["name", "lender_name", "preset_key", "status", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule", "notes"]);
+const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes"]);
+
+function validateDebtStatus(payload: Record<string, unknown>, operation: "create" | "update"): void {
+  if (payload.status === undefined) return;
+  const validStatuses = operation === "update" ? ["active", "archived", "paid_off"] : ["active", "archived"];
+  if (typeof payload.status !== "string" || !validStatuses.includes(payload.status)) {
+    throw new Error("status must be active or archived; deleted must use the delete operation");
+  }
+}
+
+function validateDebtPayload(entity: string, payload: Record<string, unknown>, operation: "create" | "update"): void {
+  if (entity === "debt_accounts") {
+    for (const field of ["name", "lender_name", "preset_key", "payment_frequency", "interest_period", "interest_method", "notes"]) {
+      if (payload[field] !== undefined && payload[field] !== null) requireString(payload, field);
+    }
+    if (payload.payment_frequency !== undefined && !["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly"].includes(payload.payment_frequency as string)) throw new Error("payment_frequency must be a supported frequency");
+    if (payload.preset_key !== undefined && payload.preset_key !== null && (typeof payload.preset_key !== "string" || !/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(payload.preset_key))) throw new Error("preset_key must be a safe slug");
+    if (payload.interest_period !== undefined && payload.interest_period !== null && !["daily", "monthly", "annual"].includes(payload.interest_period as string)) throw new Error("interest_period must be daily, monthly, or annual");
+    if (payload.interest_method !== undefined && payload.interest_method !== null && !["simple", "amortized", "compound"].includes(payload.interest_method as string)) throw new Error("interest_method must be simple, amortized, or compound");
+    for (const field of ["next_due_date", "maturity_date", "target_payoff_date"]) {
+      if (payload[field] !== undefined && payload[field] !== null && !isDateOnly(payload[field])) throw new Error(`${field} must be a valid YYYY-MM-DD date`);
+    }
+    for (const field of ["original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos"]) {
+      if (payload[field] !== undefined) requireNonNegativeInteger(payload, field);
+    }
+    if (payload.preset_data !== undefined && (!payload.preset_data || typeof payload.preset_data !== "object" || Array.isArray(payload.preset_data))) throw new Error("preset_data must be an object");
+    if (payload.payment_schedule !== undefined && (!payload.payment_schedule || typeof payload.payment_schedule !== "object" || Array.isArray(payload.payment_schedule))) throw new Error("payment_schedule must be an object");
+    if (payload.preset_data && typeof payload.preset_data === "object" && !Array.isArray(payload.preset_data)) {
+      const presetData = payload.preset_data as Record<string, unknown>;
+      const knownPreset = ["credit_card", "personal_salary_loan", "auto_loan", "housing_loan", "informal_loan", "bnpl", "online_lending_app", "product_installment", "government_member_loan", "microfinance_loan"].includes(payload.preset_key as string);
+      const presetFields = payload.preset_key === "credit_card" ? ["statementDay"] : knownPreset ? ["termMonths"] : [];
+      for (const field of Object.keys(presetData)) {
+        if (knownPreset && !presetFields.includes(field)) throw new Error(`${field} is not supported for ${String(payload.preset_key)}`);
+      }
+      for (const field of presetFields) {
+        if (presetData[field] !== undefined && (!Number.isInteger(presetData[field]) || (presetData[field] as number) < 0)) throw new Error(`${field} must be a non-negative integer`);
+      }
+      if (payload.preset_key === "credit_card" && presetData.statementDay !== undefined && ((presetData.statementDay as number) < 1 || (presetData.statementDay as number) > 31)) throw new Error("statementDay must be between 1 and 31");
+    }
+    return;
+  }
+  if (entity === "debt_payments") {
+    if (operation !== "create") throw new Error("Debt payments can only be created through Debt Manager");
+    if (operation === "create") {
+      for (const field of ["debt_account_id", "transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id", "source", "payment_date"]) {
+        requireString(payload, field);
+      }
+      if (payload.source !== "transaction") throw new Error("source must be transaction");
+      if (payload.linked_transaction_type !== "expense") throw new Error("linked_transaction_type must be expense");
+      for (const field of ["amount_centavos", "principal_centavos", "interest_centavos"]) {
+        if (payload[field] !== undefined && payload[field] !== null) requireNonNegativeInteger(payload, field);
+      }
+      requirePositiveInteger(payload, "amount_centavos");
+      if (payload.source !== undefined && !["manual", "transaction", "system_adjustment"].includes(payload.source as string)) throw new Error("source must be a valid debt payment source");
+      for (const field of ["debt_account_id", "transaction_id", "linked_source_account_id", "linked_subcategory_id"]) {
+        if (payload[field] !== undefined && payload[field] !== null) requireString(payload, field);
+      }
+      if (payload.payment_date !== undefined && payload.payment_date !== null && !isDateOnly(payload.payment_date)) throw new Error("payment_date must be a valid YYYY-MM-DD date");
+      const amount = payload.amount_centavos;
+      for (const field of ["principal_centavos", "interest_centavos"]) {
+        if (typeof payload[field] === "number" && typeof amount === "number" && payload[field] > amount) throw new Error(`${field} cannot exceed amount_centavos`);
+      }
+      const principal = payload.principal_centavos;
+      const interest = payload.interest_centavos;
+      if (typeof principal === "number" && typeof interest === "number" && typeof amount === "number" && principal + interest > amount) {
+        throw new Error("principal and interest cannot exceed amount_centavos");
+      }
+    }
+    return;
+  }
+  if (entity === "debt_strategy_preferences") {
+    if (payload.strategy !== undefined && !["snowball", "avalanche"].includes(payload.strategy as string)) throw new Error("strategy must be snowball or avalanche");
+    return;
+  }
+  if (entity === "user_debt_priorities" && payload.priorities !== undefined) {
+    if (!Array.isArray(payload.priorities) || payload.priorities.some((id) => typeof id !== "string") || new Set(payload.priorities).size !== payload.priorities.length) throw new Error("priorities must be a unique array of debt IDs");
+  }
+}
 
 export async function prepareOperation(
   supabase: SupabaseClient,
@@ -246,6 +331,23 @@ export async function prepareOperation(
 ): Promise<PreparedOperation> {
   if (!SYNCED_ENTITIES.has(op.entity)) {
     throw new Error(`entity '${op.entity}' is not in the sync allowlist`);
+  }
+  if (op.entity === "transactions" && (op.operation_type === "update" || op.operation_type === "delete")) {
+    const { data: linkedPayment, error } = await supabase
+      .from("debt_payments")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("transaction_id", op.record_id)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw error;
+    if (linkedPayment) throw new Error("Linked debt payments must be changed from Debt Manager");
+  }
+  if (op.entity === "debt_payments" && op.operation_type !== "create") {
+    throw new Error("Debt payments can only be created through Debt Manager");
+  }
+  if (["debt_accounts", "user_debt_priorities", "debt_strategy_preferences"].includes(op.entity) && op.operation_type === "update" && op.changed_fields.length === 0) {
+    throw new Error("Debt updates must include changed fields");
   }
 
   switch (op.operation_type) {
@@ -422,6 +524,20 @@ async function validateCreatePayload(
       throw new Error("only manual draft budgets can sync");
     }
     return validateBudgetPayload(supabase, userId, payload, BUDGET_CREATE_FIELDS);
+  }
+
+  if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
+    const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
+    assertOnlyAllowed(payload, allowed);
+    const sanitized = sanitizePayload(payload, allowed);
+    if (entity === "debt_accounts") {
+      requireString(sanitized, "name"); requireString(sanitized, "preset_key");
+      validateDebtStatus(sanitized, "create");
+      if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(sanitized.preset_key as string)) throw new Error("preset_key must be a safe slug");
+      if (sanitized.preset_data !== undefined && (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data))) throw new Error("preset_data must be an object");
+    }
+    validateDebtPayload(entity, sanitized, "create");
+    return sanitized;
   }
 
   if (entity === "transaction_templates") {
@@ -717,6 +833,8 @@ async function validateBudgetPayload(
   excludeId?: string,
 ): Promise<Record<string, unknown>> {
   assertOnlyAllowed(payload, allowedFields);
+  if (payload.debt_budget_amount_minor === undefined && payload.debtBudgetMinor !== undefined) payload.debt_budget_amount_minor = payload.debtBudgetMinor;
+  delete payload.debtBudgetMinor;
   if (!VALID_BUDGET_PERIOD_KINDS.includes(payload.periodKind as string)) {
     throw new Error("periodKind must be WEEKLY, MONTHLY, CUSTOM, or INCOME_CYCLE");
   }
@@ -740,6 +858,10 @@ async function validateBudgetPayload(
   if (payload.periodKind === "CUSTOM" && periodDays > 366) throw new Error("CUSTOM budgets cannot exceed 366 days");
   if (payload.budget_period_days !== periodDays) throw new Error("budget_period_days must match the inclusive date range");
   requirePositiveInteger(payload, "totalAmountMinor");
+  if (payload.debt_budget_amount_minor !== undefined) {
+    if (typeof payload.debt_budget_amount_minor !== "number" || !Number.isInteger(payload.debt_budget_amount_minor) || payload.debt_budget_amount_minor < 0) throw new Error("debt_budget_amount_minor must be a non-negative integer");
+    if (payload.periodKind !== "MONTHLY" && payload.debt_budget_amount_minor !== 0) throw new Error("debt budget requires a monthly budget");
+  }
   const overlapQuery = supabase
     .from("budgets")
     .select("id")
@@ -752,6 +874,10 @@ async function validateBudgetPayload(
   if (overlapError) throw new Error(`budget uniqueness validation failed: ${overlapError.message}`);
   if (existingBudget) throw new Error("only one budget can exist at a time");
   if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
+  if (payload.allocations.length > 100) throw new Error("allocations cannot contain more than 100 items");
+  const categoryIds = payload.allocations.map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).categoryId : undefined).filter((id): id is string => typeof id === "string");
+  const subcategoryIds = payload.allocations.map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).subcategoryId : undefined).filter((id): id is string => typeof id === "string");
+  await verifyBudgetReferences(supabase, userId, categoryIds, subcategoryIds);
   let allocated = 0;
   for (const allocation of payload.allocations) {
     if (!allocation || typeof allocation !== "object") throw new Error("allocations must contain objects");
@@ -761,10 +887,8 @@ async function validateBudgetPayload(
     }
     requirePositiveInteger(value, "amountMinor");
     allocated += value.amountMinor as number;
-    if (value.categoryId) await verifyCategoryOwnership(supabase, userId, value.categoryId as string);
-    if (value.subcategoryId) await verifySubcategoryOwnership(supabase, userId, value.subcategoryId as string, "expense");
   }
-  if (allocated > (payload.totalAmountMinor as number)) throw new Error("allocations cannot exceed the budget total");
+  if (allocated + Number(payload.debt_budget_amount_minor ?? 0) > (payload.totalAmountMinor as number)) throw new Error("allocations and debt budget cannot exceed the budget total");
   return payload;
 }
 
@@ -801,6 +925,20 @@ async function validateUpdatePayload(
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else if (entity === "budgets") {
     return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS, recordId);
+  } else if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
+    const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
+    assertOnlyAllowed(payload, allowed);
+    const sanitized = sanitizePayload(payload, allowed);
+    if (entity === "debt_accounts") {
+      validateDebtStatus(sanitized, "update");
+      const { data: currentDebt, error } = await supabase.from("debt_accounts").select("preset_key").eq("id", recordId).eq("user_id", userId).eq("deleted", false).maybeSingle();
+      if (error) throw new Error(`debt validation failed: ${error.message}`);
+      if (!currentDebt) throw new Error("debt not found or inaccessible");
+      validateDebtPayload(entity, { ...sanitized, preset_key: sanitized.preset_key ?? currentDebt.preset_key }, "update");
+    } else {
+      validateDebtPayload(entity, sanitized, "update");
+    }
+    return sanitized;
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
@@ -1259,6 +1397,17 @@ function requirePositiveInteger(payload: Record<string, unknown>, field: string)
   }
 }
 
+function requireNonNegativeInteger(payload: Record<string, unknown>, field: string): void {
+  const v = payload[field];
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) throw new Error(`${field} must be a non-negative integer`);
+}
+
+function isDateOnly(value: unknown): boolean {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function validateRecurringTemplateShape(payload: Record<string, unknown>, transactionType: string): void {
   const source = payload.source_account_id;
   const destination = payload.destination_account_id;
@@ -1324,6 +1473,21 @@ async function verifyCategoryOwnership(
     .maybeSingle();
   if (error) throw new Error(`category validation failed: ${error.message}`);
   if (!data) throw new Error("category not found or inaccessible");
+}
+
+async function verifyBudgetReferences(
+  supabase: SupabaseClient,
+  userId: string,
+  categoryIds: string[],
+  subcategoryIds: string[],
+): Promise<void> {
+  const [categories, subcategories] = await Promise.all([
+    categoryIds.length ? supabase.from("categories").select("id").in("id", [...new Set(categoryIds)]).eq("deleted", false).eq("is_active", true).or(`user_id.is.null,user_id.eq.${userId}`) : Promise.resolve({ data: [], error: null }),
+    subcategoryIds.length ? supabase.from("subcategories").select("id").in("id", [...new Set(subcategoryIds)]).eq("deleted", false).eq("is_active", true).eq("kind", "expense").or(`user_id.is.null,user_id.eq.${userId}`) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (categories.error) throw new Error(`category validation failed: ${categories.error.message}`);
+  if (subcategories.error) throw new Error(`subcategory validation failed: ${subcategories.error.message}`);
+  if ((categories.data?.length ?? 0) !== new Set(categoryIds).size || (subcategories.data?.length ?? 0) !== new Set(subcategoryIds).size) throw new Error("budget allocation reference not found or inaccessible");
 }
 
 async function verifySubcategoryOwnership(

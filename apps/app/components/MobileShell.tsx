@@ -28,6 +28,8 @@ import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../f
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
+import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
+import DebtCreateScreen from "../features/debt-manager/DebtCreateScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
@@ -71,6 +73,7 @@ type Page =
   | "budgeting"
   | "savings-goals"
   | "debt-manager"
+  | "add-debt"
   | "insurance"
   | "assistant"
   | "add-transaction"
@@ -188,6 +191,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   budgeting: { title: "Budgeting", subtitle: "Plan your money" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
   "debt-manager": { title: "Debt Manager", subtitle: "Manage liabilities" },
+  "add-debt": { title: "New Debt", subtitle: "Add a debt record" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
@@ -202,6 +206,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
 export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
+  const [debtPaymentId, setDebtPaymentId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -761,7 +766,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "add-transaction") {
-      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onClose={() => setCurrentPage(transactionReturnPage)} />;
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} debtAccountId={debtPaymentId ?? undefined} onClose={() => { setDebtPaymentId(null); setCurrentPage(transactionReturnPage); }} />;
     }
 
     if (currentPage === "add-recurring-transaction") {
@@ -794,6 +799,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "budgeting") {
       return <BudgetingScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} />;
+    }
+
+    if (currentPage === "debt-manager") {
+      return <DebtManagerScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} onCreateRequested={() => setCurrentPage("add-debt")} onPaymentRequested={(id) => { setDebtPaymentId(id); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} />;
+    }
+
+    if (currentPage === "add-debt") {
+      return <DebtCreateScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("debt-manager")} onSaved={() => setCurrentPage("debt-manager")} />;
     }
 
     if (currentPage === "dashboard") {

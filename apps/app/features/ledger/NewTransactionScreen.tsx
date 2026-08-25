@@ -23,6 +23,7 @@ import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
 import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
+import { createDebtPaymentExpense, getDebt } from "../../local-db/repositories/debts";
 
 const palette = {
   shell: "#fcf8f0",
@@ -46,9 +47,10 @@ type Props = {
   accessToken: string;
   onClose: () => void;
   transaction?: Transaction;
+  debtAccountId?: string;
 };
 
-export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction }: Props) {
+export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, debtAccountId }: Props) {
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
   const isEdit = !!transaction;
@@ -86,10 +88,23 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     estimatedIntervalDays: "",
   });
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [debtName, setDebtName] = useState<string | null>(null);
 
   const { accounts, groups, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
 
   useEffect(() => {
+    if (!debtAccountId) return;
+    void getDebt(userId, debtAccountId).then((debt) => setDebtName(debt?.name ?? null));
+  }, [debtAccountId, userId]);
+
+  useEffect(() => {
+    if (!debtAccountId || txType !== "expense") return;
+    const debtSubcategory = subcategories.find((item) => item.slug === "obligatory_debt_payments");
+    if (debtSubcategory) setCategorySelection({ tier: "subcategory", groupId: null, categoryId: debtSubcategory.category_id, subcategoryId: debtSubcategory.id });
+  }, [debtAccountId, subcategories, txType]);
+
+  useEffect(() => {
+    if (debtAccountId) return;
     if (!isEdit) {
       setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
     }
@@ -241,7 +256,12 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   async function handleSave() {
     setFormError(null);
     const centavos = parseAmount();
-    const effectiveSubcategoryId = resolveEffectiveSubcategoryId();
+    const debtSubcategory = debtAccountId ? subcategories.find((item) => item.slug === "obligatory_debt_payments") : null;
+    if (debtAccountId && !debtSubcategory) {
+      setFormError("Debt payment category is unavailable. Sync categories and try again.");
+      return;
+    }
+    const effectiveSubcategoryId = debtSubcategory?.id ?? resolveEffectiveSubcategoryId();
     if (centavos <= 0) {
       setFormError("Enter a valid amount");
       return;
@@ -298,8 +318,15 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         }
 
         await updateTransaction(userId, deviceId, transaction!.id, updateInput as UpdateTransactionInput);
-      } else if (txType === "expense") {
-        await createExpense(userId, deviceId, {
+       } else if (txType === "expense") {
+         if (debtAccountId) {
+           await createDebtPaymentExpense(userId, deviceId, debtAccountId, { amountMinor: centavos, sourceAccountId, subcategoryId: effectiveSubcategoryId, paymentDate: dateStr, notes: notes.trim() || undefined });
+           showToast("Debt payment saved", "success");
+           runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
+           onClose();
+           return;
+         }
+         await createExpense(userId, deviceId, {
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
           subcategory_id: effectiveSubcategoryId,
@@ -615,13 +642,14 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           </View>
         ) : null}
 
-        {showCategoryPicker ? renderCategoryPickerPage() : (
+        {showCategoryPicker && !debtAccountId ? renderCategoryPickerPage() : (
           <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 18 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {!isEdit ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+             {!isEdit && !debtAccountId ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
 
             <View style={{ alignItems: "center", paddingTop: 6, paddingBottom: 2 }}>
               <Text style={{ fontFamily: "Manrope", fontSize: 15, color: palette.mut, marginBottom: 2 }}>PHP</Text>
               <TextInput
+                accessibilityLabel="Payment amount"
                 value={amount}
                 onChangeText={setAmount}
                 placeholder="0"
@@ -718,7 +746,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                 </View>
                 <View style={{ flex: 1 }}>
                   {renderFieldLabel("ACCOUNT")}
-                  <Pressable onPress={() => setAccountPickerMode(txType === "income" ? "dest" : "source")} style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <Pressable accessibilityLabel="Select account" onPress={() => setAccountPickerMode(txType === "income" ? "dest" : "source")} style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
                       <Wallet color={palette.mut} size={18} weight="regular" />
                       <Text numberOfLines={1} style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: (sourceAccountId || destAccountId) ? palette.ink : palette.mut, flex: 1 }}>
@@ -734,13 +762,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             {needsCategory ? (
               <View>
                 {renderFieldLabel(categorySelection.tier ? `CATEGORY · ${categorySelection.tier.toUpperCase()}` : "CATEGORY")}
-                <Pressable onPress={() => setShowCategoryPicker(true)} style={{ borderRadius: 16, borderWidth: 1, borderColor: categorySelection.tier ? palette.successTint : "#e8deca", backgroundColor: categorySelection.tier ? palette.successCard : palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Pressable disabled={Boolean(debtAccountId)} onPress={() => setShowCategoryPicker(true)} style={{ borderRadius: 16, borderWidth: 1, borderColor: categorySelection.tier ? palette.successTint : "#e8deca", backgroundColor: categorySelection.tier ? palette.successCard : palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", opacity: debtAccountId ? 0.8 : 1 }}>
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: palette.ink }}>
-                      {getCategorySummaryLabel()}
+                        {debtAccountId ? `Debt payment${debtName ? ` · ${debtName}` : ""}` : getCategorySummaryLabel()}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>
-                      Open full list to view everything
+                      {debtAccountId ? "Seeded debt-payment category" : "Open full list to view everything"}
                     </Text>
                   </View>
                   <CaretRight color={palette.mut} size={16} weight="bold" />
@@ -761,7 +789,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               />
             </View>
 
-            {!isEdit ? (
+             {!isEdit && !debtAccountId ? (
               <>
                 <View style={{ borderRadius: 18, backgroundColor: "#f4ead2", paddingHorizontal: 16, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>

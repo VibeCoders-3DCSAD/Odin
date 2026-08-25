@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ArrowLeft, Plus } from "phosphor-react-native";
-import { createBudgetDraft, deleteBudgetDraft, getBudgetDraft, getBudgetDraftTracking, listBudgetDrafts, updateBudgetDraft, type Budget, type BudgetTracking, type CreateBudgetInput } from "../../local-db/repositories/budgets";
+import { createBudgetDraft, deleteBudgetDraft, getBudgetDraftTracking, listBudgetDrafts, updateBudgetDraft, type Budget, type BudgetTracking, type CreateBudgetInput } from "../../local-db/repositories/budgets";
 import CategorySelector from "../../components/CategorySelector";
-import { calculateProvisionalPercentage } from "./constant";
+import { calculateBudgetSpentAmount, calculateProvisionalPercentage } from "./constant";
 import { getCategory, getSubcategory } from "../../local-db/repositories/taxonomy";
 
 type Props = {
@@ -71,6 +71,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
+  const [debtBudget, setDebtBudget] = useState("");
   const [allocationRows, setAllocationRows] = useState<AllocationRow[]>([emptyAllocationRow]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -119,6 +120,24 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     }
   };
 
+  const editDraft = (draft: BudgetTracking) => {
+    setSelectedDraft(null);
+    setEditingDraftId(draft.id);
+    setShowCreate(true);
+    setPeriodKind(draft.periodKind);
+    setPeriodStart(draft.periodStart);
+    setPeriodEnd(draft.periodEnd);
+    setTotalAmount((draft.totalAmountMinor / 100).toFixed(2));
+    setDebtBudget((draft.debtBudgetMinor / 100).toFixed(2));
+    setAllocationRows(draft.allocations.map((allocation) => ({
+      id: allocation.id,
+      categoryId: allocation.categoryId,
+      subcategoryId: allocation.subcategoryId,
+      label: allocationLabels[allocation.id] ?? allocation.categoryId ?? allocation.subcategoryId ?? "",
+      amount: (allocation.amountMinor / 100).toFixed(2),
+    })));
+  };
+
   useEffect(() => {
     void loadDrafts();
   }, [loadDrafts]);
@@ -161,6 +180,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
         periodStart,
         periodEnd,
         totalAmountMinor: parsePesoToCentavos(totalAmount),
+        debtBudgetMinor: periodKind === "MONTHLY" ? parsePesoToCentavos(debtBudget) : 0,
         allocations: allocationRows
           .filter((row) => row.categoryId || row.subcategoryId)
           .map((row) => ({ categoryId: row.categoryId, subcategoryId: row.subcategoryId, amountMinor: parsePesoToCentavos(row.amount) })),
@@ -181,34 +201,6 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     } finally {
       setCreating(false);
     }
-  };
-
-  const editDraft = async (draft: Budget) => {
-    const fullDraft = await getBudgetDraft(userId, draft.id);
-    if (!fullDraft) return;
-    setSelectedDraft(null);
-    setAllocationLabels({});
-    setEditingDraftId(fullDraft.id);
-    setPeriodKind(fullDraft.periodKind);
-    setPeriodStart(fullDraft.periodStart);
-    setPeriodEnd(fullDraft.periodEnd);
-    setTotalAmount((fullDraft.totalAmountMinor / 100).toFixed(2));
-    const rows = await Promise.all(fullDraft.allocations.map(async (allocation) => {
-      const taxonomy = allocation.categoryId
-        ? await getCategory(userId, allocation.categoryId)
-        : allocation.subcategoryId
-          ? await getSubcategory(userId, allocation.subcategoryId)
-          : null;
-      return {
-        id: allocation.id,
-        categoryId: allocation.categoryId,
-        subcategoryId: allocation.subcategoryId,
-        label: taxonomy?.label ?? "",
-        amount: (allocation.amountMinor / 100).toFixed(2),
-      };
-    }));
-    setAllocationRows(rows.concat(rows.length === 0 ? [emptyAllocationRow] : []));
-    setShowCreate(true);
   };
 
   const removeDraft = (draft: Budget) => {
@@ -255,11 +247,18 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
             accessibilityRole="button"
             accessibilityLabel="Create budget draft"
             onPress={() => {
-              setSelectedDraft(null);
-              setAllocationLabels({});
-              setAllocationRows([emptyAllocationRow]);
-              setEditingDraftId(null);
-              setShowCreate(true);
+               setSelectedDraft(null);
+               setAllocationLabels({});
+               setAllocationRows([emptyAllocationRow]);
+               setEditingDraftId(null);
+               setPeriodKind("MONTHLY");
+               setPeriodStart("");
+               setPeriodEnd("");
+               setTotalAmount("");
+               setDebtBudget("");
+               setCreateError(null);
+               setSyncError(null);
+               setShowCreate(true);
             }}
             style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#013220", alignItems: "center", justifyContent: "center" }}
           >
@@ -300,7 +299,12 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
               <View>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: formPalette.ink2, marginTop: 4, marginBottom: 6 }}>TOTAL BUDGET <Text style={{ color: formPalette.error }}>*</Text></Text>
                 <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginBottom: 6 }}>Enter peso amount.</Text>
-                <TextInput value={totalAmount} onChangeText={setTotalAmount} placeholder="e.g. 10.53" placeholderTextColor={formPalette.mut} accessibilityLabel="Total budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
+               <TextInput value={totalAmount} onChangeText={setTotalAmount} placeholder="e.g. 10.53" placeholderTextColor={formPalette.mut} accessibilityLabel="Total budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
+              </View>
+              <View style={{ marginTop: 12 }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: formPalette.ink2, marginTop: 4, marginBottom: 6 }}>DEBT PAYMENTS</Text>
+                <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginBottom: 6 }}>{periodKind === "MONTHLY" ? "Monthly envelope for debt payments." : "Debt planning currently requires a monthly budget."}</Text>
+                <TextInput editable={periodKind === "MONTHLY"} value={periodKind === "MONTHLY" ? debtBudget : "0"} onChangeText={setDebtBudget} placeholder="e.g. 5.00" placeholderTextColor={formPalette.mut} accessibilityLabel="Debt payment budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card, opacity: periodKind === "MONTHLY" ? 1 : 0.55 }} />
               </View>
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", marginTop: 14 }}>Manual allocations</Text>
               {allocationRows.map((row, index) => (
@@ -341,12 +345,13 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
       ) : selectedDraft ? (
         <View>
           {(() => {
-            const spentAmount = selectedDraft.allocations.reduce((total, allocation) => total + allocation.actualAmountMinor, 0);
+            const spentAmount = calculateBudgetSpentAmount(selectedDraft.allocations.map((allocation) => allocation.actualAmountMinor), selectedDraft.debtActualPaymentMinor);
             const percentage = selectedDraft.totalAmountMinor > 0 ? Math.min((spentAmount / selectedDraft.totalAmountMinor) * 100, 100) : 0;
             return (
               <>
-                <View style={{ marginTop: 16, backgroundColor: "#F7F0E1", borderRadius: 16, padding: 16 }}>
-                  <Text style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.mut }}>Draft budget · {selectedDraft.periodStart}–{selectedDraft.periodEnd}</Text>
+                 <View style={{ marginTop: 16, backgroundColor: "#F7F0E1", borderRadius: 16, padding: 16 }}>
+                   <Pressable accessibilityRole="button" accessibilityLabel="Edit budget draft" onPress={() => editDraft(selectedDraft)} style={{ alignSelf: "flex-end" }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#0E6D46" }}>Edit</Text></Pressable>
+                   <Text style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.mut }}>Draft budget · {selectedDraft.periodStart}–{selectedDraft.periodEnd}</Text>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 28, color: formPalette.ink, marginTop: 8 }}>{formatPeso(selectedDraft.totalAmountMinor)}</Text>
                   <View accessibilityRole="progressbar" accessibilityLabel={`${percentage.toFixed(1)} percent of budget spent`} style={{ height: 6, borderRadius: 3, backgroundColor: "#E4E8E2", overflow: "hidden", marginTop: 14 }}>
                     <View style={{ width: `${percentage}%`, height: "100%", backgroundColor: "#0E6D46" }} />
@@ -364,9 +369,10 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                     </Pressable>
                   </View>
                 </View>
-                <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#EEFFF8" }}>
-                  <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - selectedDraft.allocatedAmountMinor, 0))} unallocated</Text>
-                </View>
+                 <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#EEFFF8" }}>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - selectedDraft.allocatedAmountMinor, 0))} unallocated · {formatPeso(selectedDraft.debtBudgetMinor)} debt envelope</Text>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center", marginTop: 4 }}>{formatPeso(selectedDraft.debtActualPaymentMinor)} debt payments made</Text>
+                 </View>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: formPalette.ink, marginTop: 18 }}>Categories</Text>
                 <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 22, marginTop: 10 }}>
                   <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut }}>PLANNED</Text>

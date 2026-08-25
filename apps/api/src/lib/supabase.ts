@@ -3,11 +3,18 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? "";
 
+const fetchWithTimeout: typeof fetch = (input, init) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeout));
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
   },
+  global: { fetch: fetchWithTimeout },
 });
 
 let serviceRoleClientInstance: SupabaseClient | null = null;
@@ -23,15 +30,7 @@ export function getServiceRoleClient(): SupabaseClient {
         autoRefreshToken: false,
         persistSession: false,
       },
-      global: {
-        fetch: (url, init) => {
-          const controller = new AbortController();
-          const signal = controller.signal;
-          const timeout = setTimeout(() => controller.abort(), 30_000);
-          init = { ...init, signal };
-          return fetch(url, init).finally(() => clearTimeout(timeout));
-        },
-      },
+      global: { fetch: fetchWithTimeout },
     });
   }
   return serviceRoleClientInstance;
@@ -46,6 +45,7 @@ export function createAuthenticatedSupabaseClient(
       persistSession: false,
     },
     global: {
+      fetch: fetchWithTimeout,
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },

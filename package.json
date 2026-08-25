@@ -6,7 +6,7 @@
     "dev:app": "pnpm --filter app start",
     "dev:web": "pnpm --filter app web",
     "dev:api": "pnpm --filter api dev",
-    "test": "pnpm -r test"
+    "test": "pnpm --filter api test && pnpm --filter app test"
   },
   "devDependencies": {
     "supabase": "^2.105.0"

@@ -48,21 +48,22 @@ describe("prepareOperation — entity allowlist", () => {
     ).rejects.toThrow("entity 'unknown_table' is not in the sync allowlist");
   });
 
-  it.each(["categories", "subcategories", "financial_accounts", "income_sources", "financial_obligations", "budgets"])(
+  it.each(["categories", "subcategories", "financial_accounts", "income_sources", "financial_obligations", "budgets", "debt_accounts", "debt_payments", "user_debt_priorities", "debt_strategy_preferences"])(
     "accepts entity '%s'",
     async (entity) => {
-      // Delete is the simplest operation — no payload validation needed.
+      // Delete is the simplest operation; linked payments are create-only.
+      const operationType = entity === "debt_payments" ? "create" : "delete";
       const result = await prepareOperation(mockClient, validUserId, {
         operation_id: "op-1",
         entity,
         record_id: "rec-1",
-        operation_type: "delete",
+        operation_type: operationType,
         base_version: null,
         changed_fields: [],
-        payload: {},
+        payload: entity === "debt_payments" ? { amount_centavos: 100, debt_account_id: "debt-1", transaction_id: "transaction-1", linked_transaction_type: "expense", linked_source_account_id: "account-1", linked_subcategory_id: "subcategory-1", source: "transaction", payment_date: "2026-08-21" } : {},
       });
       expect(result.entity).toBe(entity);
-      expect(result.operation_type).toBe("delete");
+      expect(result.operation_type).toBe(operationType);
     },
   );
 });
@@ -70,7 +71,7 @@ describe("prepareOperation — entity allowlist", () => {
 describe("prepareOperation — budgets create", () => {
   beforeEach(() => {
     mockFrom.mockImplementation((table: string) => {
-      if (table === "categories") return createMockQuery({ data: { id: "cat-1" }, error: null });
+      if (table === "categories") return createListQuery({ data: [{ id: "cat-1" }], error: null });
       if (table === "budgets") return createMockQuery({ data: null, error: null });
       throw new Error(`unexpected table lookup: ${table}`);
     });
@@ -191,6 +192,72 @@ describe("prepareOperation — budgets create", () => {
       },
     });
     expect(result.payload).toMatchObject({ periodKind: "CUSTOM", totalAmountMinor: 1000 });
+  });
+});
+
+describe("prepareOperation — debt entities", () => {
+  it("accepts an unknown future preset while sanitizing server-owned fields", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-1", entity: "debt_accounts", record_id: "debt-1", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { id: "debt-1", user_id: validUserId, name: "Future debt", preset_key: "future_lender_product", preset_data: { term: 12 }, version: 99 },
+    });
+    expect(result.payload).toEqual({ name: "Future debt", preset_key: "future_lender_product", preset_data: { term: 12 } });
+  });
+
+  it("rejects invalid debt status and linked payment deletes", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-2", entity: "debt_accounts", record_id: "debt-1", operation_type: "create", base_version: null, changed_fields: [], payload: { name: "Debt", preset_key: "credit_card", status: "deleted" },
+    })).rejects.toThrow("deleted must use the delete operation");
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-3", entity: "debt_payments", record_id: "payment-1", operation_type: "delete", base_version: 1, changed_fields: [], payload: {},
+    })).rejects.toThrow("Debt payments can only be created through Debt Manager");
+  });
+
+  it("rejects debt updates without a field mask", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-empty-update", entity: "debt_accounts", record_id: "debt-1", operation_type: "update",
+      base_version: 1, changed_fields: [], payload: { name: "Debt" },
+    })).rejects.toThrow("Debt updates must include changed fields");
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-priority-empty-update", entity: "user_debt_priorities", record_id: validUserId, operation_type: "update",
+      base_version: 1, changed_fields: [], payload: { priorities: [] },
+    })).rejects.toThrow("Debt updates must include changed fields");
+  });
+
+  it("validates debt numeric, strategy, and priority payloads", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-4", entity: "debt_accounts", record_id: "debt-1", operation_type: "create", base_version: null, changed_fields: [], payload: { name: "Debt", preset_key: "credit_card", current_balance_centavos: -1 },
+    })).rejects.toThrow("current_balance_centavos must be a non-negative integer");
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-5", entity: "debt_strategy_preferences", record_id: validUserId, operation_type: "update", base_version: null, changed_fields: ["strategy"], payload: { strategy: "custom" },
+    })).rejects.toThrow("strategy must be snowball or avalanche");
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-6", entity: "user_debt_priorities", record_id: validUserId, operation_type: "update", base_version: null, changed_fields: ["priorities"], payload: { priorities: ["debt-1", "debt-1"] },
+    })).rejects.toThrow("priorities must be a unique array of debt IDs");
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-7", entity: "debt_accounts", record_id: "debt-1", operation_type: "create", base_version: null, changed_fields: [], payload: { name: "Debt", preset_key: "credit_card", payment_frequency: "whenever", next_due_date: "2026-02-31" },
+    })).rejects.toThrow("payment_frequency must be a supported frequency");
+  });
+
+  it("requires transaction-linked debt payments", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-payment-source", entity: "debt_payments", record_id: "payment-1", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { amount_centavos: 100, debt_account_id: "debt-1", transaction_id: "transaction-1", linked_transaction_type: "expense", linked_source_account_id: "account-1", linked_subcategory_id: "subcategory-1", payment_date: "2026-08-21", source: "manual" },
+    })).rejects.toThrow("source must be transaction");
+  });
+
+  it("rejects debt payments missing linked transaction fields", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-payment-fields", entity: "debt_payments", record_id: "payment-1", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { amount_centavos: 100, debt_account_id: "debt-1", transaction_id: "transaction-1", linked_source_account_id: "account-1", linked_subcategory_id: "subcategory-1", source: "transaction", payment_date: "2026-08-21" },
+    })).rejects.toThrow("linked_transaction_type is required");
+  });
+
+  it("rejects payment components whose sum exceeds the payment", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-payment-components", entity: "debt_payments", record_id: "payment-1", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { amount_centavos: 100, principal_centavos: 60, interest_centavos: 50, debt_account_id: "debt-1", transaction_id: "transaction-1", linked_transaction_type: "expense", linked_source_account_id: "account-1", linked_subcategory_id: "subcategory-1", payment_date: "2026-08-21", source: "transaction" },
+    })).rejects.toThrow("principal and interest cannot exceed amount_centavos");
   });
 });
 

@@ -1,4 +1,5 @@
 import { Pressable, Text, TextInput, View } from "react-native";
+import FrequencySelector from "./FrequencySelector";
 
 const palette = {
   brand: "#013220",
@@ -34,6 +35,7 @@ export type RecurringScheduleValue = {
   secondDayOfWeek: number | null;
   monthOfYear: number | null;
   estimatedIntervalDays: string;
+  timeOfDay?: string;
 };
 
 type Props = {
@@ -46,6 +48,7 @@ type Props = {
   dayOfMonthError?: boolean;
   secondDayOfMonthError?: boolean;
   estimatedIntervalError?: boolean;
+  hideYearlyDetails?: boolean;
 };
 
 function renderLabel(label: string) {
@@ -70,6 +73,7 @@ export default function RecurringScheduleFields({
   dayOfMonthError = false,
   secondDayOfMonthError = false,
   estimatedIntervalError = false,
+  hideYearlyDetails = false,
 }: Props) {
   const shouldShowInterval = showInterval || showIntervalCount;
   const showDayOfMonth = value.frequency === "monthly" || value.frequency === "semi_monthly" || value.frequency === "quarterly" || value.frequency === "yearly";
@@ -78,29 +82,7 @@ export default function RecurringScheduleFields({
 
   return (
     <View style={{ gap: 16 }}>
-      <View>
-        {renderLabel(frequencyLabel)}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {frequencies.map((frequency) => {
-            const selected = value.frequency === frequency;
-            const label = frequency === "semi_monthly" ? "semi monthly" : frequency;
-            return (
-              <Pressable
-                key={frequency}
-                onPress={() => onChange(updateValue(value, { frequency }))}
-                accessibilityRole="radio"
-                accessibilityLabel={label}
-                accessibilityState={{ checked: selected }}
-                style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: selected ? palette.brand : palette.card }}
-              >
-                <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: selected ? palette.white : palette.ink2 }}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+      <FrequencySelector frequencies={frequencies} value={value.frequency} onChange={(frequency) => onChange(updateValue(value, { frequency }))} label={frequencyLabel} />
 
       {shouldShowInterval && value.frequency !== "semi_monthly" && value.frequency !== "biweekly" ? (
         <View>
@@ -234,7 +216,7 @@ export default function RecurringScheduleFields({
         </View>
       ) : null}
 
-      {value.frequency === "yearly" ? (
+      {value.frequency === "yearly" && !hideYearlyDetails ? (
         <>
           <View>
             {renderLabel("MONTH")}

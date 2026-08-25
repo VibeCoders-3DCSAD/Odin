@@ -24,6 +24,10 @@ export const SYNCED_TABLES = [
   "financial_obligations",
   "budgets",
   "budget_allocations",
+  "debt_accounts",
+  "debt_payments",
+  "user_debt_priorities",
+  "debt_strategy_preferences",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -112,12 +116,16 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   budgets: new Set([
     "id", "user_id", "status", "allocation_method", "period_kind", "period_start", "period_end",
     "budget_period_days", "total_amount_minor", "surplus_handling", "deficit_handling",
-    "allow_deficit_planning", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+    "allow_deficit_planning", "debt_budget_amount_minor", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   budget_allocations: new Set([
     "id", "user_id", "budget_id", "category_id", "subcategory_id", "allocated_amount_minor",
     "restriction_level", "version", "deleted", "created_at", "updated_at",
   ]),
+  debt_accounts: new Set(["id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  debt_payments: new Set(["id", "debt_account_id", "user_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  user_debt_priorities: new Set(["id", "user_id", "debt_account_id", "priority_rank", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  debt_strategy_preferences: new Set(["user_id", "strategy", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
 export function normalizePullRow(
@@ -145,12 +153,17 @@ export function normalizePullRow(
     } else if (col === "metadata") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else if (table === "debt_accounts" && col === "preset_data") {
+      const val = row[col];
+      normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
     } else if (table === "budgets" && col === "period_kind") {
       normalized[col] = String(row[col] ?? "").toUpperCase();
     } else if (table === "budgets" && col === "allocation_method") {
       normalized[col] = "MANUAL";
     } else if (table === "budgets" && col === "total_amount_minor") {
       normalized[col] = row.total_amount_centavos;
+    } else if (table === "budgets" && col === "debt_budget_amount_minor") {
+      normalized[col] = row.debt_budget_amount_centavos ?? 0;
     } else if (table === "budgets" && col === "surplus_handling") {
       normalized[col] = "LEAVE_UNALLOCATED";
     } else if (table === "budgets" && col === "deficit_handling") {
@@ -177,14 +190,28 @@ export async function applyPullRow(
   table: string,
   row: PullRow,
 ): Promise<void> {
-  const recordId = row.id as string;
+  const identityColumn = table === "debt_strategy_preferences" ? "user_id" : "id";
+  const userScoped = !TAXONOMY_TABLES.has(table);
+  const recordId = row[identityColumn] as string;
+  const identityWhere = `"${identityColumn}" = ?${userScoped ? " AND user_id = ?" : ""}`;
+  const identityParams: SQLite.SQLiteBindValue[] = userScoped ? [recordId, row.user_id as string] : [recordId];
   const rowVersion = (row.version as number) ?? 1;
   const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
 
+  if (table === "user_debt_priorities" && row.priority_rank !== undefined) {
+    await db.runAsync(
+      `UPDATE user_debt_priorities SET priority_rank = -priority_rank - 1000000
+       WHERE user_id = ? AND priority_rank = ? AND id <> ?`,
+      row.user_id as SQLite.SQLiteBindValue,
+      row.priority_rank as SQLite.SQLiteBindValue,
+      recordId,
+    );
+  }
+
   const existing = await db.getFirstAsync<{ version: number; user_id: string }>(
-    `SELECT version, user_id FROM "${table}" WHERE id = ?`,
-    recordId,
+    `SELECT version, user_id FROM "${table}" WHERE ${identityWhere}`,
+    ...identityParams,
   );
 
   if (!existing) {
@@ -223,54 +250,62 @@ export async function applyPullRow(
       table === "transactions" ||
       table === "transaction_templates" ||
       table === "recurring_transaction_templates" ||
-      table === "recurring_transaction_occurrences"
+      table === "recurring_transaction_occurrences" ||
+      table === "debt_accounts"
     ) {
       await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
-         updated_at = ? WHERE id = ?`,
+       `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
+         updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
-        recordId,
+        ...identityParams,
       );
     } else if (table === "transaction_drafts") {
       await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, status = 'discarded', version = ?,
-         updated_at = ? WHERE id = ?`,
+         `UPDATE "${table}" SET deleted = 1, status = 'discarded', version = ?,
+          updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
-        recordId,
+        ...identityParams,
       );
     } else if (table === "transaction_line_items") {
       await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, version = ?,
-         updated_at = ? WHERE id = ?`,
+         `UPDATE "${table}" SET deleted = 1, version = ?,
+          updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
-        recordId,
+        ...identityParams,
       );
     } else if (table === "budgets") {
       await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
-         updated_at = ? WHERE id = ?`,
+         `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
+          updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
-        recordId,
+        ...identityParams,
       );
     } else if (table === "budget_allocations") {
       await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, version = ?,
-         updated_at = ? WHERE id = ?`,
+         `UPDATE "${table}" SET deleted = 1, version = ?,
+          updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
-        recordId,
+        ...identityParams,
+      );
+    } else if (table === "debt_payments" || table === "user_debt_priorities" || table === "debt_strategy_preferences") {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, version = ?, updated_at = ? WHERE ${identityWhere}`,
+        rowVersion,
+        now,
+        ...identityParams,
       );
     } else {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, is_active = 0, version = ?,
-         updated_at = ? WHERE id = ?`,
+         updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
-        recordId,
+        ...identityParams,
       );
     }
     return;
@@ -280,8 +315,8 @@ export async function applyPullRow(
   const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
 
   await db.runAsync(
-    `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
+    `UPDATE "${table}" SET ${setClauses} WHERE ${identityWhere}`,
     ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
-    recordId,
+    ...identityParams,
   );
 }

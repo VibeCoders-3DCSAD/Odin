@@ -1,35 +1,37 @@
-const mockInitDatabase = jest.fn();
-const mockEnqueueOperation = jest.fn();
+import { jest } from "@jest/globals";
+
+const mockInitDatabase = jest.fn<(...args: any[]) => any>();
+const mockEnqueueOperation = jest.fn<(...args: any[]) => any>();
 const mockRandomUUID = jest.fn(() => "obligation-1");
 
 jest.mock("../../client", () => ({
-  initDatabase: (...args: unknown[]) => mockInitDatabase(...args),
+  initDatabase: (...args: any[]) => mockInitDatabase(...args),
 }));
 
 jest.mock("../../helpers", () => {
-  const actual = jest.requireActual("../../helpers");
+  const actual = jest.requireActual("../../helpers") as Record<string, unknown>;
   return {
     ...actual,
-    enqueueOperation: (...args: unknown[]) => mockEnqueueOperation(...args),
+    enqueueOperation: (...args: any[]) => mockEnqueueOperation(...args),
   };
 });
 
 jest.mock("../../uuid", () => ({
-  randomUUID: (...args: unknown[]) => mockRandomUUID(...args),
+  randomUUID: () => mockRandomUUID(),
 }));
 
 type MockDb = {
-  getFirstAsync: jest.Mock;
-  runAsync: jest.Mock;
-  withTransactionAsync: jest.Mock<Promise<void>, [(tx: () => Promise<void>) => Promise<void>]>;
+  getFirstAsync: jest.Mock<any>;
+  runAsync: jest.Mock<any>;
+  withTransactionAsync: jest.Mock<any>;
 };
 
-function createDbMock(getFirstAsync: jest.Mock): MockDb {
+function createDbMock(getFirstAsync: unknown): MockDb {
   return {
-    getFirstAsync,
+    getFirstAsync: getFirstAsync as jest.Mock<any>,
     runAsync: jest.fn(),
-    withTransactionAsync: jest.fn(async (work: () => Promise<void>) => {
-      await work();
+    withTransactionAsync: jest.fn(async (work: (tx: () => Promise<void>) => Promise<void>) => {
+      await work(async () => undefined);
     }),
   };
 }

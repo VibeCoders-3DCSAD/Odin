@@ -87,7 +87,7 @@ router.patch("/settings", requireAuth, async (request: AuthenticatedRequest, res
   } catch (error) {
     response.status(400).json({
       error: "Bad Request",
-      message: error instanceof Error ? error.message : "Invalid privacy settings payload",
+      message: "Invalid privacy settings payload",
     });
     return;
   }
