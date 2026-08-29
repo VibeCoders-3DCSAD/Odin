@@ -116,6 +116,15 @@ describe("POST /odin/api/auth/login", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when email is malformed", async () => {
+    const response = await request(app)
+      .post("/odin/api/auth/login")
+      .send({ payload: { email: "not-an-email", password: "StrongP@ss1" } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/valid email/i);
+  });
+
   it("returns 400 when password is missing", async () => {
     const response = await request(app)
       .post("/odin/api/auth/login")
@@ -148,6 +157,20 @@ describe("POST /odin/api/auth/login", () => {
 
     expect(response.status).toBe(401);
     expect(response.body).toMatchObject({ error: "Unauthorized" });
+  });
+
+  it("returns an email-unverified state when Supabase rejects an unverified account", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "email_not_confirmed", status: 400 },
+    });
+
+    const response = await request(app)
+      .post("/odin/api/auth/login")
+      .send(validLoginPayload());
+
+    expect(response.status).toBe(401);
+    expect(response.body).toMatchObject({ code: "email_unverified" });
   });
 
   it("returns 401 when Supabase does not return a session", async () => {

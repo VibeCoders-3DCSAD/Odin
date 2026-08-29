@@ -7,6 +7,7 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { AUTH_ERRORS } from "../lib/constants.js";
+import { isStrongPassword, normalizeEmail } from "../lib/authValidation.js";
 
 const router = Router();
 
@@ -163,6 +164,7 @@ router.post("/google", async (request: Request, response: Response) => {
 
 router.post("/register", async (request: Request, response: Response) => {
   const { email, password, display_name } = request.body?.payload ?? {};
+  const normalizedEmail = normalizeEmail(email);
 
   if (typeof email !== "string" || email.trim() === "") {
     response.status(400).json({
@@ -172,7 +174,12 @@ router.post("/register", async (request: Request, response: Response) => {
     return;
   }
 
-  if (typeof password !== "string" || password.trim() === "") {
+  if (!normalizedEmail) {
+    response.status(400).json({ error: "Bad Request", message: AUTH_ERRORS.email_invalid });
+    return;
+  }
+
+  if (typeof password !== "string" || password === "") {
     response.status(400).json({
       error: "Bad Request",
       message: AUTH_ERRORS.password_required,
@@ -180,15 +187,20 @@ router.post("/register", async (request: Request, response: Response) => {
     return;
   }
 
+  if (!isStrongPassword(password)) {
+    response.status(400).json({ error: "Bad Request", message: AUTH_ERRORS.password_invalid });
+    return;
+  }
+
   const { data, error } = await supabase.auth.signUp({
-    email: email.trim(),
+    email: normalizedEmail,
     password,
     options: {
       data:
         typeof display_name === "string" && display_name.trim() !== ""
           ? { display_name: display_name.trim() }
           : undefined,
-      emailRedirectTo: "odin://auth/verify",
+        emailRedirectTo: process.env.AUTH_VERIFY_REDIRECT_URL ?? "odin://auth/verify",
     },
   });
 
@@ -233,12 +245,18 @@ router.post("/register", async (request: Request, response: Response) => {
 
 router.post("/login", async (request: Request, response: Response) => {
   const { email, password } = request.body?.payload ?? {};
+  const normalizedEmail = normalizeEmail(email);
 
   if (typeof email !== "string" || email.trim() === "") {
     response.status(400).json({
       error: "Bad Request",
       message: AUTH_ERRORS.email_required,
     });
+    return;
+  }
+
+  if (!normalizedEmail) {
+    response.status(400).json({ error: "Bad Request", message: AUTH_ERRORS.email_invalid });
     return;
   }
 
@@ -251,9 +269,19 @@ router.post("/login", async (request: Request, response: Response) => {
   }
 
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
+    email: normalizedEmail,
     password,
   });
+
+  if (error?.status === 429) {
+    response.status(429).json({ error: "Too Many Requests", message: AUTH_ERRORS.too_many_requests });
+    return;
+  }
+
+  if (error?.code === "email_not_confirmed") {
+    response.status(401).json({ error: "Unauthorized", code: "email_unverified", message: AUTH_ERRORS.verification_required });
+    return;
+  }
 
   if (error || !data.user || !data.session?.access_token) {
     response.status(401).json({
@@ -290,6 +318,7 @@ router.post("/login", async (request: Request, response: Response) => {
 
 router.post("/password-reset", async (request: Request, response: Response) => {
   const { email } = request.body?.payload ?? {};
+  const normalizedEmail = normalizeEmail(email);
 
   if (typeof email !== "string" || email.trim() === "") {
     response.status(400).json({
@@ -299,7 +328,12 @@ router.post("/password-reset", async (request: Request, response: Response) => {
     return;
   }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+  if (!normalizedEmail) {
+    response.status(400).json({ error: "Bad Request", message: AUTH_ERRORS.email_invalid });
+    return;
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
     redirectTo: process.env.AUTH_REDIRECT_URL ?? "odin://auth/reset",
   });
 
@@ -330,11 +364,16 @@ router.post(
   async (request: AuthenticatedRequest, response: Response) => {
     const { password, refresh_token: refreshToken } = request.body?.payload ?? {};
 
-    if (typeof password !== "string" || password.trim() === "") {
+    if (typeof password !== "string" || password === "") {
       response.status(400).json({
         error: "Bad Request",
         message: AUTH_ERRORS.new_password_required,
       });
+      return;
+    }
+
+    if (!isStrongPassword(password)) {
+      response.status(400).json({ error: "Bad Request", message: AUTH_ERRORS.password_invalid });
       return;
     }
 
@@ -378,6 +417,46 @@ router.post(
   },
 );
 
+router.post(
+  "/verification-resend",
+  async (request: Request, response: Response) => {
+    const email = normalizeEmail(request.body?.payload?.email);
+    if (!email) {
+      response.status(400).json({ error: "Bad Request", message: AUTH_ERRORS.email_invalid });
+      return;
+    }
+
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: process.env.AUTH_VERIFY_REDIRECT_URL ?? "odin://auth/verify" },
+    });
+
+    if (error) {
+      response.status(error.status === 429 ? 429 : 500).json({
+        error: error.status === 429 ? "Too Many Requests" : "Internal Server Error",
+        message: error.status === 429 ? AUTH_ERRORS.too_many_requests : AUTH_ERRORS.verification_resend_failed,
+      });
+      return;
+    }
+
+    response.status(200).json({ payload: { sent: true } });
+  },
+);
+
+router.post(
+  "/verify",
+  requireAuth,
+  async (request: AuthenticatedRequest, response: Response) => {
+    const { data, error } = await supabase.auth.getUser(request.accessToken!);
+    if (error || !data.user?.email_confirmed_at) {
+      response.status(401).json({ error: "Unauthorized", message: AUTH_ERRORS.verification_required });
+      return;
+    }
+    response.status(200).json({ payload: { verified: true, user_id: data.user.id } });
+  },
+);
+
 router.post("/session", async (request: Request, response: Response) => {
   const authHeader = request.headers.authorization;
 
@@ -406,6 +485,15 @@ router.post("/session", async (request: Request, response: Response) => {
     response.status(401).json({
       error: "Unauthorized",
       message: AUTH_ERRORS.token_expired,
+    });
+    return;
+  }
+
+  if (!userData.user.email_confirmed_at) {
+    response.status(401).json({
+      error: "Unauthorized",
+      code: "email_unverified",
+      message: AUTH_ERRORS.verification_required,
     });
     return;
   }

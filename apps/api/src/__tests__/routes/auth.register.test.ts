@@ -109,6 +109,15 @@ describe("POST /odin/api/auth/register", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when email is malformed", async () => {
+    const response = await request(app)
+      .post("/odin/api/auth/register")
+      .send(validRegisterPayload({ email: "not-an-email" }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/valid email/i);
+  });
+
   it("returns 400 when password is missing", async () => {
     const response = await request(app)
       .post("/odin/api/auth/register")
@@ -127,6 +136,15 @@ describe("POST /odin/api/auth/register", () => {
       .send({ payload: { email: "user@example.com", password: "" } });
 
     expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when password misses required character classes", async () => {
+    const response = await request(app)
+      .post("/odin/api/auth/register")
+      .send(validRegisterPayload({ password: "alllowercase" }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/uppercase/i);
   });
 
   it("returns 400 when payload wrapper is missing", async () => {

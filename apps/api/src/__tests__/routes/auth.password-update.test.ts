@@ -89,6 +89,19 @@ describe("POST /odin/api/auth/password-update", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when password misses required character classes", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: validUserId } }, error: null });
+
+    const response = await request(app)
+      .post("/odin/api/auth/password-update")
+      .set(authHeader())
+      .send(validPasswordUpdatePayload({ password: "alllowercase" }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/uppercase/i);
+    expect(mockSetSession).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when payload wrapper is missing", async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: validUserId } },

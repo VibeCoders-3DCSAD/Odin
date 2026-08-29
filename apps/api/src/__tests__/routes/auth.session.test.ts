@@ -32,7 +32,7 @@ const mockFrom = supabase.from as jest.Mock;
 describe("POST /odin/api/auth/session", () => {
   function mockSuccess() {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: validUserId } },
+      data: { user: { id: validUserId, email_confirmed_at: "2026-01-01T00:00:00.000Z" } },
       error: null,
     });
 
@@ -81,7 +81,7 @@ describe("POST /odin/api/auth/session", () => {
 
   it("returns 200 and bootstraps profile idempotently", async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: validUserId } },
+      data: { user: { id: validUserId, email_confirmed_at: "2026-01-01T00:00:00.000Z" } },
       error: null,
     });
 
@@ -107,7 +107,7 @@ describe("POST /odin/api/auth/session", () => {
 
   it("returns 200 and bootstraps privacy settings idempotently", async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: validUserId } },
+      data: { user: { id: validUserId, email_confirmed_at: "2026-01-01T00:00:00.000Z" } },
       error: null,
     });
 
@@ -132,7 +132,7 @@ describe("POST /odin/api/auth/session", () => {
 
   it("returns 200 with default onboarding when no onboarding row exists", async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: validUserId } },
+      data: { user: { id: validUserId, email_confirmed_at: "2026-01-01T00:00:00.000Z" } },
       error: null,
     });
 
@@ -153,7 +153,7 @@ describe("POST /odin/api/auth/session", () => {
 
   it("returns 500 when onboarding query fails", async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: validUserId } },
+      data: { user: { id: validUserId, email_confirmed_at: "2026-01-01T00:00:00.000Z" } },
       error: null,
     });
 
@@ -176,7 +176,7 @@ describe("POST /odin/api/auth/session", () => {
 
   it("returns 500 when profile creation fails", async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: validUserId } },
+      data: { user: { id: validUserId, email_confirmed_at: "2026-01-01T00:00:00.000Z" } },
       error: null,
     });
 
@@ -238,6 +238,35 @@ describe("POST /odin/api/auth/session", () => {
     expect(response.body).toMatchObject({ error: "Unauthorized" });
   });
 
+  it("returns an email-unverified state without bootstrapping the session", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: validUserId, email_confirmed_at: null } },
+      error: null,
+    });
+
+    const response = await request(app)
+      .post("/odin/api/auth/session")
+      .set(authHeader())
+      .send({ payload: {} });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toMatchObject({ code: "email_unverified" });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it("rejects a session when Supabase omits the confirmation timestamp", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: validUserId } }, error: null });
+
+    const response = await request(app)
+      .post("/odin/api/auth/session")
+      .set(authHeader())
+      .send({ payload: {} });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toMatchObject({ code: "email_unverified" });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
   it("returns 500 when getUser throws", async () => {
     mockGetUser.mockRejectedValue(new Error("Supabase unreachable"));
 
@@ -251,7 +280,7 @@ describe("POST /odin/api/auth/session", () => {
 
   it("returns 500 when getUser succeeds but profile query throws", async () => {
     mockGetUser.mockResolvedValue({
-      data: { user: { id: validUserId } },
+      data: { user: { id: validUserId, email_confirmed_at: "2026-01-01T00:00:00.000Z" } },
       error: null,
     });
 

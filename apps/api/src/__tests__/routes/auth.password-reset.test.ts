@@ -65,6 +65,15 @@ describe("POST /odin/api/auth/password-reset", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when email is malformed", async () => {
+    const response = await request(app)
+      .post("/odin/api/auth/password-reset")
+      .send({ payload: { email: "not-an-email" } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/valid email/i);
+  });
+
   it("returns 400 when email is not a string", async () => {
     const response = await request(app)
       .post("/odin/api/auth/password-reset")

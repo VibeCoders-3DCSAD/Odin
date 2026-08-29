@@ -37,6 +37,12 @@ type StoredAuthSession = {
   provider: AuthenticatedState["provider"];
 };
 
+class SessionBootstrapError extends Error {
+  constructor(readonly status: number, readonly code: string | undefined, message: string) {
+    super(message);
+  }
+}
+
 async function bootstrapSession(accessToken: string) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -51,9 +57,10 @@ async function bootstrapSession(accessToken: string) {
     });
     const body = await response.json().catch(() => ({})) as {
       payload?: { user?: { id?: string }; profile?: { id?: string }; onboarding?: { status?: string } };
+      code?: string;
       message?: string;
     };
-    if (!response.ok) throw new Error(body.message ?? "Failed to restore session.");
+    if (!response.ok) throw new SessionBootstrapError(response.status, body.code, body.message ?? "Failed to restore session.");
     return body.payload;
   } finally {
     clearTimeout(timeoutId);
@@ -101,9 +108,17 @@ async function getGoogleIdToken() {
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState<AuthenticatedState | null>(null);
-  const { isPasswordRecovery, isResolvingRecoveryToken, recoveryRefreshToken, recoveryToken } = useDeepLink();
+  const {
+    isPasswordRecovery,
+    isResolvingRecoveryToken,
+    recoveryRefreshToken,
+    recoveryToken,
+    verificationToken,
+  } = useDeepLink();
   const [deviceId, setDeviceId] = useState("");
   const [isRestoringSession, setIsRestoringSession] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
 
   useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
   useEffect(() => { startConnectivityPolling(); }, []);
@@ -143,6 +158,7 @@ export default function App() {
     let cancelled = false;
 
     async function restoreSession() {
+      let restoredEmail: string | null = null;
       if (isPasswordRecovery || isResolvingRecoveryToken) {
         setIsRestoringSession(false);
         return;
@@ -166,8 +182,10 @@ export default function App() {
         const session = data.session;
         if (error || !session?.access_token || !session.refresh_token) {
           await clearAuthSession();
+          if (!cancelled) setSessionExpired(true);
           return;
         }
+        restoredEmail = session.user.email ?? null;
 
         const payload = await bootstrapSession(session.access_token);
         const restored: AuthenticatedState = {
@@ -180,8 +198,15 @@ export default function App() {
         };
         await saveAuthSession(restored);
         if (!cancelled) setAuthenticated(restored);
-      } catch {
+      } catch (error) {
         await clearAuthSession();
+        if (!cancelled && error instanceof SessionBootstrapError) {
+          if (error.code === "email_unverified") {
+            setVerificationEmail(restoredEmail);
+          } else if (error.status === 401) {
+            setSessionExpired(true);
+          }
+        }
       } finally {
         if (!cancelled) setIsRestoringSession(false);
       }
@@ -285,6 +310,9 @@ export default function App() {
             isResolvingRecoveryToken={isResolvingRecoveryToken}
             recoveryRefreshToken={recoveryRefreshToken ?? undefined}
             recoveryToken={recoveryToken ?? undefined}
+            verificationToken={verificationToken ?? undefined}
+            verificationEmail={verificationEmail ?? undefined}
+            sessionExpired={sessionExpired}
             onAuthenticated={handleAuthenticated}
             onLoggedOut={handleLoggedOut}
           />

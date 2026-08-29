@@ -20,6 +20,7 @@ const requestTimeoutMs = 10_000;
 const odinLogo = require("../assets/odin-logo.png");
 
 type AuthMode = "login" | "register" | "reset_password" | "reset_complete";
+type AuthModeWithRecovery = AuthMode | "verification_pending" | "session_expired";
 type AuthProvider = "password" | "google";
 type NoticeTone = "default" | "success" | "error";
 
@@ -42,6 +43,7 @@ type AuthResponse = {
     logged_out?: boolean;
   };
   error?: string;
+  code?: string;
   message?: string;
 };
 
@@ -68,6 +70,8 @@ type AuthExperienceProps = {
   recoveryRefreshToken?: string;
   recoveryToken?: string;
   verificationToken?: string;
+  verificationEmail?: string;
+  sessionExpired?: boolean;
   onAuthenticated: (state: AuthenticatedState) => boolean | Promise<boolean>;
   onLoggedOut: () => void;
 };
@@ -338,11 +342,13 @@ export default function AuthExperience({
   isResolvingRecoveryToken,
   recoveryRefreshToken: recoveryRefreshTokenProp,
   recoveryToken: recoveryTokenProp,
+  sessionExpired,
+  verificationEmail,
   verificationToken: verificationTokenProp,
   onAuthenticated,
   onLoggedOut,
 }: AuthExperienceProps) {
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [mode, setMode] = useState<AuthModeWithRecovery>("login");
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -366,7 +372,8 @@ export default function AuthExperience({
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [confirmTouched, setConfirmTouched] = useState(false);
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const normalizedEmail = email.trim();
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
   const passwordChecks = {
     length: password.length >= 8,
     upper: /[A-Z]/.test(password),
@@ -412,7 +419,6 @@ export default function AuthExperience({
   }
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const verifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (notice) {
@@ -421,14 +427,6 @@ export default function AuthExperience({
     }
     return () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); };
   }, [notice]);
-
-  useEffect(() => {
-    if (pendingVerificationEmail) {
-      if (verifTimer.current) clearTimeout(verifTimer.current);
-      verifTimer.current = setTimeout(() => setPendingVerificationEmail(null), 5000);
-    }
-    return () => { if (verifTimer.current) clearTimeout(verifTimer.current); };
-  }, [pendingVerificationEmail]);
 
   useEffect(() => { setNotice(null); }, [mode]);
 
@@ -446,10 +444,37 @@ export default function AuthExperience({
 
   useEffect(() => {
     if (!verificationTokenProp) return;
-    setPendingVerificationEmail(null);
-    setNotice({ tone: "success", message: "Email verified! You can now log in." });
-    setMode("login");
+    let cancelled = false;
+
+    postJson("/verify", undefined, verificationTokenProp).then(({ response, body }) => {
+      if (cancelled) return;
+      if (response.ok) {
+        setPendingVerificationEmail(null);
+        setNotice({ tone: "success", message: "Email verified. You can now log in." });
+        setMode("login");
+      } else {
+        setMode("verification_pending");
+        setNotice({ tone: "error", message: body.message ?? "We could not verify your email yet." });
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setMode("verification_pending");
+        setNotice({ tone: "error", message: getErrorMessage(error) });
+      }
+    });
+
+    return () => { cancelled = true; };
   }, [verificationTokenProp]);
+
+  useEffect(() => {
+    if (sessionExpired) setMode("session_expired");
+  }, [sessionExpired]);
+
+  useEffect(() => {
+    if (!verificationEmail) return;
+    setPendingVerificationEmail(verificationEmail);
+    setMode("verification_pending");
+  }, [verificationEmail]);
 
   async function bootstrapSession(token: string) {
     const { response, body } = await postJson("/session", undefined, token);
@@ -500,6 +525,10 @@ export default function AuthExperience({
 
       if (!response.ok) {
         setFieldErrors(["email", "password"]);
+        if (response.status === 401 && body.code === "email_unverified") {
+          setPendingVerificationEmail(email.trim());
+          setMode("verification_pending");
+        }
         throw new Error(body.message ?? "Sign in failed.");
       }
 
@@ -511,6 +540,21 @@ export default function AuthExperience({
       await continueAfterAuthentication(authState);
 
       resetSensitiveFields();
+    } catch (error) {
+      setNotice({ tone: "error", message: getErrorMessage(error) });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    const address = pendingVerificationEmail ?? email.trim();
+    if (!address) return;
+    setIsBusy(true);
+    try {
+      const { response, body } = await postJson("/verification-resend", { email: address });
+      if (!response.ok) throw new Error(body.message ?? "Verification email could not be sent.");
+      setNotice({ tone: "success", message: `A new verification email was sent to ${address}.` });
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });
     } finally {
@@ -575,7 +619,7 @@ export default function AuthExperience({
         setNotice({ tone: "success", message: "Account created. One more step." });
       } else {
         setPendingVerificationEmail(email.trim());
-        setMode("login");
+        setMode("verification_pending");
         setNotice(null);
       }
 
@@ -588,9 +632,9 @@ export default function AuthExperience({
   }
 
   async function handlePasswordReset() {
-    if (!email.trim()) {
+    if (!emailValid) {
       setFieldErrors(["email"]);
-      setNotice({ tone: "error", message: "Enter your email first so we know where to send the reset link." });
+      setNotice({ tone: "error", message: "Enter a valid registered email." });
       return;
     }
 
@@ -668,6 +712,7 @@ export default function AuthExperience({
       );
 
       if (!response.ok) {
+        if (response.status === 401) setMode("session_expired");
         throw new Error(body.message ?? "Password update failed.");
       }
 
@@ -762,11 +807,23 @@ export default function AuthExperience({
     }
   }
 
-  const title = mode === "login" ? "Welcome back" : mode === "reset_complete" ? "Reset your password" : "Create account";
+  const title = mode === "login"
+    ? "Welcome back"
+    : mode === "reset_complete"
+    ? "Reset your password"
+    : mode === "verification_pending"
+    ? "Verify your email"
+    : mode === "session_expired"
+    ? "Session expired"
+    : "Create account";
   const subtitle = mode === "login"
     ? "Sign in to your Odin account"
     : mode === "reset_complete"
     ? "Choose a new password for your account."
+    : mode === "verification_pending"
+    ? "Confirm your email address to continue."
+    : mode === "session_expired"
+    ? "Sign in again to continue securely."
     : "Set up your Odin account";
 
   return (
@@ -818,6 +875,29 @@ export default function AuthExperience({
                   onPress={handleLogout}
                 />
               </View>
+            ) : mode === "verification_pending" ? (
+              <View className="gap-6">
+                <View className="flex-row items-start gap-3 p-5 rounded-[16px] bg-accent">
+                  <MaterialCommunityIcons color={palette.brand} name="email-check-outline" size={24} />
+                  <Text className="flex-1 text-text text-sm leading-[20px] font-medium">
+                    Check {pendingVerificationEmail ? pendingVerificationEmail : "your inbox"} for Odin's verification link. The link confirms email ownership and unlocks sign-in.
+                  </Text>
+                </View>
+                <AuthButton disabled={isBusy || !pendingVerificationEmail} label="Resend verification email" loading={isBusy} onPress={handleResendVerification} />
+                <Pressable onPress={() => { setMode("login"); setNotice(null); }}>
+                  <Text className="text-brand text-xs font-bold text-center">Back to sign in</Text>
+                </Pressable>
+              </View>
+            ) : mode === "session_expired" ? (
+              <View className="gap-6">
+                <View className="flex-row items-start gap-3 p-5 rounded-[16px] bg-accent">
+                  <MaterialCommunityIcons color={palette.brand} name="lock-clock" size={24} />
+                  <Text className="flex-1 text-text text-sm leading-[20px] font-medium">
+                    Your secure session is no longer valid. Sign in again to protect your account.
+                  </Text>
+                </View>
+                <AuthButton label="Sign in again" onPress={() => { setMode("login"); setNotice(null); resetSensitiveFields(); }} />
+              </View>
             ) : mode === "reset_password" ? (
               <View className="gap-6">
                 <View className="gap-4">
@@ -829,7 +909,7 @@ export default function AuthExperience({
                     onBlur={() => setFocusedField(null)}
                     onChangeText={(v) => { setEmail(v); setFieldErrors((prev) => prev.filter((f) => f !== "email")); setEmailTouched(true); }}
                     onFocus={() => { setFocusedField("email"); setFieldErrors((prev) => prev.filter((f) => f !== "email")); }}
-                    placeholder="you@example.com"
+                    placeholder="Enter your registered email"
                     tone={
                       fieldErrors.includes("email") ? "error"
                       : emailTouched && email.length > 0 && !emailValid ? "error"
@@ -841,7 +921,7 @@ export default function AuthExperience({
                 </View>
 
                 <AuthButton
-                  disabled={isBusy || email.length === 0}
+                  disabled={isBusy || !emailValid}
                   label="Send reset link"
                   loading={isBusy}
                   onPress={handlePasswordReset}
@@ -1023,7 +1103,7 @@ export default function AuthExperience({
                         onBlur={() => setFocusedField(null)}
                         onChangeText={(v) => { setConfirmPassword(v); setFieldErrors((prev) => prev.filter((f) => f !== "confirm_password")); setConfirmTouched(true); }}
                         onFocus={() => { setFocusedField("confirm_password"); setFieldErrors((prev) => prev.filter((f) => f !== "confirm_password")); }}
-                        placeholder="Repeat your password"
+                        placeholder="Re-enter your password"
                         secureTextEntry={!showConfirmPassword}
                         tone={
                           fieldErrors.includes("confirm_password") ? "error"

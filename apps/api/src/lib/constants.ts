@@ -11,7 +11,9 @@ export const AUTH_ERRORS = {
   token_required: "Authorization header is required.",
   refresh_token_required: "Refresh token is required.",
   email_required: "Email is required.",
+  email_invalid: "Enter a valid email address.",
   password_required: "Password is required.",
+  password_invalid: "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
   new_password_required: "New password is required.",
   display_name_optional: "",
   google_id_token_required: "Google ID token is required.",
@@ -20,6 +22,9 @@ export const AUTH_ERRORS = {
   bootstrap_profile_failed: "Failed to bootstrap user profile.",
   password_reset_failed: "Password reset request failed. Please try again.",
   password_update_failed: "Password update failed.",
+  verification_resend_failed: "Verification email could not be sent. Please try again.",
+  verification_required: "Verify your email first, then sign in.",
+  verification_complete: "Email verification completed.",
   logout_failed: "Logout failed.",
   session_failed: "Failed to restore your session.",
   generic: "Something went wrong. Please try again.",
@@ -143,5 +148,4 @@ export const PROFILE_ERRORS = {
   invalid_profile_label: "Invalid profile label. Must be one of: stable_flexible, stable_obligated, variable_flexible, variable_obligated.",
   reassess_failed: "Failed to request reassessment.",
 } as const;
-
 
