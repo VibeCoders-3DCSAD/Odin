@@ -52,7 +52,7 @@ describe("POST /odin/api/onboarding/sessions", () => {
       status: "in_progress",
       started_at: "2026-07-08T00:00:00Z",
       current_step_key: "welcome",
-      raw_answers: { name: "Juan" },
+      raw_answers: { display_name: "Juan" },
       metadata: {},
     };
 
@@ -61,7 +61,7 @@ describe("POST /odin/api/onboarding/sessions", () => {
     const response = await request(app)
       .post(`${basePath}/sessions`)
       .set(authHeader())
-      .send({ payload: { raw_answers: { name: "Juan" }, current_step_key: "welcome" } });
+      .send({ payload: { raw_answers: { display_name: "Juan" }, current_step_key: "welcome" } });
 
     expect(response.status).toBe(201);
     expect(response.body.payload.session).toMatchObject({
@@ -103,6 +103,18 @@ describe("POST /odin/api/onboarding/sessions", () => {
       .send({ payload: { raw_answers: ["a", "b"] } });
 
     expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when raw_answers contains an unknown question", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post(`${basePath}/sessions`)
+      .set(authHeader())
+      .send({ payload: { raw_answers: { unsupported: "value" } } });
+
+    expect(response.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it("returns 400 when current_step_key is not a string", async () => {
@@ -154,10 +166,10 @@ describe("POST /odin/api/onboarding/sessions", () => {
     await request(app)
       .post(`${basePath}/sessions`)
       .set(authHeader())
-      .send({ payload: { raw_answers: { name: "Juan" }, current_step_key: "welcome" } });
+      .send({ payload: { raw_answers: { display_name: "Juan" }, current_step_key: "welcome" } });
 
     expect(mockRpc).toHaveBeenCalledWith("create_onboarding_session", {
-      p_raw_answers: { name: "Juan" },
+      p_raw_answers: { display_name: "Juan" },
       p_current_step_key: "welcome",
     });
   });
@@ -177,7 +189,7 @@ describe("PATCH /odin/api/onboarding/sessions/:id", () => {
       id: sessionId,
       user_id: validUserId,
       status: "in_progress",
-      raw_answers: { name: "Juan" },
+      raw_answers: { display_name: "Juan" },
     };
 
     const updatedSession = {
@@ -186,7 +198,7 @@ describe("PATCH /odin/api/onboarding/sessions/:id", () => {
       status: "in_progress",
       started_at: "2026-07-08T00:00:00Z",
       current_step_key: "income",
-      raw_answers: { name: "Juan", age: 25 },
+      raw_answers: { display_name: "Juan", monthly_income: "25000" },
       metadata: {},
     };
 
@@ -197,7 +209,7 @@ describe("PATCH /odin/api/onboarding/sessions/:id", () => {
     const response = await request(app)
       .patch(`${basePath}/sessions/${sessionId}`)
       .set(authHeader())
-      .send({ payload: { current_step_key: "income", raw_answers: { age: 25 } } });
+      .send({ payload: { current_step_key: "income", raw_answers: { monthly_income: "25000" } } });
 
     expect(response.status).toBe(200);
     expect(response.body.payload.session.current_step_key).toBe("income");

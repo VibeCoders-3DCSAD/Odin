@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, Text, TextStyle, View } from "react-native";
+import { Alert, Animated, Pressable, Text, TextInput, TextStyle, View } from "react-native";
 import {
   Bell,
   Brain,
@@ -20,12 +20,15 @@ import { getErrorMessage } from "./helpers";
 import { useToast } from "../../components/Toast";
 import UserProfileScreen from "./UserProfileScreen";
 import AccountOffboardingScreen from "./AccountOffboardingScreen";
-import { getLocalPrivacySettings, cachePrivacySettings } from "../../local-db/repositories/privacySettings";
+import { getLocalPrivacySettings, cachePrivacySettings, cacheProfileAssignment, getLocalProfileAssignment } from "../../local-db/repositories/privacySettings";
+import { confirmProfileAssignment, getProfileAssignment, requestProfileReassessment, selectProfileAssignment } from "../onboarding/api";
+import type { ProfileAssignment } from "../onboarding/types";
 
 type PrivacySettingsScreenProps = {
   accessToken: string;
   userId: string;
   onBackToLogin?: () => void;
+  onRequestReassessment?: () => void;
   onDeleted?: (scheduledDate: string) => void;
   onSubPageChange?: (showingSubPage: boolean) => void;
   beforeDangerZone?: React.ReactNode;
@@ -57,6 +60,7 @@ function SettingsToggle({
   return (
       <Pressable
         onPress={onToggle}
+        disabled={disabled}
         accessibilityRole="switch"
         accessibilityState={{ checked: value, disabled }}
         accessibilityLabel={accessibilityLabel}
@@ -143,7 +147,7 @@ function NavRow({
   labelWeight?: TextStyle["fontWeight"];
   disabled?: boolean;
 }) {
-  const Wrapper = onPress ? Pressable : View;
+  const Wrapper = onPress && !disabled ? Pressable : View;
   return (
     <Wrapper
       onPress={onPress}
@@ -255,13 +259,20 @@ function SettingsSkeleton() {
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onSubPageChange, beforeDangerZone }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onRequestReassessment, onSubPageChange, beforeDangerZone }: PrivacySettingsScreenProps) {
   const [settings, setSettings] = useState<PrivacySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subPage, setSubPage] = useState<string | null>(null);
   const [exported, setExported] = useState(false);
   const [consents, setConsents] = useState<ConsentRecord[]>([]);
+  const [profile, setProfile] = useState<ProfileAssignment | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [manualProfileSelection, setManualProfileSelection] = useState(false);
+  const [reassessmentReason, setReassessmentReason] = useState("");
+  const [useRecentTransactions, setUseRecentTransactions] = useState(true);
+  const [requestingReassessment, setRequestingReassessment] = useState(false);
+  const [reassessmentMessage, setReassessmentMessage] = useState<string | null>(null);
   const fetched = useRef(false);
   const online = useConnectivityStore(state => state.online);
   const { showToast } = useToast();
@@ -281,18 +292,21 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
     async function load() {
       if (userId) {
         const local = await getLocalPrivacySettings(userId);
+        const localProfile = await getLocalProfileAssignment(userId);
         if (local) {
           if (cancelled) return;
           setSettings(local);
           setLoading(false);
         }
+        if (localProfile && !cancelled) setProfile(localProfile);
       }
 
       Promise.all([
         getPrivacySettings(accessToken),
         getConsents(accessToken).catch(() => ({ body: {} })),
+        getProfileAssignment(accessToken).catch(() => null),
       ])
-        .then(async ([settingsRes, consentsRes]) => {
+        .then(async ([settingsRes, consentsRes, profileRes]) => {
           if (cancelled) return;
           if (settingsRes.body.payload) {
             const s = settingsRes.body.payload;
@@ -306,6 +320,11 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           const mePayload = consentsRes.body as { payload?: { consents?: ConsentRecord[] } };
           if (mePayload.payload?.consents) {
             setConsents(mePayload.payload.consents);
+          }
+          if (profileRes?.response.ok) {
+            const assignment = profileRes.body.payload?.assignment ?? null;
+            setProfile(assignment);
+            if (userId) cacheProfileAssignment(userId, assignment).catch(() => {});
           }
         })
         .catch((err) => {
@@ -427,6 +446,124 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
     );
   }
 
+  if (subPage === "financial-profile") {
+    const profileOptions = ["stable_flexible", "stable_obligated", "variable_flexible", "variable_obligated"];
+    const refreshProfile = async () => {
+      const current = await getProfileAssignment(accessToken);
+      const assignment = current.body.payload?.assignment ?? null;
+      setProfile(assignment);
+      if (userId) cacheProfileAssignment(userId, assignment).catch(() => {});
+    };
+    return (
+      <View>
+        <Pressable onPress={() => setSubPage(null)} accessibilityRole="button" accessibilityLabel="Back to settings" style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <CaretRight size={18} color={MUTED} weight="bold" style={{ transform: [{ rotate: "180deg" }] }} />
+          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: MUTED }}>Settings</Text>
+        </Pressable>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: INK, marginBottom: 8 }}>Financial profile</Text>
+        <Text style={{ fontSize: 13, color: MUTED, lineHeight: 19, marginBottom: 16 }}>
+          {profile?.explanation ?? "Choose the profile that best reflects your current financial situation."}
+        </Text>
+        {profile?.confirmation_required && !manualProfileSelection ? (
+          <View style={{ gap: 10, marginBottom: 20 }}>
+            <Pressable
+              disabled={savingProfile}
+              onPress={async () => {
+                setSavingProfile(true);
+                try {
+                  const { response, body } = await confirmProfileAssignment(accessToken, profile.id);
+                  if (!response.ok) showToast(body.message ?? "Couldn't accept your financial profile.");
+                  else { await refreshProfile(); showToast("Financial profile accepted", "success"); }
+                } catch { showToast("Can't save while offline"); }
+                finally { setSavingProfile(false); }
+              }}
+              style={{ minHeight: 48, borderRadius: 14, backgroundColor: AQUA700, alignItems: "center", justifyContent: "center", opacity: savingProfile ? 0.45 : 1 }}
+            >
+              <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700" }}>Accept suggested profile</Text>
+            </Pressable>
+            <Pressable
+              disabled={savingProfile}
+              onPress={() => {
+                if (!savingProfile) setManualProfileSelection(true);
+              }}
+              style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: LINE, alignItems: "center", justifyContent: "center", opacity: savingProfile ? 0.45 : 1 }}
+            >
+              <Text style={{ color: INK, fontSize: 14, fontWeight: "700" }}>Reject and choose another profile</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        <BorderedGroup>
+          {profileOptions.map((option, index) => (
+            <React.Fragment key={option}>
+              {index > 0 ? <Divider /> : null}
+              <NavRow
+                icon={<Brain size={18} color={option === profile?.profile_label ? AQUA700 : MUTED} />}
+                label={option.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                onPress={() => {
+                  if (!online || savingProfile || (!manualProfileSelection && option === profile?.profile_label)) return;
+                  Alert.alert(
+                    "Change financial profile?",
+                    "This replaces your current financial profile.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Change profile",
+                        style: "destructive",
+                        onPress: async () => {
+                          setSavingProfile(true);
+                          try {
+                            const { response, body } = await selectProfileAssignment(accessToken, option, profile?.confirmation_required ?? false);
+                            if (!response.ok) showToast(body.message ?? "Couldn't update your financial profile.");
+                            else {
+                              await refreshProfile();
+                              setManualProfileSelection(false);
+                              showToast("Financial profile updated", "success");
+                            }
+                          } catch {
+                            showToast("Can't save while offline");
+                          } finally {
+                            setSavingProfile(false);
+                          }
+                        },
+                      },
+                    ],
+                  );
+                }}
+                trailing={option === profile?.profile_label ? <Text style={{ fontSize: 12, fontWeight: "700", color: AQUA700 }}>Current</Text> : undefined}
+                disabled={!online || savingProfile}
+              />
+            </React.Fragment>
+          ))}
+        </BorderedGroup>
+        <TextInput value={reassessmentReason} onChangeText={setReassessmentReason} placeholder="Why do you want a reassessment?" placeholderTextColor={MUTED} style={{ marginTop: 20, borderWidth: 1, borderColor: LINE, borderRadius: 14, padding: 14, color: INK }} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}>
+          <SettingsToggle value={useRecentTransactions} onToggle={() => setUseRecentTransactions((value) => !value)} accessibilityLabel="Use recent transactions" />
+          <Text style={{ fontSize: 13, color: INK }}>Use recent transactions in this reassessment</Text>
+        </View>
+        <Pressable
+          onPress={async () => {
+            if (!online || requestingReassessment || !reassessmentReason.trim()) return;
+            setRequestingReassessment(true);
+            setReassessmentMessage(null);
+            try {
+              const { response, body } = await requestProfileReassessment(accessToken, reassessmentReason, useRecentTransactions);
+              setReassessmentMessage(response.ok ? "Reassessment requested. We'll update your profile when it is ready." : body.message ?? "Couldn't request reassessment.");
+            } catch {
+              setReassessmentMessage("Can't request reassessment while offline.");
+            } finally {
+              setRequestingReassessment(false);
+            }
+          }}
+          disabled={!online || requestingReassessment || !reassessmentReason.trim()}
+          style={{ marginTop: 16, minHeight: 48, borderRadius: 14, backgroundColor: AQUA700, alignItems: "center", justifyContent: "center", opacity: online && reassessmentReason.trim() ? 1 : 0.45 }}
+        >
+          <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700" }}>{requestingReassessment ? "Requesting..." : "Request reassessment"}</Text>
+        </Pressable>
+        {reassessmentMessage ? <Text style={{ marginTop: 12, color: reassessmentMessage.startsWith("Reassessment") ? AQUA700 : MONZA600, fontSize: 13 }}>{reassessmentMessage}</Text> : null}
+      </View>
+    );
+  }
+
   if (subPage === "delete-account") {
     return (
       <AccountOffboardingScreen
@@ -445,6 +582,21 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
         <NavRow icon={<User size={18} color={MUTED} />} label="Personal information" />
         <Divider />
         <NavRow icon={<LockKey size={18} color={MUTED} />} label="Change password" />
+        <Divider />
+        <NavRow
+          icon={<Brain size={18} color={MUTED} />}
+          label="Financial profile"
+          subtitle={profile ? profile.profile_label.replace(/_/g, " ") : "Manage or reassess"}
+          onPress={() => setSubPage("financial-profile")}
+        />
+        <Divider />
+        <NavRow
+          icon={<Brain size={18} color={MUTED} />}
+          label="Reassess financial profile"
+          subtitle="Complete the questionnaire again"
+          disabled={!online}
+          onPress={() => setSubPage("financial-profile")}
+        />
       </BorderedGroup>
 
       <View style={{ height: 20 }} />

@@ -90,6 +90,7 @@ type MobileShellProps = {
   userId: string;
   deviceId: string;
   onLoggedOut: () => void;
+  onRequestReassessment?: () => void;
   signOut?: () => Promise<void>;
 };
 
@@ -203,7 +204,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
-export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, signOut }: MobileShellProps) {
+export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, onRequestReassessment, signOut }: MobileShellProps) {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [debtPaymentId, setDebtPaymentId] = useState<string | null>(null);
@@ -738,7 +739,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
       return (
         <View>
-          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} beforeDangerZone={syncSection} />
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onRequestReassessment={onRequestReassessment} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} beforeDangerZone={syncSection} />
           {!settingsSubPage ? (
             <View style={{ marginTop: 20 }}>
               {logoutError ? (

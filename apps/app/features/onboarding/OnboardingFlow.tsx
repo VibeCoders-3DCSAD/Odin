@@ -20,9 +20,14 @@ import { useConnectivityStore } from "../../services/connectivity";
 import { useToast } from "../../components/Toast";
 import {
   createSession,
+  confirmProfileAssignment,
+  getEligibilityProfile,
   getCurrentSession,
+  getProfileAssignment,
+  rejectProfileAssignment,
   submitSession,
   updateSession,
+  updateEligibilityProfile,
 } from "./api";
 import { STEPS, type StepConfig } from "./types";
 
@@ -35,11 +40,13 @@ const INK2 = "#414942";
 const LINE = "#EAEAE6";
 const MUTED = "#6B7A6F";
 const ERROR = "#D9001F";
+const MONTHLY_OBLIGATIONS_KEY = "monthly_obligations";
 
 type OnboardingFlowProps = {
   accessToken: string;
   userId: string;
   onComplete: () => void;
+  restart?: boolean;
 };
 
 type SubmitResult = {
@@ -51,6 +58,7 @@ export default function OnboardingFlow({
   accessToken,
   userId: _userId,
   onComplete,
+  restart = false,
 }: OnboardingFlowProps) {
   const online = useConnectivityStore((state) => state.online);
   const { showToast } = useToast();
@@ -66,6 +74,7 @@ export default function OnboardingFlow({
   const [obligationAmount, setObligationAmount] = useState("");
   const [incomeText, setIncomeText] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const dateOfBirth = (answers.date_of_birth as string) ?? "";
 
@@ -88,19 +97,28 @@ export default function OnboardingFlow({
         if (response.ok && body.payload?.session) {
           const sess = body.payload.session;
           if (sess.status === "submitted") {
-            onComplete();
-            return;
+            if (!restart) {
+              onComplete();
+              return;
+            }
+            const { response: cr, body: cb } = await createSession(accessToken);
+            if (cr.ok && cb.payload?.session) setSessionId(cb.payload.session.id);
+            else {
+              setInitError(cb?.message ?? "Failed to start reassessment.");
+              return;
+            }
+          } else {
+            setSessionId(sess.id);
+            if (sess.raw_answers) {
+              const raw = sess.raw_answers as Record<string, unknown>;
+              setAnswers(raw);
+              if (typeof raw.monthly_obligations === "string") setObligationAmount(raw.monthly_obligations);
+              if (typeof raw.monthly_income === "string") setIncomeText(raw.monthly_income);
+            }
+            const savedStepKey = sess.current_step_key;
+            const idx = STEPS.findIndex((s) => s.key === savedStepKey);
+            if (idx >= 0) setStepIndex(idx);
           }
-          setSessionId(sess.id);
-          if (sess.raw_answers) {
-            const raw = sess.raw_answers as Record<string, unknown>;
-            setAnswers(raw);
-            if (typeof raw.monthly_obligations === "string") setObligationAmount(raw.monthly_obligations);
-            if (typeof raw.monthly_income === "string") setIncomeText(raw.monthly_income);
-          }
-          const savedStepKey = sess.current_step_key;
-          const idx = STEPS.findIndex((s) => s.key === savedStepKey);
-          if (idx >= 0) setStepIndex(idx);
         } else {
           const { response: cr, body: cb } = await createSession(accessToken);
           if (cancelled) return;
@@ -114,14 +132,15 @@ export default function OnboardingFlow({
         if (!cancelled) setInitError(null);
       } catch {
         if (!cancelled && onlineRef.current) setInitError("Failed to load onboarding session. Please check your connection and try again.");
+      } finally {
+        if (!cancelled) setInitializing(false);
       }
-      if (!cancelled) setInitializing(false);
     }
     init();
     return () => {
       cancelled = true;
     };
-  }, [accessToken, onComplete, showToast, online]);
+  }, [accessToken, onComplete, showToast, online, restart]);
 
   // ── Persist progress on step change ──
   const persistStep = useCallback(
@@ -139,13 +158,27 @@ export default function OnboardingFlow({
   // ── Navigation ──
   const goNext = useCallback(() => {
     if (stepIndex >= STEPS.length - 1) return;
+    const currentStep = STEPS[stepIndex];
+    if (!currentStep) return;
+    const value = answersRef.current[currentStep.questionKey];
+    const incomplete = currentStep.kind === "input"
+      ? (currentStep.key === "monthly_income" ? incomeText === "" : typeof value !== "string" || value.trim() === "")
+      : currentStep.kind === "card_multi_select"
+        ? !Array.isArray(value) || value.length === 0 || (currentStep.key === "fixed_obligations" && obligationAmount === "")
+        : currentStep.kind !== "review" && (typeof value !== "string" || value === "");
+    if (incomplete) {
+      const errorKey = currentStep.key === "fixed_obligations" && Array.isArray(value) && value.length > 0 && obligationAmount === "" ? MONTHLY_OBLIGATIONS_KEY : currentStep.questionKey;
+      setFieldErrors({ [errorKey]: currentStep.kind === "card_multi_select" ? "Select at least one answer." : "This answer is required." });
+      return;
+    }
+    setFieldErrors({});
     const next = stepIndex + 1;
     const nextStep = STEPS[next];
     if (!nextStep) return;
     setStepIndex(next);
     if (sessionRef.current)
       persistStep(sessionRef.current, nextStep.key, answersRef.current);
-  }, [stepIndex, persistStep]);
+  }, [stepIndex, persistStep, incomeText, obligationAmount]);
 
   const goBack = useCallback(() => {
     if (stepIndex <= 0) return;
@@ -155,6 +188,10 @@ export default function OnboardingFlow({
   const saveAnswer = useCallback(
     (key: string, value: unknown) => {
       setAnswers((prev) => ({ ...prev, [key]: value }));
+      setFieldErrors((errors) => {
+        const { [key]: _, ...remaining } = errors;
+        return remaining;
+      });
     },
     [],
   );
@@ -163,6 +200,10 @@ export default function OnboardingFlow({
     (val: string) => {
       const mapped = val === "very_stable" || val === "stable" ? "stable" : "variable";
       setAnswers((prev) => ({ ...prev, income_stability: val, income_type: mapped }));
+      setFieldErrors((errors) => {
+        const { income_stability: _, ...remaining } = errors;
+        return remaining;
+      });
     },
     [],
   );
@@ -184,6 +225,10 @@ export default function OnboardingFlow({
         const hasDeps = next.includes("dependents_children") || next.includes("dependents_elderly");
         return { ...prev, protected_categories: next, has_dependents: hasDeps };
       });
+      setFieldErrors((errors) => {
+        const { protected_categories: _, ...remaining } = errors;
+        return remaining;
+      });
     },
     [],
   );
@@ -192,6 +237,21 @@ export default function OnboardingFlow({
   const handleSubmit = useCallback(async () => {
     const sid = sessionRef.current;
     if (!sid) return;
+    const firstIncomplete = STEPS.findIndex((item) => {
+      if (item.kind === "review") return false;
+      const answer = answersRef.current[item.questionKey];
+      if (item.kind === "input") return typeof answer !== "string" || answer === "";
+      if (item.kind === "card_multi_select") return !Array.isArray(answer) || answer.length === 0;
+      return typeof answer !== "string" || answer === "";
+    });
+    if (firstIncomplete >= 0 || obligationAmount === "") {
+      const obligationStepIndex = STEPS.findIndex((item) => item.key === "fixed_obligations");
+      const targetIndex = firstIncomplete >= 0 ? firstIncomplete : obligationStepIndex;
+      setStepIndex(targetIndex);
+      const missingStep = STEPS[targetIndex];
+      if (missingStep) setFieldErrors({ [firstIncomplete >= 0 ? missingStep.questionKey : MONTHLY_OBLIGATIONS_KEY]: "This answer is required." });
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -206,6 +266,14 @@ export default function OnboardingFlow({
       }
       const { response, body } = await submitSession(accessToken, sid);
       if (response.ok && body.payload) {
+        const eligibility = await updateEligibilityProfile(accessToken, {
+          date_of_birth: answersRef.current.date_of_birth,
+          is_filipino: answersRef.current.is_filipino === "true",
+          metro_manila_presence: answersRef.current.metro_manila_presence,
+          metro_manila_locality_code: answersRef.current.metro_manila_locality_code,
+          primary_employment_classification: answersRef.current.primary_employment_classification,
+        });
+        if (!eligibility.response.ok) setSubmitError(eligibility.body.message ?? "Your research eligibility could not be saved.");
         setSubmitResult({
           assessment: {
             id: body.payload.assessment.id,
@@ -224,7 +292,7 @@ export default function OnboardingFlow({
       setSubmitError("Network error. Please try again.");
     }
     setSubmitting(false);
-  }, [accessToken, showToast]);
+  }, [accessToken, showToast, obligationAmount]);
 
   // ── Offline guard ──
   if (!online) {
@@ -299,33 +367,11 @@ export default function OnboardingFlow({
 
   // ── Result screen ──
   if (submitResult) {
-    return <ResultScreen result={submitResult} error={submitError} onContinue={onComplete} />;
+    return <ResultScreen accessToken={accessToken} result={submitResult} error={submitError} onContinue={onComplete} />;
   }
 
   const step = STEPS[stepIndex];
   if (!step) return null;
-
-  const isCurrentStepComplete = (() => {
-    const val = answers[step.questionKey];
-    if (step.kind === "input") {
-      if (step.key === "monthly_income") return incomeText !== "";
-      return typeof val === "string" && val !== "";
-    }
-    if (step.kind === "card_multi_select") {
-      if (step.key === "fixed_obligations") return Array.isArray(val) && val.length > 0 && obligationAmount !== "";
-      return Array.isArray(val) && val.length > 0;
-    }
-    if (step.kind === "review") {
-      const required = STEPS.filter((s) => s.kind !== "review" && s.kind !== "result");
-      return required.every((s) => {
-        const v = answers[s.questionKey];
-        if (s.kind === "input") return answers[s.questionKey] !== "" && answers[s.questionKey] !== undefined;
-        if (s.kind === "card_multi_select") return Array.isArray(v) && v.length > 0;
-        return typeof v === "string" && v !== "";
-      }) && obligationAmount !== "";
-    }
-    return typeof val === "string" && val !== "";
-  })();
 
   return (
     <KeyboardAvoider>
@@ -488,6 +534,12 @@ export default function OnboardingFlow({
           />
         )}
 
+        {fieldErrors[step.questionKey] ? (
+          <Text style={{ color: ERROR, fontFamily: "Manrope", fontSize: 13, fontWeight: "600", marginTop: 12 }}>
+            {fieldErrors[step.questionKey]}
+          </Text>
+        ) : null}
+
         {/* Obligation amount sub-input on the obligations step */}
         {step.key === "fixed_obligations" && (
           <View style={{ marginTop: 20 }}>
@@ -543,6 +595,11 @@ export default function OnboardingFlow({
                 }}
               />
             </View>
+            {fieldErrors[MONTHLY_OBLIGATIONS_KEY] ? (
+              <Text style={{ color: ERROR, fontFamily: "Manrope", fontSize: 13, fontWeight: "600", marginTop: 8 }}>
+                {fieldErrors[MONTHLY_OBLIGATIONS_KEY]}
+              </Text>
+            ) : null}
           </View>
         )}
 
@@ -566,7 +623,7 @@ export default function OnboardingFlow({
         {step.kind === "review" ? (
           <Pressable
             onPress={handleSubmit}
-            disabled={submitting || !isCurrentStepComplete}
+            disabled={submitting}
             accessibilityRole="button"
             accessibilityLabel="Submit assessment"
             style={{
@@ -577,7 +634,7 @@ export default function OnboardingFlow({
               alignItems: "center",
               flexDirection: "row",
               gap: 8,
-              opacity: submitting || !isCurrentStepComplete ? 0.45 : 1,
+              opacity: submitting ? 0.45 : 1,
               shadowColor: AQUA950,
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.28,
@@ -603,7 +660,6 @@ export default function OnboardingFlow({
         ) : (
           <Pressable
             onPress={goNext}
-            disabled={!isCurrentStepComplete}
             accessibilityRole="button"
             accessibilityLabel="Continue"
             style={{
@@ -614,7 +670,7 @@ export default function OnboardingFlow({
               alignItems: "center",
               flexDirection: "row",
               gap: 8,
-              opacity: !isCurrentStepComplete ? 0.45 : 1,
+              opacity: 1,
               shadowColor: AQUA950,
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.28,
@@ -990,12 +1046,13 @@ function ReviewStep({
   const DOB_STEP = STEPS[1]!;
   const NAT_STEP = STEPS[2]!;
   const MM_STEP = STEPS[3]!;
-  const EMP_CLASS_STEP = STEPS[4]!;
-  const EMP_STEP = STEPS[5]!;
-  const STAB_STEP = STEPS[6]!;
-  const FREQ_STEP = STEPS[7]!;
-  const OBL_STEP = STEPS[9]!;
-  const DEP_STEP = STEPS[10]!;
+  const LOCALITY_STEP = STEPS[4]!;
+  const EMP_CLASS_STEP = STEPS[5]!;
+  const EMP_STEP = STEPS[6]!;
+  const STAB_STEP = STEPS[7]!;
+  const FREQ_STEP = STEPS[8]!;
+  const OBL_STEP = STEPS[10]!;
+  const DEP_STEP = STEPS[11]!;
 
   const displayName = answers.display_name;
   if (displayName && displayName !== "") rows.push({ label: "Name", value: displayName as string, stepIndex: 0 });
@@ -1009,23 +1066,26 @@ function ReviewStep({
   const mmLabel = MM_STEP.options?.find((o) => o.key === answers.metro_manila_presence);
   if (mmLabel) rows.push({ label: "Metro Manila", value: mmLabel.label, stepIndex: 3 });
 
+  const localityLabel = LOCALITY_STEP.options?.find((o) => o.key === answers.metro_manila_locality_code);
+  if (localityLabel) rows.push({ label: "Locality", value: localityLabel.label, stepIndex: 4 });
+
   const empClassLabel = EMP_CLASS_STEP.options?.find((o) => o.key === answers.primary_employment_classification);
-  if (empClassLabel) rows.push({ label: "Employment", value: empClassLabel.label, stepIndex: 4 });
+  if (empClassLabel) rows.push({ label: "Employment", value: empClassLabel.label, stepIndex: 5 });
 
   const empLabel = EMP_STEP.options?.find((o) => o.key === answers.employment_status);
-  if (empLabel) rows.push({ label: "Employment Status", value: empLabel.label, stepIndex: 5 });
+  if (empLabel) rows.push({ label: "Employment Status", value: empLabel.label, stepIndex: 6 });
 
-  const stabLabel = STEPS[6]!.options?.find((o) => o.key === answers.income_stability);
-  if (stabLabel) rows.push({ label: "Income Stability", value: stabLabel.label, stepIndex: 6 });
+  const stabLabel = STAB_STEP.options?.find((o) => o.key === answers.income_stability);
+  if (stabLabel) rows.push({ label: "Income Stability", value: stabLabel.label, stepIndex: 7 });
 
   const freqLabel = FREQ_STEP.options?.find((o) => o.key === answers.pay_frequency);
-  if (freqLabel) rows.push({ label: "Pay Frequency", value: freqLabel.label, stepIndex: 7 });
+  if (freqLabel) rows.push({ label: "Pay Frequency", value: freqLabel.label, stepIndex: 8 });
 
   if (incomeText)
     rows.push({
       label: "Monthly Income",
       value: `PHP ${Number(incomeText).toLocaleString()}`,
-      stepIndex: 8,
+      stepIndex: 9,
     });
 
   const obligations = (answers.fixed_obligation_types as string[] | undefined) ?? [];
@@ -1034,12 +1094,12 @@ function ReviewStep({
     .filter(Boolean)
     .join(", ");
   if (oblLabels) {
-    rows.push({ label: "Obligations", value: oblLabels, stepIndex: 9 });
+    rows.push({ label: "Obligations", value: oblLabels, stepIndex: 10 });
     if (obligationAmount)
       rows.push({
         label: "Total",
         value: `PHP ${Number(obligationAmount).toLocaleString()}`,
-        stepIndex: 9,
+        stepIndex: 10,
       });
   }
 
@@ -1048,7 +1108,7 @@ function ReviewStep({
     .map((k) => DEP_STEP.options?.find((o) => o.key === k)?.label)
     .filter(Boolean)
     .join(", ");
-  if (catLabels) rows.push({ label: "Categories", value: catLabels, stepIndex: 10 });
+  if (catLabels) rows.push({ label: "Categories", value: catLabels, stepIndex: 11 });
 
   return (
     <View>
@@ -1112,14 +1172,32 @@ function ReviewStep({
 }
 
 function ResultScreen({
+  accessToken,
   result,
   error,
   onContinue,
 }: {
+  accessToken: string;
   result: SubmitResult;
   error: string | null;
   onContinue: () => void;
 }) {
+  const [drivers, setDrivers] = useState<{ driver_label: string; value_text: string; explanation: string }[]>([]);
+  const [eligible, setEligible] = useState<boolean | null>(null);
+  const [decision, setDecision] = useState<"accepted" | "rejected" | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [savingDecision, setSavingDecision] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([getProfileAssignment(accessToken), getEligibilityProfile(accessToken)])
+      .then(([profile, eligibility]) => {
+        if (profile.response.ok) setDrivers(profile.body.payload?.drivers ?? []);
+        if (eligibility.response.ok) setEligible(eligibility.body.payload?.profile?.eligibility_confirmed_at != null);
+      })
+      .catch(() => {});
+  }, [accessToken]);
+
   const label = result.assignment.profile_label
     .replace(/_/g, "-")
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -1213,10 +1291,56 @@ function ResultScreen({
               lineHeight: 19,
             }}
           >
-            This is a deterministic placeholder classification. Odin's ML classifier,
-            currently under development, will provide more nuanced profiling in a future update.
+            {drivers.length > 0
+              ? drivers.map((driver) => `${driver.driver_label}: ${driver.value_text}. ${driver.explanation}`).join("\n")
+              : "Your profile is based on the financial details you provided."}
           </Text>
         </View>
+
+        <View
+          style={{
+            width: "100%",
+            borderRadius: 16,
+            padding: 16,
+            backgroundColor: eligible ? AQUA50 : CARD,
+            borderWidth: 1,
+            borderColor: eligible ? AQUA600 : LINE,
+            marginBottom: 20,
+          }}
+        >
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: INK, marginBottom: 4 }}>
+            Research eligibility
+          </Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 13, color: INK2, lineHeight: 19 }}>
+            {eligible === null ? "Checking your saved eligibility profile..." : eligible
+              ? "You are eligible for Odin research: ages 20–40 and living or working in Metro Manila. This does not affect access to the app."
+              : "You are not currently eligible for Odin research. This does not affect access to the app."}
+          </Text>
+        </View>
+
+        {decision === null ? (
+          <View style={{ width: "100%", gap: 10, marginBottom: 20 }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: INK }}>Does this profile fit you?</Text>
+            <Pressable disabled={savingDecision} onPress={async () => {
+              setSavingDecision(true); setDecisionError(null);
+              const response = await confirmProfileAssignment(accessToken, result.assignment.id);
+              if (response.response.ok) setDecision("accepted"); else setDecisionError(response.body.message ?? "Couldn't accept your profile.");
+              setSavingDecision(false);
+            }} style={{ height: 48, borderRadius: 14, backgroundColor: AQUA950, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: "#FFFFFF", fontFamily: "Manrope", fontWeight: "700" }}>Accept profile</Text>
+            </Pressable>
+            <TextInput value={rejectReason} onChangeText={setRejectReason} placeholder="Why doesn't this fit?" placeholderTextColor={MUTED} style={{ borderWidth: 1, borderColor: LINE, borderRadius: 14, padding: 14, color: INK, fontFamily: "Manrope" }} />
+            <Pressable disabled={savingDecision || !rejectReason.trim()} onPress={async () => {
+              setSavingDecision(true); setDecisionError(null);
+              const response = await rejectProfileAssignment(accessToken, result.assignment.id, rejectReason);
+              if (response.response.ok) setDecision("rejected"); else setDecisionError(response.body.message ?? "Couldn't reject your profile.");
+              setSavingDecision(false);
+            }} style={{ height: 48, borderRadius: 14, borderWidth: 1, borderColor: LINE, alignItems: "center", justifyContent: "center", opacity: rejectReason.trim() ? 1 : 0.45 }}>
+              <Text style={{ color: INK, fontFamily: "Manrope", fontWeight: "700" }}>Reject and choose manually in Settings</Text>
+            </Pressable>
+            {decisionError ? <Text style={{ color: ERROR, fontFamily: "Manrope", fontSize: 13 }}>{decisionError}</Text> : null}
+          </View>
+        ) : null}
 
         {error ? (
           <View
@@ -1245,6 +1369,7 @@ function ResultScreen({
 
         <Pressable
           onPress={onContinue}
+          disabled={decision === null}
           accessibilityRole="button"
           accessibilityLabel="Continue to Dashboard"
           style={{
@@ -1254,6 +1379,7 @@ function ResultScreen({
             backgroundColor: AQUA950,
             justifyContent: "center",
             alignItems: "center",
+            opacity: decision === null ? 0.45 : 1,
             shadowColor: AQUA950,
             shadowOffset: { width: 0, height: 8 },
             shadowOpacity: 0.28,

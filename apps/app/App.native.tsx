@@ -119,6 +119,7 @@ export default function App() {
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [reassessing, setReassessing] = useState(false);
 
   useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
   useEffect(() => { startConnectivityPolling(); }, []);
@@ -263,6 +264,7 @@ export default function App() {
   }
 
   async function handleOnboardingComplete() {
+    setReassessing(false);
     setAuthenticated((prev) =>
       prev ? { ...prev, onboardingStatus: "submitted" } : prev,
     );
@@ -271,13 +273,14 @@ export default function App() {
   return (
     <ToastProvider>
       {authenticated ? (
-        authenticated.onboardingStatus === "submitted" ? (
+        authenticated.onboardingStatus === "submitted" && !reassessing ? (
           <>
             <MobileShell
               accessToken={authenticated.accessToken}
               userId={authenticated.userId ?? ""}
               deviceId={deviceId}
-              onLoggedOut={handleLoggedOut}
+                onLoggedOut={handleLoggedOut}
+                onRequestReassessment={() => setReassessing(true)}
               signOut={async () => { await GoogleSignin.signOut(); }}
             />
             <StatusBar style="dark" />
@@ -288,6 +291,7 @@ export default function App() {
               accessToken={authenticated.accessToken}
               userId={authenticated.userId ?? ""}
               onComplete={handleOnboardingComplete}
+              restart={reassessing}
             />
             <StatusBar style="dark" />
           </>

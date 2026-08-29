@@ -54,6 +54,7 @@ function mockInProgressSession() {
         metro_manila_presence: "lives_in_metro_manila",
         primary_employment_classification: "full_time_employee",
         employment_status: "employed_full_time",
+        income_stability: "stable",
         income_type: "stable",
         pay_frequency: "monthly",
         monthly_income: "50000",
@@ -256,6 +257,74 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.message).toContain("incomplete");
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when income stability is missing", async () => {
+    mockAuth();
+    mockFrom.mockReturnValueOnce(createMockQuery({
+      data: {
+        id: "session-1",
+        status: "in_progress",
+        raw_answers: {
+          display_name: "Juan",
+          date_of_birth: "1995-06-15",
+          is_filipino: "true",
+          metro_manila_presence: "lives_in_metro_manila",
+          primary_employment_classification: "full_time_employee",
+          employment_status: "employed_full_time",
+          income_type: "stable",
+          pay_frequency: "monthly",
+          monthly_income: "50000",
+          fixed_obligation_types: ["rent_mortgage"],
+          monthly_obligations: "5000",
+          protected_categories: ["none"],
+        },
+      },
+      error: null,
+    }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when income type conflicts with income stability", async () => {
+    mockAuth();
+    mockFrom.mockReturnValueOnce(createMockQuery({
+      data: {
+        id: "session-1",
+        status: "in_progress",
+        raw_answers: {
+          display_name: "Juan",
+          date_of_birth: "1995-06-15",
+          is_filipino: "true",
+          metro_manila_presence: "lives_in_metro_manila",
+          primary_employment_classification: "full_time_employee",
+          employment_status: "employed_full_time",
+          income_stability: "stable",
+          income_type: "variable",
+          pay_frequency: "monthly",
+          monthly_income: "50000",
+          fixed_obligation_types: ["rent_mortgage"],
+          monthly_obligations: "5000",
+          protected_categories: ["none"],
+        },
+      },
+      error: null,
+    }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain("income_type");
     expect(mockRpc).not.toHaveBeenCalled();
   });
 

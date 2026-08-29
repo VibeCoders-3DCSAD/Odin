@@ -71,7 +71,8 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   const { default: m018 } = await import("./migrations/018_budget_debt_envelope");
   const { default: m019 } = await import("./migrations/019_debt_management");
   const { default: m020 } = await import("./migrations/020_debt_payment_schedule");
-  return getDatabase([m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020]);
+  const { default: m021 } = await import("./migrations/021_financial_profile_cache");
+  return getDatabase([m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021]);
 }
 
 export function closeDatabase(): Promise<void> {

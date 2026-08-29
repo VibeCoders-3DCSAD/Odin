@@ -176,7 +176,7 @@ router.post("/profile/assignment/reject", requireAuth, async (request: Authentic
 
 router.post("/profile/assignment/select", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   const userId = request.userId!;
-  const { profile_label } = request.body?.payload ?? {};
+  const { profile_label, reject_current } = request.body?.payload ?? {};
 
   if (typeof profile_label !== "string" || !FINANCIAL_PROFILE_LABELS.includes(profile_label as typeof FINANCIAL_PROFILE_LABELS[number])) {
     response.status(400).json({
@@ -190,6 +190,7 @@ router.post("/profile/assignment/select", requireAuth, async (request: Authentic
     .rpc("select_profile_assignment", {
       p_user_id: userId,
       p_profile_label: profile_label,
+      p_reject_current: reject_current === true,
     });
 
   handleRpcResult(result as { success: boolean; code?: string } | null, rpcError, response, PROFILE_ERRORS.select_failed, () => {

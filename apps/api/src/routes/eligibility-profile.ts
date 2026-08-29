@@ -27,6 +27,15 @@ function getEligibleBirthDateBoundary(yearsAgo: number): string {
   );
 }
 
+function isResearchEligible(dateOfBirth: unknown, isFilipino: unknown, presence: unknown, locality: unknown): boolean {
+  if (typeof dateOfBirth !== "string" || isFilipino !== true || typeof presence !== "string" || typeof locality !== "string") return false;
+  const birthDate = new Date(`${dateOfBirth}T00:00:00Z`);
+  if (Number.isNaN(birthDate.getTime())) return false;
+  const youngest = getEligibleBirthDateBoundary(20);
+  const oldest = getEligibleBirthDateBoundary(40);
+  return dateOfBirth <= youngest && dateOfBirth >= oldest;
+}
+
 router.get("/eligibility-profile", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   const userId = request.userId!;
   const authenticatedSupabase = request.supabase!;
@@ -74,17 +83,8 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
     }
 
     const normalizedBirthDate = formatDateOnly(birthDate);
-    const youngestAllowedBirthDate = getEligibleBirthDateBoundary(20);
-    const oldestAllowedBirthDate = getEligibleBirthDateBoundary(40);
-
-    if (
-      normalizedBirthDate > youngestAllowedBirthDate
-      || normalizedBirthDate < oldestAllowedBirthDate
-    ) {
-      response.status(400).json({
-        error: "Bad Request",
-        message: "Age must be between 20 and 40 years",
-      });
+    if (normalizedBirthDate > formatDateOnly(new Date())) {
+      response.status(400).json({ error: "Bad Request", message: "Date of birth cannot be in the future" });
       return;
     }
   }
@@ -166,12 +166,12 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
   if (primary_employment_classification !== undefined) merged.primary_employment_classification = primary_employment_classification;
   if (primary_employment_other !== undefined) merged.primary_employment_other = primary_employment_other;
 
-  const allRequiredPresent =
-    merged.date_of_birth != null &&
-    merged.is_filipino === true &&
-    merged.metro_manila_presence != null &&
-    merged.metro_manila_locality_code != null &&
-    merged.primary_employment_classification != null;
+  const eligible = isResearchEligible(
+    merged.date_of_birth,
+    merged.is_filipino,
+    merged.metro_manila_presence,
+    merged.metro_manila_locality_code,
+  ) && merged.primary_employment_classification != null;
 
   const upsertData: Record<string, unknown> = { user_id: userId };
   for (const key of [
@@ -184,7 +184,7 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
     }
   }
 
-  if (allRequiredPresent) {
+  if (eligible) {
     upsertData.eligibility_confirmed_at =
       existing?.eligibility_confirmed_at ?? new Date().toISOString();
   } else {

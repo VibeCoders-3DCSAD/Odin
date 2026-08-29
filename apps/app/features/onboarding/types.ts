@@ -86,6 +86,16 @@ export const STEPS: StepConfig[] = [
     ],
   },
   {
+    key: "metro_manila_locality",
+    title: "Metro Manila Locality",
+    subtitle: "Select the Metro Manila city or municipality where you live or work.",
+    kind: "dropdown",
+    questionKey: "metro_manila_locality_code",
+    options: [
+      { key: "caloocan", label: "Caloocan" }, { key: "las_pinas", label: "Las Pinas" }, { key: "makati", label: "Makati" }, { key: "malabon", label: "Malabon" }, { key: "mandaluyong", label: "Mandaluyong" }, { key: "manila", label: "Manila" }, { key: "marikina", label: "Marikina" }, { key: "muntinlupa", label: "Muntinlupa" }, { key: "navotas", label: "Navotas" }, { key: "paranaque", label: "Paranaque" }, { key: "pasay", label: "Pasay" }, { key: "pasig", label: "Pasig" }, { key: "quezon_city", label: "Quezon City" }, { key: "san_juan", label: "San Juan" }, { key: "taguig", label: "Taguig" }, { key: "valenzuela", label: "Valenzuela" }, { key: "pateros", label: "Pateros" },
+    ],
+  },
+  {
     key: "employment_classification",
     title: "Employment Classification",
     subtitle: "Select the option that best describes your employment.",

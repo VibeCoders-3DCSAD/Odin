@@ -7,12 +7,49 @@ import { getServiceRoleClient } from "../lib/supabase.js";
 
 const router = Router();
 
+const ONBOARDING_ANSWER_KEYS = new Set([
+  "display_name", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
+  "primary_employment_classification", "employment_status", "income_stability",
+  "income_type", "pay_frequency", "monthly_income", "fixed_obligation_types",
+  "monthly_obligations", "protected_categories", "has_dependents",
+]);
+
+const ARRAY_ANSWER_KEYS = new Set(["fixed_obligation_types", "protected_categories"]);
+const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && key !== "has_dependents"));
+const ANSWER_OPTIONS: Record<string, readonly string[]> = {
+  is_filipino: ["true", "false"],
+  metro_manila_presence: VALID_METRO_MANILA_PRESENCE,
+  primary_employment_classification: VALID_EMPLOYMENT_CLASSIFICATIONS,
+  employment_status: ["employed_full_time", "employed_part_time", "self_employed", "unemployed", "retired", "student"],
+  income_stability: ["very_stable", "stable", "somewhat_unstable", "very_unstable"],
+  income_type: ["stable", "variable"],
+  pay_frequency: ["weekly", "bi_weekly", "semi_monthly", "monthly", "irregular", "annual"],
+  fixed_obligation_types: ["rent_mortgage", "loan_payments", "insurance", "utilities", "tuition", "support_payments", "none"],
+  protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
+};
+
 function validateOnboardingPayload(
   raw_answers: unknown,
   current_step_key: unknown,
 ): string | null {
   if (raw_answers !== undefined && (typeof raw_answers !== "object" || raw_answers === null || Array.isArray(raw_answers))) {
     return "raw_answers must be a plain object when provided.";
+  }
+  if (raw_answers && typeof raw_answers === "object" && !Array.isArray(raw_answers)) {
+    for (const [key, value] of Object.entries(raw_answers)) {
+      if (!ONBOARDING_ANSWER_KEYS.has(key)) return `Unsupported onboarding answer: ${key}.`;
+      if (ARRAY_ANSWER_KEYS.has(key) && (!Array.isArray(value) || value.some((item) => typeof item !== "string"))) {
+        return `${key} must be an array of strings.`;
+      }
+      if (STRING_ANSWER_KEYS.has(key) && typeof value !== "string") return `${key} must be a string.`;
+      if (key === "has_dependents" && typeof value !== "boolean") return "has_dependents must be a boolean.";
+      const options = ANSWER_OPTIONS[key];
+      if (options && typeof value === "string" && value !== "" && !options.includes(value)) return `Invalid ${key}.`;
+      if (options && Array.isArray(value) && value.some((item) => !options.includes(item))) return `Invalid ${key}.`;
+      if ((key === "monthly_income" || key === "monthly_obligations") && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
+        return `${key} must be a non-negative whole number.`;
+      }
+    }
   }
   if (current_step_key !== undefined && current_step_key !== null && typeof current_step_key !== "string") {
     return "current_step_key must be a string when provided.";
@@ -260,13 +297,20 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
   }
 
   const rawAnswers = (session.raw_answers ?? {}) as Record<string, unknown>;
+  const rawAnswersValidationError = validateOnboardingPayload(rawAnswers, undefined);
+  if (rawAnswersValidationError) {
+    response.status(400).json({ error: "Bad Request", message: rawAnswersValidationError });
+    return;
+  }
   const requiredFields = [
     "display_name",
     "date_of_birth",
     "is_filipino",
     "metro_manila_presence",
+    "metro_manila_locality_code",
     "primary_employment_classification",
     "employment_status",
+    "income_stability",
     "income_type",
     "pay_frequency",
     "monthly_income",
@@ -286,6 +330,7 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     response.status(400).json({
       error: "Bad Request",
       message: "Onboarding questionnaire is incomplete. Please complete all required steps before submitting.",
+      fields: missing,
     });
     return;
   }
@@ -310,6 +355,21 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
   if (typeof rawAnswers.metro_manila_presence === "string" && !VALID_METRO_MANILA_PRESENCE.includes(rawAnswers.metro_manila_presence)) {
     response.status(400).json({ error: "Bad Request", message: `Invalid metro_manila_presence. Must be one of: ${VALID_METRO_MANILA_PRESENCE.join(", ")}.` });
     return;
+  }
+  if (typeof rawAnswers.monthly_income === "string" && !/^\d+$/.test(rawAnswers.monthly_income)) {
+    response.status(400).json({ error: "Bad Request", message: "monthly_income must be a non-negative whole number." });
+    return;
+  }
+  if (typeof rawAnswers.monthly_obligations === "string" && !/^\d+$/.test(rawAnswers.monthly_obligations)) {
+    response.status(400).json({ error: "Bad Request", message: "monthly_obligations must be a non-negative whole number." });
+    return;
+  }
+  if (typeof rawAnswers.income_stability === "string" && typeof rawAnswers.income_type === "string") {
+    const expectedIncomeType = ["very_stable", "stable"].includes(rawAnswers.income_stability) ? "stable" : "variable";
+    if (rawAnswers.income_type !== expectedIncomeType) {
+      response.status(400).json({ error: "Bad Request", message: "income_type must match income_stability." });
+      return;
+    }
   }
   if (typeof rawAnswers.primary_employment_classification === "string" && !VALID_EMPLOYMENT_CLASSIFICATIONS.includes(rawAnswers.primary_employment_classification)) {
     response.status(400).json({ error: "Bad Request", message: `Invalid primary_employment_classification. Must be one of: ${VALID_EMPLOYMENT_CLASSIFICATIONS.join(", ")}.` });

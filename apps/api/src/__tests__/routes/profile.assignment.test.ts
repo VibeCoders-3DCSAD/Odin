@@ -313,6 +313,22 @@ describe("POST /odin/api/profile/assignment/select", () => {
     expect(response.body.payload.profile_label).toBe("variable_obligated");
   });
 
+  it("passes rejection intent to the atomic selection RPC", async () => {
+    mockAuth();
+    mockRpc.mockResolvedValue({ data: { success: true }, error: null });
+
+    await request(app)
+      .post(`${basePath}/assignment/select`)
+      .set(authHeader())
+      .send({ payload: { profile_label: "variable_obligated", reject_current: true } });
+
+    expect(mockRpc).toHaveBeenCalledWith("select_profile_assignment", {
+      p_user_id: validUserId,
+      p_profile_label: "variable_obligated",
+      p_reject_current: true,
+    });
+  });
+
   it("returns 400 when profile_label is invalid", async () => {
     mockAuth();
 

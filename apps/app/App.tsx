@@ -19,12 +19,14 @@ export default function App() {
     verificationToken,
   } = useDeepLink();
   const [deviceId, setDeviceId] = useState("");
+  const [reassessing, setReassessing] = useState(false);
 
   useEffect(() => { getOrCreateDeviceId().then(setDeviceId).catch(() => {}); }, []);
   useEffect(() => { startConnectivityPolling(); }, []);
   useRecurringEngineTrigger(authenticated?.onboardingStatus === "submitted");
 
   const handleOnboardingComplete = () => {
+    setReassessing(false);
     setAuthenticated((prev) =>
       prev ? { ...prev, onboardingStatus: "submitted" } : prev,
     );
@@ -34,13 +36,14 @@ export default function App() {
     <SafeAreaProvider>
       <ToastProvider>
         {authenticated ? (
-          authenticated.onboardingStatus === "submitted" ? (
+          authenticated.onboardingStatus === "submitted" && !reassessing ? (
             <>
               <MobileShell
                 accessToken={authenticated.accessToken}
                 userId={authenticated.userId ?? ""}
                 deviceId={deviceId}
                 onLoggedOut={() => setAuthenticated(null)}
+                onRequestReassessment={() => setReassessing(true)}
               />
               <StatusBar style="dark" />
             </>
@@ -50,6 +53,7 @@ export default function App() {
                 accessToken={authenticated.accessToken}
                 userId={authenticated.userId ?? ""}
                 onComplete={handleOnboardingComplete}
+                restart={reassessing}
               />
               <StatusBar style="dark" />
             </>
