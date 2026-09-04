@@ -77,6 +77,7 @@ export type CreateExpenseInput = {
   counterparty_name?: string;
   notes?: string;
   client_mutation_id?: string;
+  credit_card_posting_date?: string;
 };
 
 export type CreateTransferInput = {
@@ -404,12 +405,13 @@ function buildTransactionInsert(
       (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at,
        amount_centavos, subcategory_id, source_account_id, destination_account_id,
        recurring_template_id, merchant_name, counterparty_name, notes,
-       client_mutation_id, metadata, version, deleted, created_at, updated_at)
-     VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+        client_mutation_id, credit_card_posting_date, metadata, version, deleted, created_at, updated_at)
+     VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
     params: [
       id, userId, transactionType, input.transaction_date, ts,
       input.amount_centavos, subcategoryId, sourceAccountId, destinationAccountId,
-      merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null, ts, ts,
+      merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null,
+      "credit_card_posting_date" in input ? input.credit_card_posting_date ?? null : null, ts, ts,
     ],
   };
 }
@@ -458,9 +460,16 @@ export async function listTransactions(
     : "desc";
 
   parts.push(`ORDER BY ${sortBy} ${sortDir}`);
-  parts.push("LIMIT ? OFFSET ?");
-  params.push(Math.max(1, Math.min(filters?.limit ?? 100, 200)));
-  params.push(Math.max(0, filters?.offset ?? 0));
+  const requestedLimit = filters?.limit;
+  const requestedOffset = filters?.offset;
+  const limit = requestedLimit != null && Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(Math.trunc(requestedLimit), 200))
+    : 100;
+  const offset = requestedOffset != null && Number.isFinite(requestedOffset)
+    ? Math.max(0, Math.trunc(requestedOffset))
+    : 0;
+  // Expo SQLite on device rejects bound parameters in LIMIT/OFFSET.
+  parts.push(`LIMIT ${limit} OFFSET ${offset}`);
 
   const rows = await db.getAllAsync<TransactionRow>(parts.join(" "), ...params);
   return rows.map(mapTransaction);
@@ -544,7 +553,7 @@ export async function createExpenseInTransaction(
   const operation = await enqueueOperation(db, {
     userId, deviceId, entity: "transactions", recordId: id, operationType: "create",
     baseVersion: null, changedFields: [],
-    payload: { ...input, transaction_type: "expense", destination_account_id: null },
+     payload: { ...input, transaction_type: "expense", destination_account_id: null },
     failureMessage: "This expense transaction could not be created.",
   });
   const row = await db.getFirstAsync<TransactionRow>("SELECT * FROM transactions WHERE user_id = ? AND id = ?", userId, id);

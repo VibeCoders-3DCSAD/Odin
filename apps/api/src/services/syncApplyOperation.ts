@@ -28,6 +28,15 @@ const SYNCED_ENTITIES = new Set([
   "debt_payments",
   "user_debt_priorities",
   "debt_strategy_preferences",
+  "credit_card_details",
+  "credit_card_cycles",
+  "credit_card_installments",
+  "credit_card_transactions",
+  "credit_card_statements",
+  "credit_card_payments",
+  "credit_card_credit_applications",
+  "credit_card_settlements",
+  "credit_card_statement_strategies",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -120,6 +129,7 @@ const TRANSACTION_CREATE_FIELDS = new Set([
   "entry_source",
   "recurring_template_id",
   "client_mutation_id",
+  "credit_card_posting_date",
 ]);
 
 const TRANSACTION_UPDATE_FIELDS = new Set([
@@ -244,26 +254,147 @@ const BUDGET_UPDATE_FIELDS = new Set([
   "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debt_budget_amount_minor", "debtBudgetMinor",
 ]);
 
-const DEBT_ACCOUNT_FIELDS = new Set(["name", "lender_name", "preset_key", "status", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule", "notes"]);
+const DEBT_ACCOUNT_FIELDS = new Set(["name", "lender_name", "preset_key", "status", "paid_off_at", "archived_at", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule", "notes"]);
 const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes"]);
+const CREDIT_CARD_FIELDS = new Set(["account_id", "cycle_id", "statement_id", "transaction_id", "installment_id", "payment_id", "target_transaction_id", "client_mutation_id", "issuer", "credit_limit_centavos", "available_credit_centavos", "default_cutoff_date", "default_statement_date", "cycle_start_date", "cutoff_date", "statement_date", "description", "original_principal_centavos", "remaining_principal_centavos", "term_months", "remaining_months", "monthly_amortization_centavos", "interest_rate_bps", "interest_type", "settlement_status", "statement_balance_centavos", "minimum_due_centavos", "finance_charge_centavos", "due_date", "authoritative", "amount_centavos", "payment_date", "source_account_id", "notes", "applied_date", "settlement_date", "pretermination_fee_centavos", "status", "strategy", "custom_amount_centavos", "issuer_recognized", "applied_credit_centavos", "purchase_type"]);
+const CREDIT_CARD_REQUIRED_FIELDS: Record<string, string[]> = {
+  credit_card_details: ["account_id", "credit_limit_centavos", "default_cutoff_date", "default_statement_date"],
+  credit_card_cycles: ["account_id", "cycle_start_date", "cutoff_date", "statement_date"],
+  credit_card_installments: ["account_id", "description", "original_principal_centavos", "remaining_principal_centavos", "term_months", "remaining_months", "monthly_amortization_centavos", "interest_type", "settlement_status"],
+  credit_card_transactions: ["transaction_id", "account_id", "cycle_id", "purchase_type"],
+  credit_card_statements: ["cycle_id", "statement_balance_centavos", "minimum_due_centavos", "due_date"],
+  credit_card_payments: ["cycle_id", "amount_centavos", "payment_date"],
+  credit_card_credit_applications: ["account_id", "payment_id", "amount_centavos", "applied_date"],
+  credit_card_settlements: ["installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "status"],
+  credit_card_statement_strategies: ["statement_id", "strategy"],
+};
+
+const DERIVED_UPDATE_FIELDS: Record<string, Set<string>> = {
+  debt_accounts: new Set(["current_balance_centavos", "paid_off_at"]),
+  debt_payments: new Set(["amount_centavos", "principal_centavos", "interest_centavos"]),
+  credit_card_details: new Set(["available_credit_centavos"]),
+  credit_card_installments: new Set(["remaining_principal_centavos", "remaining_months", "settlement_status"]),
+  credit_card_transactions: new Set(["applied_credit_centavos"]),
+  credit_card_payments: new Set(["issuer_recognized"]),
+};
+const DERIVED_CREATE_FIELDS: Record<string, Set<string>> = {
+  credit_card_details: new Set(["available_credit_centavos"]),
+  credit_card_installments: new Set(["remaining_principal_centavos", "remaining_months", "monthly_amortization_centavos"]),
+  credit_card_transactions: new Set(["applied_credit_centavos"]),
+  credit_card_payments: new Set(["issuer_recognized"]),
+};
+
+async function validateCreditCardPayload(supabase: SupabaseClient, userId: string, entity: string, operation: "create" | "update", payload: Record<string, unknown>, recordId?: string): Promise<void> {
+  if (operation === "create") for (const field of CREDIT_CARD_REQUIRED_FIELDS[entity] ?? []) requireStringOrNumber(payload, field);
+  const positive = ["credit_limit_centavos", "original_principal_centavos", "term_months", "monthly_amortization_centavos", "amount_centavos"];
+  const nonNegative = ["available_credit_centavos", "remaining_principal_centavos", "remaining_months", "interest_rate_bps", "statement_balance_centavos", "minimum_due_centavos", "finance_charge_centavos", "custom_amount_centavos", "pretermination_fee_centavos"];
+  for (const field of positive) if (payload[field] !== undefined && (!Number.isInteger(payload[field]) || (payload[field] as number) <= 0)) throw new Error(`${field} must be a positive integer`);
+  for (const field of nonNegative) if (payload[field] !== undefined && payload[field] !== null && (!Number.isInteger(payload[field]) || (payload[field] as number) < 0)) throw new Error(`${field} must be a non-negative integer`);
+  for (const field of ["cycle_start_date", "cutoff_date", "statement_date", "default_cutoff_date", "default_statement_date", "due_date", "payment_date", "applied_date", "settlement_date"]) if (payload[field] !== undefined && payload[field] !== null && !isDateOnly(payload[field])) throw new Error(`${field} must be a valid YYYY-MM-DD date`);
+  if (payload.interest_type !== undefined && !["zero_interest", "interest_bearing"].includes(payload.interest_type as string)) throw new Error("interest_type is invalid");
+  if (payload.strategy !== undefined && !["pay_full", "pay_minimum", "custom"].includes(payload.strategy as string)) throw new Error("strategy is invalid");
+  if (payload.purchase_type !== undefined && !["regular", "installment"].includes(payload.purchase_type as string)) throw new Error("purchase_type is invalid");
+  if (payload.issuer_recognized !== undefined && typeof payload.issuer_recognized !== "boolean") throw new Error("issuer_recognized must be boolean");
+  if (payload.settlement_status !== undefined && !["active", "settlement_requested", "completed"].includes(payload.settlement_status as string)) throw new Error("settlement_status is invalid");
+  if (entity === "credit_card_settlements" && payload.status !== undefined && !["requested", "recognized", "rejected"].includes(payload.status as string)) throw new Error("settlement status is invalid");
+  for (const field of ["account_id", "cycle_id", "transaction_id", "installment_id", "payment_id", "statement_id", "target_transaction_id", "source_account_id"]) if (payload[field] !== undefined && payload[field] !== null) requireString(payload, field);
+  if (payload.client_mutation_id !== undefined && payload.client_mutation_id !== null) requireString(payload, "client_mutation_id");
+  if (entity === "credit_card_installments" && payload.remaining_principal_centavos !== undefined && payload.original_principal_centavos !== undefined && (payload.remaining_principal_centavos as number) > (payload.original_principal_centavos as number)) throw new Error("remaining principal cannot exceed original principal");
+  if (entity === "credit_card_statements" && payload.minimum_due_centavos !== undefined && payload.statement_balance_centavos !== undefined && (payload.minimum_due_centavos as number) > (payload.statement_balance_centavos as number)) throw new Error("minimum due cannot exceed statement balance");
+  if (entity === "credit_card_details" && payload.available_credit_centavos !== undefined && payload.available_credit_centavos !== null) {
+    const limit = payload.credit_limit_centavos;
+    if (typeof limit === "number" && Number(payload.available_credit_centavos) > limit) throw new Error("available_credit_centavos cannot exceed credit_limit_centavos");
+    if (limit === undefined && recordId) {
+      const { data, error } = await supabase.from("credit_card_details").select("credit_limit_centavos").eq("account_id", recordId).eq("user_id", userId).eq("deleted", false).maybeSingle();
+      if (error) throw new Error(`credit limit validation failed: ${error.message}`);
+      if (data && Number(payload.available_credit_centavos) > Number((data as { credit_limit_centavos: number }).credit_limit_centavos)) throw new Error("available_credit_centavos cannot exceed credit_limit_centavos");
+    }
+  }
+  if (entity === "credit_card_installments" && payload.remaining_months !== undefined && payload.term_months !== undefined && (payload.remaining_months as number) > (payload.term_months as number)) throw new Error("remaining months cannot exceed term months");
+  if (entity === "credit_card_statement_strategies" && payload.strategy === "custom") {
+    const statementId = typeof payload.statement_id === "string" ? payload.statement_id : recordId;
+    if (!statementId) throw new Error("statement_id is required for a custom strategy");
+    const { data, error } = await supabase.from("credit_card_statements").select("statement_balance_centavos,minimum_due_centavos").eq("id", statementId).eq("user_id", userId).eq("deleted", false).maybeSingle();
+    if (error) throw new Error(`statement strategy validation failed: ${error.message}`);
+    if (!data) throw new Error("statement_id does not reference an accessible statement");
+    const amount = payload.custom_amount_centavos;
+    if (typeof amount !== "number" || amount < Number((data as { minimum_due_centavos: number }).minimum_due_centavos) || amount >= Number((data as { statement_balance_centavos: number }).statement_balance_centavos)) throw new Error("custom amount must be at least minimum due and less than statement balance");
+  }
+  if (entity === "credit_card_payments" && payload.statement_id != null) {
+    const { data, error } = await supabase.from("credit_card_statements").select("cycle_id").eq("id", payload.statement_id as string).eq("user_id", userId).eq("deleted", false).maybeSingle();
+    if (error) throw new Error(`statement cycle validation failed: ${error.message}`);
+    if (!data || data.cycle_id !== payload.cycle_id) throw new Error("statement_id must belong to cycle_id");
+  }
+  if (entity === "credit_card_payments" && payload.transaction_id != null) {
+    if (payload.source_account_id == null && payload.transaction_id != null) {
+      const { data: transaction, error } = await supabase.from("transactions").select("transaction_type").eq("id", payload.transaction_id as string).eq("user_id", userId).eq("deleted", false).maybeSingle();
+      if (!error && transaction && transaction.transaction_type !== "expense") throw new Error("payment transaction must be an accessible expense");
+      throw new Error("payment transaction source account is required");
+    }
+    const { data: transaction, error } = await supabase
+      .from("transactions")
+      .select("transaction_type,amount_centavos,source_account_id")
+      .eq("id", payload.transaction_id as string)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw new Error(`payment transaction validation failed: ${error.message}`);
+    if (!transaction || transaction.transaction_type !== "expense") throw new Error("payment transaction must be an accessible expense");
+    if (payload.amount_centavos !== undefined && Number(transaction.amount_centavos) !== payload.amount_centavos) throw new Error("payment transaction amount must match payment amount");
+    if (payload.source_account_id !== undefined && transaction.source_account_id !== payload.source_account_id) throw new Error("payment transaction source account must match payment source account");
+  }
+  if (entity === "credit_card_payments" && payload.source_account_id != null) {
+    const { data: sourceAccount, error } = await supabase
+      .from("financial_accounts")
+      .select("kind,status")
+      .eq("id", payload.source_account_id as string)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw new Error(`payment source account validation failed: ${error.message}`);
+    if (!sourceAccount || sourceAccount.status !== "active" || sourceAccount.kind === "credit_card") throw new Error("payment source account must be an active non-credit-card account");
+  }
+  const refs = ["account_id", "source_account_id", "cycle_id", "installment_id", "statement_id", "payment_id", "transaction_id"];
+  for (const field of refs) if (typeof payload[field] === "string") await verifyCreditCardReference(supabase, userId, field, payload[field] as string);
+  if (typeof payload.target_transaction_id === "string") await verifyCreditCardReference(supabase, userId, "target_transaction_id", payload.target_transaction_id);
+  if (entity === "credit_card_cycles" && payload.account_id) await verifyCreditCardAccount(supabase, userId, payload.account_id as string);
+  if (entity === "credit_card_details" && payload.account_id) await verifyCreditCardAccount(supabase, userId, payload.account_id as string);
+}
+
+function requireStringOrNumber(payload: Record<string, unknown>, field: string): void {
+  if (payload[field] === undefined || payload[field] === null || (typeof payload[field] !== "string" && typeof payload[field] !== "number")) throw new Error(`${field} is required`);
+}
+
+async function verifyCreditCardReference(supabase: SupabaseClient, userId: string, field: string, id: string): Promise<void> {
+  const table = field === "account_id" || field === "source_account_id" ? "financial_accounts" : field === "cycle_id" ? "credit_card_cycles" : field === "installment_id" ? "credit_card_installments" : field === "statement_id" ? "credit_card_statements" : field === "payment_id" ? "credit_card_payments" : "transactions";
+  const { data, error } = await supabase.from(table).select("id").eq("id", id).eq("user_id", userId).eq("deleted", false).maybeSingle();
+  if (error) throw new Error(`${field} validation failed: ${error.message}`);
+  if (!data) throw new Error(`${field} does not reference an accessible record`);
+}
+
+async function verifyCreditCardAccount(supabase: SupabaseClient, userId: string, id: string): Promise<void> {
+  const { data, error } = await supabase.from("financial_accounts").select("id").eq("id", id).eq("user_id", userId).eq("kind", "credit_card").eq("deleted", false).maybeSingle();
+  if (error) throw new Error(`account validation failed: ${error.message}`);
+  if (!data) throw new Error("account_id does not reference an accessible credit card");
+}
 
 function validateDebtStatus(payload: Record<string, unknown>, operation: "create" | "update"): void {
   if (payload.status === undefined) return;
-  const validStatuses = operation === "update" ? ["active", "archived", "paid_off"] : ["active", "archived"];
+  const validStatuses = ["active", "archived", "paid_off"];
   if (typeof payload.status !== "string" || !validStatuses.includes(payload.status)) {
     throw new Error("status must be active or archived; deleted must use the delete operation");
   }
 }
 
-function validateDebtPayload(entity: string, payload: Record<string, unknown>, operation: "create" | "update"): void {
+async function validateDebtPayload(supabase: SupabaseClient, userId: string, entity: string, payload: Record<string, unknown>, operation: "create" | "update"): Promise<void> {
   if (entity === "debt_accounts") {
-    for (const field of ["name", "lender_name", "preset_key", "payment_frequency", "interest_period", "interest_method", "notes"]) {
+    for (const field of ["name", "lender_name", "preset_key", "payment_frequency", "interest_period", "interest_method", "paid_off_at", "archived_at", "notes"]) {
       if (payload[field] !== undefined && payload[field] !== null) requireString(payload, field);
     }
-    if (payload.payment_frequency !== undefined && !["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly"].includes(payload.payment_frequency as string)) throw new Error("payment_frequency must be a supported frequency");
+    if (payload.payment_frequency !== undefined && !["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(payload.payment_frequency as string)) throw new Error("payment_frequency must be a supported frequency");
     if (payload.preset_key !== undefined && payload.preset_key !== null && (typeof payload.preset_key !== "string" || !/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(payload.preset_key))) throw new Error("preset_key must be a safe slug");
     if (payload.interest_period !== undefined && payload.interest_period !== null && !["daily", "monthly", "annual"].includes(payload.interest_period as string)) throw new Error("interest_period must be daily, monthly, or annual");
-    if (payload.interest_method !== undefined && payload.interest_method !== null && !["simple", "amortized", "compound"].includes(payload.interest_method as string)) throw new Error("interest_method must be simple, amortized, or compound");
+    if (payload.interest_method !== undefined && payload.interest_method !== null && !["flat_add_on", "diminishing_balance", "provider_calculated", "no_interest", "simple", "amortized", "compound"].includes(payload.interest_method as string)) throw new Error("interest_method must be a supported method");
     for (const field of ["next_due_date", "maturity_date", "target_payoff_date"]) {
       if (payload[field] !== undefined && payload[field] !== null && !isDateOnly(payload[field])) throw new Error(`${field} must be a valid YYYY-MM-DD date`);
     }
@@ -274,26 +405,45 @@ function validateDebtPayload(entity: string, payload: Record<string, unknown>, o
     if (payload.payment_schedule !== undefined && (!payload.payment_schedule || typeof payload.payment_schedule !== "object" || Array.isArray(payload.payment_schedule))) throw new Error("payment_schedule must be an object");
     if (payload.preset_data && typeof payload.preset_data === "object" && !Array.isArray(payload.preset_data)) {
       const presetData = payload.preset_data as Record<string, unknown>;
-      const knownPreset = ["credit_card", "personal_salary_loan", "auto_loan", "housing_loan", "informal_loan", "bnpl", "online_lending_app", "product_installment", "government_member_loan", "microfinance_loan"].includes(payload.preset_key as string);
-      const presetFields = payload.preset_key === "credit_card" ? ["statementDay"] : knownPreset ? ["termMonths"] : [];
+       const presetKey = payload.preset_key as string;
+       const knownPreset = ["credit_card", "personal_salary_loan", "auto_loan", "housing_loan", "informal_loan", "bnpl", "online_lending_app", "product_installment", "government_member_loan", "microfinance_loan", "personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "custom_debt"].includes(presetKey);
+       const presetFields = presetKey === "credit_card" ? ["statementDay"] : ["personal_loan", "multipurpose_loan"].includes(presetKey) ? ["purpose"] : presetKey === "salary_loan" ? ["linkedIncomeSourceId", "repaymentMethod", "deductionAmountCentavos", "deductionSchedule"] : presetKey === "business_loan" ? ["linkedBusinessOrIncomeSourceId", "purpose"] : presetKey === "auto_loan" ? ["termMonths", "vehicleDescription", "vehiclePurchasePriceCentavos", "downpaymentCentavos"] : presetKey === "custom_debt" ? ["interestChoice", "interestRateBps", "interestMethod"] : knownPreset ? ["termMonths"] : [];
+       const commonFields = ["startDate", "feesCentavos", "penaltiesCentavos"];
       for (const field of Object.keys(presetData)) {
-        if (knownPreset && !presetFields.includes(field)) throw new Error(`${field} is not supported for ${String(payload.preset_key)}`);
+         if (knownPreset && !presetFields.includes(field) && !commonFields.includes(field)) throw new Error(`${field} is not supported for ${String(payload.preset_key)}`);
       }
-      for (const field of presetFields) {
-        if (presetData[field] !== undefined && (!Number.isInteger(presetData[field]) || (presetData[field] as number) < 0)) throw new Error(`${field} must be a non-negative integer`);
+        for (const field of [...presetFields, ...commonFields]) {
+         if (presetData[field] !== undefined && ["startDate", "purpose", "linkedIncomeSourceId", "repaymentMethod", "deductionSchedule", "vehicleDescription", "linkedBusinessOrIncomeSourceId", "interestChoice", "interestMethod"].includes(field)) {
+           if (typeof presetData[field] !== "string" || !String(presetData[field]).trim()) throw new Error(`${field} must be a non-empty string`);
+          } else if (presetData[field] !== undefined && (!Number.isInteger(presetData[field]) || (presetData[field] as number) < 0)) throw new Error(`${field} must be a non-negative integer`);
       }
-      if (payload.preset_key === "credit_card" && presetData.statementDay !== undefined && ((presetData.statementDay as number) < 1 || (presetData.statementDay as number) > 31)) throw new Error("statementDay must be between 1 and 31");
+       if (payload.preset_key === "credit_card" && presetData.statementDay !== undefined && ((presetData.statementDay as number) < 1 || (presetData.statementDay as number) > 31)) throw new Error("statementDay must be between 1 and 31");
+       if (["personal_loan", "multipurpose_loan"].includes(presetKey) && presetData.purpose !== undefined && typeof presetData.purpose !== "string") throw new Error("purpose must be a string");
+       if (["salary_loan", "business_loan"].includes(presetKey) && Object.values(presetData).some((value) => typeof value !== "string" && typeof value !== "number")) throw new Error("preset_data contains invalid values");
+       if (presetKey === "salary_loan" && (!presetData.linkedIncomeSourceId || !presetData.repaymentMethod)) throw new Error("salary loans require linked income source and repayment method");
+       if (presetKey === "salary_loan" && presetData.repaymentMethod === "payroll_deduction" && (!(typeof presetData.deductionAmountCentavos === "number") || (presetData.deductionAmountCentavos as number) <= 0 || typeof presetData.deductionSchedule !== "string")) throw new Error("payroll deduction requires deduction amount and schedule");
+       if (presetKey === "business_loan" && (!presetData.linkedBusinessOrIncomeSourceId || !presetData.purpose)) throw new Error("business loans require linked context and purpose");
+        if (presetKey === "auto_loan" && (!presetData.vehicleDescription || !Number.isInteger(presetData.vehiclePurchasePriceCentavos) || (presetData.vehiclePurchasePriceCentavos as number) <= 0 || !Number.isInteger(presetData.downpaymentCentavos) || (presetData.downpaymentCentavos as number) < 0 || (presetData.downpaymentCentavos as number) > (presetData.vehiclePurchasePriceCentavos as number))) throw new Error("auto loan vehicle details are invalid");
+        if (presetKey === "auto_loan" && payload.original_balance_centavos !== undefined && Number(payload.original_balance_centavos) !== (presetData.vehiclePurchasePriceCentavos as number) - (presetData.downpaymentCentavos as number)) throw new Error("auto loan original balance must equal the financed principal");
+        if (presetKey === "custom_debt") {
+          if (!["no_interest", "specified", "provider_calculated"].includes(presetData.interestChoice as string)) throw new Error("interestChoice is invalid");
+          if (presetData.interestChoice === "specified" && (!Number.isInteger(presetData.interestRateBps) || (presetData.interestRateBps as number) < 0 || !["simple", "amortized", "compound"].includes(presetData.interestMethod as string))) throw new Error("specified interest requires a valid rate and method");
+        }
     }
     return;
   }
   if (entity === "debt_payments") {
-    if (operation !== "create") throw new Error("Debt payments can only be created through Debt Manager");
     if (operation === "create") {
-      for (const field of ["debt_account_id", "transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id", "source", "payment_date"]) {
+      for (const field of ["debt_account_id", "source", "payment_date"]) {
         requireString(payload, field);
       }
-      if (payload.source !== "transaction") throw new Error("source must be transaction");
-      if (payload.linked_transaction_type !== "expense") throw new Error("linked_transaction_type must be expense");
+      if (payload.source !== "transaction" && payload.source !== "manual") throw new Error("source must be transaction or manual");
+      if (payload.source === "transaction") {
+        for (const field of ["transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]) requireString(payload, field);
+        if (payload.linked_transaction_type !== "expense") throw new Error("linked_transaction_type must be expense");
+      } else if (payload.transaction_id != null) {
+        throw new Error("manual debt payments cannot have a transaction");
+      }
       for (const field of ["amount_centavos", "principal_centavos", "interest_centavos"]) {
         if (payload[field] !== undefined && payload[field] !== null) requireNonNegativeInteger(payload, field);
       }
@@ -301,6 +451,14 @@ function validateDebtPayload(entity: string, payload: Record<string, unknown>, o
       if (payload.source !== undefined && !["manual", "transaction", "system_adjustment"].includes(payload.source as string)) throw new Error("source must be a valid debt payment source");
       for (const field of ["debt_account_id", "transaction_id", "linked_source_account_id", "linked_subcategory_id"]) {
         if (payload[field] !== undefined && payload[field] !== null) requireString(payload, field);
+      }
+      if (payload.source === "transaction" && payload.linked_source_account_id) {
+        const sourceQuery = supabase.from("financial_accounts") as unknown as { select?: (...args: string[]) => any };
+        if (sourceQuery && typeof sourceQuery.select === "function") {
+          const { data: account, error } = await sourceQuery.select("id,kind,status").eq("id", payload.linked_source_account_id as string).eq("user_id", userId).eq("deleted", false).maybeSingle();
+          if (error) throw new Error(`payment source account validation failed: ${error.message}`);
+          if (!account || account.status !== "active" || account.kind === "credit_card") throw new Error("payment source account must be an active non-credit-card account");
+        }
       }
       if (payload.payment_date !== undefined && payload.payment_date !== null && !isDateOnly(payload.payment_date)) throw new Error("payment_date must be a valid YYYY-MM-DD date");
       const amount = payload.amount_centavos;
@@ -312,6 +470,10 @@ function validateDebtPayload(entity: string, payload: Record<string, unknown>, o
       if (typeof principal === "number" && typeof interest === "number" && typeof amount === "number" && principal + interest > amount) {
         throw new Error("principal and interest cannot exceed amount_centavos");
       }
+    } else {
+      for (const field of ["transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id", "source", "payment_date"]) requireString(payload, field);
+      if (payload.source !== "transaction") throw new Error("debt payment updates must link a transaction");
+      if (payload.linked_transaction_type !== "expense") throw new Error("linked_transaction_type must be expense");
     }
     return;
   }
@@ -343,7 +505,7 @@ export async function prepareOperation(
     if (error) throw error;
     if (linkedPayment) throw new Error("Linked debt payments must be changed from Debt Manager");
   }
-  if (op.entity === "debt_payments" && op.operation_type !== "create") {
+  if (op.entity === "debt_payments" && op.operation_type === "delete") {
     throw new Error("Debt payments can only be created through Debt Manager");
   }
   if (["debt_accounts", "user_debt_priorities", "debt_strategy_preferences"].includes(op.entity) && op.operation_type === "update" && op.changed_fields.length === 0) {
@@ -526,17 +688,34 @@ async function validateCreatePayload(
     return validateBudgetPayload(supabase, userId, payload, BUDGET_CREATE_FIELDS);
   }
 
-  if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
-    const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
+  if (entity.startsWith("credit_card_") || entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
+    const allowed = entity.startsWith("credit_card_") ? CREDIT_CARD_FIELDS : entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
     assertOnlyAllowed(payload, allowed);
     const sanitized = sanitizePayload(payload, allowed);
+     if (entity.startsWith("credit_card_")) {
+        if (entity === "credit_card_details") await validateCreditCardPayload(supabase, userId, entity, "create", sanitized);
+        if (entity === "credit_card_installments") {
+          const principal = Number(sanitized.original_principal_centavos);
+          const term = Number(sanitized.term_months);
+          const rate = Number(sanitized.interest_rate_bps ?? 0);
+          sanitized.remaining_principal_centavos ??= sanitized.original_principal_centavos;
+          sanitized.remaining_months ??= sanitized.term_months;
+          sanitized.monthly_amortization_centavos ??= sanitized.interest_type === "zero_interest"
+            ? Math.ceil(principal / term)
+            : Math.ceil((principal * (10000 + rate)) / (term * 10000));
+        }
+        if (entity === "credit_card_transactions") sanitized.applied_credit_centavos ??= 0;
+        if (entity !== "credit_card_details") await validateCreditCardPayload(supabase, userId, entity, "create", sanitized);
+     }
     if (entity === "debt_accounts") {
       requireString(sanitized, "name"); requireString(sanitized, "preset_key");
       validateDebtStatus(sanitized, "create");
+       if (sanitized.status === "paid_off" && (typeof sanitized.paid_off_at !== "string" || sanitized.paid_off_at.length === 0)) throw new Error("paid_off status requires paid_off_at");
+       if (sanitized.status === "paid_off" && Number(sanitized.current_balance_centavos ?? 0) !== 0) throw new Error("paid_off status requires a zero balance");
       if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(sanitized.preset_key as string)) throw new Error("preset_key must be a safe slug");
       if (sanitized.preset_data !== undefined && (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data))) throw new Error("preset_data must be an object");
     }
-    validateDebtPayload(entity, sanitized, "create");
+     await validateDebtPayload(supabase, userId, entity, sanitized, "create");
     return sanitized;
   }
 
@@ -925,18 +1104,31 @@ async function validateUpdatePayload(
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else if (entity === "budgets") {
     return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS, recordId);
-  } else if (entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
-    const allowed = entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
+  } else if (entity.startsWith("credit_card_") || entity === "debt_accounts" || entity === "debt_payments" || entity === "user_debt_priorities" || entity === "debt_strategy_preferences") {
+    const derived = DERIVED_UPDATE_FIELDS[entity];
+    if (derived) {
+      const changedDerived = opFields(payload, derived);
+      const issuerRecognition = entity === "credit_card_payments"
+        && changedDerived.length === 1
+        && changedDerived[0] === "issuer_recognized"
+        && payload.issuer_recognized === true;
+      if (changedDerived.length > 0 && !issuerRecognition) {
+        throw new Error(`${changedDerived[0]} can only be changed through its dedicated invariant-preserving operation`);
+      }
+    }
+    const allowed = entity.startsWith("credit_card_") ? CREDIT_CARD_FIELDS : entity === "debt_accounts" ? DEBT_ACCOUNT_FIELDS : entity === "debt_payments" ? DEBT_PAYMENT_FIELDS : new Set(entity === "user_debt_priorities" ? ["debt_account_id", "priority_rank", "priorities"] : ["strategy"]);
     assertOnlyAllowed(payload, allowed);
     const sanitized = sanitizePayload(payload, allowed);
+     if (entity.startsWith("credit_card_")) await validateCreditCardPayload(supabase, userId, entity, "update", sanitized, recordId);
     if (entity === "debt_accounts") {
       validateDebtStatus(sanitized, "update");
-      const { data: currentDebt, error } = await supabase.from("debt_accounts").select("preset_key").eq("id", recordId).eq("user_id", userId).eq("deleted", false).maybeSingle();
+       const { data: currentDebt, error } = await supabase.from("debt_accounts").select("preset_key,current_balance_centavos").eq("id", recordId).eq("user_id", userId).eq("deleted", false).maybeSingle();
       if (error) throw new Error(`debt validation failed: ${error.message}`);
-      if (!currentDebt) throw new Error("debt not found or inaccessible");
-      validateDebtPayload(entity, { ...sanitized, preset_key: sanitized.preset_key ?? currentDebt.preset_key }, "update");
+       if (!currentDebt) throw new Error("debt not found or inaccessible");
+       if (sanitized.status === "paid_off" && Number(sanitized.current_balance_centavos ?? currentDebt.current_balance_centavos) !== 0) throw new Error("paid_off status requires a zero balance");
+       await validateDebtPayload(supabase, userId, entity, { ...sanitized, preset_key: sanitized.preset_key ?? currentDebt.preset_key }, "update");
     } else {
-      validateDebtPayload(entity, sanitized, "update");
+       await validateDebtPayload(supabase, userId, entity, sanitized, "update");
     }
     return sanitized;
   } else {
@@ -1280,6 +1472,10 @@ async function validateUpdatePayload(
   }
 
   return sanitized;
+}
+
+function opFields(payload: Record<string, unknown>, fields: Set<string>): string[] {
+  return Object.keys(payload).filter((field) => fields.has(field));
 }
 
 function assertOnlyAllowed(payload: Record<string, unknown>, allowedFields: Set<string>): void {

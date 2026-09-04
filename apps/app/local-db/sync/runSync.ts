@@ -368,12 +368,26 @@ async function pullAndApply(
         await applyPullRow(db, table, normalized);
         pulled++;
       } catch (error) {
+        const recordId = String(row.id ?? normalized.id ?? "unknown");
+        const reason = error instanceof Error ? error.message : "unknown error";
+        // Quarantine only the bad row so a malformed remote record cannot block later changes.
+        await db.runAsync(
+          `INSERT INTO sync_pull_failures (user_id, table_name, record_id, payload, last_error, attempts, updated_at)
+           VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+           ON CONFLICT(user_id, table_name, record_id) DO UPDATE SET
+             payload=excluded.payload, last_error=excluded.last_error,
+             attempts=sync_pull_failures.attempts + 1, updated_at=CURRENT_TIMESTAMP`,
+          userId,
+          table,
+          recordId,
+          JSON.stringify(row),
+          reason,
+        );
         console.error("[sync/pull] local apply failed", {
           table,
-          recordId: row.id,
-          reason: error instanceof Error ? error.message : "unknown error",
+          recordId,
+          reason,
         });
-        throw error;
       }
     }
   }

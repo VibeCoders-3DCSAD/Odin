@@ -216,7 +216,7 @@ describe("budget drafts repository", () => {
     expect(trackingQuery).toContain("s.kind = 'expense'");
     expect(trackingQuery).toContain("s.is_active = 1");
     expect(trackingQuery).toContain("c.user_id = ? OR c.is_system = 1");
-    expect(trackingQuery).toContain("t.transaction_date >= ? AND t.transaction_date < ?");
+    expect(trackingQuery).toContain("t.transaction_date >= ? AND t.transaction_date <= ?");
     expect(trackingQuery).toContain("NOT EXISTS (SELECT 1 FROM debt_payments");
     expect(trackingCall?.slice(1)).toEqual([
       "user-1",
@@ -231,5 +231,8 @@ describe("budget drafts repository", () => {
       "user-1",
       "user-1",
     ]);
+
+    const paymentCall = db.getFirstAsync.mock.calls.find(([sql]) => String(sql).includes("FROM debt_payments"));
+    expect(paymentCall?.[0]).toContain("payment_date>=? AND payment_date<=?");
   });
 });

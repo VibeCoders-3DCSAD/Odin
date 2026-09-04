@@ -12,6 +12,10 @@ type DashboardSummary = {
   currentMonthExpenseCentavos: number;
   previousMonthIncomeCentavos: number;
   previousMonthExpenseCentavos: number;
+  accountCount: number;
+  incomeSourceCount: number;
+  budgetCount: number;
+  transactionCount: number;
   recentTransactions: DashboardTransaction[];
   categoryGroupSpending: CategoryGroupSpending[];
 };
@@ -68,8 +72,10 @@ function getPreviousMonthRange(): { start: string; end: string } {
 
 export async function getDashboardSummary(userId: string): Promise<DashboardSummary> {
   const db = await getDb();
+  const currentMonth = getCurrentMonthRange();
+  const today = toLocalDateStr(new Date());
 
-  const [balance, currentMonth, previousMonth, recentTransactions, categoryGroupSpend] = await Promise.all([
+  const [balance, currentMonthTotals, previousMonth, accounts, incomeSources, transactions, budgets, recentTransactions, categoryGroupSpend] = await Promise.all([
     db.getFirstAsync<{ total: number | null }>(
       `SELECT SUM(current_balance_centavos) AS total
        FROM financial_accounts
@@ -81,34 +87,51 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
          SUM(CASE WHEN transaction_type = 'income' THEN amount_centavos ELSE 0 END) AS income,
          SUM(CASE WHEN transaction_type = 'expense' THEN amount_centavos ELSE 0 END) AS expense
        FROM transactions
-       WHERE user_id = ? AND deleted = 0 AND status = 'posted'
+        WHERE user_id = ? AND deleted = 0 AND status = 'posted'
          AND transaction_type IN ('income', 'expense')
          AND transaction_date >= ? AND transaction_date <= ?`,
       userId,
-      getCurrentMonthRange().start,
-      getCurrentMonthRange().end,
+      currentMonth.start,
+      currentMonth.end,
     ),
     db.getFirstAsync<{ income: number | null; expense: number | null }>(
       `SELECT
          SUM(CASE WHEN transaction_type = 'income' THEN amount_centavos ELSE 0 END) AS income,
          SUM(CASE WHEN transaction_type = 'expense' THEN amount_centavos ELSE 0 END) AS expense
        FROM transactions
-       WHERE user_id = ? AND deleted = 0 AND status = 'posted'
-         AND transaction_type IN ('income', 'expense')
+        WHERE user_id = ? AND deleted = 0 AND status = 'posted'
+          AND transaction_type IN ('income', 'expense')
          AND transaction_date >= ? AND transaction_date <= ?`,
       userId,
       getPreviousMonthRange().start,
       getPreviousMonthRange().end,
     ),
-    db.getAllAsync<DashboardTransaction>(
-      `SELECT id, transaction_type, amount_centavos, transaction_date, merchant_name, counterparty_name
-       FROM transactions
-       WHERE user_id = ? AND deleted = 0 AND status = 'posted'
-       ORDER BY transaction_date DESC, created_at DESC
-       LIMIT ?`,
+    db.getFirstAsync<{ total: number }>(
+      "SELECT COUNT(*) AS total FROM financial_accounts WHERE user_id = ? AND deleted = 0 AND status = 'active'",
       userId,
-      RECENT_LIMIT,
     ),
+    db.getFirstAsync<{ total: number }>(
+      "SELECT COUNT(*) AS total FROM income_sources WHERE user_id = ? AND deleted = 0",
+      userId,
+    ),
+    db.getFirstAsync<{ total: number }>(
+      "SELECT COUNT(*) AS total FROM transactions WHERE user_id = ? AND deleted = 0 AND status = 'posted' AND transaction_type IN ('income', 'expense')",
+      userId,
+    ),
+    db.getFirstAsync<{ total: number }>(
+      "SELECT COUNT(*) AS total FROM budgets WHERE user_id = ? AND deleted = 0 AND status IN ('draft', 'active') AND period_start <= ? AND period_end >= ?",
+      userId,
+      today,
+      today,
+    ),
+    db.getAllAsync<DashboardTransaction>(
+       `SELECT id, transaction_type, amount_centavos, transaction_date, merchant_name, counterparty_name
+        FROM transactions
+        WHERE user_id = ? AND deleted = 0 AND status = 'posted' AND transaction_type = 'expense'
+        ORDER BY transaction_date DESC, created_at DESC
+        LIMIT ${RECENT_LIMIT}`,
+       userId,
+     ),
     db.getAllAsync<CategoryGroupSpending>(
       `SELECT COALESCE(g.label, 'Other') AS category_group_label, SUM(t.amount_centavos) AS total_centavos
        FROM transactions t
@@ -120,17 +143,21 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
        GROUP BY COALESCE(g.id, 'other'), COALESCE(g.label, 'Other')
        ORDER BY total_centavos DESC`,
       userId,
-      getCurrentMonthRange().start,
-      getCurrentMonthRange().end,
+      currentMonth.start,
+      currentMonth.end,
     ),
   ]);
 
   return {
     currentBalanceCentavos: balance?.total ?? 0,
-    currentMonthIncomeCentavos: currentMonth?.income ?? 0,
-    currentMonthExpenseCentavos: currentMonth?.expense ?? 0,
+    currentMonthIncomeCentavos: currentMonthTotals?.income ?? 0,
+    currentMonthExpenseCentavos: currentMonthTotals?.expense ?? 0,
     previousMonthIncomeCentavos: previousMonth?.income ?? 0,
     previousMonthExpenseCentavos: previousMonth?.expense ?? 0,
+    accountCount: accounts?.total ?? 0,
+    incomeSourceCount: incomeSources?.total ?? 0,
+    transactionCount: transactions?.total ?? 0,
+    budgetCount: budgets?.total ?? 0,
     recentTransactions: recentTransactions ?? [],
     categoryGroupSpending: categoryGroupSpend ?? [],
   };

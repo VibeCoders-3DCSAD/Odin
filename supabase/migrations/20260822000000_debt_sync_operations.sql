@@ -46,6 +46,7 @@ CREATE OR REPLACE FUNCTION apply_debt_sync_operation(
 )
 RETURNS TABLE (status text, reason text, current_version integer, conflicted_fields text[])
 LANGUAGE plpgsql SECURITY INVOKER AS $$
+#variable_conflict use_column
 DECLARE
   v_user_id uuid := auth.uid();
   v_version integer;
@@ -60,7 +61,6 @@ DECLARE
   v_transaction_amount bigint;
   v_transaction_deleted boolean;
   v_transaction_status text;
-  v_transaction_metadata jsonb;
   v_transaction_exists boolean := false;
   v_source_account_id uuid;
   v_balance_debited boolean := false;
@@ -78,10 +78,13 @@ BEGIN
   IF p_operation_type NOT IN ('create', 'update', 'delete') THEN RAISE EXCEPTION 'unsupported operation'; END IF;
   IF p_entity = 'debt_payments' THEN
     IF p_operation_type <> 'create' THEN RAISE EXCEPTION 'debt payments can only be created through Debt Manager'; END IF;
-    IF NULLIF(p_payload->>'debt_account_id', '') IS NULL OR NULLIF(p_payload->>'transaction_id', '') IS NULL
-      OR NULLIF(p_payload->>'linked_source_account_id', '') IS NULL OR NULLIF(p_payload->>'linked_subcategory_id', '') IS NULL
-    THEN RAISE EXCEPTION 'linked debt payment fields are required'; END IF;
-    IF COALESCE(p_payload->>'source', '') <> 'transaction' THEN RAISE EXCEPTION 'debt payment source must be transaction'; END IF;
+    IF NULLIF(p_payload->>'debt_account_id', '') IS NULL THEN RAISE EXCEPTION 'debt_account_id is required'; END IF;
+    IF COALESCE(p_payload->>'source', '') NOT IN ('transaction', 'manual') THEN RAISE EXCEPTION 'debt payment source is invalid'; END IF;
+    IF p_payload->>'source' = 'transaction' AND (
+      NULLIF(p_payload->>'transaction_id', '') IS NULL OR NULLIF(p_payload->>'linked_source_account_id', '') IS NULL
+      OR NULLIF(p_payload->>'linked_subcategory_id', '') IS NULL
+    ) THEN RAISE EXCEPTION 'linked debt payment fields are required'; END IF;
+    IF p_payload->>'source' = 'manual' AND NULLIF(p_payload->>'transaction_id', '') IS NOT NULL THEN RAISE EXCEPTION 'manual debt payments cannot have a transaction'; END IF;
     IF COALESCE(p_payload->>'amount_centavos', '') !~ '^[1-9][0-9]*$' THEN RAISE EXCEPTION 'payment amount must be a positive integer'; END IF;
     IF p_payload ? 'principal_centavos' AND (p_payload->>'principal_centavos') !~ '^[0-9]+$' THEN RAISE EXCEPTION 'principal amount must be a non-negative integer'; END IF;
     IF p_payload ? 'interest_centavos' AND (p_payload->>'interest_centavos') !~ '^[0-9]+$' THEN RAISE EXCEPTION 'interest amount must be a non-negative integer'; END IF;
@@ -89,7 +92,7 @@ BEGIN
       OR (p_payload->>'interest_centavos')::bigint > (p_payload->>'amount_centavos')::bigint
     THEN RAISE EXCEPTION 'payment components cannot exceed amount'; END IF;
     IF NULLIF(p_payload->>'payment_date', '') IS NULL THEN RAISE EXCEPTION 'payment_date is required'; END IF;
-    IF COALESCE(p_payload->>'linked_transaction_type', '') <> 'expense' THEN RAISE EXCEPTION 'linked transaction type must be expense'; END IF;
+    IF p_payload->>'source' = 'transaction' AND COALESCE(p_payload->>'linked_transaction_type', '') <> 'expense' THEN RAISE EXCEPTION 'linked transaction type must be expense'; END IF;
   END IF;
   IF p_entity = 'debt_accounts' THEN
     IF p_operation_type = 'create' AND NULLIF(p_payload->>'name', '') IS NULL THEN RAISE EXCEPTION 'name is required'; END IF;
@@ -97,9 +100,9 @@ BEGIN
     IF p_payload ? 'preset_key' AND (p_payload->>'preset_key') !~ '^[a-z0-9]+([_-][a-z0-9]+)*$' THEN RAISE EXCEPTION 'preset_key must be a safe slug'; END IF;
     IF p_payload ? 'preset_data' AND jsonb_typeof(p_payload->'preset_data') <> 'object' THEN RAISE EXCEPTION 'preset_data must be an object'; END IF;
     IF p_payload ? 'payment_schedule' AND jsonb_typeof(p_payload->'payment_schedule') <> 'object' THEN RAISE EXCEPTION 'payment_schedule must be an object'; END IF;
-    IF p_payload ? 'payment_frequency' AND (p_payload->>'payment_frequency') NOT IN ('daily', 'weekly', 'biweekly', 'semi_monthly', 'monthly', 'quarterly', 'yearly') THEN RAISE EXCEPTION 'payment_frequency is invalid'; END IF;
+    IF p_payload ? 'payment_frequency' AND (p_payload->>'payment_frequency') NOT IN ('daily', 'weekly', 'biweekly', 'semi_monthly', 'monthly', 'quarterly', 'yearly', 'custom') THEN RAISE EXCEPTION 'payment_frequency is invalid'; END IF;
     IF p_payload ? 'interest_period' AND (p_payload->>'interest_period') NOT IN ('daily', 'monthly', 'annual') THEN RAISE EXCEPTION 'interest_period is invalid'; END IF;
-    IF p_payload ? 'interest_method' AND (p_payload->>'interest_method') NOT IN ('simple', 'amortized', 'compound') THEN RAISE EXCEPTION 'interest_method is invalid'; END IF;
+    IF p_payload ? 'interest_method' AND (p_payload->>'interest_method') NOT IN ('flat_add_on', 'diminishing_balance', 'provider_calculated', 'no_interest', 'simple', 'amortized', 'compound') THEN RAISE EXCEPTION 'interest_method is invalid'; END IF;
     IF p_payload ? 'status' AND (p_payload->>'status') NOT IN ('active', 'archived', 'paid_off') THEN RAISE EXCEPTION 'debt status is invalid'; END IF;
     IF p_payload ? 'original_balance_centavos' AND (p_payload->>'original_balance_centavos') !~ '^[0-9]+$' THEN RAISE EXCEPTION 'original balance must be a non-negative integer'; END IF;
     IF p_payload ? 'current_balance_centavos' AND (p_payload->>'current_balance_centavos') !~ '^[0-9]+$' THEN RAISE EXCEPTION 'current balance must be a non-negative integer'; END IF;
@@ -128,10 +131,11 @@ BEGIN
   IF p_entity = 'debt_accounts' THEN
     IF p_operation_type = 'create' THEN
       INSERT INTO debt_accounts (
-        id, user_id, name, lender_name, preset_key, original_balance_centavos,
-        current_balance_centavos, annual_interest_rate_bps, minimum_payment_centavos,
-        payment_frequency, next_due_date, maturity_date, target_payoff_date,
-        interest_period, interest_method, preset_data, payment_schedule, notes, version, deleted, updated_at
+         id, user_id, name, lender_name, preset_key, original_balance_centavos,
+         current_balance_centavos, annual_interest_rate_bps, minimum_payment_centavos,
+         payment_frequency, next_due_date, maturity_date, target_payoff_date,
+         interest_period, interest_method, preset_data, payment_schedule, notes,
+         status, paid_off_at, version, deleted, updated_at
       ) VALUES (
         p_record_id, v_user_id, p_payload->>'name', p_payload->>'lender_name',
         COALESCE(p_payload->>'preset_key', 'unknown'),
@@ -142,9 +146,11 @@ BEGIN
         COALESCE(p_payload->>'payment_frequency', 'monthly'),
         NULLIF(p_payload->>'next_due_date', '')::date,
         NULLIF(p_payload->>'maturity_date', '')::date,
-        NULLIF(p_payload->>'target_payoff_date', '')::date,
-        p_payload->>'interest_period', p_payload->>'interest_method',
-        COALESCE(p_payload->'preset_data', '{}'::jsonb), COALESCE(p_payload->'payment_schedule', '{}'::jsonb), p_payload->>'notes', 1, false, now()
+         NULLIF(p_payload->>'target_payoff_date', '')::date,
+         p_payload->>'interest_period', p_payload->>'interest_method',
+         COALESCE(p_payload->'preset_data', '{}'::jsonb), COALESCE(p_payload->'payment_schedule', '{}'::jsonb), p_payload->>'notes',
+         COALESCE((p_payload->>'status')::odin_debt_account_status, 'active'::odin_debt_account_status), NULLIF(p_payload->>'paid_off_at', '')::timestamptz,
+         1, false, now()
       );
     ELSE
       SELECT version, deleted INTO v_version, v_deleted FROM debt_accounts
@@ -189,9 +195,18 @@ BEGIN
     END IF;
     SELECT current_balance_centavos INTO v_current_balance FROM debt_accounts WHERE id = v_debt_id AND user_id = v_user_id FOR UPDATE;
     v_transaction_id := NULLIF(p_payload->>'transaction_id', '')::uuid;
-    IF v_transaction_id IS NULL THEN RAISE EXCEPTION 'transaction_id is required for debt payments'; END IF;
-    SELECT t.transaction_type::text, t.amount_centavos, t.deleted, t.status::text, t.metadata
-      INTO v_transaction_type, v_transaction_amount, v_transaction_deleted, v_transaction_status, v_transaction_metadata
+    IF p_payload->>'source' = 'transaction' AND v_transaction_id IS NULL THEN RAISE EXCEPTION 'transaction_id is required for linked debt payments'; END IF;
+    IF p_payload->>'source' = 'manual' THEN
+      INSERT INTO debt_payments (id, debt_account_id, user_id, transaction_id, source, payment_date, amount_centavos, principal_centavos, interest_centavos, notes, version, deleted, updated_at)
+      VALUES (p_record_id, v_debt_id, v_user_id, NULL, 'manual', (p_payload->>'payment_date')::date, (p_payload->>'amount_centavos')::bigint, NULLIF(p_payload->>'principal_centavos', '')::bigint, NULLIF(p_payload->>'interest_centavos', '')::bigint, p_payload->>'notes', 1, false, now());
+      UPDATE debt_accounts AS da
+      SET current_balance_centavos = current_balance_centavos - (p_payload->>'amount_centavos')::bigint,
+          status = CASE WHEN da.current_balance_centavos - (p_payload->>'amount_centavos')::bigint = 0 THEN 'paid_off' ELSE da.status END,
+          version = version + 1, updated_at = now()
+      WHERE id = v_debt_id AND user_id = v_user_id;
+    ELSE
+    SELECT t.transaction_type::text, t.amount_centavos, t.deleted, t.status::text
+      INTO v_transaction_type, v_transaction_amount, v_transaction_deleted, v_transaction_status
     FROM transactions t WHERE t.id = v_transaction_id AND t.user_id = v_user_id;
     IF FOUND THEN
       v_transaction_exists := true;
@@ -222,7 +237,9 @@ BEGIN
     IF (p_payload->>'amount_centavos')::bigint > v_current_balance THEN
       RAISE EXCEPTION 'payment exceeds current debt balance';
     END IF;
-    v_balance_debited := COALESCE(v_transaction_metadata->>'debt_payment_balance_debited', 'false') = 'true';
+    -- This flag is set only by the server wrapper after an authoritative debit
+    -- or an applied transaction operation. Client transaction metadata is not read.
+    v_balance_debited := current_setting('odin.debt_payment_balance_debited', true) = 'true';
     IF v_transaction_exists AND NOT v_balance_debited THEN
       RAISE EXCEPTION 'linked transaction balance was not debited';
     END IF;
@@ -247,6 +264,7 @@ BEGIN
         version = version + 1,
         updated_at = now()
     WHERE id = v_debt_id AND user_id = v_user_id;
+    END IF;
   ELSIF p_entity = 'debt_payments' THEN
     RAISE EXCEPTION 'debt payments can only be created through Debt Manager';
   ELSIF p_entity = 'user_debt_priorities' THEN

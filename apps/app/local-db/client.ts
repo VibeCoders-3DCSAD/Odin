@@ -50,7 +50,7 @@ async function runMigrations(
   }
 }
 
-export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
+export async function loadMigrations(): Promise<Migration[]> {
   const { default: m001 } = await import("./migrations/001_sync_tables");
   const { default: m002 } = await import("./migrations/002_taxonomy_tables");
   const { default: m003 } = await import("./migrations/003_privacy_settings");
@@ -72,7 +72,20 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   const { default: m019 } = await import("./migrations/019_debt_management");
   const { default: m020 } = await import("./migrations/020_debt_payment_schedule");
   const { default: m021 } = await import("./migrations/021_financial_profile_cache");
-  return getDatabase([m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021]);
+  const { default: m022 } = await import("./migrations/022_debt_paid_off_at");
+  const { default: m023 } = await import("./migrations/023_debt_archived_at");
+  const { default: m024 } = await import("./migrations/024_credit_cards");
+  const { default: m025 } = await import("./migrations/025_credit_card_atomic_purchase");
+  const { default: m026 } = await import("./migrations/026_credit_card_pull_convergence");
+  const { default: m027 } = await import("./migrations/027_credit_card_payment_recognition");
+  const { default: m028 } = await import("./migrations/028_credit_card_mutation_ids");
+  const { default: m029 } = await import("./migrations/029_credit_card_pull_columns");
+  const { default: m030 } = await import("./migrations/030_sync_pull_failures");
+  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030];
+}
+
+export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
+  return getDatabase(await loadMigrations());
 }
 
 export function closeDatabase(): Promise<void> {

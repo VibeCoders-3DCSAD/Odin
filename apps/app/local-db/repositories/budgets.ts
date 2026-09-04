@@ -251,7 +251,7 @@ export async function getBudgetDraftTracking(userId: string, id: string): Promis
        FROM budget_allocations ba
         LEFT JOIN transactions t ON t.user_id = ?
           AND t.transaction_type = 'expense' AND t.status = 'posted' AND t.deleted = 0
-           AND t.transaction_date >= ? AND t.transaction_date < ?
+            AND t.transaction_date >= ? AND t.transaction_date <= ?
           AND NOT EXISTS (SELECT 1 FROM debt_payments dp WHERE dp.transaction_id = t.id AND dp.user_id = ? AND dp.deleted = 0)
          AND (
            (ba.subcategory_id IS NOT NULL AND t.subcategory_id = ba.subcategory_id AND EXISTS (
@@ -299,7 +299,7 @@ export async function getBudgetDraftTracking(userId: string, id: string): Promis
   );
   const actualByAllocation = new Map(rows.map((row) => [row.id, row.actual_amount_minor]));
   const debtActual = await db.getFirstAsync<{ total_minor: number }>(
-    "SELECT COALESCE(SUM(amount_centavos), 0) AS total_minor FROM debt_payments WHERE user_id=? AND payment_date>=? AND payment_date<? AND deleted=0",
+    "SELECT COALESCE(SUM(amount_centavos), 0) AS total_minor FROM debt_payments WHERE user_id=? AND payment_date>=? AND payment_date<=? AND deleted=0",
     userId, budget.periodStart, budget.periodEnd,
   );
   return {

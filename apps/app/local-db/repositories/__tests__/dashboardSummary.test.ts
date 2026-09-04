@@ -41,6 +41,10 @@ describe("getDashboardSummary", () => {
     expect(summary.currentMonthExpenseCentavos).toBe(0);
     expect(summary.previousMonthIncomeCentavos).toBe(0);
     expect(summary.previousMonthExpenseCentavos).toBe(0);
+    expect(summary.accountCount).toBe(0);
+    expect(summary.incomeSourceCount).toBe(0);
+    expect(summary.budgetCount).toBe(0);
+    expect(summary.transactionCount).toBe(0);
     expect(summary.recentTransactions).toEqual([]);
   });
 
@@ -77,14 +81,13 @@ describe("getDashboardSummary", () => {
     mockGetFirstAsync.mockResolvedValue(null);
     mockGetAllAsync.mockResolvedValue([
       { id: "t1", transaction_type: "expense", amount_centavos: 1000, transaction_date: "2024-07-20", merchant_name: "Coffee", counterparty_name: null },
-      { id: "t2", transaction_type: "income", amount_centavos: 5000, transaction_date: "2024-07-18", merchant_name: null, counterparty_name: "Employer" },
     ]);
 
     const summary = await getDashboardSummary("user-1");
 
-    expect(summary.recentTransactions).toHaveLength(2);
+    expect(summary.recentTransactions).toHaveLength(1);
     expect(summary.recentTransactions[0]!.id).toBe("t1");
-    expect(summary.recentTransactions[1]!.id).toBe("t2");
+    expect(mockGetAllAsync.mock.calls[0]![0]).toContain("transaction_type = 'expense'");
   });
 
   it("scopes queries by user_id", async () => {
@@ -98,5 +101,17 @@ describe("getDashboardSummary", () => {
 
     const recentCall = mockGetAllAsync.mock.calls[0]!;
     expect(recentCall[1]).toBe("user-42");
+  });
+
+  it("counts active budgets as present", async () => {
+    mockGetFirstAsync.mockResolvedValue(null);
+    mockGetAllAsync.mockResolvedValue([]);
+
+    await getDashboardSummary("user-1");
+
+    const budgetCall = mockGetFirstAsync.mock.calls.find(([sql]) => sql.includes("FROM budgets"));
+    expect(budgetCall?.[0]).toContain("status IN ('draft', 'active')");
+    expect(budgetCall?.[0]).toContain("period_start <= ? AND period_end >= ?");
+    expect(budgetCall?.slice(1)).toHaveLength(3);
   });
 });

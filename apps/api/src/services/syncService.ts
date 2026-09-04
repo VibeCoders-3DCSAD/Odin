@@ -54,7 +54,16 @@ const SYNCED_TABLES = [
   "debt_payments",
   "user_debt_priorities",
   "debt_strategy_preferences",
+  "credit_card_details", "credit_card_cycles", "credit_card_installments", "credit_card_transactions",
+  "credit_card_statements", "credit_card_payments", "credit_card_credit_applications", "credit_card_settlements", "credit_card_statement_strategies",
 ] as const;
+
+const PULL_IDENTITY_COLUMNS: Record<string, string> = {
+  debt_strategy_preferences: "user_id",
+  credit_card_details: "account_id",
+  credit_card_transactions: "transaction_id",
+  credit_card_statement_strategies: "statement_id",
+};
 
 export async function pushOperations(
   supabase: SupabaseClient,
@@ -70,7 +79,9 @@ export async function pushOperations(
     try {
       const prepared = await prepareOperation(supabase, userId, op);
       auditPayload = { redacted: true, fields: Object.keys(prepared.payload) };
-      const rpcName = prepared.entity === "budgets"
+       const rpcName = prepared.entity.startsWith("credit_card_")
+         ? "apply_credit_card_sync_operation"
+         : prepared.entity === "budgets"
         ? "apply_budget_sync_operation_v2"
         : ["debt_accounts", "debt_payments", "user_debt_priorities", "debt_strategy_preferences"].includes(prepared.entity)
           ? "apply_debt_sync_operation"
@@ -158,7 +169,7 @@ export async function pullChanges(
   let successful = true;
 
   for (const table of SYNCED_TABLES) {
-    const cursorColumn = table === "debt_strategy_preferences" ? "user_id" : "id";
+    const cursorColumn = PULL_IDENTITY_COLUMNS[table] ?? "id";
     const query = supabase
       .from(table)
       .select("*")
@@ -184,6 +195,7 @@ export async function pullChanges(
       || table === "debt_payments"
       || table === "user_debt_priorities"
       || table === "debt_strategy_preferences"
+      || table.startsWith("credit_card_")
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);

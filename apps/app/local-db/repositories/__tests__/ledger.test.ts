@@ -73,4 +73,19 @@ describe("ledger taxonomy validation", () => {
     await expect(updateTransaction("user-1", "device-1", "transaction-1", { notes: "changed" }))
       .rejects.toThrow("Linked debt payments must be changed from Debt Manager");
   });
+
+  test("uses literal pagination values for Expo SQLite reads", async () => {
+    const db = {
+      getAllAsync: jest.fn(async (sql: string) => {
+        if (sql.includes("LIMIT ?")) throw new Error("near limit: syntax error");
+        return [];
+      }),
+    };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { listTransactions } = await import("../ledger");
+
+    await expect(listTransactions("user-1", { limit: 25, offset: 10 })).resolves.toEqual([]);
+    expect(db.getAllAsync.mock.calls[0]?.[0]).toContain("LIMIT 25 OFFSET 10");
+  });
 });

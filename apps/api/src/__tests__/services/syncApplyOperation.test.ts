@@ -68,6 +68,88 @@ describe("prepareOperation — entity allowlist", () => {
   );
 });
 
+describe("prepareOperation — credit-card invariants", () => {
+  it("accepts purchase_type for credit-card transactions", async () => {
+    mockFrom.mockImplementation(() => createMockQuery({ data: { id: "reference-1" }, error: null }));
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "cc-purchase",
+      entity: "credit_card_transactions",
+      record_id: "transaction-1",
+      operation_type: "create",
+      base_version: null,
+      changed_fields: [],
+      payload: {
+        transaction_id: "transaction-1",
+        account_id: "account-1",
+        cycle_id: "cycle-1",
+        purchase_type: "regular",
+      },
+    });
+
+    expect(result.payload.purchase_type).toBe("regular");
+    expect(result.payload.applied_credit_centavos).toBe(0);
+  });
+
+  it.each([
+    ["credit_card_details", "available_credit_centavos"],
+    ["credit_card_installments", "remaining_principal_centavos"],
+    ["credit_card_installments", "remaining_months"],
+    ["credit_card_transactions", "applied_credit_centavos"],
+  ])("rejects generic updates to derived %s field %s", async (entity, field) => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: `derived-${field}`, entity, record_id: "record-1",
+      operation_type: "update", base_version: 1, changed_fields: [field],
+      payload: { [field]: 1 },
+    })).rejects.toThrow("dedicated invariant-preserving operation");
+  });
+
+  it("rejects a linked payment transaction with the wrong amount or type", async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "credit_card_cycles") return createMockQuery({ data: { id: "cycle-1" }, error: null });
+      if (table === "transactions") return createMockQuery({ data: { id: "tx-1", transaction_type: "income", amount_centavos: 99, source_account_id: "source-1" }, error: null });
+      throw new Error(`unexpected table lookup: ${table}`);
+    });
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "cc-payment-transaction", entity: "credit_card_payments", record_id: "payment-1",
+      operation_type: "create", base_version: null, changed_fields: [],
+      payload: { cycle_id: "cycle-1", transaction_id: "tx-1", amount_centavos: 100, payment_date: "2026-09-03" },
+    })).rejects.toThrow("payment transaction must be an accessible expense");
+  });
+
+  it("rejects available credit above the card limit before persistence", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "cc-limit", entity: "credit_card_details", record_id: "account-1",
+      operation_type: "create", base_version: null, changed_fields: [],
+      payload: { account_id: "account-1", credit_limit_centavos: 100, available_credit_centavos: 101, default_cutoff_date: "2026-09-15", default_statement_date: "2026-09-20" },
+    })).rejects.toThrow("available_credit_centavos cannot exceed credit_limit_centavos");
+  });
+
+  it("rejects a custom strategy outside the issuer statement bounds", async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "credit_card_statements") return createMockQuery({ data: { statement_balance_centavos: 1000, minimum_due_centavos: 100 }, error: null });
+      if (table === "transactions") return createMockQuery({ data: { id: "tx-1" }, error: null });
+      throw new Error(`unexpected table lookup: ${table}`);
+    });
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "cc-strategy", entity: "credit_card_statement_strategies", record_id: "statement-1",
+      operation_type: "create", base_version: null, changed_fields: [],
+      payload: { statement_id: "statement-1", strategy: "custom", custom_amount_centavos: 1000 },
+    })).rejects.toThrow("custom amount must be at least minimum due and less than statement balance");
+  });
+
+  it("rejects a payment whose statement belongs to another cycle", async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "credit_card_statements") return createMockQuery({ data: { id: "statement-1", cycle_id: "cycle-2" }, error: null });
+      throw new Error(`unexpected table lookup: ${table}`);
+    });
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "cc-payment-cycle", entity: "credit_card_payments", record_id: "payment-1",
+      operation_type: "create", base_version: null, changed_fields: [],
+      payload: { cycle_id: "cycle-1", statement_id: "statement-1", amount_centavos: 100, payment_date: "2026-09-03" },
+    })).rejects.toThrow("statement_id must belong to cycle_id");
+  });
+});
+
 describe("prepareOperation — budgets create", () => {
   beforeEach(() => {
     mockFrom.mockImplementation((table: string) => {
@@ -196,12 +278,43 @@ describe("prepareOperation — budgets create", () => {
 });
 
 describe("prepareOperation — debt entities", () => {
+  it("preserves preset text and validates fee fields", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-preset-text", entity: "debt_accounts", record_id: "debt-text", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { name: "Loan", preset_key: "personal_loan", preset_data: { purpose: "home repair", feesCentavos: 1250, penaltiesCentavos: 300, startDate: "2026-09-01" } },
+    });
+    expect(result.payload.preset_data).toEqual({ purpose: "home repair", feesCentavos: 1250, penaltiesCentavos: 300, startDate: "2026-09-01" });
+  });
+
   it("accepts an unknown future preset while sanitizing server-owned fields", async () => {
     const result = await prepareOperation(mockClient, validUserId, {
       operation_id: "op-debt-1", entity: "debt_accounts", record_id: "debt-1", operation_type: "create", base_version: null, changed_fields: [],
       payload: { id: "debt-1", user_id: validUserId, name: "Future debt", preset_key: "future_lender_product", preset_data: { term: 12 }, version: 99 },
     });
     expect(result.payload).toEqual({ name: "Future debt", preset_key: "future_lender_product", preset_data: { term: 12 } });
+  });
+
+  it("preserves archived debt account creates", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-archived", entity: "debt_accounts", record_id: "debt-archived", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { name: "Archived debt", preset_key: "credit_card", status: "archived" },
+    });
+    expect(result.payload).toMatchObject({ status: "archived" });
+  });
+
+  it("requires auto-loan original balance to equal financed principal", async () => {
+    await expect(prepareOperation(mockClient, validUserId, {
+      operation_id: "op-auto-principal", entity: "debt_accounts", record_id: "debt-auto", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { name: "Car", preset_key: "auto_loan", original_balance_centavos: 90000, preset_data: { termMonths: 60, vehicleDescription: "Sedan", vehiclePurchasePriceCentavos: 100000, downpaymentCentavos: 20000 } },
+    })).rejects.toThrow("financed principal");
+  });
+
+  it("preserves paid-off debt account creates with their payoff timestamp", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-paid-off", entity: "debt_accounts", record_id: "debt-paid-off", operation_type: "create", base_version: null, changed_fields: [],
+      payload: { name: "Paid-off debt", preset_key: "credit_card", status: "paid_off", paid_off_at: "2026-08-21T10:00:00Z" },
+    });
+    expect(result.payload).toMatchObject({ status: "paid_off", paid_off_at: "2026-08-21T10:00:00Z" });
   });
 
   it("rejects invalid debt status and linked payment deletes", async () => {
@@ -239,11 +352,11 @@ describe("prepareOperation — debt entities", () => {
     })).rejects.toThrow("payment_frequency must be a supported frequency");
   });
 
-  it("requires transaction-linked debt payments", async () => {
+  it("rejects a transaction on a standalone debt payment", async () => {
     await expect(prepareOperation(mockClient, validUserId, {
       operation_id: "op-debt-payment-source", entity: "debt_payments", record_id: "payment-1", operation_type: "create", base_version: null, changed_fields: [],
       payload: { amount_centavos: 100, debt_account_id: "debt-1", transaction_id: "transaction-1", linked_transaction_type: "expense", linked_source_account_id: "account-1", linked_subcategory_id: "subcategory-1", payment_date: "2026-08-21", source: "manual" },
-    })).rejects.toThrow("source must be transaction");
+    })).rejects.toThrow("manual debt payments cannot have a transaction");
   });
 
   it("rejects debt payments missing linked transaction fields", async () => {
@@ -251,6 +364,15 @@ describe("prepareOperation — debt entities", () => {
       operation_id: "op-debt-payment-fields", entity: "debt_payments", record_id: "payment-1", operation_type: "create", base_version: null, changed_fields: [],
       payload: { amount_centavos: 100, debt_account_id: "debt-1", transaction_id: "transaction-1", linked_source_account_id: "account-1", linked_subcategory_id: "subcategory-1", source: "transaction", payment_date: "2026-08-21" },
     })).rejects.toThrow("linked_transaction_type is required");
+  });
+
+  it("accepts a debt payment link update", async () => {
+    const result = await prepareOperation(mockClient, validUserId, {
+      operation_id: "op-debt-payment-link", entity: "debt_payments", record_id: "payment-1", operation_type: "update",
+      base_version: 1, changed_fields: ["transaction_id", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id", "source", "payment_date"],
+      payload: { transaction_id: "transaction-1", linked_transaction_type: "expense", linked_source_account_id: "account-1", linked_subcategory_id: "subcategory-1", source: "transaction", payment_date: "2026-08-21" },
+    });
+    expect(result.operation_type).toBe("update");
   });
 
   it("rejects payment components whose sum exceeds the payment", async () => {
