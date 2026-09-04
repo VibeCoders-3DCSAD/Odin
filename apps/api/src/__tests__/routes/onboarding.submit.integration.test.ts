@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-const LOCAL_API_URL = "http://127.0.0.1:54321";
-const LOCAL_SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+const LOCAL_API_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
+const LOCAL_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!LOCAL_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for integration tests");
 
 const serviceRole = createClient(LOCAL_API_URL, LOCAL_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },

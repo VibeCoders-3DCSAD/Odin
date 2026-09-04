@@ -125,12 +125,26 @@ async function postJson(
   }
 }
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown, fallback = "Authentication failed. Please try again.") {
   if (error instanceof Error && error.name === "AbortError") {
     return "The request timed out. Check the API and try again.";
   }
 
-  return error instanceof Error ? error.message : "Something went wrong.";
+  if (error instanceof TypeError || (error instanceof Error && /network|fetch/i.test(error.message))) {
+    return "We could not reach Odin. Check your internet connection and try again.";
+  }
+
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
+}
+
+function getAuthResponseError(response: Response, body: AuthResponse, fallback: string) {
+  if (body.message?.trim()) return body.message;
+  if (body.code === "email_unverified") return "Verify your email first, then sign in.";
+  if (response.status === 401) return "Invalid email or password.";
+  if (response.status === 409) return "An account with this email already exists.";
+  if (response.status === 429) return "Too many attempts. Please wait and try again.";
+  if (response.status >= 500) return "The app could not complete that request. Please try again.";
+  return fallback;
 }
 
 function FieldLabel({ children }: { children: string }) {
@@ -454,7 +468,7 @@ export default function AuthExperience({
         setMode("login");
       } else {
         setMode("verification_pending");
-        setNotice({ tone: "error", message: body.message ?? "We could not verify your email yet." });
+        setNotice({ tone: "error", message: getAuthResponseError(response, body, "We could not verify your email yet.") });
       }
     }).catch((error) => {
       if (!cancelled) {
@@ -480,7 +494,7 @@ export default function AuthExperience({
     const { response, body } = await postJson("/session", undefined, token);
 
     if (!response.ok) {
-      throw new Error(body.message ?? "Failed to restore your session.");
+      throw new Error(getAuthResponseError(response, body, "Failed to restore your session."));
     }
 
     return body;
@@ -529,7 +543,7 @@ export default function AuthExperience({
           setPendingVerificationEmail(email.trim());
           setMode("verification_pending");
         }
-        throw new Error(body.message ?? "Sign in failed.");
+        throw new Error(getAuthResponseError(response, body, "Sign in failed."));
       }
 
       const accessToken = body.payload?.session?.access_token;
@@ -552,8 +566,12 @@ export default function AuthExperience({
     if (!address) return;
     setIsBusy(true);
     try {
+      if (!await isOnline()) {
+        setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+        return;
+      }
       const { response, body } = await postJson("/verification-resend", { email: address });
-      if (!response.ok) throw new Error(body.message ?? "Verification email could not be sent.");
+      if (!response.ok) throw new Error(getAuthResponseError(response, body, "Verification email could not be sent."));
       setNotice({ tone: "success", message: `A new verification email was sent to ${address}.` });
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });
@@ -600,7 +618,7 @@ export default function AuthExperience({
       });
 
       if (!response.ok) {
-        throw new Error(body.message ?? "Registration failed.");
+        throw new Error(getAuthResponseError(response, body, "Registration failed."));
       }
 
       const accessToken = body.payload?.session?.access_token;
@@ -655,7 +673,7 @@ export default function AuthExperience({
       });
 
       if (!response.ok) {
-        throw new Error(body.message ?? "Password reset failed.");
+        throw new Error(getAuthResponseError(response, body, "Password reset failed."));
       }
 
       setNotice({
@@ -713,7 +731,7 @@ export default function AuthExperience({
 
       if (!response.ok) {
         if (response.status === 401) setMode("session_expired");
-        throw new Error(body.message ?? "Password update failed.");
+        throw new Error(getAuthResponseError(response, body, "Password update failed."));
       }
 
       setMode("login");
@@ -733,6 +751,7 @@ export default function AuthExperience({
 
   async function handleGoogle() {
     if (!google.signIn) {
+      setNotice({ tone: "error", message: "Google sign-in is not available right now. Use email and password instead." });
       return;
     }
 
@@ -757,7 +776,7 @@ export default function AuthExperience({
       await continueAfterAuthentication(authState);
     } catch (error) {
       const msg = getErrorMessage(error);
-      setNotice({ tone: "error", message: /Google sign-in was cancelled/i.test(msg) ? "Google login cancelled." : msg });
+      setNotice({ tone: "error", message: /cancelled/i.test(msg) ? "Google login cancelled." : msg });
     } finally {
       setIsGoogleBusy(false);
     }
@@ -774,6 +793,10 @@ export default function AuthExperience({
     setNotice({ tone: "default", message: "Logging you out..." });
 
     try {
+      if (!await isOnline()) {
+        setNotice({ tone: "error", message: "No internet connection. Please check your network and try again." });
+        return;
+      }
       const { response, body } = await postJson(
         "/logout",
         undefined,
@@ -781,7 +804,7 @@ export default function AuthExperience({
       );
 
       if (!response.ok) {
-        throw new Error(body.message ?? "Logout failed.");
+        throw new Error(getAuthResponseError(response, body, "Logout failed."));
       }
 
       setAuthenticated(null);
@@ -938,11 +961,14 @@ export default function AuthExperience({
               <View className="gap-6">
                 <View className="gap-4">
                   {!recoveryToken || !recoveryRefreshToken ? (
-                    <Text className="text-subtle text-xs leading-[18px]">
-                      {isResolvingRecoveryToken
-                        ? "Opening your reset session..."
-                        : "This reset link did not include a recovery session. Request a new reset link and open it on this device."}
-                    </Text>
+                    isResolvingRecoveryToken ? (
+                      <Text className="text-subtle text-xs leading-[18px]">Opening your reset session...</Text>
+                    ) : (
+                      <Notice
+                        tone="error"
+                        message="This reset link did not include a recovery session. Request a new reset link and open it on this device."
+                      />
+                    )
                   ) : null}
                   {recoveryToken && recoveryRefreshToken ? (
                     <Text className="text-brand text-xs font-bold">Reset session ready.</Text>
