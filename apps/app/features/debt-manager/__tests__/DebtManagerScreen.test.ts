@@ -5,6 +5,7 @@ jest.mock("../components/DebtPlanSummary", () => ({ DebtPlanSummary: "DebtPlanSu
 jest.mock("../components/DebtStrategySelector", () => ({ DebtStrategySelector: "DebtStrategySelector" }));
 jest.mock("../components/DebtForm", () => ({ DebtForm: "DebtForm" }));
 jest.mock("../components/DebtCard", () => ({ DebtCard: "DebtCard" }));
+jest.mock("../components/CreditCardBillingCycles", () => ({ CreditCardBillingCycles: "CreditCardBillingCycles" }));
 
 import DebtManagerScreen from "../DebtManagerScreen";
 import { useDebtManager } from "../hooks/useDebtManager";
@@ -27,11 +28,11 @@ describe("DebtManagerScreen", () => {
     const screen = DebtManagerScreen({ userId: "user-1", deviceId: "device-1" });
     const children = screen.props.children as Array<{ type: unknown; props: { children?: unknown } }>;
 
-    expect(children).toHaveLength(6);
+    expect(children).toHaveLength(7);
     expect(children[0]!.type).toBe("DebtHeader");
     expect(children[1]!.type).toBe("DebtPlanSummary");
     expect(children[2]!.type).toBe("DebtStrategySelector");
-    expect(children[5]!.props.children).toBe("No debts yet.");
+    expect(children[6]!.props.children).toBe("No debts yet.");
   });
 
   test("wires create and strategy actions to the manager", () => {

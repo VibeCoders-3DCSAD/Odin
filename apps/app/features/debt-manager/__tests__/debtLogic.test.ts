@@ -1,4 +1,4 @@
-import { calculateDebtPlan, forecastDebtFreeMonths } from "../debtLogic";
+import { calculateDebtPlan, forecastDebtFreeDate, forecastDebtFreeMonths } from "../debtLogic";
 
 const debt = (overrides: Record<string, unknown> = {}) => ({ id: "a", balanceMinor: 1000, minimumPaymentMinor: 100, annualInterestRateBps: 0, paymentFrequency: "monthly", nextDueDate: null, targetPayoffDate: null, ...overrides });
 
@@ -7,6 +7,10 @@ test("required payments come before snowball surplus and roll over", () => {
   expect(result.requiredTotalMinor).toBe(300);
   expect(result.allocations.find((item) => item.id === "a")?.extraPaymentMinor).toBe(900);
   expect(result.allocations.find((item) => item.id === "b")?.extraPaymentMinor).toBe(300);
+});
+
+test("missing card strategy returns a blocked required-strategy result", () => {
+  expect(calculateDebtPlan({ debts: [debt()], debtBudgetMinor: 1000, strategy: "avalanche", priorities: [], asOfDate: "2026-08-21", strategyRequired: true })).toMatchObject({ strategyRequired: true, allocations: [], requiredTotalMinor: 0 });
 });
 
 test("priorities are applied before the global strategy", () => {
@@ -54,6 +58,18 @@ test("frequency minimums are normalized and statuses are derived", () => {
   expect(result.allocations.find((item) => item.id === "paid-off")?.status).toBe("Ahead");
 });
 
+test("custom payment intervals are normalized from their configured days", () => {
+  const result = calculateDebtPlan({
+    debts: [debt({ paymentFrequency: "custom", minimumPaymentMinor: 100, paymentSchedule: { estimatedIntervalDays: "15" } })],
+    debtBudgetMinor: 0,
+    strategy: "avalanche",
+    priorities: [],
+    asOfDate: "2026-08-21",
+  });
+
+  expect(result.requiredTotalMinor).toBe(203);
+});
+
 test("debts without a due date expire after their payment frequency", () => {
   const result = calculateDebtPlan({ debts: [debt({ lastPaymentDate: "2026-07-01" })], debtBudgetMinor: 0, strategy: "avalanche", priorities: [], asOfDate: "2026-08-21" });
   expect(result.allocations[0]?.status).toBe("Behind");
@@ -72,6 +88,7 @@ test("forecast applies payments on their scheduled date", () => {
 
 test("principal-only forecast reports calendar months to payoff", () => {
   expect(forecastDebtFreeMonths([debt({ minimumPaymentMinor: 100 })], 300, "avalanche", [], "2026-08-21")).toBe(3);
+  expect(forecastDebtFreeDate([debt({ minimumPaymentMinor: 100 })], 300, "avalanche", [], "2026-08-21")).toBe("2026-11-21");
   expect(forecastDebtFreeMonths([debt({ balanceMinor: 0 })], 300)).toBe(0);
   expect(forecastDebtFreeMonths([debt({ minimumPaymentMinor: 0 })], 0)).toBeNull();
 });

@@ -4,6 +4,7 @@ type PaymentSchedule = {
   secondDayOfMonth?: string;
   dayOfWeek?: number | null;
   monthOfYear?: number | null;
+  estimatedIntervalDays?: string;
 };
 export type DebtLogicInput = {
   id: string;
@@ -23,6 +24,7 @@ export type DebtPlanInput = {
   strategy: DebtStrategy;
   priorities: string[];
   asOfDate: string;
+  strategyRequired?: boolean;
 };
 export type DebtAllocation = DebtLogicInput & {
   requiredPaymentMinor: number;
@@ -40,14 +42,20 @@ function monthsRemaining(debt: DebtLogicInput, asOfDate: string): number {
 }
 
 function monthlyMinimum(debt: DebtLogicInput): number {
-  const multiplier = { daily: 365 / 12, weekly: 52 / 12, biweekly: 26 / 12, semi_monthly: 2, quarterly: 1 / 3, yearly: 1 / 12 }[debt.paymentFrequency ?? "monthly"] ?? 1;
+  const customInterval = Number(debt.paymentSchedule?.estimatedIntervalDays);
+  const multiplier = debt.paymentFrequency === "custom" && Number.isInteger(customInterval) && customInterval > 0
+    ? 365 / 12 / customInterval
+    : { daily: 365 / 12, weekly: 52 / 12, biweekly: 26 / 12, semi_monthly: 2, quarterly: 1 / 3, yearly: 1 / 12 }[debt.paymentFrequency ?? "monthly"] ?? 1;
   return Math.ceil(debt.minimumPaymentMinor * multiplier);
 }
 
 export function cycleExpired(debt: DebtLogicInput, asOfDate: string): boolean {
   const start = debt.lastPaymentDate ? new Date(`${debt.lastPaymentDate}T00:00:00Z`) : null;
   if (!start) return false;
-  const days = { daily: 1, weekly: 7, biweekly: 14, semi_monthly: 15, monthly: 30, quarterly: 90, yearly: 365 }[debt.paymentFrequency ?? "monthly"] ?? 30;
+  const customInterval = Number(debt.paymentSchedule?.estimatedIntervalDays);
+  const days = debt.paymentFrequency === "custom" && Number.isInteger(customInterval) && customInterval > 0
+    ? customInterval
+    : { daily: 1, weekly: 7, biweekly: 14, semi_monthly: 15, monthly: 30, quarterly: 90, yearly: 365 }[debt.paymentFrequency ?? "monthly"] ?? 30;
   const expiry = new Date(start);
   expiry.setUTCDate(expiry.getUTCDate() + days);
   return expiry < new Date(`${asOfDate}T00:00:00Z`);
@@ -77,6 +85,7 @@ function strategyCompare(strategy: DebtStrategy, priorities: Map<string, number>
 }
 
 export function calculateDebtPlan(input: DebtPlanInput) {
+  if (input.strategyRequired) return { allocations: [], requiredTotalMinor: 0, surplusMinor: 0, shortfallMinor: 0, strategyRequired: true as const };
   const allocations: DebtAllocation[] = input.debts.map((debt) => {
     const requiredPaymentMinor = Math.min(debt.balanceMinor, Math.max(Math.ceil(debt.balanceMinor / monthsRemaining(debt, input.asOfDate)), monthlyMinimum(debt)));
     const paid = debt.paidPaymentMinor ?? 0;
@@ -105,7 +114,7 @@ export function calculateDebtPlan(input: DebtPlanInput) {
       available -= debt.extraPaymentMinor;
     }
   }
-  return { allocations, requiredTotalMinor, surplusMinor: Math.max(input.debtBudgetMinor - requiredTotalMinor, 0), shortfallMinor };
+  return { allocations, requiredTotalMinor, surplusMinor: Math.max(input.debtBudgetMinor - requiredTotalMinor, 0), shortfallMinor, strategyRequired: false as const };
 }
 
 function formatDate(date: Date): string {
@@ -134,6 +143,10 @@ function followsDueDate(debt: DebtLogicInput, date: Date): boolean {
   if (debt.paymentFrequency === "daily") return true;
   if (debt.paymentFrequency === "weekly") return days % 7 === 0;
   if (debt.paymentFrequency === "biweekly") return days % 14 === 0;
+  if (debt.paymentFrequency === "custom") {
+    const interval = Number(debt.paymentSchedule?.estimatedIntervalDays);
+    return Number.isInteger(interval) && interval > 0 && days % interval === 0;
+  }
   const months = (date.getUTCFullYear() - due.getUTCFullYear()) * 12 + date.getUTCMonth() - due.getUTCMonth();
   if (debt.paymentFrequency === "quarterly") return months >= 0 && months % 3 === 0 && validDay(String(due.getUTCDate()), date);
   if (debt.paymentFrequency === "yearly") return date.getUTCMonth() === due.getUTCMonth() && validDay(String(due.getUTCDate()), date);
@@ -207,4 +220,12 @@ export function forecastDebtFreeMonths(debts: DebtLogicInput[], monthlyPaymentMi
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return null;
+}
+
+export function forecastDebtFreeDate(debts: DebtLogicInput[], monthlyPaymentMinor: number, strategy: DebtStrategy = "avalanche", priorities: string[] = [], asOfDate = formatDate(new Date())): string | null {
+  const months = forecastDebtFreeMonths(debts, monthlyPaymentMinor, strategy, priorities, asOfDate);
+  if (months === null) return null;
+  const date = new Date(`${asOfDate}T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return formatDate(date);
 }

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { getCurrentBudgetDraft } from "../../../local-db/repositories/budgets";
-import { createDebt, deleteDebt, getDebtStrategy, listCurrentDebtPaymentTotals, listDebtPriorities, listDebts, setDebtPriorities, updateDebt, updateDebtStatus, updateDebtStrategy, type Debt, type DebtPaymentSchedule } from "../../../local-db/repositories/debts";
+import { createDebt, deleteDebt, getDebtOverview, getDebtStrategy, listCurrentDebtPaymentTotals, listDebtPriorities, listDebts, setDebtPriorities, updateDebt, updateDebtStatus, updateDebtStrategy, type Debt, type DebtPaymentSchedule, type DebtOverview } from "../../../local-db/repositories/debts";
 import type { RecurringScheduleValue } from "../../recurring-transactions/components/RecurringScheduleFields";
-import { DEBT_PRESETS } from "../presets";
-import { calculateDebtPlan, forecastDebtFreeMonths } from "../debtLogic";
+import { DEBT_PRESETS, validatePresetData } from "../presets";
+import { calculateDebtPlan, forecastDebtFreeDate, forecastDebtFreeMonths } from "../debtLogic";
 import { today } from "../formatters";
+import { getCreditCardDebtBudgetRequirement } from "../../../local-db/repositories/creditCards";
 
 function annualizeRateBps(rate: number, period: string): number {
   const multiplier = period === "daily" ? 365 : period === "monthly" ? 12 : 1;
@@ -28,7 +29,8 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
   const [strategy, setStrategy] = useState<Strategy>("avalanche");
   const [name, setName] = useState("");
   const [lenderName, setLenderName] = useState("");
-  const [balance, setBalance] = useState("");
+  const [originalBalance, setOriginalBalance] = useState(""); const [balance, setBalance] = useState("");
+  const [startDate, setStartDate] = useState(""); const [fees, setFees] = useState(""); const [penalties, setPenalties] = useState("");
   const [interestRate, setInterestRate] = useState("");
   const [minimum, setMinimum] = useState("");
   const [paymentFrequency, setPaymentFrequency] = useState("monthly");
@@ -40,7 +42,7 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
   const [interestMethod, setInterestMethod] = useState("");
   const [notes, setNotes] = useState("");
   const [presetData, setPresetData] = useState<Record<string, unknown>>({});
-  const [presetKey, setPresetKey] = useState(DEBT_PRESETS[0]!.key);
+  const [presetKey, setPresetKey] = useState("personal_loan");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -48,6 +50,11 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [creditCardTargetMinor, setCreditCardTargetMinor] = useState(0);
+  const [creditCardBalanceMinor, setCreditCardBalanceMinor] = useState(0);
+  const [missingCardStrategyCount, setMissingCardStrategyCount] = useState(0);
+  const [strategyRequired, setStrategyRequired] = useState(false);
+  const [overview, setOverview] = useState<DebtOverview>({ totalPaidMinor: 0, totalOriginalMinor: 0, totalRemainingMinor: 0, monthlyPayments: [] });
 
   async function withPending(id: string, action: () => Promise<void>) {
     setPendingIds((current) => new Set(current).add(id));
@@ -60,14 +67,20 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
     setLoading(true);
     try {
       const asOfDate = today();
-      const [nextDebts, nextPriorities, nextStrategy, currentBudget] = await Promise.all([
-        listDebts(userId), listDebtPriorities(userId), getDebtStrategy(userId), getCurrentBudgetDraft(userId, asOfDate),
+      const [nextDebts, nextPriorities, nextStrategy, currentBudget, nextOverview] = await Promise.all([
+        listDebts(userId), listDebtPriorities(userId), getDebtStrategy(userId), getCurrentBudgetDraft(userId, asOfDate), getDebtOverview(userId),
       ]);
       setDebts(nextDebts);
       setPriorities(nextPriorities);
       setStrategy(nextStrategy);
       setDebtBudgetMinor(currentBudget?.debtBudgetMinor ?? 0);
       setHasCurrentBudget(Boolean(currentBudget));
+      setOverview(nextOverview);
+        const cardTarget = currentBudget ? await getCreditCardDebtBudgetRequirement(userId, currentBudget.periodStart, currentBudget.periodEnd) : { requiredMinor: 0, statementBalanceMinor: 0, missingStrategyCount: 0, strategyRequired: false };
+        setCreditCardTargetMinor(cardTarget.requiredMinor);
+        setCreditCardBalanceMinor(cardTarget.statementBalanceMinor);
+       setMissingCardStrategyCount(cardTarget.missingStrategyCount);
+       setStrategyRequired(cardTarget.strategyRequired);
       setPaidByDebt(await listCurrentDebtPaymentTotals(userId, asOfDate.slice(0, 7)));
     } catch {
       setError("Debt data could not be loaded.");
@@ -83,11 +96,11 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
     setEditingId(null);
     setName("");
     setLenderName("");
-    setBalance("");
+    setOriginalBalance(""); setBalance(""); setStartDate(""); setFees(""); setPenalties("");
     setInterestRate("");
     setMinimum("");
      setPaymentFrequency("monthly"); setPaymentSchedule({ frequency: "monthly", intervalCount: "1", dayOfMonth: "", secondDayOfMonth: "", dayOfWeek: null, secondDayOfWeek: null, monthOfYear: null, estimatedIntervalDays: "", timeOfDay: "" }); setNextDueDate(""); setMaturityDate(""); setTargetPayoffDate(""); setInterestPeriod(""); setInterestMethod(""); setNotes(""); setPresetData({});
-    setPresetKey(DEBT_PRESETS[0]!.key);
+     setPresetKey("personal_loan");
     setShowCreate(true);
   }
 
@@ -96,7 +109,7 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
     setEditingId(debt.id);
     setName(debt.name);
     setLenderName(debt.lenderName ?? "");
-    setBalance(String(debt.currentBalanceMinor / 100));
+    setOriginalBalance(String(debt.originalBalanceMinor / 100)); setBalance(String(debt.currentBalanceMinor / 100)); setStartDate(typeof debt.presetData.startDate === "string" ? debt.presetData.startDate : ""); setFees(String(Number(debt.presetData.feesCentavos ?? 0) / 100)); setPenalties(String(Number(debt.presetData.penaltiesCentavos ?? 0) / 100));
     setInterestRate(displayRate(debt.annualInterestRateBps, debt.interestPeriod ?? "annual"));
     setMinimum(String(debt.minimumPaymentMinor / 100));
     setPaymentFrequency(debt.paymentFrequency); setPaymentSchedule({ ...debt.paymentSchedule, frequency: debt.paymentFrequency as RecurringScheduleValue["frequency"], estimatedIntervalDays: "" }); setNextDueDate(debt.nextDueDate ?? ""); setMaturityDate(debt.maturityDate ?? ""); setTargetPayoffDate(debt.targetPayoffDate ?? ""); setInterestPeriod(debt.interestPeriod ?? (debt.annualInterestRateBps > 0 ? "annual" : "")); setInterestMethod(debt.interestMethod ?? ""); setNotes(debt.notes ?? ""); setPresetData(debt.presetData);
@@ -114,31 +127,42 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
     if (pendingIds.has(pendingId)) return false;
     setError(null);
     setFormError(null);
-    const validFrequencies = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly"];
+    const validFrequencies = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
     const validInterestPeriods = ["", "daily", "monthly", "annual"];
-    const validInterestMethods = ["", "simple", "amortized", "compound"];
+    const validInterestMethods = ["", "flat_add_on", "diminishing_balance", "provider_calculated", "no_interest"];
     const validDate = (value: string) => !value || (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime()) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value);
     const numericFields = [["balance", balance], ["minimum payment", minimum], ["interest rate", interestRate]] as const;
     const invalidNumeric = numericFields.find(([, value]) => value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0));
-    if (!name.trim()) { setFormError("Debt name is required."); return false; }
+     if (!presetKey) { setFormError("Select debt type."); return false; }
+      if (!name.trim()) { setFormError("Debt name is required."); return false; }
+      if (presetKey !== "custom_debt" && !lenderName.trim()) { setFormError("Lender or provider is required."); return false; }
+      try { validatePresetData(presetKey, presetData); } catch (e) { setFormError(e instanceof Error ? e.message : "Debt type details are invalid."); return false; }
+      const autoPrincipal = presetKey === "auto_loan" ? (Number(presetData.vehiclePurchasePriceCentavos) - Number(presetData.downpaymentCentavos)) / 100 : null;
+      const originalAmount = autoPrincipal ?? Number(originalBalance);
+      if (!Number.isFinite(originalAmount) || originalAmount <= 0) { setFormError("Original amount must be positive."); return false; }
+      if (Number(balance) > originalAmount) { setFormError("Current balance cannot exceed the original amount."); return false; }
+     if (!balance || !Number.isFinite(Number(balance)) || Number(balance) < 0) { setFormError("Current balance must be non-negative."); return false; }
     if (invalidNumeric) { setFormError(`${invalidNumeric[0]} must be a non-negative number.`); return false; }
-    if (!validFrequencies.includes(paymentFrequency)) { setFormError("Payment frequency must be a supported value."); return false; }
+     if (!validFrequencies.includes(paymentFrequency)) { setFormError("Payment frequency must be a supported value."); return false; }
+     if (paymentFrequency === "custom" && (!/^\d+$/.test(paymentSchedule.estimatedIntervalDays) || Number(paymentSchedule.estimatedIntervalDays) < 1)) { setFormError("Custom payment frequency requires a positive interval in days."); return false; }
     if (!validInterestPeriods.includes(interestPeriod)) { setFormError("Rate period must be daily, monthly, or annual."); return false; }
-    if (interestRate !== "" && !interestPeriod) { setFormError("Select a rate period when entering an interest rate."); return false; }
-    if (!validInterestMethods.includes(interestMethod)) { setFormError("Interest method must be simple, amortized, or compound."); return false; }
-    const dateFields: Array<[string, string]> = [["Next due date", nextDueDate], ["Maturity date", maturityDate], ["Target payoff date", targetPayoffDate]];
-    const invalidDate = dateFields.find(([, value]) => !validDate(value));
-    if (invalidDate) { setFormError(`${invalidDate[0]} must use a valid YYYY-MM-DD date.`); return false; }
+     if (interestRate !== "" && !interestPeriod) { setFormError("Select a rate period when entering an interest rate."); return false; }
+     if (!validInterestMethods.includes(interestMethod)) { setFormError("Select a supported interest method."); return false; }
+     if (Number(interestRate || 0) > 0 && !interestMethod) { setFormError("Select an interest method when entering an interest rate."); return false; }
+     const dateFields: Array<[string, string]> = [["Start date", startDate], ["Next due date", nextDueDate], ["Maturity date", maturityDate], ["Target payoff date", targetPayoffDate]];
+     const invalidDate = dateFields.find(([, value]) => !validDate(value));
+     if (invalidDate) { setFormError(`${invalidDate[0]} must use a valid YYYY-MM-DD date.`); return false; }
+     if (["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan"].includes(presetKey) && (!startDate || !nextDueDate)) { setFormError("Start date and next payment date are required."); return false; }
     try {
       const current = editingId ? debts.find((debt) => debt.id === editingId) : null;
       const input = {
          name, lenderName: lenderName || null, presetKey,
-         originalBalanceMinor: current?.originalBalanceMinor ?? Math.round(Number(balance) * 100),
+         originalBalanceMinor: Math.round(originalAmount * 100),
           currentBalanceMinor: Math.round(Number(balance) * 100), annualInterestRateBps: annualizeRateBps(Number(interestRate || 0), interestPeriod),
          minimumPaymentMinor: Math.round(Number(minimum || 0) * 100), paymentFrequency,
          nextDueDate: nextDueDate || null, maturityDate: maturityDate || null,
          targetPayoffDate: targetPayoffDate || null, interestPeriod: interestPeriod || null,
-          interestMethod: interestMethod || null, presetData, paymentSchedule: paymentSchedule as DebtPaymentSchedule, notes: notes || null,
+           interestMethod: interestMethod || null, presetData: { ...presetData, startDate: startDate || undefined, feesCentavos: Math.round(Number(fees || 0) * 100), penaltiesCentavos: Math.round(Number(penalties || 0) * 100) }, paymentSchedule: paymentSchedule as DebtPaymentSchedule, notes: notes || null,
       };
        if (editingId) await withPending(pendingId, async () => updateDebt(userId, deviceId, editingId, input).then(() => undefined));
         else await withPending(pendingId, async () => createDebt(userId, deviceId, input).then(() => undefined));
@@ -229,14 +253,21 @@ export function useDebtManager({ userId, deviceId, onSyncRequested }: Props) {
   const asOfDate = today();
   const plan = calculateDebtPlan({
      debts: debts.filter((debt) => debt.status === "active").map((debt) => ({ id: debt.id, balanceMinor: debt.currentBalanceMinor, minimumPaymentMinor: debt.minimumPaymentMinor, annualInterestRateBps: debt.annualInterestRateBps, paymentFrequency: debt.paymentFrequency, paymentSchedule: debt.paymentSchedule, nextDueDate: debt.nextDueDate, lastPaymentDate: debt.lastPaymentDate, targetPayoffDate: debt.targetPayoffDate, paidPaymentMinor: paidByDebt[debt.id] ?? 0 })),
-    debtBudgetMinor, strategy, priorities, asOfDate,
+      debtBudgetMinor: Math.max(0, debtBudgetMinor - creditCardTargetMinor), strategy, priorities, asOfDate, strategyRequired,
   });
 
+  const nonCreditForecastMonths = forecastDebtFreeMonths(plan.allocations, Math.max(0, debtBudgetMinor - creditCardTargetMinor), strategy, priorities, asOfDate);
+  const creditCardForecastMonths = creditCardBalanceMinor > 0 && creditCardTargetMinor > 0 ? Math.ceil(creditCardBalanceMinor / creditCardTargetMinor) : creditCardBalanceMinor > 0 ? null : 0;
+  const forecastMonths = nonCreditForecastMonths === null || creditCardForecastMonths === null ? null : Math.max(nonCreditForecastMonths, creditCardForecastMonths);
+  const nonCreditForecastDate = forecastDebtFreeDate(plan.allocations, Math.max(0, debtBudgetMinor - creditCardTargetMinor), strategy, priorities, asOfDate);
+  const forecastDate = forecastMonths === null ? null : creditCardForecastMonths != null && creditCardForecastMonths >= nonCreditForecastMonths! ? (() => { const date = new Date(`${asOfDate}T00:00:00Z`); date.setUTCMonth(date.getUTCMonth() + creditCardForecastMonths); return date.toISOString().slice(0, 10); })() : nonCreditForecastDate;
+
   return {
-    debts, priorities, strategy, debtBudgetMinor, hasCurrentBudget, plan,
-    forecastMonths: forecastDebtFreeMonths(plan.allocations, debtBudgetMinor, strategy, priorities, asOfDate),
-     loading, error, formError, name, lenderName, balance, interestRate, minimum, paymentFrequency, paymentSchedule, nextDueDate, maturityDate, targetPayoffDate, interestPeriod, interestMethod, notes, presetKey, presetData, editingId, showCreate, confirmDeleteId, pendingIds,
-     setName, setLenderName, setBalance, setInterestRate, setMinimum, setPaymentFrequency, setPaymentSchedule, setNextDueDate, setMaturityDate, setTargetPayoffDate, setInterestPeriod, setInterestMethod, setNotes, setPresetKey, setPresetData, setConfirmDeleteId,
+      debts, priorities, strategy, debtBudgetMinor, creditCardTargetMinor, missingCardStrategyCount, hasCurrentBudget, overview, plan,
+        forecastMonths, forecastDate,
+      strategyRequired,
+      loading, error, formError, name, lenderName, originalBalance, balance, startDate, fees, penalties, interestRate, minimum, paymentFrequency, paymentSchedule, nextDueDate, maturityDate, targetPayoffDate, interestPeriod, interestMethod, notes, presetKey, presetData, editingId, showCreate, confirmDeleteId, pendingIds,
+      setName, setLenderName, setOriginalBalance, setBalance, setStartDate, setFees, setPenalties, setInterestRate, setMinimum, setPaymentFrequency, setPaymentSchedule, setNextDueDate, setMaturityDate, setTargetPayoffDate, setInterestPeriod, setInterestMethod, setNotes, setPresetKey, setPresetData, setConfirmDeleteId,
      openCreate, edit, cancelForm, save, confirmDelete, movePriority, removePriority, changeStrategy, changeStatus, load,
   };
 }
