@@ -23,7 +23,9 @@ import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
 import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
-import { createDebtPaymentExpense, getDebt } from "../../local-db/repositories/debts";
+import { createDebtPaymentExpense, getDebt, linkDebtPaymentToTransaction } from "../../local-db/repositories/debts";
+import { recordCreditCardPurchase } from "../../local-db/repositories/creditCards";
+import { money } from "../debt-manager/formatters";
 
 const palette = {
   shell: "#fcf8f0",
@@ -48,9 +50,10 @@ type Props = {
   onClose: () => void;
   transaction?: Transaction;
   debtAccountId?: string;
+  debtPaymentId?: string;
 };
 
-export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, debtAccountId }: Props) {
+export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, debtAccountId, debtPaymentId }: Props) {
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
   const isEdit = !!transaction;
@@ -75,6 +78,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [notes, setNotes] = useState(transaction?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [debtPaymentEnabled, setDebtPaymentEnabled] = useState(false);
+  const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [accountPickerMode, setAccountPickerMode] = useState<"source" | "dest" | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringSchedule, setRecurringSchedule] = useState<RecurringScheduleValue>({
@@ -89,26 +94,50 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   });
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [debtName, setDebtName] = useState<string | null>(null);
+  const [purchaseType, setPurchaseType] = useState<"regular" | "installment">("regular");
+  const [postingDate, setPostingDate] = useState("");
+  const [installmentTerm, setInstallmentTerm] = useState("");
+  const [installmentMonthly, setInstallmentMonthly] = useState("");
+  const [installmentInterestRate, setInstallmentInterestRate] = useState("0");
+  const [installmentInterestType, setInstallmentInterestType] = useState<"zero_interest" | "interest_bearing">("zero_interest");
 
-  const { accounts, groups, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
+  const { accounts: loadedAccounts, groups, categories, subcategories, debts, loading, error: dataError } = useTransactionData(userId, txType);
+  const activeDebtId = debtAccountId ?? (debtPaymentEnabled ? selectedDebtId : null);
+  const accounts = activeDebtId
+    ? loadedAccounts.filter((account) => account.kind !== "credit_card" && account.status === "active")
+    : loadedAccounts;
 
   useEffect(() => {
-    if (!debtAccountId) return;
-    void getDebt(userId, debtAccountId).then((debt) => setDebtName(debt?.name ?? null));
-  }, [debtAccountId, userId]);
+    if (!activeDebtId) {
+      setDebtName(null);
+      return;
+    }
+    void getDebt(userId, activeDebtId).then((debt) => {
+      const name = debt?.name ?? null;
+      setDebtName(name);
+      setDescription(name ?? "");
+    });
+  }, [activeDebtId, userId]);
 
   useEffect(() => {
-    if (!debtAccountId || txType !== "expense") return;
+    if (!activeDebtId || txType !== "expense") return;
     const debtSubcategory = subcategories.find((item) => item.slug === "obligatory_debt_payments");
     if (debtSubcategory) setCategorySelection({ tier: "subcategory", groupId: null, categoryId: debtSubcategory.category_id, subcategoryId: debtSubcategory.id });
-  }, [debtAccountId, subcategories, txType]);
+  }, [activeDebtId, subcategories, txType]);
 
   useEffect(() => {
-    if (debtAccountId) return;
+    if (activeDebtId) return;
     if (!isEdit) {
       setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
     }
-  }, [txType, isEdit]);
+  }, [txType, isEdit, activeDebtId]);
+
+  useEffect(() => {
+    if (txType !== "expense" && debtPaymentEnabled) {
+      setDebtPaymentEnabled(false);
+      setSelectedDebtId(null);
+    }
+  }, [txType, debtPaymentEnabled]);
 
   useEffect(() => {
     if (txType === "transfer") return;
@@ -254,16 +283,22 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   }
 
   async function handleSave() {
+    let savePhase = "start";
+    console.log("[DEBUG-TX-SAVE] started", { isEdit, txType });
     setFormError(null);
     const centavos = parseAmount();
-    const debtSubcategory = debtAccountId ? subcategories.find((item) => item.slug === "obligatory_debt_payments") : null;
-    if (debtAccountId && !debtSubcategory) {
+    const debtSubcategory = activeDebtId ? subcategories.find((item) => item.slug === "obligatory_debt_payments") : null;
+    if (activeDebtId && !debtSubcategory) {
       setFormError("Debt payment category is unavailable. Sync categories and try again.");
       return;
     }
     const effectiveSubcategoryId = debtSubcategory?.id ?? resolveEffectiveSubcategoryId();
     if (centavos <= 0) {
       setFormError("Enter a valid amount");
+      return;
+    }
+    if (debtPaymentEnabled && !selectedDebtId) {
+      setFormError("Select a debt before continuing.");
       return;
     }
 
@@ -292,9 +327,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       return;
     }
 
+    savePhase = "validated";
+    console.log("[DEBUG-TX-SAVE] validation passed", { isEdit, txType });
     setSaving(true);
     try {
       if (isEdit) {
+        savePhase = "updateTransaction";
+        console.log("[DEBUG-TX-SAVE] calling updateTransaction");
         const updateInput: Record<string, unknown> = {
           amount_centavos: centavos,
           transaction_date: dateStr,
@@ -317,16 +356,56 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           updateInput.notes = desc && note ? `${desc} — ${note}` : (desc || note || "");
         }
 
-        await updateTransaction(userId, deviceId, transaction!.id, updateInput as UpdateTransactionInput);
-       } else if (txType === "expense") {
-         if (debtAccountId) {
-           await createDebtPaymentExpense(userId, deviceId, debtAccountId, { amountMinor: centavos, sourceAccountId, subcategoryId: effectiveSubcategoryId, paymentDate: dateStr, notes: notes.trim() || undefined });
-           showToast("Debt payment saved", "success");
+         await updateTransaction(userId, deviceId, transaction!.id, updateInput as UpdateTransactionInput);
+         console.log("[DEBUG-TX-SAVE] updateTransaction completed");
+        } else if (txType === "expense") {
+           if (debtPaymentId) {
+             savePhase = "linkDebtPaymentToTransaction";
+             console.log("[DEBUG-TX-SAVE] calling linkDebtPaymentToTransaction");
+             await linkDebtPaymentToTransaction(userId, deviceId, debtPaymentId, { sourceAccountId, subcategoryId: effectiveSubcategoryId, paymentDate: dateStr, notes: notes.trim() || undefined });
+            showToast("Debt transaction linked", "success");
+            onClose();
+            return;
+           }
+            if (activeDebtId) {
+            savePhase = "createDebtPaymentExpense";
+            console.log("[DEBUG-TX-SAVE] calling createDebtPaymentExpense");
+             await createDebtPaymentExpense(userId, deviceId, activeDebtId, { amountMinor: centavos, sourceAccountId, subcategoryId: effectiveSubcategoryId, paymentDate: dateStr, notes: notes.trim() || undefined });
+            showToast("Your transaction and debt payment were saved.", "success");
            runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
            onClose();
-           return;
-         }
-         await createExpense(userId, deviceId, {
+            return;
+          }
+          const selectedAccount = accounts.find((account) => account.id === sourceAccountId);
+           if (selectedAccount?.kind === "credit_card") {
+             if (purchaseType === "installment" && (!/^\d+$/.test(installmentTerm) || Number(installmentTerm) < 1 || !/^\d+(?:\.\d{1,2})?$/.test(installmentMonthly) || Number(installmentMonthly) <= 0)) {
+               setFormError("Enter a positive installment term and monthly amortization.");
+               return;
+             }
+              if (postingDate && !/^\d{4}-\d{2}-\d{2}$/.test(postingDate)) {
+               setFormError("Posting date must use YYYY-MM-DD.");
+               return;
+              }
+              savePhase = "recordCreditCardPurchase";
+              console.log("[DEBUG-TX-SAVE] calling recordCreditCardPurchase");
+              await recordCreditCardPurchase(userId, deviceId, {
+              accountId: sourceAccountId,
+               amountMinor: centavos,
+               transactionDate: dateStr,
+               postingDate: postingDate || undefined,
+              subcategoryId: effectiveSubcategoryId,
+              merchant: description.trim() || undefined,
+               purchaseType,
+                installment: purchaseType === "installment" ? { accountId: sourceAccountId, description: description.trim() || "Installment purchase", originalPrincipalMinor: centavos, remainingPrincipalMinor: centavos, termMonths: Number(installmentTerm), remainingMonths: Number(installmentTerm), monthlyAmortizationMinor: Math.round(Number(installmentMonthly) * 100), interestRateBps: Math.round(Number(installmentInterestRate) * 100), interestType: installmentInterestType } : undefined,
+            });
+            showToast("Your credit-card transaction was recorded. Review its billing-cycle assignment to confirm the update.", "success");
+            runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
+            onClose();
+            return;
+          }
+           savePhase = "createExpense";
+           console.log("[DEBUG-TX-SAVE] calling createExpense");
+           await createExpense(userId, deviceId, {
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
           subcategory_id: effectiveSubcategoryId,
@@ -335,7 +414,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           notes: notes.trim() || undefined,
         });
       } else if (txType === "income") {
-        await createIncome(userId, deviceId, {
+         savePhase = "createIncome";
+         console.log("[DEBUG-TX-SAVE] calling createIncome");
+         await createIncome(userId, deviceId, {
           amount_centavos: centavos,
           destination_account_id: destAccountId,
           subcategory_id: effectiveSubcategoryId,
@@ -347,6 +428,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         const desc = description.trim();
         const note = notes.trim();
         const mergedNotes = desc && note ? `${desc} — ${note}` : (desc || note || undefined);
+        savePhase = "createTransfer";
+        console.log("[DEBUG-TX-SAVE] calling createTransfer");
         await createTransfer(userId, deviceId, {
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
@@ -357,6 +440,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       }
 
       if (!isEdit && isRecurring) {
+        savePhase = "createRecurringTemplate";
+        console.log("[DEBUG-TX-SAVE] calling createRecurringTemplate");
         const freqInterval = parseInt(recurringSchedule.intervalCount, 10);
         const dom = parseInt(recurringSchedule.dayOfMonth, 10);
         const secondDom = parseInt(recurringSchedule.secondDayOfMonth, 10);
@@ -378,10 +463,22 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       }
 
       showToast(isEdit ? "Transaction updated" : "Transaction saved", "success");
-      runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
+      savePhase = "runSync";
+      console.log("[DEBUG-TX-SAVE] starting runSync");
+      runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch((error) => {
+        console.error("[DEBUG-TX-SAVE] runSync failed", {
+          name: error instanceof Error ? error.name : "unknown",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
 
       resetForm(true);
     } catch (error) {
+      console.error("[DEBUG-TX-SAVE] failed", {
+        phase: savePhase,
+        name: error instanceof Error ? error.name : "unknown",
+        message: error instanceof Error ? error.message : String(error),
+      });
       setFormError(error instanceof Error ? error.message : "Failed to save transaction");
     } finally {
       setSaving(false);
@@ -510,7 +607,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const selectedSubcategory = getSelectedSubcategory();
 
     return (
-      <View style={{ flex: 1 }}>
+               <View style={{ flex: 1 }}>
         <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut, marginBottom: 16 }}>
           Pick from your full {txType} category list.
         </Text>
@@ -642,9 +739,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           </View>
         ) : null}
 
-        {showCategoryPicker && !debtAccountId ? renderCategoryPickerPage() : (
+        {showCategoryPicker && !activeDebtId ? renderCategoryPickerPage() : (
           <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 18 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-             {!isEdit && !debtAccountId ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+             {!isEdit && !activeDebtId ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
 
             <View style={{ alignItems: "center", paddingTop: 6, paddingBottom: 2 }}>
               <Text style={{ fontFamily: "Manrope", fontSize: 15, color: palette.mut, marginBottom: 2 }}>PHP</Text>
@@ -692,6 +789,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                 value={description}
                 onChangeText={setDescription}
                 placeholder={descriptionPlaceholder}
+                editable={!activeDebtId}
                 placeholderTextColor={palette.mut}
                 style={{ height: 58, borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", paddingHorizontal: 16, fontFamily: "Manrope", fontSize: 16, color: palette.ink, backgroundColor: palette.softCard }}
               />
@@ -755,20 +853,54 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     </View>
                     <CaretRight color={palette.mut} size={16} weight="bold" />
                   </Pressable>
-                </View>
-              </View>
+               </View>
+             </View>
             )}
 
-            {needsCategory ? (
+            {txType === "expense" && accounts.find((account) => account.id === sourceAccountId)?.kind === "credit_card" && !isEdit ? (
+              <View style={{ gap: 10 }}>
+                 {renderFieldLabel("PURCHASE TYPE")}
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  {(["regular", "installment"] as const).map((value) => <Pressable key={value} onPress={() => setPurchaseType(value)} style={{ flex: 1, padding: 13, borderRadius: 12, borderWidth: 1, borderColor: purchaseType === value ? palette.brand : palette.line, backgroundColor: purchaseType === value ? palette.successCard : palette.card }}><Text style={{ textAlign: "center", color: palette.ink, fontWeight: "700" }}>{value === "regular" ? "Regular" : "Installment"}</Text></Pressable>)}
+                </View>
+                 {purchaseType === "installment" ? <View style={{ gap: 10 }}>
+                   <View style={{ flexDirection: "row", gap: 10 }}><TextInput accessibilityLabel="Installment term months" value={installmentTerm} onChangeText={setInstallmentTerm} placeholder="Term months" keyboardType="number-pad" style={{ flex: 1, borderWidth: 1, borderColor: palette.line, borderRadius: 12, padding: 12, backgroundColor: palette.softCard }} /><TextInput accessibilityLabel="Monthly amortization" value={installmentMonthly} onChangeText={setInstallmentMonthly} placeholder="Monthly amount" keyboardType="decimal-pad" style={{ flex: 1, borderWidth: 1, borderColor: palette.line, borderRadius: 12, padding: 12, backgroundColor: palette.softCard }} /></View>
+                   <View style={{ flexDirection: "row", gap: 10 }}>{(["zero_interest", "interest_bearing"] as const).map((value) => <Pressable key={value} onPress={() => setInstallmentInterestType(value)} style={{ flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: installmentInterestType === value ? palette.brand : palette.line, backgroundColor: installmentInterestType === value ? palette.successCard : palette.card }}><Text style={{ textAlign: "center", color: palette.ink, fontWeight: "700" }}>{value === "zero_interest" ? "0% interest" : "Interest-bearing"}</Text></Pressable>)}</View>
+                   {installmentInterestType === "interest_bearing" ? <TextInput accessibilityLabel="Installment interest rate" value={installmentInterestRate} onChangeText={setInstallmentInterestRate} placeholder="Annual interest %" keyboardType="decimal-pad" style={{ borderWidth: 1, borderColor: palette.line, borderRadius: 12, padding: 12, backgroundColor: palette.softCard }} /> : null}
+                 </View> : null}
+                 <TextInput accessibilityLabel="Card posting date" value={postingDate} onChangeText={setPostingDate} placeholder="Posting date YYYY-MM-DD (optional)" style={{ borderWidth: 1, borderColor: palette.line, borderRadius: 12, padding: 12, backgroundColor: palette.softCard }} />
+              </View>
+            ) : null}
+
+             {txType === "expense" && !isEdit && !debtAccountId ? (
+               <View style={{ gap: 10 }}>
+                 <View style={{ borderRadius: 18, backgroundColor: palette.card, paddingHorizontal: 16, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                   <View style={{ flex: 1, paddingRight: 12 }}>
+                     <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: palette.ink }}>Record as debt payment</Text>
+                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>Link this expense to a debt and update its balance.</Text>
+                   </View>
+                   <Pressable onPress={() => { setDebtPaymentEnabled(!debtPaymentEnabled); if (debtPaymentEnabled) setSelectedDebtId(null); }} accessibilityRole="switch" accessibilityLabel="Record as debt payment" accessibilityState={{ checked: debtPaymentEnabled }} style={{ width: 50, height: 30, borderRadius: 999, backgroundColor: debtPaymentEnabled ? palette.successTint : "#e4dfd3", padding: 3, justifyContent: "center" }}>
+                     <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", alignSelf: debtPaymentEnabled ? "flex-end" : "flex-start" }} />
+                   </Pressable>
+                 </View>
+                 {debtPaymentEnabled ? <View style={{ gap: 8 }}>
+                   <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: palette.mut, letterSpacing: 0.4 }}>DEBT</Text>
+                   {!selectedDebtId ? <Text style={{ color: palette.mut }}>Select debt</Text> : null}
+                   {debts.length === 0 ? <Text style={{ color: palette.error }}>No eligible debt is available. Add an active debt and try again.</Text> : debts.map((debt) => <Pressable key={debt.id} accessibilityRole="radio" accessibilityLabel={`Select debt ${debt.name}`} accessibilityState={{ selected: selectedDebtId === debt.id }} onPress={() => setSelectedDebtId(debt.id)} style={{ borderRadius: 14, borderWidth: 1, borderColor: selectedDebtId === debt.id ? palette.successTint : palette.line, backgroundColor: selectedDebtId === debt.id ? palette.successCard : palette.softCard, padding: 14 }}><Text style={{ fontWeight: "700", color: palette.ink }}>{debt.name}</Text><Text style={{ color: palette.mut, marginTop: 3 }}>{money(debt.currentBalanceMinor)} remaining</Text></Pressable>)}
+                 </View> : null}
+               </View>
+             ) : null}
+
+             {needsCategory ? (
               <View>
                 {renderFieldLabel(categorySelection.tier ? `CATEGORY · ${categorySelection.tier.toUpperCase()}` : "CATEGORY")}
-                <Pressable disabled={Boolean(debtAccountId)} onPress={() => setShowCategoryPicker(true)} style={{ borderRadius: 16, borderWidth: 1, borderColor: categorySelection.tier ? palette.successTint : "#e8deca", backgroundColor: categorySelection.tier ? palette.successCard : palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", opacity: debtAccountId ? 0.8 : 1 }}>
+                 <Pressable disabled={Boolean(activeDebtId)} onPress={() => setShowCategoryPicker(true)} style={{ borderRadius: 16, borderWidth: 1, borderColor: categorySelection.tier ? palette.successTint : "#e8deca", backgroundColor: categorySelection.tier ? palette.successCard : palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", opacity: activeDebtId ? 0.8 : 1 }}>
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: palette.ink }}>
-                        {debtAccountId ? `Debt payment${debtName ? ` · ${debtName}` : ""}` : getCategorySummaryLabel()}
+                        {activeDebtId ? `Debt payment${debtName ? ` · ${debtName}` : ""}` : getCategorySummaryLabel()}
                     </Text>
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>
-                      {debtAccountId ? "Seeded debt-payment category" : "Open full list to view everything"}
+                       {activeDebtId ? "Seeded debt-payment category" : "Open full list to view everything"}
                     </Text>
                   </View>
                   <CaretRight color={palette.mut} size={16} weight="bold" />
@@ -789,7 +921,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               />
             </View>
 
-             {!isEdit && !debtAccountId ? (
+              {!isEdit && !activeDebtId ? (
               <>
                 <View style={{ borderRadius: 18, backgroundColor: "#f4ead2", paddingHorizontal: 16, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
