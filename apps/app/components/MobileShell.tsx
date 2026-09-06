@@ -18,6 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
+import { getTransaction, type Transaction } from "../local-db/repositories/ledger";
 import TransactionHistoryScreen from "../features/ledger/TransactionHistoryScreen";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
@@ -201,6 +202,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const { bottom: bottomInset } = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
+  const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -768,7 +770,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "add-transaction") {
-      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onClose={() => { setCurrentPage(transactionReturnPage); }} />;
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} onClose={() => { setTransactionToEdit(null); setCurrentPage(transactionReturnPage); }} />;
     }
 
     if (currentPage === "add-recurring-transaction") {
