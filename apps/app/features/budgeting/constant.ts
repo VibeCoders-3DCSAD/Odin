@@ -4,6 +4,6 @@ export function calculateProvisionalPercentage(actualAmountMinor: number, alloca
   return allocationAmountMinor > 0 ? (actualAmountMinor / allocationAmountMinor) * 100 : 0;
 }
 
-export function calculateBudgetSpentAmount(actualAmountsMinor: number[], debtActualPaymentMinor: number): number {
-  return actualAmountsMinor.reduce((total, amount) => total + amount, 0) + debtActualPaymentMinor;
+export function calculateBudgetSpentAmount(actualAmountsMinor: number[]): number {
+  return actualAmountsMinor.reduce((total, amount) => total + amount, 0);
 }

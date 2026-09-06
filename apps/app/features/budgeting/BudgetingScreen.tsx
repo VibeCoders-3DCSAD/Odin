@@ -71,7 +71,6 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
-  const [debtBudget, setDebtBudget] = useState("");
   const [allocationRows, setAllocationRows] = useState<AllocationRow[]>([emptyAllocationRow]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -128,7 +127,6 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     setPeriodStart(draft.periodStart);
     setPeriodEnd(draft.periodEnd);
     setTotalAmount((draft.totalAmountMinor / 100).toFixed(2));
-    setDebtBudget((draft.debtBudgetMinor / 100).toFixed(2));
     setAllocationRows(draft.allocations.map((allocation) => ({
       id: allocation.id,
       categoryId: allocation.categoryId,
@@ -180,7 +178,6 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
         periodStart,
         periodEnd,
         totalAmountMinor: parsePesoToCentavos(totalAmount),
-        debtBudgetMinor: periodKind === "MONTHLY" ? parsePesoToCentavos(debtBudget) : 0,
         allocations: allocationRows
           .filter((row) => row.categoryId || row.subcategoryId)
           .map((row) => ({ categoryId: row.categoryId, subcategoryId: row.subcategoryId, amountMinor: parsePesoToCentavos(row.amount) })),
@@ -255,7 +252,6 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                setPeriodStart("");
                setPeriodEnd("");
                setTotalAmount("");
-               setDebtBudget("");
                setCreateError(null);
                setSyncError(null);
                setShowCreate(true);
@@ -301,11 +297,6 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                 <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginBottom: 6 }}>Enter peso amount.</Text>
                <TextInput value={totalAmount} onChangeText={setTotalAmount} placeholder="e.g. 10.53" placeholderTextColor={formPalette.mut} accessibilityLabel="Total budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
               </View>
-              <View style={{ marginTop: 12 }}>
-                <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: formPalette.ink2, marginTop: 4, marginBottom: 6 }}>DEBT PAYMENTS</Text>
-                <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginBottom: 6 }}>{periodKind === "MONTHLY" ? "Monthly envelope for debt payments." : "Debt planning currently requires a monthly budget."}</Text>
-                <TextInput editable={periodKind === "MONTHLY"} value={periodKind === "MONTHLY" ? debtBudget : "0"} onChangeText={setDebtBudget} placeholder="e.g. 5.00" placeholderTextColor={formPalette.mut} accessibilityLabel="Debt payment budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card, opacity: periodKind === "MONTHLY" ? 1 : 0.55 }} />
-              </View>
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", marginTop: 14 }}>Manual allocations</Text>
               {allocationRows.map((row, index) => (
                 <View key={row.id} style={{ marginTop: 12 }}>
@@ -345,7 +336,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
       ) : selectedDraft ? (
         <View>
           {(() => {
-            const spentAmount = calculateBudgetSpentAmount(selectedDraft.allocations.map((allocation) => allocation.actualAmountMinor), selectedDraft.debtActualPaymentMinor);
+            const spentAmount = calculateBudgetSpentAmount(selectedDraft.allocations.map((allocation) => allocation.actualAmountMinor));
             const percentage = selectedDraft.totalAmountMinor > 0 ? Math.min((spentAmount / selectedDraft.totalAmountMinor) * 100, 100) : 0;
             return (
               <>
@@ -370,8 +361,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                   </View>
                 </View>
                  <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#EEFFF8" }}>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - selectedDraft.allocatedAmountMinor, 0))} unallocated · {formatPeso(selectedDraft.debtBudgetMinor)} debt envelope</Text>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center", marginTop: 4 }}>{formatPeso(selectedDraft.debtActualPaymentMinor)} debt payments made</Text>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - selectedDraft.allocatedAmountMinor, 0))} unallocated</Text>
                  </View>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: formPalette.ink, marginTop: 18 }}>Categories</Text>
                 <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 22, marginTop: 10 }}>
