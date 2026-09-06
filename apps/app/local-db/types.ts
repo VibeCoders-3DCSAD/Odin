@@ -16,21 +16,9 @@ export type SyncableEntity =
   | "recurring_transaction_occurrences"
   | "budgets"
   | "savings_goals"
-  | "debt_accounts"
   | "alerts"
   | "notification_preferences"
-  | "debt_payments"
-  | "user_debt_priorities"
-  | "debt_strategy_preferences"
-  | "credit_card_details"
-  | "credit_card_cycles"
-  | "credit_card_installments"
-  | "credit_card_transactions"
-  | "credit_card_statements"
-  | "credit_card_payments"
-  | "credit_card_credit_applications"
-  | "credit_card_settlements"
-  | "credit_card_statement_strategies";
+  ;
 
 export type SyncOperation = {
   operation_id: string;

@@ -3,18 +3,6 @@ import * as SQLite from "expo-sqlite";
 type PullRow = Record<string, unknown>;
 
 const TAXONOMY_TABLES = new Set(["category_groups", "categories", "subcategories"]);
-const CREDIT_CARD_IDENTITY: Record<string, string> = {
-  credit_card_details: "account_id",
-  credit_card_cycles: "id",
-  credit_card_installments: "id",
-  credit_card_transactions: "transaction_id",
-  credit_card_statements: "id",
-  credit_card_payments: "id",
-  credit_card_credit_applications: "id",
-  credit_card_settlements: "id",
-  credit_card_statement_strategies: "statement_id",
-};
-
 export interface PullDb {
   getFirstAsync<T>(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<T | null>;
   runAsync(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<SQLite.SQLiteRunResult>;
@@ -35,12 +23,6 @@ export const SYNCED_TABLES = [
   "financial_obligations",
   "budgets",
   "budget_allocations",
-  "debt_accounts",
-  "debt_payments",
-  "user_debt_priorities",
-  "debt_strategy_preferences",
-  "credit_card_details", "credit_card_cycles", "credit_card_installments", "credit_card_transactions",
-  "credit_card_statements", "credit_card_payments", "credit_card_credit_applications", "credit_card_settlements", "credit_card_statement_strategies",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -63,7 +45,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   financial_accounts: new Set([
     "id", "user_id", "name", "kind", "status", "opening_balance_centavos",
-    "current_balance_centavos", "credit_limit_centavos",
+    "current_balance_centavos",
     "include_in_dashboard_balance", "institution_name", "opened_on",
     "archived_at", "deleted_at", "sort_order", "metadata", "version",
     "deleted", "created_at", "updated_at", "last_synced_at",
@@ -89,7 +71,6 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   transactions: new Set([
     "id", "user_id", "transaction_type", "status", "entry_source",
    "transaction_date", "posted_at", "amount_centavos",
-     "credit_card_posting_date",
     "subcategory_id", "source_account_id", "destination_account_id",
     "recurring_template_id", "merchant_name", "counterparty_name",
     "notes", "client_mutation_id", "metadata", "version", "deleted",
@@ -130,25 +111,12 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   budgets: new Set([
     "id", "user_id", "status", "allocation_method", "period_kind", "period_start", "period_end",
     "budget_period_days", "total_amount_minor", "surplus_handling", "deficit_handling",
-    "allow_deficit_planning", "debt_budget_amount_minor", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+    "allow_deficit_planning", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   budget_allocations: new Set([
     "id", "user_id", "budget_id", "category_id", "subcategory_id", "allocated_amount_minor",
     "restriction_level", "version", "deleted", "created_at", "updated_at",
   ]),
-  debt_accounts: new Set(["id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status", "paid_off_at", "archived_at", "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  debt_payments: new Set(["id", "debt_account_id", "user_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  user_debt_priorities: new Set(["id", "user_id", "debt_account_id", "priority_rank", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  debt_strategy_preferences: new Set(["user_id", "strategy", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_details: new Set(["account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos", "default_cutoff_date", "default_statement_date", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_cycles: new Set(["id", "user_id", "account_id", "cycle_start_date", "cutoff_date", "statement_date", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_installments: new Set(["id", "user_id", "account_id", "transaction_id", "description", "original_principal_centavos", "remaining_principal_centavos", "term_months", "remaining_months", "monthly_amortization_centavos", "interest_rate_bps", "interest_type", "settlement_status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_transactions: new Set(["transaction_id", "user_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_statements: new Set(["id", "user_id", "cycle_id", "statement_balance_centavos", "minimum_due_centavos", "finance_charge_centavos", "due_date", "authoritative", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_payments: new Set(["id", "user_id", "cycle_id", "statement_id", "transaction_id", "amount_centavos", "payment_date", "source_account_id", "notes", "client_mutation_id", "issuer_recognized", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_credit_applications: new Set(["id", "user_id", "account_id", "payment_id", "amount_centavos", "applied_date", "target_transaction_id", "client_mutation_id", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_settlements: new Set(["id", "user_id", "installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  credit_card_statement_strategies: new Set(["statement_id", "user_id", "strategy", "custom_amount_centavos", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
 export function normalizePullRow(
@@ -176,20 +144,12 @@ export function normalizePullRow(
     } else if (col === "metadata") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
-    } else if (table === "debt_accounts" && col === "preset_data") {
-      const val = row[col];
-      normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
-    } else if (table === "debt_accounts" && col === "payment_schedule") {
-      const val = row[col];
-      normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
     } else if (table === "budgets" && col === "period_kind") {
       normalized[col] = String(row[col] ?? "").toUpperCase();
     } else if (table === "budgets" && col === "allocation_method") {
       normalized[col] = "MANUAL";
     } else if (table === "budgets" && col === "total_amount_minor") {
       normalized[col] = row.total_amount_centavos;
-    } else if (table === "budgets" && col === "debt_budget_amount_minor") {
-      normalized[col] = row.debt_budget_amount_centavos ?? 0;
     } else if (table === "budgets" && col === "surplus_handling") {
       normalized[col] = "LEAVE_UNALLOCATED";
     } else if (table === "budgets" && col === "deficit_handling") {
@@ -204,11 +164,6 @@ export function normalizePullRow(
     }
   }
 
-  if (table === "debt_accounts" && normalized.status === "paid_off" && normalized.current_balance_centavos !== 0) {
-    normalized.status = "active";
-    normalized.paid_off_at = null;
-  }
-
   if (table === "budget_allocations" && normalized.category_id == null && normalized.subcategory_id != null) {
     normalized.category_id = row.category_id ?? null;
   }
@@ -221,11 +176,7 @@ export async function applyPullRow(
   table: string,
   row: PullRow,
 ): Promise<void> {
-  const identityColumn = CREDIT_CARD_IDENTITY[table] ?? (table === "debt_strategy_preferences"
-    ? "user_id"
-    : table === "user_debt_priorities"
-      ? "debt_account_id"
-      : "id");
+  const identityColumn = "id";
   const userScoped = !TAXONOMY_TABLES.has(table);
   const recordId = row[identityColumn] as string;
   const identityWhere = `"${identityColumn}" = ?${userScoped ? " AND user_id = ?" : ""}`;
@@ -233,16 +184,6 @@ export async function applyPullRow(
   const rowVersion = (row.version as number) ?? 1;
   const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
-
-  if (table === "user_debt_priorities" && row.priority_rank !== undefined) {
-    await db.runAsync(
-      `UPDATE user_debt_priorities SET priority_rank = -priority_rank - 1000000
-       WHERE user_id = ? AND priority_rank = ? AND id <> ?`,
-      row.user_id as SQLite.SQLiteBindValue,
-      row.priority_rank as SQLite.SQLiteBindValue,
-      recordId,
-    );
-  }
 
   const existing = await db.getFirstAsync<{ version: number; user_id: string }>(
     `SELECT version, user_id FROM "${table}" WHERE ${identityWhere}`,
@@ -285,8 +226,7 @@ export async function applyPullRow(
       table === "transactions" ||
       table === "transaction_templates" ||
       table === "recurring_transaction_templates" ||
-      table === "recurring_transaction_occurrences" ||
-      table === "debt_accounts"
+       table === "recurring_transaction_occurrences"
     ) {
       await db.runAsync(
        `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
@@ -323,13 +263,6 @@ export async function applyPullRow(
       await db.runAsync(
          `UPDATE "${table}" SET deleted = 1, version = ?,
           updated_at = ? WHERE ${identityWhere}`,
-        rowVersion,
-        now,
-        ...identityParams,
-      );
-    } else if (table === "debt_payments" || table === "user_debt_priorities" || table === "debt_strategy_preferences" || table.startsWith("credit_card_")) {
-      await db.runAsync(
-        `UPDATE "${table}" SET deleted = 1, version = ?, updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
         ...identityParams,

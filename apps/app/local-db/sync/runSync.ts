@@ -162,8 +162,7 @@ async function pushQueue(
      WHERE user_id = ? AND device_id = ?
        AND status IN ('pending', 'failed')
        ${maxAttempts === undefined ? "" : "AND attempts < ?"}
-       ORDER BY CASE WHEN entity = 'transactions' THEN 0 WHEN entity = 'debt_payments' THEN 1 ELSE 2 END,
-               created_at, operation_id LIMIT 50`,
+        ORDER BY created_at, operation_id LIMIT 50`,
     userId,
     deviceId,
     ...(maxAttempts === undefined ? [] : [maxAttempts]),
@@ -368,7 +367,7 @@ async function pullAndApply(
         await applyPullRow(db, table, normalized);
         pulled++;
       } catch (error) {
-        const recordId = String(row.id ?? normalized.id ?? "unknown");
+        const recordId = String(row.id ?? normalized.id ?? row.transaction_id ?? "unknown");
         const reason = error instanceof Error ? error.message : "unknown error";
         // Quarantine only the bad row so a malformed remote record cannot block later changes.
         await db.runAsync(
