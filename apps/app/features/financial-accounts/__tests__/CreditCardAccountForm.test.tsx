@@ -75,6 +75,8 @@ it("shows credit card fields only when the Credit Card kind is selected", () => 
   expect(view.getByPlaceholderText("Enter billing cycle in days")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter cut-off day")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter statement day")).toBeTruthy();
+  expect(view.getByText("When your billing cycle ends each month. Enter 1-31; check your card statement.")).toBeTruthy();
+  expect(view.getByText("When your monthly statement is issued. Enter 1-31; check your card statement.")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter alert percentage")).toBeTruthy();
 });
 

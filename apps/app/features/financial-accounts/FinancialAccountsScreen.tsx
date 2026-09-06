@@ -233,12 +233,13 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
 
 type FieldErrors = Partial<Record<"name" | "openingBalance" | "creditLimit" | "billingCycle" | "cutoffDay" | "statementDay" | "threshold", string>>;
 
-function FormField({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
+function FormField({ label, required, error, hint, children }: { label: string; required?: boolean; error?: string; hint?: string; children: React.ReactNode }) {
   return (
     <View>
       <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
         {label} {required ? <Text style={{ color: P.error }}>*</Text> : null}
       </Text>
+      {hint ? <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginBottom: 6 }}>{hint}</Text> : null}
       {children}
       {error ? (
         <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.error, marginTop: 4 }}>{error}</Text>
@@ -485,7 +486,12 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
                         />
                       </FormField>
 
-                      <FormField label="CUT-OFF DAY" required error={fieldErrors.cutoffDay}>
+                      <FormField
+                        label="CUT-OFF DAY OF MONTH"
+                        hint="When your billing cycle ends each month. Enter 1-31; check your card statement."
+                        required
+                        error={fieldErrors.cutoffDay}
+                      >
                         <TextInput
                           value={cutoffDay}
                           onChangeText={(t) => { setCutoffDay(t); clearFieldError("cutoffDay"); }}
@@ -496,7 +502,12 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
                         />
                       </FormField>
 
-                      <FormField label="STATEMENT DAY" required error={fieldErrors.statementDay}>
+                      <FormField
+                        label="STATEMENT DAY OF MONTH"
+                        hint="When your monthly statement is issued. Enter 1-31; check your card statement."
+                        required
+                        error={fieldErrors.statementDay}
+                      >
                         <TextInput
                           value={statementDay}
                           onChangeText={(t) => { setStatementDay(t); clearFieldError("statementDay"); }}
