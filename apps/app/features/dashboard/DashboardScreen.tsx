@@ -91,18 +91,13 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
    const forecastSnap = snapshots.forecast;
   const forecast = getForecastContent(forecastSnap);
    const savingsSnap = snapshots.savings_goals;
-   const debtSnap = snapshots.debt_status;
    const alertsSnap = snapshots.alerts;
   const savingsText = getSnapshotText(savingsSnap);
-  const debtText = getSnapshotText(debtSnap);
   const alertsText = getSnapshotText(alertsSnap);
   const savingsCount = getSnapshotCount(savingsSnap);
-  const debtCount = getSnapshotCount(debtSnap);
   const alertCount = getSnapshotCount(alertsSnap);
   const savingsCentavos = getSnapshotCentavos(savingsSnap, ["saved_centavos", "current_amount_centavos"]);
-  const debtCentavos = getSnapshotCentavos(debtSnap, ["remaining_centavos", "balance_centavos"]);
   const savingsUnavailable = (snapshotsUnavailable && !savingsSnap) || (!!savingsSnap && !savingsText && savingsCount === null);
-  const debtUnavailable = (snapshotsUnavailable && !debtSnap) || (!!debtSnap && !debtText && debtCount === null);
   const alertsUnavailable = (snapshotsUnavailable && !alertsSnap) || (!!alertsSnap && !alertsText && alertCount === null);
   const forecastUnavailable = snapshotsUnavailable && !forecastSnap;
   const staleSnapshot = (snapshot: typeof savingsSnap) => !!snapshot && (snapshot.stale || snapshotsUnavailable);
@@ -172,7 +167,6 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
 
       <View style={{ flexDirection: "row", gap: 11, marginTop: 14 }}>
         <SnapshotCard title="Savings goals" stale={staleSnapshot(savingsSnap)} unavailable={savingsUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("savings-goals")} actionLabel={!savingsSnap || savingsCount === 0 ? "Create a goal" : undefined} copy={savingsText ?? (savingsUnavailable ? "Savings goal information is unavailable." : !savingsSnap || savingsCount === 0 ? "No savings goals yet. Create one when you're ready." : savingsCount === null ? "Savings goal summary is unavailable. Refresh to try again." : `${savingsCount} savings goal${savingsCount === 1 ? "" : "s"} in progress${savingsCentavos === null ? "." : ` · ${formatPeso(savingsCentavos)} saved.`}`)} />
-        <SnapshotCard title="Debt" stale={staleSnapshot(debtSnap)} unavailable={debtUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("debt-manager")} copy={debtText ?? (debtUnavailable ? "Debt information is unavailable." : !debtSnap || debtCount === 0 ? "No debts are currently recorded." : debtCount === null ? "Debt summary is unavailable. Refresh to try again." : `${debtCount} debt${debtCount === 1 ? "" : "s"} being tracked${debtCentavos === null ? "." : ` · ${formatPeso(debtCentavos)} remaining.`}`)} />
       </View>
 
       {s.incomeSourceCount === 0 ? (

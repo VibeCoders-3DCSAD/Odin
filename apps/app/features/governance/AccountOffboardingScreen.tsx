@@ -120,7 +120,7 @@ export default function AccountOffboardingScreen({ accessToken, onBack, onGoToEx
         <View style={{ gap: 9, marginBottom: 16 }}>
           {([
             { icon: Receipt, text: "All transactions & history" },
-            { icon: ChartPieSlice, text: "Budgets, goals & debt plans" },
+            { icon: ChartPieSlice, text: "Budgets and goals" },
             { icon: Brain, text: "Your behavioral profile" },
           ] as const).map(({ icon: Icon, text }) => (
             <View

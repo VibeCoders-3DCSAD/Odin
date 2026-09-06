@@ -36,7 +36,7 @@ export function getSnapshotText(snapshot: DashboardSnapshotWithMeta | null | und
 
 export function getSnapshotCount(snapshot: DashboardSnapshotWithMeta | null | undefined): number | null {
   const value = payload(snapshot);
-  for (const key of ["count", "activeCount", "goalCount", "debtCount"] as const) {
+  for (const key of ["count", "activeCount", "goalCount"] as const) {
     if (typeof value[key] === "number" && Number.isFinite(value[key])) return value[key];
   }
   return null;

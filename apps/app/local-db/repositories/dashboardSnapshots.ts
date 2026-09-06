@@ -8,7 +8,6 @@ export type DashboardSnapshotSource =
   | "budget_health"
   | "alerts"
   | "savings_goals"
-  | "debt_status"
   | "forecast";
 
 export type DashboardSnapshot = {
@@ -91,7 +90,6 @@ export async function getAllSnapshots(
     budget_health: null,
     alerts: null,
     savings_goals: null,
-    debt_status: null,
     forecast: null,
   };
 

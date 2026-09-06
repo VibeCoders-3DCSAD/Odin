@@ -254,7 +254,6 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
           "Profile & account information",
           "All transaction history",
           "Budget plans & goals",
-          "Debt management records",
           "Personalization preferences",
         ].map((item, i) => (
           <View
