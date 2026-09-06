@@ -4,10 +4,9 @@ import { ArrowLeft, Sparkle } from "phosphor-react-native";
 import { getSnapshot, upsertSnapshot } from "../../local-db/repositories/dashboardSnapshots";
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
 import { getForecastContent } from "../dashboard/dashboardSnapshotContent";
-import { ForecastPanel } from "../dashboard/components/ForecastPanel";
 import { getForecast } from "./api";
 import { ForecastLineChart } from "./ForecastLineChart";
-import type { ForecastHorizon } from "./types";
+import type { ForecastHorizon, ForecastHorizonResult } from "./types";
 
 type Props = { userId: string; accessToken: string; onBack: () => void };
 
@@ -46,6 +45,33 @@ function formatUpdatedAt(iso: string): string {
 
 function formatPeso(centavos: number): string {
   return `PHP ${(centavos / 100).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+}
+
+function HorizonSummary({ horizon, title }: { horizon: ForecastHorizonResult; title: string }) {
+  const spending = horizon.points.reduce((sum, point) => sum + point.expense_centavos, 0);
+  const income = horizon.points.reduce((sum, point) => sum + point.income_centavos, 0);
+  const endingBalance = horizon.points[horizon.points.length - 1]?.projected_balance_centavos ?? 0;
+
+  return (
+    <View accessible accessibilityLabel={`${title}: expected spending ${formatPeso(spending)}, expected income ${formatPeso(income)}, projected ending balance ${formatPeso(endingBalance)}`} style={{ marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: palette.line }}>
+      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: palette.ink }}>{title}</Text>
+      <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 2 }}>{horizon.period}</Text>
+      <View style={{ flexDirection: "row", gap: 16, marginTop: 14 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>Expected spending</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.ink, marginTop: 3 }}>{formatPeso(spending)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>Expected income</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.aqua700, marginTop: 3 }}>{formatPeso(income)}</Text>
+        </View>
+      </View>
+      <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: palette.line }}>
+        <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>Projected ending balance</Text>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.brand, marginTop: 3 }}>{formatPeso(endingBalance)}</Text>
+      </View>
+    </View>
+  );
 }
 
 export default function SpendingForecastScreen({ userId, accessToken, onBack }: Props) {
@@ -88,6 +114,7 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
   const badge = trustBadge(forecast.confidence);
   const lastUpdate = snapshot ? formatUpdatedAt(snapshot.updated_at) : null;
   const activeHorizon = forecast.horizons.find((horizon) => horizon.key === selectedHorizon) ?? forecast.horizons[0];
+  const yearlyHorizon = forecast.horizons.find((horizon) => horizon.key === "yearly");
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -142,6 +169,8 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
 
             {refreshing ? <ActivityIndicator size="small" color={palette.aqua700} style={{ marginTop: 16 }} /> : null}
 
+            {yearlyHorizon ? <HorizonSummary horizon={yearlyHorizon} title="Yearly Spending Forecast" /> : null}
+
             {forecast.horizons.length > 0 ? (
               <>
                 <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8, marginTop: 20 }}>
@@ -158,38 +187,12 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
                     </Pressable>
                   ))}
                 </View>
-                {activeHorizon ? (
-                  <View accessible accessibilityLabel={`${activeHorizon.label} spending forecast`} style={{ marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: palette.line }}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: palette.ink }}>{activeHorizon.label} spending forecast</Text>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 2 }}>{activeHorizon.period}</Text>
-                    <View style={{ flexDirection: "row", gap: 16, marginTop: 14 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>Expected spending</Text>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.ink, marginTop: 3 }}>{formatPeso(activeHorizon.points.reduce((sum, point) => sum + point.expense_centavos, 0))}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>Expected income</Text>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.aqua700, marginTop: 3 }}>{formatPeso(activeHorizon.points.reduce((sum, point) => sum + point.income_centavos, 0))}</Text>
-                      </View>
-                    </View>
-                    <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: palette.line }}>
-                      <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>Projected ending balance</Text>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.brand, marginTop: 3 }}>{formatPeso(activeHorizon.points[activeHorizon.points.length - 1]?.projected_balance_centavos ?? 0)}</Text>
-                    </View>
-                  </View>
+                {activeHorizon && activeHorizon.key !== "yearly" ? (
+                  <HorizonSummary horizon={activeHorizon} title={`${activeHorizon.label} spending forecast`} />
                 ) : null}
                 {activeHorizon ? <ForecastLineChart horizon={activeHorizon} /> : null}
               </>
             ) : null}
-
-            <ForecastPanel
-              forecast={forecast}
-              stale={snapshot?.stale ?? false}
-              unavailable={!!error}
-              refreshable
-              onRefresh={refresh}
-              onNavigate={onBack}
-            />
           </>
         )}
       </View>
