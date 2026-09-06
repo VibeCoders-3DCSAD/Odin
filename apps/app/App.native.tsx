@@ -5,6 +5,7 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, Alert, Platform, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import AuthExperience, { type AuthenticatedState } from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow";
@@ -271,8 +272,9 @@ export default function App() {
   }
 
   return (
-    <ToastProvider>
-      {authenticated ? (
+    <SafeAreaProvider>
+      <ToastProvider>
+        {authenticated ? (
         authenticated.onboardingStatus === "submitted" && !reassessing ? (
           <>
             <MobileShell
@@ -322,7 +324,8 @@ export default function App() {
           />
           <StatusBar style="dark" />
         </>
-      )}
-    </ToastProvider>
+        )}
+      </ToastProvider>
+    </SafeAreaProvider>
   );
 }

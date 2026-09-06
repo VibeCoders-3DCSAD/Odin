@@ -15,7 +15,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
 import TransactionHistoryScreen from "../features/ledger/TransactionHistoryScreen";
@@ -198,6 +198,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
 };
 
 export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, onRequestReassessment, signOut }: MobileShellProps) {
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -893,10 +894,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         </ScrollView>
 
         {/* Bottom toolbar */}
-        <View className="absolute bottom-0 left-0 right-0 items-center px-4 pb-4">
+        <View className="absolute bottom-0 left-0 right-0 items-center px-4">
           <View
-            style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell }}
-            className="w-full px-6 pt-2 pb-[6px] flex-row items-end justify-between border-t border-[#EAEAE6]"
+            style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell, paddingBottom: bottomInset + 6 }}
+            className="w-full px-6 pt-2 flex-row items-end justify-between border-t border-[#EAEAE6]"
           >
             <Pressable
               onPress={() => setCurrentPage("dashboard")}
