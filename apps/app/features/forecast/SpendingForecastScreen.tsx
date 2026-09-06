@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkle } from "phosphor-react-native";
 import { getSnapshot, upsertSnapshot } from "../../local-db/repositories/dashboardSnapshots";
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
 import { getForecastContent } from "../dashboard/dashboardSnapshotContent";
+import { ForecastPanel } from "../dashboard/components/ForecastPanel";
 import { getForecast } from "./api";
 import { ForecastLineChart } from "./ForecastLineChart";
 import type { ForecastHorizon, ForecastHorizonResult } from "./types";
@@ -187,12 +188,19 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
                     </Pressable>
                   ))}
                 </View>
-                {activeHorizon && activeHorizon.key !== "yearly" ? (
-                  <HorizonSummary horizon={activeHorizon} title={`${activeHorizon.label} spending forecast`} />
-                ) : null}
                 {activeHorizon ? <ForecastLineChart horizon={activeHorizon} /> : null}
               </>
             ) : null}
+
+            <ForecastPanel
+              forecast={forecast}
+              horizon={activeHorizon}
+              stale={snapshot?.stale ?? false}
+              unavailable={!!error}
+              refreshable
+              onRefresh={refresh}
+              onNavigate={onBack}
+            />
           </>
         )}
       </View>
