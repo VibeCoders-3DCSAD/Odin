@@ -13,6 +13,7 @@ import onboardingRoutes from "./routes/onboarding.js";
 import profileRoutes from "./routes/profile.js";
 import syncRoutes from "./routes/sync.js";
 import recurringRoutes from "./routes/recurring.js";
+import forecastRoutes from "./routes/forecast.js";
 
 const app = express();
 app.disable("etag");
@@ -56,6 +57,7 @@ app.use("/odin/api", onboardingRoutes);
 app.use("/odin/api", profileRoutes);
 app.use("/odin/api/sync", syncRoutes);
 app.use("/odin/api/recurring", recurringRoutes);
+app.use("/odin/api/forecast", forecastRoutes);
 
 app.use((error: Error, request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };
