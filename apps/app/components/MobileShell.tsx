@@ -27,6 +27,7 @@ import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen"
 import FinancialObligationsScreen from "../features/financial-obligations/FinancialObligationsScreen";
 import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../features/recurring-transactions/RecurringTransactionsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
+import SpendingForecastScreen from "../features/forecast/SpendingForecastScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
 import { useConnectivityStore } from "../services/connectivity";
@@ -807,6 +808,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "dashboard") {
       return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNavigate={setCurrentPage as (page: string) => void} />;
+    }
+
+    if (currentPage === "spending-forecast") {
+      return <SpendingForecastScreen userId={userId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
     }
 
     const meta = pageMeta[currentPage];
