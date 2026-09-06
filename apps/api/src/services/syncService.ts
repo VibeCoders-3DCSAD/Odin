@@ -50,20 +50,9 @@ const SYNCED_TABLES = [
   "recurring_transaction_occurrences",
   "budgets",
   "budget_allocations",
-  "debt_accounts",
-  "debt_payments",
-  "user_debt_priorities",
-  "debt_strategy_preferences",
-  "credit_card_details", "credit_card_cycles", "credit_card_installments", "credit_card_transactions",
-  "credit_card_statements", "credit_card_payments", "credit_card_credit_applications", "credit_card_settlements", "credit_card_statement_strategies",
 ] as const;
 
-const PULL_IDENTITY_COLUMNS: Record<string, string> = {
-  debt_strategy_preferences: "user_id",
-  credit_card_details: "account_id",
-  credit_card_transactions: "transaction_id",
-  credit_card_statement_strategies: "statement_id",
-};
+const PULL_IDENTITY_COLUMNS: Record<string, string> = {};
 
 export async function pushOperations(
   supabase: SupabaseClient,
@@ -79,13 +68,9 @@ export async function pushOperations(
     try {
       const prepared = await prepareOperation(supabase, userId, op);
       auditPayload = { redacted: true, fields: Object.keys(prepared.payload) };
-       const rpcName = prepared.entity.startsWith("credit_card_")
-         ? "apply_credit_card_sync_operation"
-         : prepared.entity === "budgets"
+        const rpcName = prepared.entity === "budgets"
         ? "apply_budget_sync_operation_v2"
-        : ["debt_accounts", "debt_payments", "user_debt_priorities", "debt_strategy_preferences"].includes(prepared.entity)
-          ? "apply_debt_sync_operation"
-          : "apply_sync_operation";
+        : "apply_sync_operation";
       const { data, error } = await supabase.rpc(rpcName, {
         p_operation_id: prepared.operation_id,
         p_device_id: deviceId,
@@ -190,12 +175,7 @@ export async function pullChanges(
       table === "recurring_transaction_templates" ||
       table === "recurring_transaction_occurrences"
       || table === "budgets"
-      || table === "budget_allocations"
-      || table === "debt_accounts"
-      || table === "debt_payments"
-      || table === "user_debt_priorities"
-      || table === "debt_strategy_preferences"
-      || table.startsWith("credit_card_")
+       || table === "budget_allocations"
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);

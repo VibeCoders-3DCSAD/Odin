@@ -25,7 +25,7 @@ describe("normalizePullRow", () => {
     const row = {
       id: "acct-1", user_id: null, name: "BPI Savings", kind: "bank",
       status: "active", opening_balance_centavos: 500000, current_balance_centavos: 500000,
-      credit_limit_centavos: null, include_in_dashboard_balance: true,
+      include_in_dashboard_balance: true,
       institution_name: "BPI", opened_on: "2026-01-15", archived_at: null,
       deleted_at: null, sort_order: 0, metadata: { notes: "primary" },
       version: 1, deleted: true,
