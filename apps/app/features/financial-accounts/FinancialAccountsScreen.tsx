@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import {
   Bank,
-  CreditCard,
   DeviceMobile,
   Money,
   PiggyBank,
@@ -50,12 +49,12 @@ const P = {
 };
 
 const ACCOUNT_KINDS: readonly FinancialAccountKind[] = [
-  "cash", "bank", "e_wallet", "savings", "credit_card", "loan", "other",
+  "cash", "bank", "e_wallet", "savings", "other",
 ];
 
 const KIND_LABELS: Record<FinancialAccountKind, string> = {
   cash: "Cash", bank: "Bank", e_wallet: "E-Wallet",
-  savings: "Savings", credit_card: "Credit Card", loan: "Loan", other: "Other",
+  savings: "Savings", other: "Other",
 };
 
 function kindIcon(kind: FinancialAccountKind, size: number, color: string) {
@@ -65,8 +64,6 @@ function kindIcon(kind: FinancialAccountKind, size: number, color: string) {
     case "bank": return <Bank {...props} />;
     case "e_wallet": return <DeviceMobile {...props} />;
     case "savings": return <PiggyBank {...props} />;
-    case "credit_card": return <CreditCard {...props} />;
-    case "loan": return <Wallet {...props} />;
     default: return <Question {...props} />;
   }
 }
@@ -79,10 +76,7 @@ function formatPeso(centavos: number): string {
 }
 
 function isNegativeAccount(account: FinancialAccount): boolean {
-  return (
-    (account.kind === "credit_card" || account.kind === "loan") &&
-    account.currentBalanceCentavos < 0
-  );
+  return account.currentBalanceCentavos < 0;
 }
 
 function parseSafeCents(raw: string): number | null {
@@ -210,7 +204,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
   const [name, setName] = useState("");
   const [kind, setKind] = useState<FinancialAccountKind>("bank");
   const [openingBalance, setOpeningBalance] = useState("");
-  const [creditLimit, setCreditLimit] = useState("");
   const [institutionName, setInstitutionName] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -221,17 +214,14 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
       setName(editing.name);
       setKind(editing.kind);
       setOpeningBalance(String(editing.openingBalanceCentavos / 100));
-      setCreditLimit(editing.creditLimitCentavos != null ? String(editing.creditLimitCentavos / 100) : "");
       setInstitutionName(editing.institutionName ?? "");
     } else {
-      setName(""); setKind("bank"); setOpeningBalance(""); setCreditLimit(""); setInstitutionName("");
+      setName(""); setKind("bank"); setOpeningBalance(""); setInstitutionName("");
     }
     setFormError(null);
   }, [editing]);
 
-  const showCreditLimit = kind === "credit_card" || kind === "loan";
   const openingInvalid = openingBalance.trim() !== "" && parseSafeCents(openingBalance) === null;
-  const limitInvalid = creditLimit.trim() !== "" && parseSafeCents(creditLimit) === null;
 
   const handleSubmit = async () => {
     setFormError(null);
@@ -242,10 +232,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
     const openingCents = parseSafeCents(openingBalance);
     if (openingBalance.trim() && openingCents === null) errors.push("Opening balance must be a valid amount.");
 
-    const limitCents = parseSafeCents(creditLimit);
-    if (showCreditLimit && creditLimit.trim() && limitCents === null) errors.push("Credit limit must be a valid amount.");
-    else if (limitCents !== null && limitCents < 0) errors.push("Credit limit must be >= 0.");
-
     if (errors.length > 0) { setFormError(errors.join("\n")); return; }
 
     setSaving(true);
@@ -254,7 +240,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
         name: name.trim(),
         kind,
         openingBalanceCentavos: openingCents ?? 0,
-        creditLimitCentavos: showCreditLimit ? limitCents : null,
         institutionName: institutionName.trim() || null,
       });
     } catch (err) { setFormError(err instanceof Error ? err.message : "Something went wrong"); }
@@ -325,22 +310,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
                       style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: openingInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                     />
                   </View>
-
-                  {showCreditLimit && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                        CREDIT LIMIT (₱)
-                      </Text>
-                      <TextInput
-                        value={creditLimit}
-                        onChangeText={setCreditLimit}
-                        placeholder="0.00"
-                        placeholderTextColor={P.muted}
-                        keyboardType="decimal-pad"
-                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: limitInvalid ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                      />
-                    </View>
-                  )}
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
