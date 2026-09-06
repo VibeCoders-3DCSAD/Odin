@@ -10,11 +10,6 @@ const VALID_SORT_DIR = ["asc", "desc"] as const;
 const VALID_STATUSES = ["posted", "draft", "voided", "deleted"] as const;
 const UPDATE_FIELDS = ["amount_centavos", "subcategory_id", "source_account_id", "destination_account_id", "transaction_date", "merchant_name", "counterparty_name", "notes"] as const;
 
-async function rejectLinkedDebtPayment(db: SQLite.SQLiteDatabase, userId: string, transactionId: string): Promise<void> {
-  const linked = await db.getFirstAsync("SELECT id FROM debt_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, transactionId);
-  if (linked) throw new LocalDbError("VALIDATION_ERROR", "Linked debt payments must be changed from Debt Manager");
-}
-
 type TransactionRow = {
   id: string;
   user_id: string;
@@ -77,7 +72,6 @@ export type CreateExpenseInput = {
   counterparty_name?: string;
   notes?: string;
   client_mutation_id?: string;
-  credit_card_posting_date?: string;
 };
 
 export type CreateTransferInput = {
@@ -405,13 +399,12 @@ function buildTransactionInsert(
       (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at,
        amount_centavos, subcategory_id, source_account_id, destination_account_id,
        recurring_template_id, merchant_name, counterparty_name, notes,
-        client_mutation_id, credit_card_posting_date, metadata, version, deleted, created_at, updated_at)
-     VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+        client_mutation_id, metadata, version, deleted, created_at, updated_at)
+      VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
     params: [
       id, userId, transactionType, input.transaction_date, ts,
       input.amount_centavos, subcategoryId, sourceAccountId, destinationAccountId,
-      merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null,
-      "credit_card_posting_date" in input ? input.credit_card_posting_date ?? null : null, ts, ts,
+      merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null, ts, ts,
     ],
   };
 }
@@ -644,8 +637,6 @@ export async function updateTransaction(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
-    await rejectLinkedDebtPayment(db, userId, id);
-
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
     const newAmount = input.amount_centavos ?? current.amount_centavos;
@@ -735,8 +726,6 @@ export async function deleteTransaction(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
-    await rejectLinkedDebtPayment(db, userId, id);
-
     await reverseBalanceEffects(
       db, userId,
       current.transaction_type,

@@ -16,7 +16,6 @@ type FinancialAccountRow = {
   status: string;
   opening_balance_centavos: number;
   current_balance_centavos: number;
-  credit_limit_centavos: number | null;
   include_in_dashboard_balance: number;
   institution_name: string | null;
   opened_on: string | null;
@@ -96,8 +95,6 @@ export type FinancialAccountKind =
   | "bank"
   | "e_wallet"
   | "savings"
-  | "credit_card"
-  | "loan"
   | "other";
 
 export type FinancialAccountStatus = "active" | "archived";
@@ -109,7 +106,6 @@ export type FinancialAccount = {
   status: FinancialAccountStatus;
   openingBalanceCentavos: number;
   currentBalanceCentavos: number;
-  creditLimitCentavos: number | null;
   includeInDashboardBalance: boolean;
   institutionName: string | null;
   openedOn: string | null;
@@ -185,7 +181,6 @@ export type CreateFinancialAccountInput = {
   name: string;
   kind: FinancialAccountKind;
   openingBalanceCentavos?: number;
-  creditLimitCentavos?: number | null;
   includeInDashboardBalance?: boolean;
   institutionName?: string | null;
   openedOn?: string | null;
@@ -197,7 +192,6 @@ export type UpdateFinancialAccountInput = {
   status?: FinancialAccountStatus;
   openingBalanceCentavos?: number;
   currentBalanceCentavos?: number;
-  creditLimitCentavos?: number | null;
   includeInDashboardBalance?: boolean;
   institutionName?: string | null;
   openedOn?: string | null;
@@ -294,7 +288,6 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
     status: row.status as FinancialAccountStatus,
     openingBalanceCentavos: row.opening_balance_centavos,
     currentBalanceCentavos: row.current_balance_centavos,
-    creditLimitCentavos: row.credit_limit_centavos,
     includeInDashboardBalance: row.include_in_dashboard_balance === 1,
     institutionName: row.institution_name,
     openedOn: row.opened_on,
@@ -485,8 +478,6 @@ const VALID_ACCOUNT_KINDS: FinancialAccountKind[] = [
   "bank",
   "e_wallet",
   "savings",
-  "credit_card",
-  "loan",
   "other",
 ];
 
@@ -553,9 +544,6 @@ export async function createFinancialAccount(
   if (!VALID_ACCOUNT_KINDS.includes(input.kind)) {
     throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_ACCOUNT_KINDS.join(", ")}`);
   }
-  if (input.creditLimitCentavos !== undefined && input.creditLimitCentavos !== null && input.creditLimitCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "creditLimitCentavos must be >= 0");
-  }
 
   const db = await getDb();
   const id = randomUUID();
@@ -564,7 +552,6 @@ export async function createFinancialAccount(
     name: input.name,
     kind: input.kind,
     opening_balance_centavos: input.openingBalanceCentavos ?? 0,
-    credit_limit_centavos: input.creditLimitCentavos ?? null,
     include_in_dashboard_balance: input.includeInDashboardBalance ?? true,
     institution_name: input.institutionName ?? null,
     opened_on: input.openedOn ?? null,
@@ -577,7 +564,7 @@ export async function createFinancialAccount(
     await db.runAsync(
       `INSERT INTO financial_accounts
         (id, user_id, name, kind, status, opening_balance_centavos, current_balance_centavos,
-         credit_limit_centavos, include_in_dashboard_balance, institution_name, opened_on,
+         include_in_dashboard_balance, institution_name, opened_on,
          sort_order, metadata, version, deleted, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
@@ -586,7 +573,6 @@ export async function createFinancialAccount(
       input.kind,
       input.openingBalanceCentavos ?? 0,
       input.openingBalanceCentavos ?? 0,
-      input.creditLimitCentavos ?? null,
       boolToInt(input.includeInDashboardBalance ?? true),
       input.institutionName ?? null,
       input.openedOn ?? null,
@@ -627,9 +613,6 @@ export async function updateFinancialAccount(
   if (input.status && !VALID_ACCOUNT_STATUSES.includes(input.status)) {
     throw new LocalDbError("VALIDATION_ERROR", "status must be active or archived");
   }
-  if (input.creditLimitCentavos !== undefined && input.creditLimitCentavos !== null && input.creditLimitCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "creditLimitCentavos must be >= 0");
-  }
 
   const db = await getDb();
   const ts = now();
@@ -640,7 +623,6 @@ export async function updateFinancialAccount(
   if (input.status !== undefined) { changedFields.push("status"); payload.status = input.status; }
   if (input.openingBalanceCentavos !== undefined) { changedFields.push("opening_balance_centavos"); payload.opening_balance_centavos = input.openingBalanceCentavos; }
   if (input.currentBalanceCentavos !== undefined) { changedFields.push("current_balance_centavos"); payload.current_balance_centavos = input.currentBalanceCentavos; }
-  if (input.creditLimitCentavos !== undefined) { changedFields.push("credit_limit_centavos"); payload.credit_limit_centavos = input.creditLimitCentavos; }
   if (input.includeInDashboardBalance !== undefined) { changedFields.push("include_in_dashboard_balance"); payload.include_in_dashboard_balance = input.includeInDashboardBalance; }
   if (input.institutionName !== undefined) { changedFields.push("institution_name"); payload.institution_name = input.institutionName; }
   if (input.openedOn !== undefined) { changedFields.push("opened_on"); payload.opened_on = input.openedOn; }
@@ -670,7 +652,6 @@ export async function updateFinancialAccount(
     if (input.status !== undefined) { setClauses.push("status = ?"); params.push(input.status); }
     if (input.openingBalanceCentavos !== undefined) { setClauses.push("opening_balance_centavos = ?"); params.push(input.openingBalanceCentavos); }
     if (input.currentBalanceCentavos !== undefined) { setClauses.push("current_balance_centavos = ?"); params.push(input.currentBalanceCentavos); }
-    if (input.creditLimitCentavos !== undefined) { setClauses.push("credit_limit_centavos = ?"); params.push(input.creditLimitCentavos); }
     if (input.includeInDashboardBalance !== undefined) { setClauses.push("include_in_dashboard_balance = ?"); params.push(boolToInt(input.includeInDashboardBalance)); }
     if (input.institutionName !== undefined) { setClauses.push("institution_name = ?"); params.push(input.institutionName); }
     if (input.openedOn !== undefined) { setClauses.push("opened_on = ?"); params.push(input.openedOn); }

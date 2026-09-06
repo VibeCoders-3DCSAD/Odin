@@ -4,9 +4,9 @@ import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 
-const VALID_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "loan", "other"] as const;
+const VALID_KINDS = ["cash", "bank", "e_wallet", "savings", "other"] as const;
 const VALID_STATUSES = ["active", "archived", "deleted"] as const;
-const UPDATE_FIELDS = ["name", "opening_balance_centavos", "credit_limit_centavos", "include_in_dashboard_balance", "institution_name", "opened_on", "sort_order"] as const;
+const UPDATE_FIELDS = ["name", "opening_balance_centavos", "include_in_dashboard_balance", "institution_name", "opened_on", "sort_order"] as const;
 
 type FinancialAccountRow = {
   id: string;
@@ -16,7 +16,6 @@ type FinancialAccountRow = {
   status: string;
   opening_balance_centavos: number;
   current_balance_centavos: number;
-  credit_limit_centavos: number | null;
   include_in_dashboard_balance: number;
   institution_name: string | null;
   opened_on: string | null;
@@ -37,7 +36,6 @@ export type FinancialAccount = {
   status: string;
   opening_balance_centavos: number;
   current_balance_centavos: number;
-  credit_limit_centavos: number | null;
   include_in_dashboard_balance: boolean;
   institution_name: string | null;
   opened_on: string | null;
@@ -48,7 +46,6 @@ export type CreateFinancialAccountInput = {
   name: string;
   kind: string;
   opening_balance_centavos?: number;
-  credit_limit_centavos?: number | null;
   include_in_dashboard_balance?: boolean;
   institution_name?: string | null;
   opened_on?: string | null;
@@ -58,7 +55,6 @@ export type CreateFinancialAccountInput = {
 export type UpdateFinancialAccountInput = {
   name?: string;
   opening_balance_centavos?: number;
-  credit_limit_centavos?: number | null;
   include_in_dashboard_balance?: boolean;
   institution_name?: string | null;
   opened_on?: string | null;
@@ -73,7 +69,6 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
     status: row.status,
     opening_balance_centavos: row.opening_balance_centavos,
     current_balance_centavos: row.current_balance_centavos,
-    credit_limit_centavos: row.credit_limit_centavos,
     include_in_dashboard_balance: row.include_in_dashboard_balance === 1,
     institution_name: row.institution_name,
     opened_on: row.opened_on,
@@ -146,9 +141,6 @@ export async function createFinancialAccount(
       throw new LocalDbError("VALIDATION_ERROR", "opening_balance_centavos must be a finite integer");
     }
   }
-  if (input.credit_limit_centavos != null && (typeof input.credit_limit_centavos !== "number" || !Number.isFinite(input.credit_limit_centavos) || !Number.isInteger(input.credit_limit_centavos) || input.credit_limit_centavos < 0)) {
-    throw new LocalDbError("VALIDATION_ERROR", "credit_limit_centavos must be a finite integer >= 0");
-  }
 
   const db = await getDb();
   const id = randomUUID();
@@ -162,7 +154,7 @@ export async function createFinancialAccount(
     await db.runAsync(
       `INSERT INTO financial_accounts
         (id, user_id, name, kind, status, opening_balance_centavos, current_balance_centavos,
-         credit_limit_centavos, include_in_dashboard_balance, institution_name,
+         include_in_dashboard_balance, institution_name,
          opened_on, sort_order, metadata, version, deleted, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
       id,
@@ -171,7 +163,6 @@ export async function createFinancialAccount(
       input.kind,
       openingBalance,
       openingBalance,
-      input.credit_limit_centavos ?? null,
       boolToInt(input.include_in_dashboard_balance ?? true),
       input.institution_name ?? null,
       input.opened_on ?? null,
@@ -232,11 +223,6 @@ export async function updateFinancialAccount(
       const value = (input as Record<string, unknown>)[key];
       if (value === undefined) continue;
 
-      if (key === "credit_limit_centavos") {
-        if (value != null && (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 0)) {
-          throw new LocalDbError("VALIDATION_ERROR", "credit_limit_centavos must be a finite integer >= 0");
-        }
-      }
       if (key === "opening_balance_centavos") {
         if (value != null && (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value))) {
           throw new LocalDbError("VALIDATION_ERROR", "opening_balance_centavos must be a finite integer");
