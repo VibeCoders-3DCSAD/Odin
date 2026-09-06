@@ -30,5 +30,6 @@ test("normalizes dashboard snapshot content without accepting malformed values",
     events: [{ label: "Rent", date: "Aug 31" }],
     freshness: "Updated today",
     confidence: "High confidence",
+    horizons: [],
   });
 });

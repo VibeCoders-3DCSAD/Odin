@@ -90,6 +90,7 @@ describe("GET /odin/api/forecast", () => {
     expect(response.body.payload.projected_balance_centavos).toBe(1_000_000 + 666_667 - 200_000);
     expect(response.body.payload.confidence).toBe("Fallback estimate");
     expect(response.body.payload.categories).toEqual([{ label: "Food", amount_centavos: 200_000 }]);
+    expect(response.body.payload.horizons).toHaveLength(4);
 
     const scoped = transactionsChain.calls
       .filter((call) => call.method === "eq")

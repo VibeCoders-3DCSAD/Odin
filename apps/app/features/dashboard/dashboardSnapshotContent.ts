@@ -1,4 +1,5 @@
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
+import type { ForecastHorizon, ForecastPoint } from "../forecast/types";
 
 type BudgetItem = { label: string; spent: number; budget: number };
 type BudgetStatus = "on_track" | "warning" | "critical" | "unknown";
@@ -14,6 +15,7 @@ export type ForecastContent = {
   events: { label: string; date: string | null }[];
   freshness: string | null;
   confidence: string | null;
+  horizons: { key: ForecastHorizon; label: string; period: string; points: ForecastPoint[] }[];
 };
 
 function payload(snapshot: DashboardSnapshotWithMeta | null | undefined): Record<string, unknown> {
@@ -80,5 +82,19 @@ export function getForecastContent(snapshot: DashboardSnapshotWithMeta | null | 
   const events = Array.isArray(value.expected_events)
     ? value.expected_events.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && typeof item.label === "string").map((item) => ({ label: item.label as string, date: typeof item.date === "string" ? item.date : null })).slice(0, 3)
     : [];
-  return { text: getSnapshotText(snapshot), projectedBalanceCentavos, period, insights, incomeCentavos: amount("income_centavos"), expenseCentavos: amount("expense_centavos"), categories, events, freshness: typeof value.freshness === "string" ? value.freshness : null, confidence: typeof value.confidence === "string" ? value.confidence : null };
+  const horizons = Array.isArray(value.horizons)
+    ? value.horizons.filter((item): item is Record<string, unknown> => !!item && typeof item === "object").flatMap((item) => {
+        const key = item.key;
+        const points = Array.isArray(item.points)
+          ? item.points.filter((point): point is Record<string, unknown> => !!point && typeof point === "object").flatMap((point) => {
+              if (typeof point.label !== "string") return [];
+              if (typeof point.projected_balance_centavos !== "number" || typeof point.income_centavos !== "number" || typeof point.expense_centavos !== "number") return [];
+              return [{ label: point.label, projected_balance_centavos: point.projected_balance_centavos, income_centavos: point.income_centavos, expense_centavos: point.expense_centavos }];
+            })
+          : [];
+        if (!(["next_day", "weekly", "monthly", "yearly"] as const).includes(key as ForecastHorizon) || typeof item.label !== "string" || typeof item.period !== "string" || points.length === 0) return [];
+        return [{ key: key as ForecastHorizon, label: item.label, period: item.period, points }];
+      })
+    : [];
+  return { text: getSnapshotText(snapshot), projectedBalanceCentavos, period, insights, incomeCentavos: amount("income_centavos"), expenseCentavos: amount("expense_centavos"), categories, events, freshness: typeof value.freshness === "string" ? value.freshness : null, confidence: typeof value.confidence === "string" ? value.confidence : null, horizons };
 }

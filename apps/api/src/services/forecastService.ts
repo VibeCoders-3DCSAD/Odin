@@ -16,6 +16,23 @@ export type ForecastResult = {
   period: string | null;
   freshness: string | null;
   confidence: string | null;
+  horizons: ForecastHorizonResult[];
+};
+
+export type ForecastHorizon = "next_day" | "weekly" | "monthly" | "yearly";
+
+export type ForecastPoint = {
+  label: string;
+  projected_balance_centavos: number;
+  income_centavos: number;
+  expense_centavos: number;
+};
+
+export type ForecastHorizonResult = {
+  key: ForecastHorizon;
+  label: string;
+  period: string;
+  points: ForecastPoint[];
 };
 
 const MONTHS_IN_WINDOW = 3;
@@ -50,6 +67,7 @@ export function buildEmptyForecast(): ForecastResult {
     period: null,
     freshness: null,
     confidence: "Cold-start estimate",
+    horizons: [],
   };
 }
 
@@ -137,6 +155,14 @@ export function buildForecast(input: {
     insights.push("Based on limited transaction history — treat as a rough estimate.");
   }
 
+  const horizons = buildHorizons({
+    now,
+    openingBalanceCentavos: input.openingBalanceCentavos,
+    monthlyIncomeCentavos: incomeAvg,
+    monthlyExpenseCentavos: expenseAvg,
+    transactions: input.transactions,
+  });
+
   return {
     projected_balance_centavos: projectedBalance,
     income_centavos: hasIncome ? incomeAvg : null,
@@ -148,7 +174,91 @@ export function buildForecast(input: {
     period,
     freshness,
     confidence,
+    horizons,
   };
+}
+
+function buildHorizons(input: {
+  now: Date;
+  openingBalanceCentavos: number;
+  monthlyIncomeCentavos: number;
+  monthlyExpenseCentavos: number;
+  transactions: ForecastTransaction[];
+}): ForecastHorizonResult[] {
+  const currentMonthStart = dateKey(input.now.getFullYear(), input.now.getMonth(), 1);
+  const longTermStart = dateKey(input.now.getFullYear(), input.now.getMonth() - 12, 1);
+  const longTermTransactions = input.transactions.filter((transaction) =>
+    transaction.transaction_type !== "transfer" &&
+    transaction.transaction_date >= longTermStart &&
+    transaction.transaction_date < currentMonthStart,
+  );
+  const coveredMonths = new Set(longTermTransactions.map((transaction) => transaction.transaction_date.slice(0, 7))).size;
+  const longTermIncome = longTermTransactions
+    .filter((transaction) => transaction.transaction_type === "income")
+    .reduce((sum, transaction) => sum + transaction.amount_centavos, 0);
+  const longTermExpense = longTermTransactions
+    .filter((transaction) => transaction.transaction_type === "expense")
+    .reduce((sum, transaction) => sum + transaction.amount_centavos, 0);
+  const yearlyMonthlyIncome = coveredMonths > 0 ? Math.round(longTermIncome / coveredMonths) : input.monthlyIncomeCentavos;
+  const yearlyMonthlyExpense = coveredMonths > 0 ? Math.round(longTermExpense / coveredMonths) : input.monthlyExpenseCentavos;
+
+  const definitions: { key: ForecastHorizon; label: string; period: string; count: number; income: number; expense: number; labels: string[] }[] = [
+    {
+      key: "next_day",
+      label: "Next day",
+      period: "tomorrow",
+      count: 2,
+      income: Math.round(input.monthlyIncomeCentavos / 30),
+      expense: Math.round(input.monthlyExpenseCentavos / 30),
+      labels: ["Today", "Tomorrow"],
+    },
+    {
+      key: "weekly",
+      label: "Weekly",
+      period: "next 7 days",
+      count: 7,
+      income: Math.round(input.monthlyIncomeCentavos / 4.345),
+      expense: Math.round(input.monthlyExpenseCentavos / 4.345),
+      labels: Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(input.now);
+        date.setDate(date.getDate() + index + 1);
+        return date.toLocaleDateString("en-US", { weekday: "short" });
+      }),
+    },
+    {
+      key: "monthly",
+      label: "Monthly",
+      period: "next month",
+      count: 5,
+      income: input.monthlyIncomeCentavos,
+      expense: input.monthlyExpenseCentavos,
+      labels: ["Now", "Week 1", "Week 2", "Week 3", "Week 4"],
+    },
+    {
+      key: "yearly",
+      label: "Yearly",
+      period: "next 12 months",
+      count: 12,
+      income: yearlyMonthlyIncome,
+      expense: yearlyMonthlyExpense,
+      labels: Array.from({ length: 12 }, (_, index) => MONTH_NAMES_SHORT[(input.now.getMonth() + index + 1) % 12]!),
+    },
+  ];
+
+  return definitions.map((definition) => {
+    const points: ForecastPoint[] = [];
+    let balance = input.openingBalanceCentavos;
+    for (let index = 0; index < definition.count; index += 1) {
+      if (definition.key !== "next_day" || index > 0) balance += definition.income - definition.expense;
+      points.push({
+        label: definition.labels[index]!,
+        projected_balance_centavos: balance,
+        income_centavos: index === 0 && definition.key === "next_day" ? 0 : definition.income,
+        expense_centavos: index === 0 && definition.key === "next_day" ? 0 : definition.expense,
+      });
+    }
+    return { key: definition.key, label: definition.label, period: definition.period, points };
+  });
 }
 
 function dateKey(year: number, month: number, day: number): string {

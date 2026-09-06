@@ -44,6 +44,9 @@ describe("buildForecast", () => {
     expect(result.confidence).toBe("Personalized estimate");
     expect(result.freshness).toBe("As of Aug 15, 2026");
     expect(result.expected_events).toEqual([]);
+    expect(result.horizons.map((horizon) => horizon.key)).toEqual(["next_day", "weekly", "monthly", "yearly"]);
+    expect(result.horizons.find((horizon) => horizon.key === "weekly")?.points).toHaveLength(7);
+    expect(result.horizons.find((horizon) => horizon.key === "yearly")?.points).toHaveLength(12);
     expect(result.insights[0]).toBe("You are projected to save PHP 11,000 this period.");
     expect(result.insights[1]).toBe("Largest forecasted expense is Food at PHP 6,000.");
   });
@@ -103,6 +106,7 @@ describe("buildForecast", () => {
       period: null,
       freshness: null,
       confidence: "Cold-start estimate",
+      horizons: [],
     });
   });
 });

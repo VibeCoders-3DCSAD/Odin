@@ -6,6 +6,8 @@ import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dash
 import { getForecastContent } from "../dashboard/dashboardSnapshotContent";
 import { ForecastPanel } from "../dashboard/components/ForecastPanel";
 import { getForecast } from "./api";
+import { ForecastLineChart } from "./ForecastLineChart";
+import type { ForecastHorizon } from "./types";
 
 type Props = { userId: string; accessToken: string; onBack: () => void };
 
@@ -47,6 +49,7 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedHorizon, setSelectedHorizon] = useState<ForecastHorizon>("monthly");
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +83,7 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
   const forecast = getForecastContent(snapshot);
   const badge = trustBadge(forecast.confidence);
   const lastUpdate = snapshot ? formatUpdatedAt(snapshot.updated_at) : null;
+  const activeHorizon = forecast.horizons.find((horizon) => horizon.key === selectedHorizon) ?? forecast.horizons[0];
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -133,6 +137,26 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
             ) : null}
 
             {refreshing ? <ActivityIndicator size="small" color={palette.aqua700} style={{ marginTop: 16 }} /> : null}
+
+            {forecast.horizons.length > 0 ? (
+              <>
+                <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8, marginTop: 20 }}>
+                  {forecast.horizons.map((horizon) => (
+                    <Pressable
+                      key={horizon.key}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: activeHorizon?.key === horizon.key }}
+                      accessibilityLabel={`${horizon.label} forecast`}
+                      onPress={() => setSelectedHorizon(horizon.key)}
+                      style={{ flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: activeHorizon?.key === horizon.key ? palette.brand : palette.aqua50, alignItems: "center" }}
+                    >
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: activeHorizon?.key === horizon.key ? "#FFFFFF" : palette.aqua700 }}>{horizon.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {activeHorizon ? <ForecastLineChart horizon={activeHorizon} /> : null}
+              </>
+            ) : null}
 
             <ForecastPanel
               forecast={forecast}

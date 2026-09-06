@@ -35,7 +35,7 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
   const authenticatedSupabase = request.supabase!;
 
   const today = new Date();
-  const windowStart = dateKey(today.getFullYear(), today.getMonth() - 3, 1);
+  const windowStart = dateKey(today.getFullYear(), today.getMonth() - 12, 1);
 
   const { data: accounts, error: accountsError } = await authenticatedSupabase
     .from("financial_accounts")
