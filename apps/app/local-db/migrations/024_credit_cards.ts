@@ -7,7 +7,7 @@ const migration: Migration = {
       ALTER TABLE transactions ADD COLUMN credit_card_posting_date text;
       CREATE TABLE IF NOT EXISTS credit_card_details (
         account_id text primary key, user_id text not null, issuer text, credit_limit_centavos integer not null,
-        available_credit_centavos integer, default_cutoff_date text not null, default_statement_date text not null,
+        available_credit_centavos integer, cutoff_day integer not null check (cutoff_day between 1 and 31), statement_day integer not null check (statement_day between 1 and 31),
         notes text, version integer not null default 1, deleted integer not null default 0,
         created_at text not null, updated_at text not null, last_synced_at text
       );

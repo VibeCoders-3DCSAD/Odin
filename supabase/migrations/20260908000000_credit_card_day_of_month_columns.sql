@@ -1,3 +1,27 @@
+-- Cut-off and statement are modeled as a recurring day of the month
+-- (cutoff_day / statement_day, 1-31) instead of one-off calendar dates.
+-- DBs that already applied 20260902000002 have default_cutoff_date /
+-- default_statement_date as date columns; rename and convert them in place.
+-- Fresh DBs (edited 20260902000002) already have the new columns and skip.
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'credit_card_details' AND column_name = 'default_cutoff_date'
+  ) THEN
+    ALTER TABLE public.credit_card_details
+      ALTER COLUMN default_cutoff_date TYPE integer USING EXTRACT(DAY FROM default_cutoff_date)::integer,
+      ALTER COLUMN default_statement_date TYPE integer USING EXTRACT(DAY FROM default_statement_date)::integer;
+    ALTER TABLE public.credit_card_details
+      RENAME COLUMN default_cutoff_date TO cutoff_day,
+      RENAME COLUMN default_statement_date TO statement_day;
+    ALTER TABLE public.credit_card_details
+      ADD CONSTRAINT credit_card_details_cutoff_day_check CHECK (cutoff_day BETWEEN 1 AND 31),
+      ADD CONSTRAINT credit_card_details_statement_day_check CHECK (statement_day BETWEEN 1 AND 31);
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION apply_credit_card_sync_operation_core(
   p_operation_id uuid, p_device_id text, p_entity text, p_record_id uuid,
   p_operation_type text, p_base_version integer, p_changed_fields text[], p_payload jsonb

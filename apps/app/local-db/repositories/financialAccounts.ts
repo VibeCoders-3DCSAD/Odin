@@ -4,7 +4,7 @@ import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 
-const VALID_KINDS = ["cash", "bank", "e_wallet", "savings", "other"] as const;
+const VALID_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "other"] as const;
 const VALID_STATUSES = ["active", "archived", "deleted"] as const;
 const UPDATE_FIELDS = ["name", "opening_balance_centavos", "include_in_dashboard_balance", "institution_name", "opened_on", "sort_order"] as const;
 

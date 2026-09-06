@@ -28,6 +28,11 @@ type FinancialAccountRow = {
   created_at: string;
   updated_at: string;
   last_synced_at: string | null;
+  cc_credit_limit_centavos: number | null;
+  cc_billing_cycle_days: number | null;
+  cc_cutoff_day: number | null;
+  cc_statement_day: number | null;
+  cc_alert_threshold_percent: number | null;
 };
 
 type IncomeSourceRow = {
@@ -95,6 +100,7 @@ export type FinancialAccountKind =
   | "bank"
   | "e_wallet"
   | "savings"
+  | "credit_card"
   | "other";
 
 export type FinancialAccountStatus = "active" | "archived";
@@ -111,6 +117,23 @@ export type FinancialAccount = {
   openedOn: string | null;
   archivedAt: string | null;
   sortOrder: number;
+  creditCardDetails: CreditCardDetails | null;
+};
+
+export type CreditCardDetails = {
+  creditLimitCentavos: number;
+  billingCycleDays: number | null;
+  cutoffDay: number;
+  statementDay: number;
+  alertThresholdPercent: number | null;
+};
+
+export type CreditCardDetailsInput = {
+  creditLimitCentavos: number;
+  billingCycleDays: number;
+  cutoffDay: number;
+  statementDay: number;
+  alertThresholdPercent: number;
 };
 
 export type IncomeType = "stable" | "variable";
@@ -185,10 +208,12 @@ export type CreateFinancialAccountInput = {
   institutionName?: string | null;
   openedOn?: string | null;
   sortOrder?: number;
+  creditCardDetails?: CreditCardDetailsInput;
 };
 
 export type UpdateFinancialAccountInput = {
   name?: string;
+  kind?: FinancialAccountKind;
   status?: FinancialAccountStatus;
   openingBalanceCentavos?: number;
   currentBalanceCentavos?: number;
@@ -197,6 +222,7 @@ export type UpdateFinancialAccountInput = {
   openedOn?: string | null;
   archivedAt?: string | null;
   sortOrder?: number;
+  creditCardDetails?: CreditCardDetailsInput;
 };
 
 export type CreateIncomeSourceInput = {
@@ -293,6 +319,16 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
     openedOn: row.opened_on,
     archivedAt: row.archived_at,
     sortOrder: row.sort_order,
+    creditCardDetails:
+      row.kind === "credit_card" && row.cc_credit_limit_centavos != null
+        ? {
+            creditLimitCentavos: row.cc_credit_limit_centavos,
+            billingCycleDays: row.cc_billing_cycle_days,
+            cutoffDay: row.cc_cutoff_day ?? 0,
+            statementDay: row.cc_statement_day ?? 0,
+            alertThresholdPercent: row.cc_alert_threshold_percent,
+          }
+        : null,
   };
 }
 
@@ -455,6 +491,78 @@ function now(): string {
   return new Date().toISOString();
 }
 
+function isDayOfMonth(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 31;
+}
+
+function validateCreditCardDetails(details: Partial<CreditCardDetailsInput>, required: boolean): void {
+  if (required) {
+    for (const field of ["creditLimitCentavos", "billingCycleDays", "cutoffDay", "statementDay", "alertThresholdPercent"] as const) {
+      const value = details[field];
+      if (value === undefined || value === null) {
+        throw new LocalDbError("VALIDATION_ERROR", `${field} is required for credit card accounts`);
+      }
+    }
+  }
+  const limit = details.creditLimitCentavos;
+  if (limit != null && (typeof limit !== "number" || !Number.isFinite(limit) || !Number.isInteger(limit) || limit <= 0)) {
+    throw new LocalDbError("VALIDATION_ERROR", "creditLimitCentavos must be a positive integer");
+  }
+  const cycle = details.billingCycleDays;
+  if (cycle != null && !Number.isInteger(cycle)) {
+    throw new LocalDbError("VALIDATION_ERROR", "billingCycleDays must be an integer");
+  }
+  if (cycle != null && (cycle < 28 || cycle > 31)) {
+    throw new LocalDbError("VALIDATION_ERROR", "billingCycleDays must be between 28 and 31");
+  }
+  if (details.cutoffDay != null && !isDayOfMonth(details.cutoffDay)) {
+    throw new LocalDbError("VALIDATION_ERROR", "cutoffDay must be an integer between 1 and 31");
+  }
+  if (details.statementDay != null && !isDayOfMonth(details.statementDay)) {
+    throw new LocalDbError("VALIDATION_ERROR", "statementDay must be an integer between 1 and 31");
+  }
+  const threshold = details.alertThresholdPercent;
+  if (threshold != null && (threshold < 0 || threshold > 100)) {
+    throw new LocalDbError("VALIDATION_ERROR", "alertThresholdPercent must be between 0 and 100");
+  }
+}
+
+async function upsertCreditCardDetails(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  accountId: string,
+  details: CreditCardDetailsInput,
+  ts: string,
+): Promise<void> {
+  validateCreditCardDetails(details, true);
+  await db.runAsync(
+    `INSERT INTO credit_card_details
+      (account_id, user_id, issuer, credit_limit_centavos, available_credit_centavos,
+       cutoff_day, statement_day, notes, billing_cycle_days,
+       alert_threshold_percent, version, deleted, created_at, updated_at)
+     VALUES (?, ?, NULL, ?, NULL, ?, ?, NULL, ?, ?, 1, 0, ?, ?)
+     ON CONFLICT(account_id) DO UPDATE SET
+       credit_limit_centavos = excluded.credit_limit_centavos,
+       available_credit_centavos = NULL,
+       cutoff_day = excluded.cutoff_day,
+       statement_day = excluded.statement_day,
+       billing_cycle_days = excluded.billing_cycle_days,
+       alert_threshold_percent = excluded.alert_threshold_percent,
+       deleted = 0,
+       updated_at = excluded.updated_at,
+       version = credit_card_details.version + 1`,
+    accountId,
+    userId,
+    details.creditLimitCentavos,
+    details.cutoffDay,
+    details.statementDay,
+    details.billingCycleDays,
+    details.alertThresholdPercent,
+    ts,
+    ts,
+  );
+}
+
 async function assertAccessibleRecurringTemplate(
   db: SQLite.SQLiteDatabase,
   userId: string,
@@ -478,6 +586,7 @@ const VALID_ACCOUNT_KINDS: FinancialAccountKind[] = [
   "bank",
   "e_wallet",
   "savings",
+  "credit_card",
   "other",
 ];
 
@@ -514,7 +623,16 @@ const VALID_OBLIGATION_FREQUENCIES: ObligationFrequency[] = [
 export async function listFinancialAccounts(userId: string): Promise<FinancialAccount[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<FinancialAccountRow>(
-    "SELECT * FROM financial_accounts WHERE user_id = ? AND deleted = 0 ORDER BY sort_order",
+    `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
+            cc.billing_cycle_days AS cc_billing_cycle_days,
+            cc.cutoff_day AS cc_cutoff_day,
+            cc.statement_day AS cc_statement_day,
+            cc.alert_threshold_percent AS cc_alert_threshold_percent
+     FROM financial_accounts fa
+     LEFT JOIN credit_card_details cc
+       ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+     WHERE fa.user_id = ? AND fa.deleted = 0
+     ORDER BY fa.sort_order`,
     userId,
   );
   return rows.map(mapAccount);
@@ -526,7 +644,15 @@ export async function getFinancialAccount(
 ): Promise<FinancialAccount | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<FinancialAccountRow>(
-    "SELECT * FROM financial_accounts WHERE user_id = ? AND id = ? AND deleted = 0",
+    `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
+            cc.billing_cycle_days AS cc_billing_cycle_days,
+            cc.cutoff_day AS cc_cutoff_day,
+            cc.statement_day AS cc_statement_day,
+            cc.alert_threshold_percent AS cc_alert_threshold_percent
+     FROM financial_accounts fa
+     LEFT JOIN credit_card_details cc
+       ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+     WHERE fa.user_id = ? AND fa.id = ? AND fa.deleted = 0`,
     userId,
     id,
   );
@@ -543,6 +669,12 @@ export async function createFinancialAccount(
   }
   if (!VALID_ACCOUNT_KINDS.includes(input.kind)) {
     throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_ACCOUNT_KINDS.join(", ")}`);
+  }
+  if (input.kind === "credit_card") {
+    validateCreditCardDetails(input.creditCardDetails ?? {}, true);
+  }
+  if (input.openingBalanceCentavos != null && (typeof input.openingBalanceCentavos !== "number" || !Number.isFinite(input.openingBalanceCentavos) || !Number.isInteger(input.openingBalanceCentavos))) {
+    throw new LocalDbError("VALIDATION_ERROR", "openingBalanceCentavos must be a finite integer");
   }
 
   const db = await getDb();
@@ -581,6 +713,10 @@ export async function createFinancialAccount(
       ts,
     );
 
+    if (input.kind === "credit_card") {
+      await upsertCreditCardDetails(db, userId, id, input.creditCardDetails!, ts);
+    }
+
     const operation = await enqueueOperation(db, {
       userId,
       deviceId,
@@ -613,6 +749,15 @@ export async function updateFinancialAccount(
   if (input.status && !VALID_ACCOUNT_STATUSES.includes(input.status)) {
     throw new LocalDbError("VALIDATION_ERROR", "status must be active or archived");
   }
+  if (input.kind && !VALID_ACCOUNT_KINDS.includes(input.kind)) {
+    throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_ACCOUNT_KINDS.join(", ")}`);
+  }
+  if (input.kind === "credit_card" && !input.creditCardDetails) {
+    throw new LocalDbError("VALIDATION_ERROR", "creditCardDetails is required when switching to a credit card account");
+  }
+  if (input.creditCardDetails) {
+    validateCreditCardDetails(input.creditCardDetails, true);
+  }
 
   const db = await getDb();
   const ts = now();
@@ -620,6 +765,7 @@ export async function updateFinancialAccount(
   const payload: Record<string, unknown> = {};
 
   if (input.name !== undefined) { changedFields.push("name"); payload.name = input.name; }
+  if (input.kind !== undefined) { changedFields.push("kind"); payload.kind = input.kind; }
   if (input.status !== undefined) { changedFields.push("status"); payload.status = input.status; }
   if (input.openingBalanceCentavos !== undefined) { changedFields.push("opening_balance_centavos"); payload.opening_balance_centavos = input.openingBalanceCentavos; }
   if (input.currentBalanceCentavos !== undefined) { changedFields.push("current_balance_centavos"); payload.current_balance_centavos = input.currentBalanceCentavos; }
@@ -649,6 +795,7 @@ export async function updateFinancialAccount(
     const params: SQLite.SQLiteBindValue[] = [];
 
     if (input.name !== undefined) { setClauses.push("name = ?"); params.push(input.name); }
+    if (input.kind !== undefined) { setClauses.push("kind = ?"); params.push(input.kind); }
     if (input.status !== undefined) { setClauses.push("status = ?"); params.push(input.status); }
     if (input.openingBalanceCentavos !== undefined) { setClauses.push("opening_balance_centavos = ?"); params.push(input.openingBalanceCentavos); }
     if (input.currentBalanceCentavos !== undefined) { setClauses.push("current_balance_centavos = ?"); params.push(input.currentBalanceCentavos); }
@@ -666,6 +813,18 @@ export async function updateFinancialAccount(
       `UPDATE financial_accounts SET ${setClauses.join(", ")} WHERE id = ? AND user_id = ?`,
       ...params,
     );
+
+    const effectiveKind = input.kind ?? existing.kind;
+    if (effectiveKind === "credit_card" && input.creditCardDetails) {
+      await upsertCreditCardDetails(db, userId, id, input.creditCardDetails, ts);
+    } else if (effectiveKind !== "credit_card") {
+      await db.runAsync(
+        "UPDATE credit_card_details SET deleted = 1, updated_at = ?, version = version + 1 WHERE account_id = ? AND user_id = ? AND deleted = 0",
+        ts,
+        id,
+        userId,
+      );
+    }
 
     const operation = await enqueueOperation(db, {
       userId,
@@ -713,6 +872,13 @@ export async function deleteFinancialAccount(
        SET deleted = 1, status = 'deleted', deleted_at = ?, updated_at = ?, version = version + 1
        WHERE id = ? AND user_id = ?`,
       ts,
+      ts,
+      id,
+      userId,
+    );
+
+    await db.runAsync(
+      "UPDATE credit_card_details SET deleted = 1, updated_at = ?, version = version + 1 WHERE account_id = ? AND user_id = ? AND deleted = 0",
       ts,
       id,
       userId,
