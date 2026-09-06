@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDashboardSummary, getDailyTrends } from "../../../local-db/repositories/dashboardSummary";
 import type { DashboardSummary, DailyTrend } from "../../../local-db/repositories/dashboardSummary";
-import { getAllSnapshots } from "../../../local-db/repositories/dashboardSnapshots";
+import { getAllSnapshots, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
 import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboardSnapshots";
+import { getForecast } from "../../forecast/api";
 import { runSync } from "../../../local-db/sync/runSync";
 
 const EMPTY_SUMMARY: DashboardSummary = {
@@ -40,7 +41,17 @@ export async function loadDashboardData(userId: string) {
 
 export async function refreshDashboardData(userId: string, deviceId: string, accessToken: string): Promise<boolean> {
   try {
-    return (await runSync(userId, deviceId, accessToken, { maxAttempts: 3 })).successful;
+    const result = await runSync(userId, deviceId, accessToken, { maxAttempts: 3 });
+    if (!result.successful) return false;
+    try {
+      const forecast = await getForecast(accessToken);
+      if (forecast.response.ok && forecast.body.payload) {
+        await upsertSnapshot(userId, "forecast", forecast.body.payload);
+      }
+    } catch {
+      // ponytail: forecast is best-effort; a stale snapshot beats failing the refresh
+    }
+    return true;
   } catch {
     return false;
   }
