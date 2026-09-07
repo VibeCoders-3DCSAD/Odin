@@ -360,7 +360,6 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Credit limit, when applicable
 - Billing cycle: 28-31 days, for credit card accounts
 - Cut-off day of the month (1-31), for credit card accounts
-- Statement day of the month (1-31), for credit card accounts
 - Alert threshold percentage of credit limit, for credit card accounts
 
 ### 4.3 Account Form Placeholders
@@ -373,7 +372,6 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Credit limit: `Enter credit limit`
 - Billing cycle: `Enter billing cycle in days`
 - Cut-off day: `Enter cut-off day`
-- Statement day: `Enter statement day`
 - Alert threshold percentage: `Enter alert percentage`
 
 ### 4.4 Account States
@@ -428,7 +426,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Require a valid credit limit for credit card accounts when enabled
 - Require a credit limit greater than 0 when provided
 - Require a billing cycle from 28 to 31 days for credit card accounts
-- Require valid cut-off and statement days in 1-31 for credit card accounts (recurring day of the month; short months clamp to the month's last day)
+- Require a valid cut-off day in 1-31 for credit card accounts; short months clamp the cutoff to the month's last day
 - Require an alert threshold percentage from 0 to 100 for credit card accounts
 - Alert the user when a credit card balance exceeds its configured alert threshold percentage of the credit limit
 - Current account balance reflects the opening balance and supported transaction effects
@@ -793,7 +791,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 ### 7.2 Credit Card Module
 
 - Manage credit cards within Debt Manager as persistent Credit Card financial accounts, not as generic debt records
-- View a credit card's issuer, credit limit, available credit, default cutoff day, and default statement day
+- View a credit card's issuer, credit limit, available credit, and default cutoff day
 - View separate billing cycles for each credit card
 - View the current billing cycle and prior billing-cycle history
 - Record regular purchases, installment purchases, statements, and payments for a billing cycle
@@ -802,38 +800,32 @@ This document defines product-level capabilities, user-facing form fields, domai
 
 ### 7.3 Credit Card Account Form
 
-- Card name
-- Bank or card issuer
+- Create and edit the credit-card account through Financial Accounts
+- Card name, represented by the financial account name
+- Institution or card issuer, represented by the financial account institution
 - Credit limit
-- Available credit, when supplied by the user or issuer
 - Default cutoff day of the month (1-31)
-- Default statement day of the month (1-31)
-- Notes
+- Available credit is displayed when supplied by the issuer or account data; it is not a required account-form input
 
 ### 7.3.1 Credit Card Account Form Placeholders
 
-- Card name: `Enter card name`
-- Bank or card issuer: `Enter bank or card issuer`
+- Card name: `Enter account name`
+- Institution or card issuer: `Enter institution name`
 - Credit limit: `Enter credit limit`
-- Available credit: `Enter available credit`
 - Default cutoff day: `Enter default cut-off day`
-- Default statement day: `Enter default statement day`
-- Notes: `Add card notes`
 
 ### 7.3.2 Credit Card Account Validation
 
 - Require a card name
 - Require a valid positive credit limit
-- Require a valid non-negative available credit when provided
-- Require valid default cutoff and statement days in 1-31
+- Require a valid default cutoff day in 1-31
 - Preserve valid entries after validation failure
 - Clear field errors when corrected
 
 ### 7.4 Credit Card Billing Cycles
 
 - Create or maintain one billing cycle per credit card statement period
-- Store the billing-cycle start date, cutoff date, statement date, transactions, statement, and payments
-- Default the cutoff date to the statement date when the issuer does not use a separate cutoff date
+- Store the billing-cycle start date, cutoff date, optional statement date, transactions, statement, and payments
 - Allow the user to override the default cutoff date for a billing cycle
 - Route a transaction with a posting date on or before the cutoff date to that billing cycle
 - Route a transaction with a posting date after the cutoff date to the next billing cycle
@@ -844,19 +836,17 @@ This document defines product-level capabilities, user-facing form fields, domai
 
 - Billing-cycle start date
 - Cutoff date
-- Statement date
 
 ### 7.4.2 Credit Card Billing Cycle Form Placeholders
 
 - Billing-cycle start date: `Select billing-cycle start date`
 - Cutoff date: `Select cut-off date`
-- Statement date: `Select statement date`
 
 ### 7.4.3 Credit Card Billing Cycle Validation
 
 - Require a billing-cycle start date
-- Require a cutoff date and statement date
-- Require the cutoff date and statement date to be valid dates for the billing cycle
+- Require a cutoff date
+- Allow the statement date to remain empty until the bank-provided statement is recorded
 - Preserve recorded cycles when card defaults are changed
 - Preserve valid entries after validation failure
 - Clear field errors when corrected
@@ -946,7 +936,9 @@ This document defines product-level capabilities, user-facing form fields, domai
 
 ### 7.6 Credit Card Statements
 
-- Notify the user on the expected statement date that the statement should be available for recording
+- Ask the user whether a bank-provided statement has been received for the current cycle
+- Do not calculate or invent a statement date before the bank-provided statement is recorded
+- Allow the user to record a statement when it is received
 - Allow the user to record the bank-provided statement balance, minimum amount due, finance charges or interest, and due date
 - Treat the bank-provided statement as authoritative
 - Label a statement balance calculated before the bank-provided statement is recorded as an estimate
@@ -954,6 +946,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 
 ### 7.6.1 Credit Card Statement Form
 
+- Statement date
 - Statement balance or total amount due
 - Minimum amount due
 - Finance charges or interest
@@ -961,6 +954,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 
 ### 7.6.2 Credit Card Statement Form Placeholders
 
+- Statement date: `Select statement date`
 - Statement balance or total amount due: `Enter statement balance`
 - Minimum amount due: `Enter minimum amount due`
 - Finance charges or interest: `Enter finance charges or interest`
@@ -968,6 +962,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 
 ### 7.6.3 Credit Card Statement Validation
 
+- Require a statement date on or after the associated cutoff date
 - Require a valid non-negative statement balance
 - Require a valid non-negative minimum amount due
 - Require the minimum amount due not to exceed the statement balance when both are provided
@@ -1087,7 +1082,7 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Empty-billing-cycle state: a credit card has no recorded billing cycles
 - Empty-statement state: a billing cycle has no recorded bank statement
 - Estimated-statement state: the application-calculated balance is shown until the bank statement is recorded
-- Statement-due state: the expected statement date has arrived and the statement should be recorded
+- Statement-pending state: ask whether the bank-provided statement has been received for the current cycle
 - Repayment-strategy-required state: an active statement has no selected repayment strategy
 - Payment-recording state: a credit-card payment is being recorded
 - Transaction-recording state: a regular or installment purchase is being recorded
@@ -1144,6 +1139,7 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 
 #### Error and Recovery Messages
 
+- Credit-card transaction unavailable: `Credit-card transactions cannot be recorded until billing-cycle routing is available.`
 - Credit-card error: `Your credit-card information could not be loaded or saved. Check your connection and try again.`
 - Statement error: `Your statement could not be recorded. Check the details and try again.`
 - Payment error: `Your credit-card payment could not be recorded. Check the details and try again.`
