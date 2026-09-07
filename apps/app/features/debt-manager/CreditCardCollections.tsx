@@ -2,6 +2,7 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import type { CreditCardCycle, CreditCardCycleTransaction } from "../../local-db/repositories/creditCardCycles";
 import type { CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
+import type { CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
 import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import CreditCardStatementForm from "./CreditCardStatementForm";
 
@@ -22,13 +23,11 @@ type Props = {
   cycles: CreditCardCycle[];
   transactions: CreditCardCycleTransaction[];
   statements: CreditCardStatement[];
+  installments: CreditCardInstallment[];
   statementCycle: CreditCardCycle | null;
-  editingStatement: CreditCardStatement | null;
   onManageCycle: (account: FinancialAccount, cycle: CreditCardCycle | null) => void;
   onAddStatement: (cycle: CreditCardCycle) => void;
   onCancelStatement: () => void;
-  onEditStatement: (statement: CreditCardStatement) => void;
-  onCancelEditStatement: () => void;
   onStatementSaved: () => Promise<void>;
   today?: string;
 };
@@ -85,19 +84,16 @@ function CreditCardInventory({ accounts, cycles, onManageCycle, today }: Pick<Pr
   );
 }
 
-function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, statementCycle, editingStatement, onManageCycle, onAddStatement, onCancelStatement, onEditStatement, onCancelEditStatement, onStatementSaved, today, userId, deviceId }: {
+function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, today, userId, deviceId }: {
   account: FinancialAccount;
   accountCycleCount: number;
   cycle: CreditCardCycle;
   transactions: CreditCardCycleTransaction[];
   statement: CreditCardStatement | undefined;
   statementCycle: CreditCardCycle | null;
-  editingStatement: CreditCardStatement | null;
   onManageCycle: Props["onManageCycle"];
   onAddStatement: Props["onAddStatement"];
   onCancelStatement: Props["onCancelStatement"];
-  onEditStatement: Props["onEditStatement"];
-  onCancelEditStatement: Props["onCancelEditStatement"];
   onStatementSaved: Props["onStatementSaved"];
   today: string;
   userId: string;
@@ -130,23 +126,17 @@ function BillingCycleCard({ account, accountCycleCount, cycle, transactions, sta
         </View>
         {statement ? (
           <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink }}>Recorded statement</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel={`Edit statement for ${account.name}`} onPress={() => editingStatement?.id === statement.id ? onCancelEditStatement() : onEditStatement(statement)}>
-                <Text style={{ color: P.brand, fontFamily: "Manrope", fontWeight: "700", fontSize: 11.5 }}>Edit</Text>
-              </Pressable>
-            </View>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink }}>Recorded statement</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 5 }}>Statement date: {statement.statement_date} · Due: {statement.due_date}</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Balance: {formatPeso(statement.statement_balance_centavos)} · Minimum: {formatPeso(statement.minimum_due_centavos)}</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Finance charges: {formatPeso(statement.finance_charge_centavos)}</Text>
-            {editingStatement?.id === statement.id ? <CreditCardStatementForm userId={userId} deviceId={deviceId} cycleId={cycle.id} cycleStartDate={cycle.cycle_start_date} today={today} statement={statement} onCancel={onCancelEditStatement} onSaved={onStatementSaved} /> : null}
           </View>
         ) : null}
         {needsStatement ? (
           <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12 }}>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>Have you received the statement for this billing cycle?</Text>
             <Pressable accessibilityRole="button" onPress={() => onAddStatement(cycle)} style={{ marginTop: 7 }}><Text style={{ color: P.brand, fontWeight: "700", fontFamily: "Manrope", fontSize: 12 }}>Add statement</Text></Pressable>
-            {statementCycle?.id === cycle.id ? <CreditCardStatementForm userId={userId} deviceId={deviceId} cycleId={cycle.id} cycleStartDate={cycle.cycle_start_date} today={today} onCancel={onCancelStatement} onSaved={onStatementSaved} /> : null}
+            {statementCycle?.id === cycle.id ? <CreditCardStatementForm userId={userId} deviceId={deviceId} cycleId={cycle.id} cycleCutoffDate={cycle.cutoff_date} today={today} onCancel={onCancelStatement} onSaved={onStatementSaved} /> : null}
           </View>
         ) : null}
         <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12 }}>
@@ -166,11 +156,20 @@ function BillingCycleCard({ account, accountCycleCount, cycle, transactions, sta
   );
 }
 
-export default function CreditCardCollections({ userId, deviceId, accounts, cycles, transactions, statements, statementCycle, editingStatement, onManageCycle, onAddStatement, onCancelStatement, onEditStatement, onCancelEditStatement, onStatementSaved, today = localToday() }: Props) {
+export default function CreditCardCollections({ userId, deviceId, accounts, cycles, transactions, statements, installments, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, today = localToday() }: Props) {
   const accountsById = new Map(accounts.map((account) => [account.id, account]));
   return (
     <View>
       <CreditCardInventory accounts={accounts} cycles={cycles} onManageCycle={onManageCycle} today={today} />
+      {installments.length > 0 ? <View style={{ borderTopWidth: 1, borderTopColor: P.line, marginTop: 18, paddingTop: 16 }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>Active installments</Text>
+        <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 4 }}>Monthly due amounts are estimates until the issuer confirms them.</Text>
+        {installments.map((installment) => <View key={installment.id} style={{ borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 12, marginTop: 10, backgroundColor: P.shell }}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: P.ink }}>{installment.description}</Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 4 }}>{formatPeso(installment.monthly_amortization_centavos)} / month · {installment.remaining_months} of {installment.term_months} months remaining</Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Remaining principal: {formatPeso(installment.remaining_principal_centavos)} · {installment.interest_type === "zero_interest" ? "Zero interest" : `Interest: ${(installment.interest_rate_bps / 100).toFixed(2)}%`}</Text>
+        </View>)}
+      </View> : null}
       <View style={{ height: 1, backgroundColor: P.line, marginVertical: 18 }} />
       <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>Billing Cycles</Text>
@@ -180,7 +179,7 @@ export default function CreditCardCollections({ userId, deviceId, accounts, cycl
       {cycles.map((cycle) => {
         const account = accountsById.get(cycle.account_id);
         if (!account) return null;
-        return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={cycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statements.find((item) => item.cycle_id === cycle.id)} statementCycle={statementCycle} editingStatement={editingStatement} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onEditStatement={onEditStatement} onCancelEditStatement={onCancelEditStatement} onStatementSaved={onStatementSaved} today={today} userId={userId} deviceId={deviceId} />;
+        return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={cycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statements.find((item) => item.cycle_id === cycle.id)} statementCycle={statementCycle} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onStatementSaved={onStatementSaved} today={today} userId={userId} deviceId={deviceId} />;
       })}
     </View>
   );

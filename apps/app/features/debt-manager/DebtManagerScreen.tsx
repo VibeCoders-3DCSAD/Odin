@@ -8,6 +8,7 @@ import {
 } from "../../local-db/repositories/financialFoundations";
 import { LocalDbError } from "../../local-db/helpers";
 import { listCreditCardStatements, type CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
+import { listCreditCardInstallments, type CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
 import CreditCardCollections from "./CreditCardCollections";
 
 const P = {
@@ -27,6 +28,7 @@ export default function DebtManagerScreen({ userId, deviceId, onBack }: Props) {
   const [cycles, setCycles] = useState<CreditCardCycle[]>([]);
   const [cycleTransactions, setCycleTransactions] = useState<CreditCardCycleTransaction[]>([]);
   const [statements, setStatements] = useState<CreditCardStatement[]>([]);
+  const [installments, setInstallments] = useState<CreditCardInstallment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [stale, setStale] = useState(false);
@@ -37,7 +39,6 @@ export default function DebtManagerScreen({ userId, deviceId, onBack }: Props) {
   const [cycleSaving, setCycleSaving] = useState(false);
   const [cycleNotice, setCycleNotice] = useState<string | null>(null);
   const [statementCycle, setStatementCycle] = useState<CreditCardCycle | null>(null);
-  const [editingStatement, setEditingStatement] = useState<CreditCardStatement | null>(null);
   const hasLoadedData = useRef(false);
 
   const load = useCallback(async () => {
@@ -62,6 +63,7 @@ export default function DebtManagerScreen({ userId, deviceId, onBack }: Props) {
        setCycles(nextCycles);
        setCycleTransactions(await listCreditCardCycleTransactions(userId));
        setStatements(await listCreditCardStatements(userId));
+       setInstallments(await listCreditCardInstallments(userId));
       setError(cycleLoadFailed);
       setStale(cycleLoadFailed && hasLoadedData.current);
     } catch (loadError) {
@@ -148,13 +150,11 @@ export default function DebtManagerScreen({ userId, deviceId, onBack }: Props) {
         cycles={cycles}
         transactions={cycleTransactions}
         statements={statements}
+        installments={installments}
         statementCycle={statementCycle}
-        editingStatement={editingStatement}
         onManageCycle={openCycleEditor}
         onAddStatement={setStatementCycle}
         onCancelStatement={() => setStatementCycle(null)}
-        onEditStatement={setEditingStatement}
-        onCancelEditStatement={() => setEditingStatement(null)}
         onStatementSaved={load}
       />
     </View>

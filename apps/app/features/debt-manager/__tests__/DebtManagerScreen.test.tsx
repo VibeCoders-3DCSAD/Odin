@@ -9,8 +9,8 @@ const mockListCreditCardCycles = jest.fn();
 const mockListCreditCardCycleTransactions = jest.fn();
 const mockListCreditCardStatements = jest.fn();
 const mockCreateCreditCardStatement = jest.fn();
-const mockUpdateCreditCardStatement = jest.fn();
-const mockDatePickerRef: { props: { onChange: (event: { type: string }, date?: Date) => void } | null } = { props: null };
+const mockListCreditCardInstallments = jest.fn();
+const mockDatePickerRef: { props: { onChange: (event: { type: string }, date?: Date) => void; minimumDate?: Date } | null } = { props: null };
 
 jest.mock("../../../local-db/repositories/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
@@ -25,12 +25,15 @@ jest.mock("../../../local-db/repositories/creditCardCycles", () => ({
 jest.mock("../../../local-db/repositories/creditCardStatements", () => ({
   listCreditCardStatements: (...args: unknown[]) => mockListCreditCardStatements(...args),
   createCreditCardStatement: (...args: unknown[]) => mockCreateCreditCardStatement(...args),
-  updateCreditCardStatement: (...args: unknown[]) => mockUpdateCreditCardStatement(...args),
+}));
+
+jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({
+  listCreditCardInstallments: (...args: unknown[]) => mockListCreditCardInstallments(...args),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => ({
   __esModule: true,
-  default: (props: { onChange: (event: { type: string }, date?: Date) => void }) => {
+  default: (props: { onChange: (event: { type: string }, date?: Date) => void; minimumDate?: Date }) => {
     mockDatePickerRef.props = props;
     return null;
   },
@@ -42,8 +45,8 @@ beforeEach(() => {
   mockListCreditCardCycles.mockResolvedValue([]);
   mockListCreditCardCycleTransactions.mockResolvedValue([]);
   mockListCreditCardStatements.mockResolvedValue([]);
+  mockListCreditCardInstallments.mockResolvedValue([]);
   mockCreateCreditCardStatement.mockResolvedValue({});
-  mockUpdateCreditCardStatement.mockResolvedValue({});
   mockDatePickerRef.props = null;
   jest.restoreAllMocks();
 });
@@ -61,6 +64,9 @@ it("opens native date pickers for a closed cycle statement", async () => {
   fireEvent.press(view.getByText("Add statement"));
   fireEvent.press(view.getByLabelText("Select statement date"));
   expect(mockDatePickerRef.props).not.toBeNull();
+  expect(mockDatePickerRef.props?.minimumDate?.getFullYear()).toBe(2026);
+  expect(mockDatePickerRef.props?.minimumDate?.getMonth()).toBe(0);
+  expect(mockDatePickerRef.props?.minimumDate?.getDate()).toBe(31);
   act(() => mockDatePickerRef.props?.onChange({ type: "set" }, new Date("2026-02-01T00:00:00Z")));
   fireEvent.press(view.getByLabelText("Select due date"));
   expect(mockDatePickerRef.props).not.toBeNull();
@@ -126,36 +132,6 @@ it("identifies missing dates when otherwise valid statement amounts are entered"
     expect(view.getByText("Statement date is required.")).toBeTruthy();
     expect(view.getByText("Due date is required.")).toBeTruthy();
   });
-});
-
-it("edits a recorded statement from the statement details", async () => {
-  mockListFinancialAccounts.mockResolvedValue([{
-    id: "card-1", name: "Visa", kind: "credit_card", status: "active", creditCardDetails: null,
-  }]);
-  mockListCreditCardCycles.mockResolvedValue([{
-    id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-01-01", cutoff_date: "2026-01-31",
-    statement_date: "2026-02-01", version: 1, deleted: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z",
-  }]);
-  mockListCreditCardStatements.mockResolvedValue([{
-    id: "statement-1", user_id: "user-1", cycle_id: "cycle-1", statement_date: "2026-02-01",
-    statement_balance_centavos: 120000, minimum_due_centavos: 10000, finance_charge_centavos: 2500,
-    due_date: "2026-02-21", authoritative: true, version: 1, deleted: false,
-    created_at: "2026-02-01T00:00:00.000Z", updated_at: "2026-02-01T00:00:00.000Z",
-  }]);
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
-  await waitFor(() => expect(view.getByText("Recorded statement")).toBeTruthy());
-  fireEvent.press(view.getByLabelText("Edit statement for Visa"));
-  expect(view.getByText("Edit statement")).toBeTruthy();
-  fireEvent.press(view.getByLabelText("Edit statement for Visa"));
-  expect(view.queryByText("Edit statement")).toBeNull();
-  fireEvent.press(view.getByLabelText("Edit statement for Visa"));
-  fireEvent.changeText(view.getByPlaceholderText("Enter statement balance"), "1300");
-  fireEvent.press(view.getByText("Save changes"));
-  await waitFor(() => expect(mockUpdateCreditCardStatement).toHaveBeenCalledWith("user-1", "device-1", "statement-1", {
-    statement_date: "2026-02-01", due_date: "2026-02-21",
-    statement_balance_centavos: 130000, minimum_due_centavos: 10000, finance_charge_centavos: 2500,
-  }));
-  expect(view.getByText("Saved")).toBeTruthy();
 });
 
 it("shows the requirements-aligned empty card message", async () => {
