@@ -17,12 +17,14 @@ import { CategorySelectorTree, type CategorySelection } from "../../components/C
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
 import { createExpense, createIncome, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../local-db/repositories/ledger";
+import type { CreateCreditCardInstallmentInput } from "../../local-db/repositories/creditCardInstallments";
 import { createRecurringTemplate } from "../../local-db/repositories/recurringTransactions";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
 import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
+import CreditCardInstallmentFields, { type InstallmentFieldErrors, type InstallmentFormValue } from "./components/CreditCardInstallmentFields";
 
 const palette = {
   shell: "#fcf8f0",
@@ -61,6 +63,11 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [amount, setAmount] = useState(transaction ? String(transaction.amount_centavos / 100) : "");
   const [date, setDate] = useState(transaction ? new Date(transaction.transaction_date + "T00:00:00") : new Date());
   const [postingDate, setPostingDate] = useState(transaction?.credit_card_posting_date ?? "");
+  const [creditCardPurchaseType, setCreditCardPurchaseType] = useState<"regular" | "installment">("regular");
+  const [installment, setInstallment] = useState<InstallmentFormValue>({
+    originalPrincipal: "", termMonths: "", remainingPrincipal: "", remainingMonths: "", monthlyAmortization: "",
+    interestType: "zero_interest", interestRatePercent: "", settlementStatus: "active",
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPostingDatePicker, setShowPostingDatePicker] = useState(false);
   const [sourceAccountId, setSourceAccountId] = useState(transaction?.source_account_id ?? "");
@@ -75,6 +82,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [notes, setNotes] = useState(transaction?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [installmentErrors, setInstallmentErrors] = useState<InstallmentFieldErrors>({});
   const [accountPickerMode, setAccountPickerMode] = useState<"source" | "dest" | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringSchedule, setRecurringSchedule] = useState<RecurringScheduleValue>({
@@ -162,16 +170,23 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     setSourceAccountId("");
     setDestAccountId("");
     setPostingDate("");
+    setCreditCardPurchaseType("regular");
+    setInstallment({ originalPrincipal: "", termMonths: "", remainingPrincipal: "", remainingMonths: "", monthlyAmortization: "", interestType: "zero_interest", interestRatePercent: "", settlementStatus: "active" });
+    setInstallmentErrors({});
     setFormError(null);
     if (!keepType) setTxType("expense");
   }
 
-  function parseAmount(): number {
-    const cleaned = amount.replace(/,/g, "").trim();
+  function parseMoney(value: string): number {
+    const cleaned = value.replace(/,/g, "").trim();
     if (!/^\d+(?:\.\d{1,2})?$/.test(cleaned)) return 0;
     const parsed = parseFloat(cleaned);
     if (Number.isNaN(parsed) || parsed <= 0) return 0;
     return Math.round(parsed * 100);
+  }
+
+  function parseAmount(): number {
+    return parseMoney(amount);
   }
 
   function formatDate(value: Date): string {
@@ -330,6 +345,38 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       return;
     }
 
+    const isInstallmentPurchase = selectedSourceIsCreditCard() && creditCardPurchaseType === "installment";
+    let installmentInput: CreateCreditCardInstallmentInput | undefined;
+    if (isInstallmentPurchase) {
+      const originalPrincipal = parseMoney(installment.originalPrincipal);
+      const termMonths = Number.parseInt(installment.termMonths, 10);
+      const remainingMonths = Number.parseInt(installment.remainingMonths, 10);
+      const remainingPrincipal = parseMoney(installment.remainingPrincipal);
+      const monthlyAmortization = parseMoney(installment.monthlyAmortization);
+      const interestRateBps = Math.round(Number.parseFloat(installment.interestRatePercent) * 100);
+      const errors: InstallmentFieldErrors = {};
+      if (originalPrincipal <= 0 || originalPrincipal !== centavos) errors.originalPrincipal = "Enter the transaction amount as the original principal.";
+      if (!/^\d+$/.test(installment.termMonths) || termMonths <= 0) errors.termMonths = "Enter a positive whole-number term.";
+      if (!/^\d+$/.test(installment.remainingMonths) || remainingMonths < 0 || remainingMonths > termMonths) errors.remainingMonths = "Remaining months cannot exceed the term.";
+      if (!installment.remainingPrincipal.trim() || remainingPrincipal < 0 || remainingPrincipal > originalPrincipal) errors.remainingPrincipal = "Enter a non-negative amount up to the original principal.";
+      if (monthlyAmortization <= 0) errors.monthlyAmortization = "Enter a positive monthly amount.";
+      if (installment.interestType === "interest_bearing" && (!Number.isFinite(interestRateBps) || interestRateBps < 0)) errors.interestRatePercent = "Enter a non-negative interest rate.";
+      if (Object.keys(errors).length) {
+        setInstallmentErrors(errors);
+        setFormError("Some installment details are not valid. Check the highlighted fields and try again.");
+        return;
+      }
+      setInstallmentErrors({});
+      installmentInput = {
+        description: description.trim(), original_principal_centavos: centavos,
+        remaining_principal_centavos: remainingPrincipal, term_months: termMonths,
+        remaining_months: remainingMonths, monthly_amortization_centavos: monthlyAmortization,
+        interest_type: installment.interestType,
+        interest_rate_bps: installment.interestType === "zero_interest" ? 0 : interestRateBps,
+        settlement_status: installment.settlementStatus,
+      };
+    }
+
     const warning = getBalanceWarning(centavos);
     if (warning && !confirmed) {
       setBalanceWarning(warning);
@@ -379,6 +426,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
            credit_card_posting_date: selectedSourceIsCreditCard() ? postingDate.trim() || null : null,
           merchant_name: description.trim() || undefined,
           notes: notes.trim() || undefined,
+          installment: installmentInput,
         });
       } else if (txType === "income") {
          savePhase = "createIncome";
@@ -406,7 +454,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         });
       }
 
-      if (!isEdit && isRecurring) {
+      if (!isEdit && isRecurring && !isInstallmentPurchase) {
         savePhase = "createRecurringTemplate";
         console.log("[DEBUG-TX-SAVE] calling createRecurringTemplate");
         const freqInterval = parseInt(recurringSchedule.intervalCount, 10);
@@ -836,7 +884,19 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             )}
 
             {selectedSourceIsCreditCard() ? (
-              <View>
+              <>
+                <View>
+                  {renderFieldLabel("PURCHASE TYPE")}
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    {(["regular", "installment"] as const).map((type) => {
+                      const selected = creditCardPurchaseType === type;
+                      return <Pressable key={type} onPress={() => setCreditCardPurchaseType(type)} accessibilityRole="radio" accessibilityState={{ selected }} style={{ flex: 1, borderWidth: 1, borderColor: selected ? palette.brand : "#e8deca", backgroundColor: selected ? palette.successCard : palette.softCard, borderRadius: 14, padding: 13 }}>
+                        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>{type === "regular" ? "Regular Purchase" : "Installment Purchase"}</Text>
+                      </Pressable>;
+                    })}
+                  </View>
+                </View>
+                <View>
                 {renderFieldLabel("POSTING DATE (OPTIONAL)")}
                 <Pressable
                   accessibilityLabel="Credit-card posting date"
@@ -849,7 +909,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                 <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 5 }}>
                   Use YYYY-MM-DD when the issuer provides a posting date. Otherwise Odin uses the transaction date as an estimate.
                 </Text>
-              </View>
+                </View>
+                {creditCardPurchaseType === "installment" ? <CreditCardInstallmentFields value={installment} errors={installmentErrors} onChange={(next) => {
+                  const changed = (Object.keys(next) as (keyof InstallmentFormValue)[]).find((key) => next[key] !== installment[key]);
+                  if (changed) setInstallmentErrors((current) => ({ ...current, [changed]: undefined }));
+                  setInstallment(next);
+                }} /> : null}
+              </>
             ) : null}
 
             {needsCategory ? (
@@ -878,7 +944,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               />
             </View>
 
-              {!isEdit ? (
+              {!isEdit && !(selectedSourceIsCreditCard() && creditCardPurchaseType === "installment") ? (
               <>
                 <View style={{ borderRadius: 18, backgroundColor: "#f4ead2", paddingHorizontal: 16, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
