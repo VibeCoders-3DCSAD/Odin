@@ -13,6 +13,7 @@ export const SYNCED_TABLES = [
   "categories",
   "subcategories",
   "financial_accounts",
+  "credit_card_details",
   "transactions",
   "transaction_line_items",
   "transaction_templates",
@@ -23,6 +24,9 @@ export const SYNCED_TABLES = [
   "financial_obligations",
   "budgets",
   "budget_allocations",
+  "credit_card_cycles",
+  "credit_card_transactions",
+  "credit_card_statements",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -50,6 +54,11 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "archived_at", "deleted_at", "sort_order", "metadata", "version",
     "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
+  credit_card_details: new Set([
+    "account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
+    "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
   income_sources: new Set([
     "id", "user_id", "name", "income_type", "frequency",
     "expected_amount_centavos", "min_amount_centavos", "max_amount_centavos",
@@ -70,7 +79,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   transactions: new Set([
     "id", "user_id", "transaction_type", "status", "entry_source",
-   "transaction_date", "posted_at", "amount_centavos",
+    "transaction_date", "posted_at", "credit_card_posting_date", "amount_centavos",
     "subcategory_id", "source_account_id", "destination_account_id",
     "recurring_template_id", "merchant_name", "counterparty_name",
     "notes", "client_mutation_id", "metadata", "version", "deleted",
@@ -117,6 +126,23 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "budget_id", "category_id", "subcategory_id", "allocated_amount_minor",
     "restriction_level", "version", "deleted", "created_at", "updated_at",
   ]),
+  credit_card_cycles: new Set([
+    "id", "user_id", "account_id", "cycle_start_date", "cutoff_date", "statement_date",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  credit_card_transactions: new Set([
+    "transaction_id", "user_id", "account_id", "cycle_id", "purchase_type", "installment_id",
+    "client_mutation_id", "applied_credit_centavos", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  credit_card_statements: new Set([
+    "id", "user_id", "cycle_id", "statement_date", "statement_balance_centavos", "minimum_due_centavos",
+    "finance_charge_centavos", "due_date", "authoritative", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+};
+
+const PULL_IDENTITY_COLUMNS: Record<string, string> = {
+  credit_card_details: "account_id",
+  credit_card_transactions: "transaction_id",
 };
 
 export function normalizePullRow(
@@ -176,7 +202,7 @@ export async function applyPullRow(
   table: string,
   row: PullRow,
 ): Promise<void> {
-  const identityColumn = "id";
+  const identityColumn = PULL_IDENTITY_COLUMNS[table] ?? "id";
   const userScoped = !TAXONOMY_TABLES.has(table);
   const recordId = row[identityColumn] as string;
   const identityWhere = `"${identityColumn}" = ?${userScoped ? " AND user_id = ?" : ""}`;
@@ -185,8 +211,8 @@ export async function applyPullRow(
   const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
 
-  const existing = await db.getFirstAsync<{ version: number; user_id: string }>(
-    `SELECT version, user_id FROM "${table}" WHERE ${identityWhere}`,
+  const existing = await db.getFirstAsync<{ version: number; user_id: string; statement_date?: string | null }>(
+    `SELECT version, user_id${table === "credit_card_cycles" ? ", statement_date" : ""} FROM "${table}" WHERE ${identityWhere}`,
     ...identityParams,
   );
 
@@ -262,6 +288,14 @@ export async function applyPullRow(
     } else if (table === "budget_allocations") {
       await db.runAsync(
          `UPDATE "${table}" SET deleted = 1, version = ?,
+           updated_at = ? WHERE ${identityWhere}`,
+        rowVersion,
+        now,
+        ...identityParams,
+      );
+    } else if (table === "credit_card_cycles" || table === "credit_card_details") {
+      await db.runAsync(
+        `UPDATE "${table}" SET deleted = 1, version = ?,
           updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
@@ -279,7 +313,11 @@ export async function applyPullRow(
     return;
   }
 
-  const columns = Object.keys(row);
+  const columns = table === "credit_card_cycles" && existing.statement_date !== null && existing.statement_date !== undefined
+    // SQLite fires UPDATE OF triggers even when the assigned value is unchanged.
+    // Recorded cycle dates are immutable, while statement_date remains server-owned.
+    ? Object.keys(row).filter((column) => column !== "cycle_start_date" && column !== "cutoff_date")
+    : Object.keys(row);
   const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
 
   await db.runAsync(

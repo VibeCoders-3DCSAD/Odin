@@ -12,7 +12,7 @@ import {
 const SYNCED_CURSOR_TABLES = new Set([
   "category_groups", "categories", "subcategories", "financial_accounts", "transactions", "transaction_line_items",
   "income_sources", "financial_obligations", "transaction_templates", "transaction_drafts", "recurring_transaction_templates",
-  "recurring_transaction_occurrences", "budgets", "budget_allocations",
+  "recurring_transaction_occurrences", "budgets", "budget_allocations", "credit_card_details", "credit_card_cycles", "credit_card_transactions", "credit_card_statements",
 ]);
 const MAX_PUSH_OPERATIONS = 100;
 const MAX_ID_LENGTH = 128;

@@ -29,10 +29,30 @@ type FinancialAccountRow = {
   updated_at: string;
   last_synced_at: string | null;
   cc_credit_limit_centavos: number | null;
+  cc_available_credit_centavos: number | null;
+  cc_issuer: string | null;
+  cc_notes: string | null;
   cc_billing_cycle_days: number | null;
   cc_cutoff_day: number | null;
   cc_statement_day: number | null;
   cc_alert_threshold_percent: number | null;
+};
+
+type CreditCardDetailsSyncRow = {
+  account_id: string;
+  user_id: string;
+  issuer: string | null;
+  credit_limit_centavos: number;
+  available_credit_centavos: number | null;
+  cutoff_day: number;
+  statement_day: number | null;
+  notes: string | null;
+  billing_cycle_days: number | null;
+  alert_threshold_percent: number | null;
+  version: number;
+  deleted: number;
+  created_at: string;
+  updated_at: string;
 };
 
 type IncomeSourceRow = {
@@ -122,9 +142,12 @@ export type FinancialAccount = {
 
 export type CreditCardDetails = {
   creditLimitCentavos: number;
+  availableCreditCentavos: number | null;
+  issuer: string | null;
+  notes: string | null;
   billingCycleDays: number | null;
   cutoffDay: number;
-  statementDay: number;
+  statementDay: number | null;
   alertThresholdPercent: number | null;
 };
 
@@ -132,7 +155,7 @@ export type CreditCardDetailsInput = {
   creditLimitCentavos: number;
   billingCycleDays: number;
   cutoffDay: number;
-  statementDay: number;
+  statementDay?: number | null;
   alertThresholdPercent: number;
 };
 
@@ -323,9 +346,12 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
       row.kind === "credit_card" && row.cc_credit_limit_centavos != null
         ? {
             creditLimitCentavos: row.cc_credit_limit_centavos,
+            availableCreditCentavos: row.cc_available_credit_centavos,
+            issuer: row.cc_issuer,
+            notes: row.cc_notes,
             billingCycleDays: row.cc_billing_cycle_days,
             cutoffDay: row.cc_cutoff_day ?? 0,
-            statementDay: row.cc_statement_day ?? 0,
+            statementDay: row.cc_statement_day,
             alertThresholdPercent: row.cc_alert_threshold_percent,
           }
         : null,
@@ -497,7 +523,7 @@ function isDayOfMonth(value: number): boolean {
 
 function validateCreditCardDetails(details: Partial<CreditCardDetailsInput>, required: boolean): void {
   if (required) {
-    for (const field of ["creditLimitCentavos", "billingCycleDays", "cutoffDay", "statementDay", "alertThresholdPercent"] as const) {
+    for (const field of ["creditLimitCentavos", "billingCycleDays", "cutoffDay", "alertThresholdPercent"] as const) {
       const value = details[field];
       if (value === undefined || value === null) {
         throw new LocalDbError("VALIDATION_ERROR", `${field} is required for credit card accounts`);
@@ -535,15 +561,24 @@ async function upsertCreditCardDetails(
   ts: string,
 ): Promise<void> {
   validateCreditCardDetails(details, true);
+  const usage = await db.getFirstAsync<{ outstanding_centavos: number | null }>(
+    `SELECT SUM(t.amount_centavos - cct.applied_credit_centavos) AS outstanding_centavos
+       FROM credit_card_transactions cct
+       JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id
+      WHERE cct.user_id = ? AND cct.account_id = ? AND cct.deleted = 0 AND t.deleted = 0`,
+    userId,
+    accountId,
+  );
+  const availableCredit = details.creditLimitCentavos - (usage?.outstanding_centavos ?? 0);
   await db.runAsync(
     `INSERT INTO credit_card_details
       (account_id, user_id, issuer, credit_limit_centavos, available_credit_centavos,
        cutoff_day, statement_day, notes, billing_cycle_days,
        alert_threshold_percent, version, deleted, created_at, updated_at)
-     VALUES (?, ?, NULL, ?, NULL, ?, ?, NULL, ?, ?, 1, 0, ?, ?)
-     ON CONFLICT(account_id) DO UPDATE SET
-       credit_limit_centavos = excluded.credit_limit_centavos,
-       available_credit_centavos = NULL,
+     VALUES (?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?, 1, 0, ?, ?)
+      ON CONFLICT(account_id) DO UPDATE SET
+        credit_limit_centavos = excluded.credit_limit_centavos,
+        available_credit_centavos = excluded.available_credit_centavos,
        cutoff_day = excluded.cutoff_day,
        statement_day = excluded.statement_day,
        billing_cycle_days = excluded.billing_cycle_days,
@@ -554,13 +589,53 @@ async function upsertCreditCardDetails(
     accountId,
     userId,
     details.creditLimitCentavos,
+    availableCredit,
     details.cutoffDay,
-    details.statementDay,
+    details.statementDay ?? null,
     details.billingCycleDays,
     details.alertThresholdPercent,
     ts,
     ts,
   );
+}
+
+async function enqueueCreditCardDetailsOperation(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  accountId: string,
+  operationType: "create" | "update" | "delete",
+  baseVersion: number | null,
+): Promise<SyncOperation | null> {
+  const row = await db.getFirstAsync<CreditCardDetailsSyncRow>(
+    "SELECT * FROM credit_card_details WHERE account_id = ? AND user_id = ?",
+    accountId,
+    userId,
+  );
+  if (!row) return null;
+    const payload = operationType === "delete"
+      ? { account_id: accountId }
+      : {
+          account_id: accountId,
+          issuer: row.issuer,
+          credit_limit_centavos: row.credit_limit_centavos,
+          cutoff_day: row.cutoff_day,
+        statement_day: row.statement_day,
+        notes: row.notes,
+        billing_cycle_days: row.billing_cycle_days,
+        alert_threshold_percent: row.alert_threshold_percent,
+        };
+  return enqueueOperation(db, {
+    userId,
+    deviceId,
+    entity: "credit_card_details",
+    recordId: accountId,
+    operationType,
+    baseVersion,
+    changedFields: operationType === "delete" ? [] : Object.keys(payload),
+    payload,
+    failureMessage: "This credit-card information could not be synchronized.",
+  });
 }
 
 async function assertAccessibleRecurringTemplate(
@@ -624,7 +699,10 @@ export async function listFinancialAccounts(userId: string): Promise<FinancialAc
   const db = await getDb();
   const rows = await db.getAllAsync<FinancialAccountRow>(
     `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
-            cc.billing_cycle_days AS cc_billing_cycle_days,
+             cc.available_credit_centavos AS cc_available_credit_centavos,
+             cc.issuer AS cc_issuer,
+             cc.notes AS cc_notes,
+             cc.billing_cycle_days AS cc_billing_cycle_days,
             cc.cutoff_day AS cc_cutoff_day,
             cc.statement_day AS cc_statement_day,
             cc.alert_threshold_percent AS cc_alert_threshold_percent
@@ -645,7 +723,10 @@ export async function getFinancialAccount(
   const db = await getDb();
   const row = await db.getFirstAsync<FinancialAccountRow>(
     `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
-            cc.billing_cycle_days AS cc_billing_cycle_days,
+             cc.available_credit_centavos AS cc_available_credit_centavos,
+             cc.issuer AS cc_issuer,
+             cc.notes AS cc_notes,
+             cc.billing_cycle_days AS cc_billing_cycle_days,
             cc.cutoff_day AS cc_cutoff_day,
             cc.statement_day AS cc_statement_day,
             cc.alert_threshold_percent AS cc_alert_threshold_percent
@@ -698,7 +779,7 @@ export async function createFinancialAccount(
         (id, user_id, name, kind, status, opening_balance_centavos, current_balance_centavos,
          include_in_dashboard_balance, institution_name, opened_on,
          sort_order, metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
       userId,
       input.name,
@@ -728,6 +809,10 @@ export async function createFinancialAccount(
       payload,
       failureMessage: `This financial account "${input.name}" could not be created.`,
     });
+
+    if (input.kind === "credit_card") {
+      await enqueueCreditCardDetailsOperation(db, userId, deviceId, id, "create", null);
+    }
 
     const row = await db.getFirstAsync<FinancialAccountRow>(
       "SELECT * FROM financial_accounts WHERE id = ?",
@@ -775,7 +860,7 @@ export async function updateFinancialAccount(
   if (input.archivedAt !== undefined) { changedFields.push("archived_at"); payload.archived_at = input.archivedAt; }
   if (input.sortOrder !== undefined) { changedFields.push("sort_order"); payload.sort_order = input.sortOrder; }
 
-  if (changedFields.length === 0) {
+    if (changedFields.length === 0 && !input.creditCardDetails) {
     const existing = await getFinancialAccount(userId, id);
     if (!existing) throw new LocalDbError("NOT_FOUND", "account not found");
     return { account: existing, operation: null as unknown as SyncOperation };
@@ -790,6 +875,21 @@ export async function updateFinancialAccount(
       id,
     );
     if (!existing) throw new LocalDbError("NOT_FOUND", "account not found");
+    if (input.kind === existing.kind) {
+      changedFields.splice(changedFields.indexOf("kind"), 1);
+      delete payload.kind;
+    }
+    if (changedFields.length === 0 && !input.creditCardDetails) {
+      result = { account: mapAccount(existing), operation: null as unknown as SyncOperation };
+      return;
+    }
+    const existingCardDetails = input.creditCardDetails
+      ? await db.getFirstAsync<{ version: number }>(
+          "SELECT version FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0",
+          id,
+          userId,
+        )
+      : null;
 
     const setClauses: string[] = [];
     const params: SQLite.SQLiteBindValue[] = [];
@@ -817,6 +917,7 @@ export async function updateFinancialAccount(
     const effectiveKind = input.kind ?? existing.kind;
     if (effectiveKind === "credit_card" && input.creditCardDetails) {
       await upsertCreditCardDetails(db, userId, id, input.creditCardDetails, ts);
+      await enqueueCreditCardDetailsOperation(db, userId, deviceId, id, existingCardDetails ? "update" : "create", existingCardDetails?.version ?? null);
     } else if (effectiveKind !== "credit_card") {
       await db.runAsync(
         "UPDATE credit_card_details SET deleted = 1, updated_at = ?, version = version + 1 WHERE account_id = ? AND user_id = ? AND deleted = 0",
@@ -883,6 +984,9 @@ export async function deleteFinancialAccount(
       id,
       userId,
     );
+    if (existing.kind === "credit_card") {
+      await enqueueCreditCardDetailsOperation(db, userId, deviceId, id, "delete", null);
+    }
 
     const operation = await enqueueOperation(db, {
       userId,

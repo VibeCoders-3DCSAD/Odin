@@ -311,7 +311,6 @@ Table financial_accounts {
   status text [not null]
   opening_balance_centavos bigint [not null]
   current_balance_centavos bigint [not null]
-  credit_limit_centavos bigint
   include_in_dashboard_balance boolean [not null]
   institution_name text
   opened_on date

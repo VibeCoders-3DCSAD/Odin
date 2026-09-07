@@ -18,6 +18,10 @@ export type SyncableEntity =
   | "savings_goals"
   | "alerts"
   | "notification_preferences"
+  | "credit_card_cycles"
+  | "credit_card_details"
+  | "credit_card_transactions"
+  | "credit_card_statements"
   ;
 
 export type SyncOperation = {

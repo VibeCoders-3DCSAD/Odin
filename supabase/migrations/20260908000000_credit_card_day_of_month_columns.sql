@@ -1,5 +1,5 @@
--- Cut-off and statement are modeled as a recurring day of the month
--- (cutoff_day / statement_day, 1-31) instead of one-off calendar dates.
+-- Cut-off is modeled as a recurring day of the month. Statements are recorded
+-- from the bank and are not inferred from a recurring account default.
 -- DBs that already applied 20260902000002 have default_cutoff_date /
 -- default_statement_date as date columns; rename and convert them in place.
 -- Fresh DBs (edited 20260902000002) already have the new columns and skip.
@@ -11,14 +11,15 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'credit_card_details' AND column_name = 'default_cutoff_date'
   ) THEN
     ALTER TABLE public.credit_card_details
-      ALTER COLUMN default_cutoff_date TYPE integer USING EXTRACT(DAY FROM default_cutoff_date)::integer,
+      ALTER COLUMN default_cutoff_date TYPE integer USING EXTRACT(DAY FROM default_cutoff_date)::integer;
+    ALTER TABLE public.credit_card_details
       ALTER COLUMN default_statement_date TYPE integer USING EXTRACT(DAY FROM default_statement_date)::integer;
     ALTER TABLE public.credit_card_details
-      RENAME COLUMN default_cutoff_date TO cutoff_day,
+      RENAME COLUMN default_cutoff_date TO cutoff_day;
+    ALTER TABLE public.credit_card_details
       RENAME COLUMN default_statement_date TO statement_day;
     ALTER TABLE public.credit_card_details
-      ADD CONSTRAINT credit_card_details_cutoff_day_check CHECK (cutoff_day BETWEEN 1 AND 31),
-      ADD CONSTRAINT credit_card_details_statement_day_check CHECK (statement_day BETWEEN 1 AND 31);
+      ADD CONSTRAINT credit_card_details_cutoff_day_check CHECK (cutoff_day BETWEEN 1 AND 31);
   END IF;
 END $$;
 
@@ -60,8 +61,8 @@ BEGIN
   IF p_entity = 'credit_card_details' THEN v_payload := jsonb_set(v_payload, '{account_id}', COALESCE(v_payload->'account_id', to_jsonb(p_record_id)), true); ELSE v_payload := jsonb_set(v_payload, ARRAY[v_key], to_jsonb(p_record_id), true); END IF;
 
   IF p_operation_type = 'create' THEN
-    IF p_entity = 'credit_card_details' AND (v_payload->>'credit_limit_centavos' IS NULL OR v_payload->>'cutoff_day' IS NULL OR v_payload->>'statement_day' IS NULL) THEN RAISE EXCEPTION 'credit-card details required fields are missing'; END IF;
-    IF p_entity = 'credit_card_cycles' AND (v_payload->>'account_id' IS NULL OR v_payload->>'cycle_start_date' IS NULL OR v_payload->>'cutoff_date' IS NULL OR v_payload->>'statement_date' IS NULL) THEN RAISE EXCEPTION 'credit-card cycle required fields are missing'; END IF;
+    IF p_entity = 'credit_card_details' AND (v_payload->>'credit_limit_centavos' IS NULL OR v_payload->>'cutoff_day' IS NULL) THEN RAISE EXCEPTION 'credit-card details required fields are missing'; END IF;
+    IF p_entity = 'credit_card_cycles' AND (v_payload->>'account_id' IS NULL OR v_payload->>'cycle_start_date' IS NULL OR v_payload->>'cutoff_date' IS NULL) THEN RAISE EXCEPTION 'credit-card cycle required fields are missing'; END IF;
     IF p_entity = 'credit_card_installments' AND (v_payload->>'account_id' IS NULL OR v_payload->>'description' IS NULL OR v_payload->>'original_principal_centavos' IS NULL OR v_payload->>'remaining_principal_centavos' IS NULL OR v_payload->>'term_months' IS NULL OR v_payload->>'remaining_months' IS NULL OR v_payload->>'monthly_amortization_centavos' IS NULL OR v_payload->>'interest_type' IS NULL) THEN RAISE EXCEPTION 'credit-card installment required fields are missing'; END IF;
     IF p_entity = 'credit_card_transactions' AND (v_payload->>'account_id' IS NULL OR v_payload->>'cycle_id' IS NULL OR v_payload->>'purchase_type' IS NULL) THEN RAISE EXCEPTION 'credit-card transaction required fields are missing'; END IF;
     IF p_entity = 'credit_card_statements' AND (v_payload->>'cycle_id' IS NULL OR v_payload->>'statement_balance_centavos' IS NULL OR v_payload->>'minimum_due_centavos' IS NULL OR v_payload->>'due_date' IS NULL) THEN RAISE EXCEPTION 'credit-card statement required fields are missing'; END IF;

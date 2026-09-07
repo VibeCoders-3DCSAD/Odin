@@ -15,7 +15,7 @@ const migration: Migration = {
         id text primary key, user_id text not null, account_id text not null, cycle_start_date text not null,
         cutoff_date text not null, statement_date text not null, version integer not null default 1,
         deleted integer not null default 0, created_at text not null, updated_at text not null, last_synced_at text,
-        UNIQUE(user_id, account_id, cycle_start_date)
+         UNIQUE(user_id, account_id, cycle_start_date, cutoff_date, statement_date)
       );
       CREATE TABLE IF NOT EXISTS credit_card_installments (
         id text primary key, user_id text not null, account_id text not null, transaction_id text,

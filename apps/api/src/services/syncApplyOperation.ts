@@ -24,6 +24,10 @@ const SYNCED_ENTITIES = new Set([
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "budgets",
+  "credit_card_details",
+  "credit_card_cycles",
+  "credit_card_transactions",
+  "credit_card_statements",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -101,9 +105,38 @@ const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
   "sort_order",
 ]);
 
+const CREDIT_CARD_CYCLE_CREATE_FIELDS = new Set([
+  "account_id", "cycle_start_date", "cutoff_date",
+]);
+
+const CREDIT_CARD_CYCLE_FIELDS = new Set([
+  "account_id", "cycle_start_date", "cutoff_date", "statement_date",
+]);
+
+const CREDIT_CARD_STATEMENT_CREATE_FIELDS = new Set([
+  "cycle_id", "statement_date", "statement_balance_centavos", "minimum_due_centavos",
+  "finance_charge_centavos", "due_date",
+]);
+
+const CREDIT_CARD_STATEMENT_UPDATE_FIELDS = new Set([
+  "statement_date", "statement_balance_centavos", "minimum_due_centavos",
+  "finance_charge_centavos", "due_date",
+]);
+
+const CREDIT_CARD_DETAILS_CREATE_FIELDS = new Set([
+  "account_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
+  "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
+]);
+
+const CREDIT_CARD_DETAILS_UPDATE_FIELDS = new Set([
+  "account_id", "issuer", "credit_limit_centavos", "cutoff_day", "statement_day",
+  "notes", "billing_cycle_days", "alert_threshold_percent",
+]);
+
 const TRANSACTION_CREATE_FIELDS = new Set([
   "transaction_type",
   "transaction_date",
+  "credit_card_posting_date",
   "amount_centavos",
   "subcategory_id",
   "source_account_id",
@@ -122,12 +155,13 @@ const TRANSACTION_UPDATE_FIELDS = new Set([
   "source_account_id",
   "destination_account_id",
   "transaction_date",
+  "credit_card_posting_date",
   "merchant_name",
   "counterparty_name",
   "notes",
 ]);
 
-const VALID_ACCOUNT_KINDS = ["cash", "bank", "e_wallet", "savings", "other"];
+const VALID_ACCOUNT_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "other"];
 const VALID_TRANSACTION_TYPES = ["income", "expense", "transfer"];
 
 const INCOME_SOURCE_CREATE_FIELDS = new Set([
@@ -238,6 +272,10 @@ const BUDGET_UPDATE_FIELDS = new Set([
   "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
 ]);
 
+const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
+  "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos",
+]);
+
 export async function prepareOperation(
   supabase: SupabaseClient,
   userId: string,
@@ -292,7 +330,7 @@ async function validateCreatePayload(
     const sanitized = sanitizePayload(payload, FINANCIAL_ACCOUNT_CREATE_FIELDS);
     requireString(sanitized, "name");
     requireString(sanitized, "kind");
-    const validKinds = ["cash", "bank", "e_wallet", "savings", "other"];
+     const validKinds = ["cash", "bank", "e_wallet", "savings", "credit_card", "other"];
     if (!validKinds.includes(sanitized.kind as string)) {
       throw new Error(`kind must be one of: ${validKinds.join(", ")}`);
     }
@@ -302,6 +340,77 @@ async function validateCreatePayload(
     optionalString(sanitized, "opened_on");
     optionalNumber(sanitized, "sort_order");
     return Promise.resolve(sanitized);
+  }
+
+  if (entity === "credit_card_cycles") {
+    assertOnlyAllowed(payload, CREDIT_CARD_CYCLE_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, CREDIT_CARD_CYCLE_CREATE_FIELDS);
+    requireString(sanitized, "account_id");
+    requireString(sanitized, "cycle_start_date");
+    requireString(sanitized, "cutoff_date");
+    requireDateString(sanitized, "cycle_start_date");
+    requireDateString(sanitized, "cutoff_date");
+    validateDateOrdering(sanitized, "cycle_start_date", "cutoff_date");
+    await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
+    return sanitized;
+  }
+
+  if (entity === "credit_card_statements") {
+    assertOnlyAllowed(payload, CREDIT_CARD_STATEMENT_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, CREDIT_CARD_STATEMENT_CREATE_FIELDS);
+    requireString(sanitized, "cycle_id");
+    requireDateString(sanitized, "statement_date");
+    requireDateString(sanitized, "due_date");
+    requireBigInt(sanitized, "statement_balance_centavos");
+    requireBigInt(sanitized, "minimum_due_centavos");
+    if (sanitized.finance_charge_centavos === undefined) sanitized.finance_charge_centavos = 0;
+    // jsonb_populate_record inserts NULL for absent fields instead of applying
+    // the database default, so authoritative must be supplied server-side.
+    sanitized.authoritative = true;
+    requireBigInt(sanitized, "finance_charge_centavos");
+    for (const field of ["statement_balance_centavos", "minimum_due_centavos", "finance_charge_centavos"]) {
+      const value = sanitized[field];
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+        throw new Error(`${field} must be a non-negative whole number`);
+      }
+    }
+    if ((sanitized.minimum_due_centavos as number) > (sanitized.statement_balance_centavos as number)) {
+      throw new Error("minimum_due_centavos must be <= statement_balance_centavos");
+    }
+    await verifyStatementCycle(supabase, userId, sanitized.cycle_id as string, sanitized.statement_date as string);
+    return sanitized;
+  }
+
+  if (entity === "credit_card_details") {
+    assertOnlyAllowed(payload, CREDIT_CARD_DETAILS_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, CREDIT_CARD_DETAILS_CREATE_FIELDS);
+    requireString(sanitized, "account_id");
+    requirePositiveInteger(sanitized, "credit_limit_centavos");
+    requireNumberInRange(sanitized, "cutoff_day", 1, 31);
+     if (sanitized.statement_day != null) requireNumberInRange(sanitized, "statement_day", 1, 31);
+    optionalString(sanitized, "issuer");
+    optionalString(sanitized, "notes");
+    optionalFiniteInteger(sanitized, "available_credit_centavos");
+    optionalFiniteInteger(sanitized, "billing_cycle_days");
+    optionalFiniteInteger(sanitized, "alert_threshold_percent");
+    validateOptionalRange(sanitized, "billing_cycle_days", 28, 31);
+    validateOptionalRange(sanitized, "alert_threshold_percent", 0, 100);
+    await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
+    return sanitized;
+  }
+
+  if (entity === "credit_card_transactions") {
+    assertOnlyAllowed(payload, CREDIT_CARD_TRANSACTION_FIELDS);
+    const sanitized = sanitizePayload(payload, CREDIT_CARD_TRANSACTION_FIELDS);
+    requireString(sanitized, "transaction_id");
+    requireString(sanitized, "account_id");
+    requireString(sanitized, "cycle_id");
+    requireString(sanitized, "purchase_type");
+    if (sanitized.purchase_type !== "regular") {
+      throw new Error("purchase_type must be regular for this transaction slice");
+    }
+    await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
+    return sanitized;
   }
 
   if (entity === "income_sources") {
@@ -338,7 +447,7 @@ async function validateCreatePayload(
     validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_day_of_week", 0, 6);
     validateDayRange(sanitized, "payday_second_day_of_week", 0, 6);
-    await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+     await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
     await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
     if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
       const { data: template, error: templateErr } = await supabase
@@ -568,14 +677,14 @@ async function validateTaxonomyCreatePayload(
       requireString(sanitized, "destination_account_id");
       requireString(sanitized, "subcategory_id");
       if (sanitized.source_account_id != null) throw new Error("source_account_id must not be set for income");
-      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+      await verifyOwnedAccount(supabase, userId, sanitized.destination_account_id as string);
       await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
       sanitized.source_account_id = null;
     } else if (txType === "expense") {
       requireString(sanitized, "source_account_id");
       requireString(sanitized, "subcategory_id");
       if (sanitized.destination_account_id != null) throw new Error("destination_account_id must not be set for expense");
-      await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
+      await verifyOwnedAccount(supabase, userId, sanitized.source_account_id as string);
       await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "expense");
       sanitized.destination_account_id = null;
     } else {
@@ -585,8 +694,8 @@ async function validateTaxonomyCreatePayload(
         throw new Error("source and destination accounts must differ");
       }
       if (sanitized.subcategory_id != null) throw new Error("subcategory_id must not be set for transfer");
-      await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
-      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
+      await verifyOwnedAccount(supabase, userId, sanitized.source_account_id as string);
+      await verifyOwnedAccount(supabase, userId, sanitized.destination_account_id as string);
       sanitized.subcategory_id = null;
     }
 
@@ -776,6 +885,12 @@ async function validateUpdatePayload(
     allowedFields = SUBCATEGORY_UPDATE_FIELDS;
   } else if (entity === "financial_accounts") {
     allowedFields = FINANCIAL_ACCOUNT_UPDATE_FIELDS;
+  } else if (entity === "credit_card_cycles") {
+    allowedFields = CREDIT_CARD_CYCLE_FIELDS;
+  } else if (entity === "credit_card_statements") {
+    allowedFields = CREDIT_CARD_STATEMENT_UPDATE_FIELDS;
+  } else if (entity === "credit_card_details") {
+    allowedFields = CREDIT_CARD_DETAILS_UPDATE_FIELDS;
   } else if (entity === "transactions") {
     allowedFields = TRANSACTION_UPDATE_FIELDS;
   } else if (entity === "income_sources") {
@@ -802,7 +917,70 @@ async function validateUpdatePayload(
   assertOnlyAllowed(payload, allowedFields);
   const sanitized = sanitizePayload(payload, allowedFields);
 
+  if (entity === "credit_card_cycles") {
+    if (sanitized.account_id !== undefined) {
+      if (typeof sanitized.account_id !== "string") throw new Error("account_id must be a string");
+      await verifyAccountOwnership(supabase, userId, sanitized.account_id);
+    }
+    for (const field of ["cycle_start_date", "cutoff_date", "statement_date"]) {
+      if (sanitized[field] !== undefined) requireDateString(sanitized, field);
+    }
+    if (sanitized.statement_date !== undefined) {
+      const { data: statement, error } = await supabase
+        .from("credit_card_statements")
+        .select("id")
+        .eq("cycle_id", recordId)
+        .eq("user_id", userId)
+        .eq("statement_date", sanitized.statement_date)
+        .eq("deleted", false)
+        .maybeSingle();
+      if (error) throw new Error(`credit-card statement lookup failed: ${error.message}`);
+      if (!statement) throw new Error("statement_date must match a recorded statement on this billing cycle");
+    }
+  } else if (entity === "credit_card_details" && sanitized.account_id !== undefined) {
+    if (typeof sanitized.account_id !== "string") throw new Error("account_id must be a string");
+    await verifyAccountOwnership(supabase, userId, sanitized.account_id);
+  } else if (entity === "transactions") {
+    for (const field of ["source_account_id", "destination_account_id"]) {
+      const accountId = sanitized[field];
+      if (accountId !== undefined && accountId !== null) {
+        if (typeof accountId !== "string") throw new Error(`${field} must be a string or null`);
+        await verifyAccountOwnership(supabase, userId, accountId);
+      }
+    }
+  }
+
   for (const [key, value] of Object.entries(sanitized)) {
+    if (entity === "credit_card_cycles") {
+       if (key === "statement_date" && value === null) continue;
+       if (typeof value !== "string" || !value) throw new Error(`${key} must be a non-empty string`);
+      continue;
+    }
+    if (entity === "credit_card_statements") {
+      if (key === "statement_date" || key === "due_date") {
+        if (typeof value !== "string" || !value) throw new Error(`${key} must be a non-empty string`);
+        continue;
+      }
+      if (key === "statement_balance_centavos" || key === "minimum_due_centavos" || key === "finance_charge_centavos") {
+        if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+          throw new Error(`${key} must be a non-negative whole number`);
+        }
+        continue;
+      }
+    }
+    if (entity === "credit_card_details") {
+      if (key === "account_id") {
+        if (typeof value !== "string" || !value) throw new Error("account_id must be a non-empty string");
+      } else if (["issuer", "notes"].includes(key)) {
+        if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+       } else if (key === "cutoff_day" || key === "statement_day") {
+         if (key === "statement_day" && value === null) continue;
+        requireNumberInRange(sanitized, key, 1, 31);
+      } else {
+        optionalFiniteInteger(sanitized, key);
+      }
+      continue;
+    }
     if (entity === "recurring_transaction_templates") {
       if (key === "subcategory_id" || key === "source_account_id" || key === "destination_account_id") {
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
@@ -976,6 +1154,39 @@ async function validateUpdatePayload(
     }
 
     if (typeof value !== "boolean") throw new Error(`${key} must be a boolean`);
+  }
+
+  if (entity === "credit_card_statements") {
+    const balance = sanitized.statement_balance_centavos as number | undefined;
+    const minimum = sanitized.minimum_due_centavos as number | undefined;
+    if (balance !== undefined && minimum !== undefined && minimum > balance) {
+      throw new Error("minimum_due_centavos must be <= statement_balance_centavos");
+    }
+    const { data: statement, error } = await supabase
+      .from("credit_card_statements")
+      .select("cycle_id")
+      .eq("id", recordId)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (error) throw new Error(`credit-card statement lookup failed: ${error.message}`);
+    if (!statement) throw new Error("credit-card statement not found or inaccessible");
+    const statementDate = sanitized.statement_date as string | undefined;
+    if (statementDate !== undefined) {
+      const { data: cycle, error: cycleError } = await supabase
+        .from("credit_card_cycles")
+        .select("cycle_start_date")
+        .eq("id", statement.cycle_id)
+        .eq("user_id", userId)
+        .eq("deleted", false)
+        .maybeSingle();
+      if (cycleError) throw new Error(`credit-card cycle lookup failed: ${cycleError.message}`);
+      if (!cycle) throw new Error("credit-card statement cycle is invalid");
+      const today = new Date().toISOString().slice(0, 10);
+      if (statementDate <= cycle.cycle_start_date || statementDate > today) {
+        throw new Error("statement_date must be after the billing cycle start and no later than today");
+      }
+    }
   }
 
   if (entity === "transactions") {
@@ -1246,6 +1457,17 @@ function requirePositiveInteger(payload: Record<string, unknown>, field: string)
   }
 }
 
+function requireNumberInRange(payload: Record<string, unknown>, field: string, min: number, max: number): void {
+  const value = payload[field];
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${field} must be an integer between ${min} and ${max}`);
+  }
+}
+
+function validateOptionalRange(payload: Record<string, unknown>, field: string, min: number, max: number): void {
+  if (payload[field] !== undefined && payload[field] !== null) requireNumberInRange(payload, field, min, max);
+}
+
 function validateRecurringTemplateShape(payload: Record<string, unknown>, transactionType: string): void {
   const source = payload.source_account_id;
   const destination = payload.destination_account_id;
@@ -1280,6 +1502,21 @@ function optionalFiniteInteger(payload: Record<string, unknown>, field: string):
   }
 }
 
+async function verifyOwnedAccount(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("financial_accounts")
+    .select("id")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`account validation failed: ${error.message}`);
+  if (!data) throw new Error("account not found or inaccessible");
+}
+
 async function verifyAccountOwnership(
   supabase: SupabaseClient,
   userId: string,
@@ -1294,6 +1531,36 @@ async function verifyAccountOwnership(
     .maybeSingle();
   if (error) throw new Error(`account validation failed: ${error.message}`);
   if (!data) throw new Error("account not found or inaccessible");
+}
+
+async function verifyStatementCycle(
+  supabase: SupabaseClient,
+  userId: string,
+  cycleId: string,
+  statementDate: string,
+): Promise<void> {
+  const { data: cycle, error } = await supabase
+    .from("credit_card_cycles")
+    .select("id, cycle_start_date, statement_date, account_id")
+    .eq("id", cycleId)
+    .eq("user_id", userId)
+    .eq("deleted", false)
+    .maybeSingle();
+  if (error) throw new Error(`credit-card cycle validation failed: ${error.message}`);
+  const today = new Date().toISOString().slice(0, 10);
+  if (!cycle || cycle.statement_date !== null || statementDate <= cycle.cycle_start_date || statementDate > today) {
+    throw new Error("credit-card statement cycle is invalid");
+  }
+  const { data: account, error: accountError } = await supabase
+    .from("financial_accounts")
+    .select("id")
+    .eq("id", cycle.account_id)
+    .eq("user_id", userId)
+    .eq("kind", "credit_card")
+    .eq("deleted", false)
+    .maybeSingle();
+  if (accountError) throw new Error(`credit-card account validation failed: ${accountError.message}`);
+  if (!account) throw new Error("credit-card statement cycle is invalid");
 }
 
 async function verifyCategoryOwnership(

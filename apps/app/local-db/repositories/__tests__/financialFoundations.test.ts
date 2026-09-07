@@ -339,6 +339,126 @@ describe("financial obligation recurring template validation", () => {
   });
 });
 
+describe("financial account inserts", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockInitDatabase.mockReset();
+    mockEnqueueOperation.mockReset();
+    mockRandomUUID.mockClear();
+    mockRandomUUID.mockReturnValue("account-1");
+    mockEnqueueOperation.mockResolvedValue({ operation_id: "sync-1" });
+  });
+
+  test("creates a credit-card account with matching insert columns and values", async () => {
+    const db = createDbMock(jest.fn(async () => ({
+      id: "account-1",
+      name: "Visa Platinum",
+      kind: "credit_card",
+      status: "active",
+      opening_balance_centavos: 0,
+      current_balance_centavos: 0,
+      include_in_dashboard_balance: 1,
+      institution_name: null,
+      opened_on: null,
+      archived_at: null,
+      deleted_at: null,
+      sort_order: 0,
+      metadata: "{}",
+      version: 1,
+      deleted: 0,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      last_synced_at: null,
+      cc_credit_limit_centavos: 2500000,
+      cc_billing_cycle_days: 30,
+      cc_cutoff_day: 15,
+      cc_statement_day: 5,
+      cc_alert_threshold_percent: 80,
+    })));
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { createFinancialAccount } = await import("../financialFoundations");
+    await createFinancialAccount("user-1", "device-1", {
+      name: "Visa Platinum",
+      kind: "credit_card",
+      creditCardDetails: {
+        creditLimitCentavos: 2500000,
+        billingCycleDays: 30,
+        cutoffDay: 15,
+        statementDay: 5,
+        alertThresholdPercent: 80,
+      },
+    });
+
+    const accountInsert = db.runAsync.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO financial_accounts"));
+    expect(accountInsert).toBeTruthy();
+    const sql = String(accountInsert?.[0]);
+    const columns = sql.match(/\(([^)]+)\)\s*VALUES/)?.[1]?.split(",").length;
+    const values = sql.match(/VALUES\s*\(([^)]+)\)/)?.[1]?.split(",").length;
+    expect(values).toBe(columns);
+  });
+
+  test("does not queue an unchanged account kind during a credit-card edit", async () => {
+    const existing = {
+      id: "account-1", user_id: "user-1", name: "Visa Platinum", kind: "credit_card",
+      status: "active", opening_balance_centavos: 0, current_balance_centavos: 0,
+      include_in_dashboard_balance: 1, institution_name: null, opened_on: null,
+      archived_at: null, deleted_at: null, sort_order: 0, metadata: "{}",
+      version: 2, deleted: 0, created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const db = createDbMock(jest.fn(async () => existing));
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { updateFinancialAccount } = await import("../financialFoundations");
+    const result = await updateFinancialAccount("user-1", "device-1", "account-1", {
+      kind: "credit_card",
+      creditCardDetails: {
+        creditLimitCentavos: 2500000,
+        billingCycleDays: 30,
+        cutoffDay: 15,
+        alertThresholdPercent: 80,
+      },
+    });
+
+    expect(result.operation).toBeDefined();
+    expect(mockEnqueueOperation).toHaveBeenCalledTimes(2);
+    expect(mockEnqueueOperation.mock.calls[1][1].changedFields).not.toContain("kind");
+    expect(mockEnqueueOperation.mock.calls[1][1].payload).not.toHaveProperty("kind");
+  });
+
+  test("reconciles available credit when editing credit-card details", async () => {
+    const existing = {
+      id: "account-1", user_id: "user-1", name: "Visa Platinum", kind: "credit_card",
+      status: "active", opening_balance_centavos: 0, current_balance_centavos: 0,
+      include_in_dashboard_balance: 1, institution_name: null, opened_on: null,
+      archived_at: null, deleted_at: null, sort_order: 0, metadata: "{}",
+      version: 2, deleted: 0, created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const db = createDbMock(jest.fn(async (sql: string) => {
+      if (sql.includes("SELECT version FROM credit_card_details")) return { version: 3 };
+      return existing;
+    }));
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { updateFinancialAccount } = await import("../financialFoundations");
+    await updateFinancialAccount("user-1", "device-1", "account-1", {
+      creditCardDetails: {
+        creditLimitCentavos: 3000000,
+        billingCycleDays: 30,
+        cutoffDay: 15,
+        alertThresholdPercent: 80,
+      },
+    });
+
+    const upsert = db.runAsync.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO credit_card_details"));
+    const normalizedSql = String(upsert?.[0]).replace(/\s+/g, " ");
+    expect(normalizedSql).toContain("available_credit_centavos = excluded.available_credit_centavos");
+    expect(upsert?.[4]).toBe(3000000);
+  });
+});
+
 describe("income source recurring linkage", () => {
   beforeEach(() => {
     jest.resetModules();

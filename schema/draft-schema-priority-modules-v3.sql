@@ -1309,7 +1309,6 @@ CREATE TABLE financial_accounts (
   status odin_account_status NOT NULL DEFAULT 'active',
   opening_balance_centavos bigint NOT NULL DEFAULT 0,
   current_balance_centavos bigint NOT NULL DEFAULT 0,
-  credit_limit_centavos bigint,
   include_in_dashboard_balance boolean NOT NULL DEFAULT true,
   institution_name text,
   opened_on date,
@@ -1320,8 +1319,6 @@ CREATE TABLE financial_accounts (
   updated_at timestamptz NOT NULL DEFAULT now(),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 
-  CONSTRAINT financial_accounts_credit_limit_chk
-    CHECK (credit_limit_centavos IS NULL OR credit_limit_centavos >= 0),
   CONSTRAINT financial_accounts_deleted_status_chk
     CHECK (status <> 'deleted' OR deleted_at IS NOT NULL)
 );

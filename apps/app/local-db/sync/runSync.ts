@@ -1,10 +1,12 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
+import { enqueueOperation } from "../helpers";
 import {
   normalizePullRow,
   applyPullRow,
   SYNCED_TABLES,
 } from "./pullConvergence";
+import { syncQueueOrderByClause } from "./queueOrder";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
@@ -162,7 +164,7 @@ async function pushQueue(
      WHERE user_id = ? AND device_id = ?
        AND status IN ('pending', 'failed')
        ${maxAttempts === undefined ? "" : "AND attempts < ?"}
-        ORDER BY created_at, operation_id LIMIT 50`,
+          ORDER BY ${syncQueueOrderByClause} LIMIT 50`,
     userId,
     deviceId,
     ...(maxAttempts === undefined ? [] : [maxAttempts]),
@@ -170,9 +172,17 @@ async function pushQueue(
 
   if (rows.length === 0) return { pushed: 0, errors: 0 };
 
-  await repairIncomeSourceSyncRows(db, rows);
+  const activeRows = await discardOrphanedCreates(db, rows);
+  if (activeRows.length === 0) return { pushed: 0, errors: 0 };
 
-  const operations = rows.map((r) => ({
+  const repairedRows = await repairLegacyDerivedUpdates(db, activeRows);
+  if (repairedRows.length === 0) return { pushed: 0, errors: 0 };
+
+  await repairIncomeSourceSyncRows(db, repairedRows);
+  await repairCreditCardDetailSyncRows(db, userId, deviceId, repairedRows);
+  await repairCreditCardTransactionSyncRows(db, repairedRows);
+
+  const operations = repairedRows.map((r) => ({
     operation_id: r.operation_id,
     entity: r.entity,
     record_id: r.record_id,
@@ -193,13 +203,13 @@ async function pushQueue(
       body: JSON.stringify({ payload: { device_id: deviceId, operations } }),
     });
   } catch {
-    await bumpQueueAttempts(db, userId, deviceId, rows, "network error");
-    return { pushed: 0, errors: rows.length };
+      await bumpQueueAttempts(db, userId, deviceId, repairedRows, "network error");
+      return { pushed: 0, errors: repairedRows.length };
   }
 
   if (!response.ok) {
-    await bumpQueueAttempts(db, userId, deviceId, rows, `server error: ${response.status}`);
-    return { pushed: 0, errors: rows.length };
+    await bumpQueueAttempts(db, userId, deviceId, repairedRows, `server error: ${response.status}`);
+    return { pushed: 0, errors: repairedRows.length };
   }
 
   const body = await response.json();
@@ -236,6 +246,117 @@ async function pushQueue(
   }
 
   return { pushed, errors };
+}
+
+async function repairCreditCardTransactionSyncRows(
+  db: SQLite.SQLiteDatabase,
+  rows: QueueRow[],
+): Promise<void> {
+  for (const row of rows) {
+    if (row.entity !== "credit_card_transactions" || row.operation_type !== "create") continue;
+
+    const payload = JSON.parse(row.payload) as Record<string, unknown>;
+    const changedFields = JSON.parse(row.changed_fields) as string[];
+    if (payload.transaction_id) continue;
+
+    payload.transaction_id = row.record_id;
+    if (!changedFields.includes("transaction_id")) changedFields.unshift("transaction_id");
+
+    await db.runAsync(
+      "UPDATE sync_queue SET payload = ?, changed_fields = ? WHERE operation_id = ?",
+      JSON.stringify(payload),
+      JSON.stringify(changedFields),
+      row.operation_id,
+    );
+    row.payload = JSON.stringify(payload);
+    row.changed_fields = JSON.stringify(changedFields);
+  }
+}
+
+async function discardOrphanedCreates(
+  db: SQLite.SQLiteDatabase,
+  rows: QueueRow[],
+): Promise<QueueRow[]> {
+  const activeRows: QueueRow[] = [];
+
+  for (const row of rows) {
+    if (row.operation_type !== "create" || row.entity !== "credit_card_cycles") {
+      activeRows.push(row);
+      continue;
+    }
+
+    const localCycle = await db.getFirstAsync<{ id: string }>(
+      "SELECT id FROM credit_card_cycles WHERE id = ? AND user_id = ? AND deleted = 0",
+      row.record_id,
+      row.user_id,
+    );
+    if (localCycle) {
+      activeRows.push(row);
+      continue;
+    }
+
+    await db.runAsync(
+      `UPDATE sync_queue SET status = 'discarded', discarded_at = CURRENT_TIMESTAMP,
+       last_error = ? WHERE operation_id = ?`,
+      "Discarded because the local credit-card cycle was deleted before sync.",
+      row.operation_id,
+    );
+  }
+
+  return activeRows;
+}
+
+async function repairLegacyDerivedUpdates(
+  db: SQLite.SQLiteDatabase,
+  rows: QueueRow[],
+): Promise<QueueRow[]> {
+  const activeRows: QueueRow[] = [];
+
+  for (const row of rows) {
+    if (row.entity === "credit_card_cycles" && row.operation_type === "update") {
+      const changedFields = JSON.parse(row.changed_fields) as string[];
+      if (changedFields.length === 1 && changedFields[0] === "statement_date") {
+        await db.runAsync(
+          "UPDATE sync_queue SET status = 'discarded', discarded_at = CURRENT_TIMESTAMP, last_error = ? WHERE operation_id = ?",
+          "Discarded legacy cycle statement-date operation; the statement operation synchronizes this field.",
+          row.operation_id,
+        );
+        continue;
+      }
+    }
+    if (row.operation_type !== "update" ||
+      (row.entity !== "financial_accounts" && row.entity !== "credit_card_details")) {
+      activeRows.push(row);
+      continue;
+    }
+
+    const payload = JSON.parse(row.payload) as Record<string, unknown>;
+    const changedFields = JSON.parse(row.changed_fields) as string[];
+    const blockedFields = row.entity === "financial_accounts" ? ["kind"] : ["available_credit_centavos"];
+    const repairedFields = changedFields.filter((field) => !blockedFields.includes(field));
+    for (const field of blockedFields) delete payload[field];
+
+    if (repairedFields.length === 0) {
+      await db.runAsync(
+        "UPDATE sync_queue SET status = 'discarded', discarded_at = CURRENT_TIMESTAMP, last_error = ? WHERE operation_id = ?",
+        "Discarded derived or immutable fields from a legacy sync operation.",
+        row.operation_id,
+      );
+      continue;
+    }
+
+    row.payload = JSON.stringify(payload);
+    row.changed_fields = JSON.stringify(repairedFields);
+    await db.runAsync(
+      "UPDATE sync_queue SET payload = ?, changed_fields = ? WHERE operation_id = ?",
+      row.payload,
+      row.changed_fields,
+      row.operation_id,
+    );
+    activeRows.push(row);
+  }
+
+  return activeRows;
 }
 
 async function repairIncomeSourceSyncRows(
@@ -295,6 +416,63 @@ async function repairIncomeSourceSyncRows(
       row.changed_fields,
       row.operation_id,
     );
+  }
+}
+
+async function repairCreditCardDetailSyncRows(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  rows: QueueRow[],
+): Promise<void> {
+  for (const row of rows) {
+    if (row.entity !== "financial_accounts" || (row.operation_type !== "create" && row.operation_type !== "update")) continue;
+    const accountPayload = JSON.parse(row.payload) as Record<string, unknown>;
+    if (accountPayload.kind !== "credit_card") continue;
+
+    const details = await db.getFirstAsync<{
+      account_id: string;
+      issuer: string | null;
+      credit_limit_centavos: number;
+      available_credit_centavos: number | null;
+      cutoff_day: number;
+      statement_day: number | null;
+      notes: string | null;
+      billing_cycle_days: number | null;
+      alert_threshold_percent: number | null;
+    }>("SELECT account_id, issuer, credit_limit_centavos, available_credit_centavos, cutoff_day, statement_day, notes, billing_cycle_days, alert_threshold_percent FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0", row.record_id, userId);
+    if (!details) continue;
+
+    const queued = await db.getFirstAsync<{ operation_id: string }>(
+      "SELECT operation_id FROM sync_queue WHERE user_id = ? AND device_id = ? AND record_id = ? AND entity = 'credit_card_details' AND status IN ('pending', 'failed') LIMIT 1",
+      userId,
+      deviceId,
+      row.record_id,
+    );
+    if (queued) continue;
+
+    const payload = {
+      account_id: details.account_id,
+      issuer: details.issuer,
+      credit_limit_centavos: details.credit_limit_centavos,
+      available_credit_centavos: details.available_credit_centavos,
+      cutoff_day: details.cutoff_day,
+      statement_day: details.statement_day,
+      notes: details.notes,
+      billing_cycle_days: details.billing_cycle_days,
+      alert_threshold_percent: details.alert_threshold_percent,
+    };
+    await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "credit_card_details",
+      recordId: row.record_id,
+      operationType: "create",
+      baseVersion: null,
+      changedFields: Object.keys(payload),
+      payload,
+      failureMessage: "This credit-card information could not be synchronized.",
+    });
   }
 }
 
@@ -367,7 +545,7 @@ async function pullAndApply(
         await applyPullRow(db, table, normalized);
         pulled++;
       } catch (error) {
-        const recordId = String(row.id ?? normalized.id ?? row.transaction_id ?? "unknown");
+        const recordId = String(row.id ?? normalized.id ?? row.account_id ?? normalized.account_id ?? row.transaction_id ?? "unknown");
         const reason = error instanceof Error ? error.message : "unknown error";
         // Quarantine only the bad row so a malformed remote record cannot block later changes.
         await db.runAsync(

@@ -79,7 +79,17 @@ function formatPeso(centavos: number): string {
 }
 
 function isNegativeAccount(account: FinancialAccount): boolean {
+  if (account.kind === "credit_card") {
+    return (account.creditCardDetails?.availableCreditCentavos ?? 0) < 0;
+  }
   return account.currentBalanceCentavos < 0;
+}
+
+function accountDisplayAmount(account: FinancialAccount): number {
+  if (account.kind === "credit_card" && account.creditCardDetails) {
+    return account.creditCardDetails.availableCreditCentavos ?? account.creditCardDetails.creditLimitCentavos;
+  }
+  return account.currentBalanceCentavos;
 }
 
 function parseSafeCents(raw: string): number | null {
@@ -136,6 +146,9 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
     .filter((a) => a.status === "active" && a.includeInDashboardBalance)
     .reduce((sum, a) => sum + a.currentBalanceCentavos, 0);
 
+  const categoryAccounts = accounts.filter((account) => account.kind !== "credit_card");
+  const creditCardAccounts = accounts.filter((account) => account.kind === "credit_card");
+
   const handleCreate = async (input: CreateFinancialAccountInput) => {
     await createFinancialAccount(userId, deviceId, input);
     setSheetVisible(false); await loadAccounts();
@@ -158,10 +171,26 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
   };
 
   const handleDelete = (account: FinancialAccount) => {
-    Alert.alert(`Delete ${account.name}?`, "This account and its transactions will be permanently removed.", [
+    Alert.alert(`Delete ${account.name}?`, "This account will be removed from active accounts. Its transaction history will be preserved.", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => { await deleteFinancialAccount(userId, deviceId, account.id); await loadAccounts(); onSyncRequested?.(); } },
     ]);
+  };
+
+  const renderAccount = (account: FinancialAccount) => {
+    const negative = isNegativeAccount(account);
+    return (
+      <AccountTile
+        key={account.id}
+        account={account}
+        negative={negative}
+        tileBg={negative ? P.errorSoft : P.card}
+        amountColor={negative ? P.error : P.ink}
+        iconColor={negative ? P.error : P.brandMedium}
+        onEdit={() => { setEditingAccount(account); setSheetVisible(true); }}
+        onDelete={() => handleDelete(account)}
+      />
+    );
   };
 
   return (
@@ -191,47 +220,63 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
           <Text style={{ marginTop: 4, fontSize: 13, fontFamily: "Manrope", color: P.muted }}>Tap + to add your first account</Text>
         </View>
       ) : (
-        accounts.map((a) => {
-          const negative = isNegativeAccount(a);
-          const tileBg = negative ? P.errorSoft : P.card;
-          const amountColor = negative ? P.error : a.currentBalanceCentavos < 0 ? P.error : P.ink;
-          const iconColor = negative ? P.error : P.brandMedium;
-
-          return (
-            <View key={a.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: negative ? "#FFF1F3" : P.shell, borderRadius: 15, marginBottom: 9, padding: 13, borderWidth: 1, borderColor: negative ? "#FFB9C2" : P.line }}>
-              <View style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: negative ? "#FFF9F0" : tileBg, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-                {kindIcon(a.kind, 22, iconColor)}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>{a.name}</Text>
-                <Text style={{ fontSize: 10.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 2 }}>
-                  {negative
-                    ? "Negative balance"
-                    : a.kind === "credit_card" && a.creditCardDetails
-                      ? `Credit limit ${formatPeso(a.creditCardDetails.creditLimitCentavos)}`
-                      : KIND_LABELS[a.kind] ?? a.kind}
-                </Text>
-              </View>
-              <View style={{ alignItems: "flex-end", marginRight: 2 }}>
-                <Text style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "800", color: amountColor }}>{formatPeso(a.currentBalanceCentavos)}</Text>
-                <Text style={{ fontSize: 9.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 1 }}>PHP</Text>
-              </View>
-              <KebabTooltip
-                kebabDirection="horizontal"
-                tooltipLocation="bottomRight"
-                onEdit={() => { setEditingAccount(a); setSheetVisible(true); }}
-                onDelete={() => handleDelete(a)}
-              />
-            </View>
-          );
-        })
+        <>
+          {categoryAccounts.length > 0 ? (
+            <AccountGroup title="Categories">
+              {categoryAccounts.map(renderAccount)}
+            </AccountGroup>
+          ) : null}
+          {creditCardAccounts.length > 0 ? (
+            <AccountGroup title="Credit Cards">
+              {creditCardAccounts.map(renderAccount)}
+            </AccountGroup>
+          ) : null}
+        </>
       )}
       <AccountFormSheet visible={sheetVisible} editing={editingAccount} onClose={() => { setSheetVisible(false); setEditingAccount(null); }} onSubmit={editingAccount ? handleUpdate : handleCreate} />
     </>
   );
 }
 
-type FieldErrors = Partial<Record<"name" | "openingBalance" | "creditLimit" | "billingCycle" | "cutoffDay" | "statementDay" | "threshold", string>>;
+function AccountGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "800", color: P.ink, marginBottom: 8 }}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function AccountTile({ account, negative, tileBg, amountColor, iconColor, onEdit, onDelete }: { account: FinancialAccount; negative: boolean; tileBg: string; amountColor: string; iconColor: string; onEdit: () => void; onDelete: () => void }) {
+  const creditCardDetails = account.kind === "credit_card" ? account.creditCardDetails : null;
+  const amount = accountDisplayAmount(account);
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: negative ? "#FFF1F3" : P.shell, borderRadius: 15, marginBottom: 9, padding: 13, borderWidth: 1, borderColor: negative ? "#FFB9C2" : P.line }}>
+      <View style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: negative ? "#FFF9F0" : tileBg, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+        {kindIcon(account.kind, 22, iconColor)}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text numberOfLines={1} style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>{account.name}</Text>
+        <Text style={{ fontSize: 10.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 2 }}>
+          {negative ? "Over available credit" : creditCardDetails?.availableCreditCentavos != null ? "Available credit" : KIND_LABELS[account.kind] ?? account.kind}
+        </Text>
+      </View>
+      <View style={{ alignItems: "flex-end", marginRight: 2 }}>
+        <Text style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "800", color: amountColor }}>{formatPeso(amount)}</Text>
+        <Text style={{ fontSize: 9.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 1 }}>PHP</Text>
+      </View>
+      <KebabTooltip
+        kebabDirection="horizontal"
+        tooltipLocation="bottomRight"
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    </View>
+  );
+}
+
+type FieldErrors = Partial<Record<"name" | "openingBalance" | "creditLimit" | "billingCycle" | "cutoffDay" | "threshold", string>>;
 
 function FormField({ label, required, error, hint, children }: { label: string; required?: boolean; error?: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -268,7 +313,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
   const [creditLimit, setCreditLimit] = useState("");
   const [billingCycle, setBillingCycle] = useState("");
   const [cutoffDay, setCutoffDay] = useState("");
-  const [statementDay, setStatementDay] = useState("");
   const [threshold, setThreshold] = useState("");
   const [datePicker, setDatePicker] = useState<"opening" | null>(null);
   const [saving, setSaving] = useState(false);
@@ -287,12 +331,11 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
       setCreditLimit(cc ? String(cc.creditLimitCentavos / 100) : "");
       setBillingCycle(cc && cc.billingCycleDays != null ? String(cc.billingCycleDays) : "");
       setCutoffDay(cc ? String(cc.cutoffDay) : "");
-      setStatementDay(cc ? String(cc.statementDay) : "");
       setThreshold(cc && cc.alertThresholdPercent != null ? String(cc.alertThresholdPercent) : "");
     } else {
       setName(""); setKind("bank"); setOpeningBalance(""); setInstitutionName("");
       setOpenedOn(null);
-      setCreditLimit(""); setBillingCycle(""); setCutoffDay(""); setStatementDay(""); setThreshold("");
+      setCreditLimit(""); setBillingCycle(""); setCutoffDay(""); setThreshold("");
     }
     setDatePicker(null);
     setFieldErrors({});
@@ -329,7 +372,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
     let cycleDays: number | null = null;
     let thresholdValue: number | null = null;
     let cutoffDayValue: number | null = null;
-    let statementDayValue: number | null = null;
 
     if (kind === "credit_card") {
       if (!creditLimit.trim()) {
@@ -352,10 +394,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
       cutoffDayValue = parseDayOfMonth(cutoffDay);
       if (!cutoffDay.trim()) nextErrors.cutoffDay = "Enter a valid cut-off day.";
       else if (cutoffDayValue === null) nextErrors.cutoffDay = "Enter a valid cut-off day.";
-
-      statementDayValue = parseDayOfMonth(statementDay);
-      if (!statementDay.trim()) nextErrors.statementDay = "Enter a valid statement day.";
-      else if (statementDayValue === null) nextErrors.statementDay = "Enter a valid statement day.";
 
       if (!threshold.trim()) {
         nextErrors.threshold = "Alert threshold is required.";
@@ -383,7 +421,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
           creditLimitCentavos: limitCents!,
           billingCycleDays: cycleDays!,
           cutoffDay: cutoffDayValue!,
-          statementDay: statementDayValue!,
           alertThresholdPercent: thresholdValue!,
         };
       }
@@ -499,22 +536,6 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
                           placeholderTextColor={P.muted}
                           keyboardType="number-pad"
                           style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: fieldErrors.cutoffDay ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                        />
-                      </FormField>
-
-                      <FormField
-                        label="STATEMENT DAY OF MONTH"
-                        hint="When your monthly statement is issued. Enter 1-31; check your card statement."
-                        required
-                        error={fieldErrors.statementDay}
-                      >
-                        <TextInput
-                          value={statementDay}
-                          onChangeText={(t) => { setStatementDay(t); clearFieldError("statementDay"); }}
-                          placeholder="Enter statement day"
-                          placeholderTextColor={P.muted}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: fieldErrors.statementDay ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                         />
                       </FormField>
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import type { FinancialAccount } from "../../../local-db/repositories/financialAccounts";
+import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
 import type { Category, CategoryGroup, Subcategory } from "../../../local-db/repositories/taxonomy";
-import { listFinancialAccounts } from "../../../local-db/repositories/financialAccounts";
+import { listFinancialAccounts } from "../../../local-db/repositories/financialFoundations";
 import { listCategories, listCategoryGroups, listSubcategories } from "../../../local-db/repositories/taxonomy";
 
 type TransactionKind = "expense" | "income" | "transfer";
@@ -21,7 +21,7 @@ export function useTransactionData(userId: string, kind: TransactionKind) {
       setError(null);
       try {
         const [accts, localGroups, localCategories, subs] = await Promise.all([
-          listFinancialAccounts(userId, "active"),
+          listFinancialAccounts(userId),
           kind !== "transfer" ? listCategoryGroups(userId) : Promise.resolve([] as CategoryGroup[]),
           kind !== "transfer" ? listCategories(userId) : Promise.resolve([] as Category[]),
           kind !== "transfer"

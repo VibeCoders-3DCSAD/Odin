@@ -74,9 +74,7 @@ it("shows credit card fields only when the Credit Card kind is selected", () => 
   expect(view.getByPlaceholderText("Enter credit limit")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter billing cycle in days")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter cut-off day")).toBeTruthy();
-  expect(view.getByPlaceholderText("Enter statement day")).toBeTruthy();
   expect(view.getByText("When your billing cycle ends each month. Enter 1-31; check your card statement.")).toBeTruthy();
-  expect(view.getByText("When your monthly statement is issued. Enter 1-31; check your card statement.")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter alert percentage")).toBeTruthy();
 });
 
@@ -89,7 +87,6 @@ it("submits credit card details when creating a credit card account", async () =
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "25000");
   fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "30");
   fireEvent.changeText(view.getByPlaceholderText("Enter cut-off day"), "15");
-  fireEvent.changeText(view.getByPlaceholderText("Enter statement day"), "5");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "80");
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 
@@ -103,7 +100,6 @@ it("submits credit card details when creating a credit card account", async () =
       creditLimitCentavos: 2500000,
       billingCycleDays: 30,
       cutoffDay: 15,
-      statementDay: 5,
       alertThresholdPercent: 80,
     },
   });
@@ -120,7 +116,6 @@ it("shows per-field validation errors without submitting and keeps entered value
   expect(view.getByText("Credit limit is required.")).toBeTruthy();
   expect(view.getByText("Billing cycle is required.")).toBeTruthy();
   expect(view.getByText("Enter a valid cut-off day.")).toBeTruthy();
-  expect(view.getByText("Enter a valid statement day.")).toBeTruthy();
   expect(view.getByText("Alert threshold is required.")).toBeTruthy();
   expect(mockCreateFinancialAccount).not.toHaveBeenCalled();
 
@@ -128,7 +123,6 @@ it("shows per-field validation errors without submitting and keeps entered value
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "abc");
   fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "27");
   fireEvent.changeText(view.getByPlaceholderText("Enter cut-off day"), "0");
-  fireEvent.changeText(view.getByPlaceholderText("Enter statement day"), "45");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "120");
   expect(view.queryByText("Account name is required.")).toBeNull();
 
@@ -137,14 +131,12 @@ it("shows per-field validation errors without submitting and keeps entered value
   expect(view.getByText("Credit limit must be a valid amount.")).toBeTruthy();
   expect(view.getByText("Billing cycle must be between 28 and 31 days.")).toBeTruthy();
   expect(view.getByText("Enter a valid cut-off day.")).toBeTruthy();
-  expect(view.getByText("Enter a valid statement day.")).toBeTruthy();
   expect(view.getByText("Alert threshold must be between 0 and 100.")).toBeTruthy();
   expect(mockCreateFinancialAccount).not.toHaveBeenCalled();
 
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "5000");
   fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "30");
   fireEvent.changeText(view.getByPlaceholderText("Enter cut-off day"), "10");
-  fireEvent.changeText(view.getByPlaceholderText("Enter statement day"), "10");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "90");
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 
@@ -157,7 +149,6 @@ it("shows per-field validation errors without submitting and keeps entered value
       creditLimitCentavos: 500000,
       billingCycleDays: 30,
       cutoffDay: 10,
-      statementDay: 10,
       alertThresholdPercent: 90,
     },
   });
@@ -179,4 +170,55 @@ it("keeps card fields hidden and omits card details for a bank account", async (
   const [, , input] = mockCreateFinancialAccount.mock.calls[0];
   expect(input).toMatchObject({ name: "Everyday Checking", kind: "bank" });
   expect(input.creditCardDetails).toBeUndefined();
+});
+
+it("groups credit cards separately and displays their credit limit", async () => {
+  mockListFinancialAccounts.mockResolvedValue([
+    {
+      id: "bank-1",
+      name: "Everyday Checking",
+      kind: "bank",
+      status: "active",
+      openingBalanceCentavos: 100000,
+      currentBalanceCentavos: 125000,
+      includeInDashboardBalance: true,
+      institutionName: null,
+      openedOn: null,
+      archivedAt: null,
+      sortOrder: 0,
+      creditCardDetails: null,
+    },
+    {
+      id: "card-1",
+      name: "Visa Platinum",
+      kind: "credit_card",
+      status: "active",
+      openingBalanceCentavos: 0,
+      currentBalanceCentavos: 0,
+      includeInDashboardBalance: true,
+      institutionName: null,
+      openedOn: null,
+      archivedAt: null,
+      sortOrder: 1,
+      creditCardDetails: {
+        creditLimitCentavos: 2500000,
+        availableCreditCentavos: 2500000,
+        issuer: null,
+        notes: null,
+        billingCycleDays: 30,
+        cutoffDay: 15,
+        statementDay: null,
+        alertThresholdPercent: 80,
+      },
+    },
+  ]);
+
+  const view = renderScreen();
+
+  await waitFor(() => {
+    expect(view.getByText("Categories")).toBeTruthy();
+    expect(view.getByText("Credit Cards")).toBeTruthy();
+    expect(view.getByText("₱25,000.00")).toBeTruthy();
+  });
+  expect(view.getByText("Available credit")).toBeTruthy();
 });

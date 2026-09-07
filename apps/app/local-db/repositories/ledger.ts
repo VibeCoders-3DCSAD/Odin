@@ -3,12 +3,14 @@ import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
+import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
+import { validateIsoDate } from "./creditCardCycleDates";
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
 const VALID_SORT_DIR = ["asc", "desc"] as const;
 const VALID_STATUSES = ["posted", "draft", "voided", "deleted"] as const;
-const UPDATE_FIELDS = ["amount_centavos", "subcategory_id", "source_account_id", "destination_account_id", "transaction_date", "merchant_name", "counterparty_name", "notes"] as const;
+const UPDATE_FIELDS = ["amount_centavos", "subcategory_id", "source_account_id", "destination_account_id", "transaction_date", "credit_card_posting_date", "merchant_name", "counterparty_name", "notes"] as const;
 
 type TransactionRow = {
   id: string;
@@ -18,6 +20,7 @@ type TransactionRow = {
   entry_source: string;
   transaction_date: string;
   posted_at: string | null;
+  credit_card_posting_date: string | null;
   amount_centavos: number;
   subcategory_id: string | null;
   source_account_id: string | null;
@@ -42,6 +45,7 @@ export type Transaction = {
   entry_source: string;
   transaction_date: string;
   posted_at: string | null;
+  credit_card_posting_date: string | null;
   amount_centavos: number;
   subcategory_id: string | null;
   source_account_id: string | null;
@@ -68,6 +72,7 @@ export type CreateExpenseInput = {
   source_account_id: string;
   subcategory_id: string;
   transaction_date: string;
+  credit_card_posting_date?: string | null;
   merchant_name?: string;
   counterparty_name?: string;
   notes?: string;
@@ -88,6 +93,7 @@ export type UpdateTransactionInput = {
   source_account_id?: string;
   destination_account_id?: string;
   transaction_date?: string;
+  credit_card_posting_date?: string | null;
   merchant_name?: string;
   counterparty_name?: string;
   notes?: string;
@@ -124,6 +130,7 @@ function mapTransaction(row: TransactionRow): Transaction {
     entry_source: row.entry_source,
     transaction_date: row.transaction_date,
     posted_at: row.posted_at,
+    credit_card_posting_date: row.credit_card_posting_date,
     amount_centavos: row.amount_centavos,
     subcategory_id: row.subcategory_id,
     source_account_id: row.source_account_id,
@@ -151,6 +158,35 @@ async function verifyAccountOwnership(
   if (!row) {
     throw new LocalDbError("VALIDATION_ERROR", `${label} not found or inaccessible`);
   }
+}
+
+async function verifyOwnedAccount(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  accountId: string,
+  label: string,
+): Promise<void> {
+  const row = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM financial_accounts WHERE user_id = ? AND id = ?",
+    userId,
+    accountId,
+  );
+  if (!row) {
+    throw new LocalDbError("VALIDATION_ERROR", `${label} not found or inaccessible`);
+  }
+}
+
+async function verifyExpenseAccountCanBeUsed(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  accountId: string,
+): Promise<boolean> {
+  const card = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM financial_accounts WHERE user_id = ? AND id = ? AND kind = 'credit_card' AND deleted = 0",
+    userId,
+    accountId,
+  );
+  return Boolean(card);
 }
 
 async function verifySubcategoryOwnership(
@@ -301,6 +337,11 @@ async function validateExpenseShape(
     throw new LocalDbError("VALIDATION_ERROR", "destination_account_id must not be set for expense");
   }
   await verifyAccountOwnership(db, userId, input.source_account_id, "source account");
+  const isCreditCard = await verifyExpenseAccountCanBeUsed(db, userId, input.source_account_id);
+  if (!isCreditCard && input.credit_card_posting_date != null) {
+    throw new LocalDbError("VALIDATION_ERROR", "credit_card_posting_date is only valid for credit-card expenses");
+  }
+  if (input.credit_card_posting_date != null) validateIsoDate(input.credit_card_posting_date, "credit_card_posting_date");
   await verifySubcategoryOwnership(db, userId, input.subcategory_id, "expense");
 }
 
@@ -348,10 +389,14 @@ async function validateUpdatedShape(
   if (input.amount_centavos != null) validateAmount(input.amount_centavos);
 
   if (sourceId != null) {
-    await verifyAccountOwnership(db, userId, sourceId, "source account");
+    await (input.source_account_id === undefined
+      ? verifyOwnedAccount(db, userId, sourceId, "source account")
+      : verifyAccountOwnership(db, userId, sourceId, "source account"));
   }
   if (destId != null) {
-    await verifyAccountOwnership(db, userId, destId, "destination account");
+    await (input.destination_account_id === undefined
+      ? verifyOwnedAccount(db, userId, destId, "destination account")
+      : verifyAccountOwnership(db, userId, destId, "destination account"));
   }
   if (subId != null) {
     const subKind = transactionType === "income" ? "income" : "expense";
@@ -366,6 +411,8 @@ async function validateUpdatedShape(
     if (!sourceId) throw new LocalDbError("VALIDATION_ERROR", "source_account_id is required for expense");
     if (destId != null) throw new LocalDbError("VALIDATION_ERROR", "destination_account_id must be null for expense");
     if (!subId) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id is required for expense");
+    await verifyExpenseAccountCanBeUsed(db, userId, sourceId);
+    if (input.credit_card_posting_date != null) validateIsoDate(input.credit_card_posting_date, "credit_card_posting_date");
   } else if (transactionType === "transfer") {
     if (!sourceId || !destId) throw new LocalDbError("VALIDATION_ERROR", "both accounts are required for transfer");
     if (sourceId === destId) throw new LocalDbError("VALIDATION_ERROR", "source and destination accounts must differ");
@@ -393,16 +440,19 @@ function buildTransactionInsert(
   const merchantName = "merchant_name" in input ? input.merchant_name ?? null : null;
   const counterpartyName = "counterparty_name" in input ? input.counterparty_name ?? null : null;
   const notes = input.notes ?? null;
+  const postingDate = transactionType === "expense" && "credit_card_posting_date" in input
+    ? (input as CreateExpenseInput).credit_card_posting_date ?? null
+    : null;
 
   return {
     sql: `INSERT INTO transactions
-      (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at,
+      (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at, credit_card_posting_date,
        amount_centavos, subcategory_id, source_account_id, destination_account_id,
        recurring_template_id, merchant_name, counterparty_name, notes,
         client_mutation_id, metadata, version, deleted, created_at, updated_at)
-      VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
     params: [
-      id, userId, transactionType, input.transaction_date, ts,
+      id, userId, transactionType, input.transaction_date, ts, postingDate,
       input.amount_centavos, subcategoryId, sourceAccountId, destinationAccountId,
       merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null, ts, ts,
     ],
@@ -539,8 +589,11 @@ export async function createExpenseInTransaction(
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const ts = now();
   const id = randomUUID();
+  const isCreditCard = await verifyExpenseAccountCanBeUsed(db, userId, input.source_account_id);
   await validateExpenseShape(db, userId, input);
-  await applyBalanceEffects(db, userId, "expense", input.source_account_id, null, input.amount_centavos);
+  if (!isCreditCard) {
+    await applyBalanceEffects(db, userId, "expense", input.source_account_id, null, input.amount_centavos);
+  }
   const { sql, params } = buildTransactionInsert(id, userId, "expense", input, ts);
   await db.runAsync(sql, ...params);
   const operation = await enqueueOperation(db, {
@@ -549,6 +602,66 @@ export async function createExpenseInTransaction(
      payload: { ...input, transaction_type: "expense", destination_account_id: null },
     failureMessage: "This expense transaction could not be created.",
   });
+  if (isCreditCard) {
+    const cycle = await db.getFirstAsync<{ id: string }>(
+      `SELECT id FROM credit_card_cycles
+        WHERE user_id = ? AND account_id = ? AND deleted = 0
+          AND cycle_start_date <= ? AND cutoff_date >= ?
+        ORDER BY cutoff_date ASC LIMIT 1`,
+      userId,
+      input.source_account_id,
+      input.credit_card_posting_date ?? input.transaction_date,
+      input.credit_card_posting_date ?? input.transaction_date,
+    );
+    if (!cycle) {
+      throw new LocalDbError(
+        "CREDIT_CARD_TRANSACTION_UNAVAILABLE",
+        "Credit-card transactions cannot be recorded until billing-cycle routing is available.",
+      );
+    }
+    await db.runAsync(
+      `INSERT INTO credit_card_transactions
+        (transaction_id, user_id, account_id, cycle_id, purchase_type, installment_id,
+         client_mutation_id, applied_credit_centavos, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'regular', NULL, ?, 0, 1, 0, ?, ?)`,
+      id,
+      userId,
+      input.source_account_id,
+      cycle.id,
+      input.client_mutation_id ?? id,
+      ts,
+      ts,
+    );
+    await db.runAsync(
+      `UPDATE credit_card_details
+          SET available_credit_centavos = COALESCE(available_credit_centavos, credit_limit_centavos) - ?,
+              version = version + 1,
+              updated_at = ?
+         WHERE account_id = ? AND user_id = ? AND deleted = 0
+          `,
+      input.amount_centavos,
+      ts,
+      input.source_account_id,
+      userId,
+    );
+    await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "credit_card_transactions",
+      recordId: id,
+      operationType: "create",
+      baseVersion: null,
+      changedFields: ["transaction_id", "account_id", "cycle_id", "purchase_type", "client_mutation_id"],
+      payload: {
+        transaction_id: id,
+        account_id: input.source_account_id,
+        cycle_id: cycle.id,
+        purchase_type: "regular",
+        client_mutation_id: input.client_mutation_id ?? id,
+      },
+      failureMessage: "This credit-card transaction could not be recorded.",
+    });
+  }
   const row = await db.getFirstAsync<TransactionRow>("SELECT * FROM transactions WHERE user_id = ? AND id = ?", userId, id);
   return { transaction: mapTransaction(row!), operation };
 }
@@ -559,6 +672,15 @@ export async function createExpense(
   input: CreateExpenseInput,
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const db = await getDb();
+
+  const creditCard = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM financial_accounts WHERE user_id = ? AND id = ? AND kind = 'credit_card' AND status = 'active' AND deleted = 0",
+    userId,
+    input.source_account_id,
+  );
+  if (creditCard) {
+    await ensureCurrentCreditCardCycles(userId, deviceId, input.credit_card_posting_date ?? input.transaction_date);
+  }
 
   let result!: { transaction: Transaction; operation: SyncOperation };
 
@@ -640,26 +762,95 @@ export async function updateTransaction(
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
     const newAmount = input.amount_centavos ?? current.amount_centavos;
+    const cardPurchase = await db.getFirstAsync<{
+      account_id: string;
+      cycle_id: string;
+      version: number;
+    }>(
+      `SELECT account_id, cycle_id, version FROM credit_card_transactions
+         WHERE transaction_id = ? AND user_id = ? AND deleted = 0`,
+      id,
+      userId,
+    );
+    const cardAmountChanged = Boolean(cardPurchase && input.amount_centavos != null && input.amount_centavos !== current.amount_centavos);
+    const newIsCreditCard = newShape.transaction_type === "expense" && newShape.source_account_id
+      ? await verifyExpenseAccountCanBeUsed(db, userId, newShape.source_account_id)
+      : false;
+    if (cardPurchase && input.source_account_id !== undefined && input.source_account_id !== cardPurchase.account_id) {
+      throw new LocalDbError(
+        "VALIDATION_ERROR",
+        "A credit-card purchase cannot be moved to another account after it is recorded.",
+      );
+    }
+    if (!cardPurchase && newIsCreditCard) {
+      throw new LocalDbError(
+        "VALIDATION_ERROR",
+        "Move a transaction to a credit card by recording it as a new credit-card purchase.",
+      );
+    }
+    const effectiveDate = input.credit_card_posting_date === undefined
+      ? current.credit_card_posting_date ?? input.transaction_date ?? current.transaction_date
+      : input.credit_card_posting_date ?? input.transaction_date ?? current.transaction_date;
+    let updatedCycleId: string | null = null;
+    if (cardPurchase) {
+      const cycle = await db.getFirstAsync<{ id: string }>(
+        `SELECT id FROM credit_card_cycles
+          WHERE user_id = ? AND account_id = ? AND deleted = 0
+            AND cycle_start_date <= ? AND cutoff_date >= ?
+          ORDER BY cutoff_date ASC LIMIT 1`,
+        userId,
+        cardPurchase.account_id,
+        effectiveDate,
+        effectiveDate,
+      );
+      if (!cycle) {
+        throw new LocalDbError(
+          "CREDIT_CARD_TRANSACTION_UNAVAILABLE",
+          "The edited date is outside an available credit-card billing cycle.",
+        );
+      }
+      updatedCycleId = cycle.id;
+    }
     const balanceChanged =
       input.amount_centavos != null ||
       input.source_account_id != null ||
       input.destination_account_id != null;
 
     if (balanceChanged) {
-      await reverseBalanceEffects(
-        db, userId,
-        current.transaction_type,
-        current.source_account_id,
-        current.destination_account_id,
-        current.amount_centavos,
-      );
+      if (!cardPurchase) {
+        await reverseBalanceEffects(
+          db, userId,
+          current.transaction_type,
+          current.source_account_id,
+          current.destination_account_id,
+          current.amount_centavos,
+        );
+      }
 
-      await applyBalanceEffects(
-        db, userId,
-        newShape.transaction_type,
-        newShape.source_account_id,
-        newShape.destination_account_id,
+      if (!newIsCreditCard) {
+        await applyBalanceEffects(
+          db, userId,
+          newShape.transaction_type,
+          newShape.source_account_id,
+          newShape.destination_account_id,
+          newAmount,
+        );
+      }
+    }
+
+    if (cardPurchase && cardAmountChanged) {
+      await db.runAsync(
+        `UPDATE credit_card_details
+            SET available_credit_centavos = MIN(credit_limit_centavos,
+              COALESCE(available_credit_centavos, credit_limit_centavos) + ? - ?),
+                version = version + 1, updated_at = ?
+          WHERE account_id = ? AND user_id = ? AND deleted = 0
+          `,
+        current.amount_centavos,
         newAmount,
+        ts,
+        cardPurchase.account_id,
+        userId,
       );
     }
 
@@ -684,6 +875,28 @@ export async function updateTransaction(
       params.push(userId);
       params.push(id);
       await db.runAsync(sql, ...params);
+    }
+
+    if (cardPurchase && updatedCycleId !== cardPurchase.cycle_id) {
+      await db.runAsync(
+        `UPDATE credit_card_transactions SET cycle_id = ?, version = version + 1, updated_at = ?
+          WHERE transaction_id = ? AND user_id = ? AND deleted = 0`,
+        updatedCycleId,
+        ts,
+        id,
+        userId,
+      );
+      await enqueueOperation(db, {
+        userId,
+        deviceId,
+        entity: "credit_card_transactions",
+        recordId: id,
+        operationType: "update",
+        baseVersion: cardPurchase.version,
+        changedFields: ["cycle_id"],
+        payload: { cycle_id: updatedCycleId },
+        failureMessage: "This credit-card transaction could not be moved to its billing cycle.",
+      });
     }
 
     const operation = await enqueueOperation(db, {
@@ -726,13 +939,56 @@ export async function deleteTransaction(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
-    await reverseBalanceEffects(
-      db, userId,
-      current.transaction_type,
-      current.source_account_id,
-      current.destination_account_id,
-      current.amount_centavos,
+    const cardPurchase = await db.getFirstAsync<{
+      account_id: string;
+      amount_centavos: number;
+      version: number;
+    }>(
+      `SELECT cct.account_id, cct.version, t.amount_centavos
+         FROM credit_card_transactions cct
+         JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id
+        WHERE cct.transaction_id = ? AND cct.user_id = ? AND cct.deleted = 0`,
+      id,
+      userId,
     );
+    if (!cardPurchase) {
+      await reverseBalanceEffects(
+        db, userId,
+        current.transaction_type,
+        current.source_account_id,
+        current.destination_account_id,
+        current.amount_centavos,
+      );
+    }
+    if (cardPurchase) {
+      await db.runAsync(
+        `UPDATE credit_card_details
+            SET available_credit_centavos = MIN(credit_limit_centavos, COALESCE(available_credit_centavos, credit_limit_centavos) + ?),
+                version = version + 1, updated_at = ?
+          WHERE account_id = ? AND user_id = ? AND deleted = 0`,
+        cardPurchase.amount_centavos,
+        ts,
+        cardPurchase.account_id,
+        userId,
+      );
+      await db.runAsync(
+        "UPDATE credit_card_transactions SET deleted = 1, version = version + 1, updated_at = ? WHERE transaction_id = ? AND user_id = ? AND deleted = 0",
+        ts,
+        id,
+        userId,
+      );
+      await enqueueOperation(db, {
+        userId,
+        deviceId,
+        entity: "credit_card_transactions",
+        recordId: id,
+        operationType: "delete",
+        baseVersion: cardPurchase.version,
+        changedFields: [],
+        payload: { transaction_id: id },
+        failureMessage: "This credit-card transaction could not be deleted.",
+      });
+    }
 
     await db.runAsync(
       "UPDATE transactions SET status = 'deleted', deleted = 1, version = version + 1, updated_at = ? WHERE user_id = ? AND id = ?",

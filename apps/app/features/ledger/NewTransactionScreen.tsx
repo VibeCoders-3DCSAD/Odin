@@ -60,7 +60,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   }, [txType]);
   const [amount, setAmount] = useState(transaction ? String(transaction.amount_centavos / 100) : "");
   const [date, setDate] = useState(transaction ? new Date(transaction.transaction_date + "T00:00:00") : new Date());
+  const [postingDate, setPostingDate] = useState(transaction?.credit_card_posting_date ?? "");
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showPostingDatePicker, setShowPostingDatePicker] = useState(false);
   const [sourceAccountId, setSourceAccountId] = useState(transaction?.source_account_id ?? "");
   const [destAccountId, setDestAccountId] = useState(transaction?.destination_account_id ?? "");
   const [categorySelection, setCategorySelection] = useState<CategorySelection>({
@@ -86,6 +88,11 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     estimatedIntervalDays: "",
   });
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [balanceWarning, setBalanceWarning] = useState<{
+    accountName: string;
+    deficitCentavos: number;
+    isCreditCard: boolean;
+  } | null>(null);
 
   const { accounts, groups, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
 
@@ -154,6 +161,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
     setSourceAccountId("");
     setDestAccountId("");
+    setPostingDate("");
     setFormError(null);
     if (!keepType) setTxType("expense");
   }
@@ -170,6 +178,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const today = new Date();
     if (value.toDateString() === today.toDateString()) return "Today";
     return value.toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+  }
+
+  function formatAccountAmount(account: (typeof accounts)[number]): string {
+    const amount = account.kind === "credit_card" && account.creditCardDetails
+      ? account.creditCardDetails.availableCreditCentavos ?? account.creditCardDetails.creditLimitCentavos
+      : account.currentBalanceCentavos;
+    return `P${(amount / 100).toLocaleString()}`;
   }
 
   function getSelectedSubcategory(): Subcategory | null {
@@ -226,6 +241,43 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     return sourceAccountId ? getAccountName(sourceAccountId) : "Select account";
   }
 
+  function getBalanceWarning(amountCentavos: number) {
+    const accountId = txType === "income" ? "" : sourceAccountId;
+    const account = accounts.find((item) => item.id === accountId);
+    if (!account) return null;
+
+    const isCreditCard = account.kind === "credit_card" && account.creditCardDetails;
+    let availableCentavos = isCreditCard
+      ? account.creditCardDetails!.availableCreditCentavos ?? account.creditCardDetails!.creditLimitCentavos
+      : account.currentBalanceCentavos;
+
+    if (
+      isEdit
+      && transaction?.source_account_id === account.id
+      && (transaction.transaction_type === "expense" || transaction.transaction_type === "transfer")
+    ) {
+      availableCentavos += transaction.amount_centavos;
+    }
+
+    const remainingCentavos = availableCentavos - amountCentavos;
+    return remainingCentavos < 0
+      ? { accountName: account.name, deficitCentavos: Math.abs(remainingCentavos), isCreditCard: Boolean(isCreditCard) }
+      : null;
+  }
+
+  function formatCurrency(amountCentavos: number): string {
+    return `₱${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  function selectedSourceIsCreditCard(): boolean {
+    return txType === "expense" && accounts.some((account) => account.id === sourceAccountId && account.kind === "credit_card");
+  }
+
+  function formatPostingDate(): string {
+    if (!postingDate) return "Select posting date";
+    return formatDate(new Date(`${postingDate}T00:00:00`));
+  }
+
   function getScreenTitle(): string {
     return isEdit ? "Edit Transaction" : "New Transaction";
   }
@@ -238,7 +290,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     );
   }
 
-  async function handleSave() {
+  async function handleSave(confirmed = false) {
     let savePhase = "start";
     console.log("[DEBUG-TX-SAVE] started", { isEdit, txType });
     setFormError(null);
@@ -273,6 +325,16 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       setFormError("Select a category");
       return;
     }
+    if (selectedSourceIsCreditCard() && postingDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(postingDate.trim())) {
+      setFormError("Some credit-card details are not valid. Check the highlighted fields and try again.");
+      return;
+    }
+
+    const warning = getBalanceWarning(centavos);
+    if (warning && !confirmed) {
+      setBalanceWarning(warning);
+      return;
+    }
 
     savePhase = "validated";
     console.log("[DEBUG-TX-SAVE] validation passed", { isEdit, txType });
@@ -291,6 +353,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           updateInput.source_account_id = sourceAccountId;
           updateInput.subcategory_id = effectiveSubcategoryId;
           updateInput.merchant_name = description.trim() || "";
+          updateInput.credit_card_posting_date = selectedSourceIsCreditCard() ? postingDate.trim() || null : null;
         } else if (txType === "income") {
           updateInput.destination_account_id = destAccountId;
           updateInput.subcategory_id = effectiveSubcategoryId;
@@ -312,7 +375,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
           subcategory_id: effectiveSubcategoryId,
-          transaction_date: dateStr,
+           transaction_date: dateStr,
+           credit_card_posting_date: selectedSourceIsCreditCard() ? postingDate.trim() || null : null,
           merchant_name: description.trim() || undefined,
           notes: notes.trim() || undefined,
         });
@@ -434,7 +498,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                               {a.name}
                             </Text>
                             <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
-                              {a.kind.replace("_", " ")} · P{(a.current_balance_centavos / 100).toLocaleString()}
+                               {a.kind.replace("_", " ")} · {formatAccountAmount(a)}
                             </Text>
                           </Pressable>
                         );
@@ -449,18 +513,29 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     );
   }
 
-  function renderDatePicker() {
-    if (!showDatePicker) return null;
+  function renderDatePicker(mode: "transaction" | "posting") {
+    const posting = mode === "posting";
+    const visible = posting ? showPostingDatePicker : showDatePicker;
+    if (!visible) return null;
+    const selectedDate = posting && postingDate ? new Date(`${postingDate}T00:00:00`) : date;
+    const close = () => posting ? setShowPostingDatePicker(false) : setShowDatePicker(false);
+    const select = (nextDate: Date) => {
+      if (posting) {
+        setPostingDate(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`);
+      } else {
+        setDate(nextDate);
+      }
+    };
 
     if (Platform.OS === "android") {
       return (
         <DateTimePicker
-          value={date}
+          value={selectedDate}
           mode="date"
           maximumDate={new Date()}
           onChange={(_event, nextDate) => {
-            setShowDatePicker(false);
-            if (nextDate) setDate(nextDate);
+            close();
+            if (nextDate) select(nextDate);
           }}
         />
       );
@@ -468,12 +543,12 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
     return (
       <Modal visible transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
-        <Pressable onPress={() => setShowDatePicker(false)} style={{ flex: 1 }}>
+        <Pressable onPress={close} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
             <Pressable onPress={() => {}}>
               <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingTop: 14 }}>
-                  <Pressable onPress={() => setShowDatePicker(false)}>
+                  <Pressable onPress={close}>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.mut }}>
                       Cancel
                     </Text>
@@ -481,19 +556,19 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.ink }}>
                     Select date
                   </Text>
-                  <Pressable onPress={() => setShowDatePicker(false)}>
+                  <Pressable onPress={close}>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.brand }}>
                       Done
                     </Text>
                   </Pressable>
                 </View>
                 <DateTimePicker
-                  value={date}
+                  value={selectedDate}
                   mode="date"
                   maximumDate={new Date()}
                   display="spinner"
                   onChange={(_event, nextDate) => {
-                    if (nextDate) setDate(nextDate);
+                    if (nextDate) select(nextDate);
                   }}
                 />
               </View>
@@ -760,6 +835,23 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
              </View>
             )}
 
+            {selectedSourceIsCreditCard() ? (
+              <View>
+                {renderFieldLabel("POSTING DATE (OPTIONAL)")}
+                <Pressable
+                  accessibilityLabel="Credit-card posting date"
+                  onPress={() => setShowPostingDatePicker(true)}
+                  style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                >
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: postingDate ? palette.ink : palette.mut }}>{formatPostingDate()}</Text>
+                  <CalendarBlank color={palette.mut} size={18} weight="regular" />
+                </Pressable>
+                <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 5 }}>
+                  Use YYYY-MM-DD when the issuer provides a posting date. Otherwise Odin uses the transaction date as an estimate.
+                </Text>
+              </View>
+            ) : null}
+
             {needsCategory ? (
               <View>
                 {renderFieldLabel(categorySelection.tier ? `CATEGORY · ${categorySelection.tier.toUpperCase()}` : "CATEGORY")}
@@ -816,19 +908,52 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             ) : null}
 
             {isEdit ? (
-              <Pressable onPress={handleSave} disabled={saving} style={{ height: 54, borderRadius: 16, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.5 : 1 }} accessibilityRole="button" accessibilityLabel="Save changes">
+              <Pressable onPress={() => handleSave()} disabled={saving} style={{ height: 54, borderRadius: 16, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.5 : 1 }} accessibilityRole="button" accessibilityLabel="Save changes">
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#fff" }}>Save Changes</Text>}
               </Pressable>
             ) : (
-              <Pressable onPress={handleSave} disabled={saving} style={{ height: 54, borderRadius: 16, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.5 : 1 }} accessibilityRole="button" accessibilityLabel="Save transaction">
+              <Pressable onPress={() => handleSave()} disabled={saving} style={{ height: 54, borderRadius: 16, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.5 : 1 }} accessibilityRole="button" accessibilityLabel="Save transaction">
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#fff" }}>Save</Text>}
               </Pressable>
             )}
           </ScrollView>
         )}
 
-        {renderDatePicker()}
+        {renderDatePicker("transaction")}
+        {renderDatePicker("posting")}
         {renderAccountPicker()}
+        <Modal visible={balanceWarning !== null} transparent animationType="fade" onRequestClose={() => setBalanceWarning(null)}>
+          <Pressable onPress={() => setBalanceWarning(null)} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
+            <Pressable onPress={() => {}}>
+              <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>Insufficient available balance</Text>
+                <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 12 }}>
+                  {balanceWarning?.isCreditCard
+                    ? `This transaction exceeds ${balanceWarning.accountName}'s available credit by ${formatCurrency(balanceWarning.deficitCentavos)}.`
+                    : `This transaction exceeds ${balanceWarning?.accountName}'s available balance by ${formatCurrency(balanceWarning?.deficitCentavos ?? 0)}.`}
+                </Text>
+                <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+                  Continue recording? The available {balanceWarning?.isCreditCard ? "credit" : "balance"} will be negative.
+                </Text>
+                <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 22 }}>
+                  <Pressable onPress={() => setBalanceWarning(null)} accessibilityRole="button" accessibilityLabel="Cancel transaction">
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.mut }}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setBalanceWarning(null);
+                      handleSave(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Confirm record transaction"
+                  >
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Continue</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
     </KeyboardAvoidingView>
   );
