@@ -4,7 +4,7 @@ function createSupabaseStub() {
   const query = {
     select: () => query,
     eq: () => query,
-    maybeSingle: async () => ({ data: { id: "card-1" }, error: null }),
+    maybeSingle: async () => ({ data: { id: "card-1", transaction_type: "expense", source_account_id: "card-1" }, error: null }),
   };
   return { from: () => query } as never;
 }
@@ -30,6 +30,24 @@ it("preserves transaction_id when preparing a credit-card relationship", async (
     account_id: "card-1",
     cycle_id: "cycle-1",
     purchase_type: "regular",
+  });
+});
+
+it("prepares an installment linked to the user-owned credit-card expense", async () => {
+  const prepared = await prepareOperation(createSupabaseStub(), "user-1", {
+    operation_id: "operation-installment", entity: "credit_card_installments", record_id: "installment-1",
+    operation_type: "create", base_version: null, changed_fields: [],
+    payload: {
+      account_id: "card-1", transaction_id: "transaction-1", description: "Laptop",
+      original_principal_centavos: 120000, remaining_principal_centavos: 120000,
+      term_months: 12, remaining_months: 12, monthly_amortization_centavos: 10000,
+      interest_rate_bps: 0, interest_type: "zero_interest", settlement_status: "active",
+    },
+  });
+
+  expect(prepared.payload).toMatchObject({
+    account_id: "card-1", transaction_id: "transaction-1", interest_type: "zero_interest",
+    settlement_status: "active",
   });
 });
 

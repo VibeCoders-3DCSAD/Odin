@@ -26,6 +26,7 @@ const SYNCED_ENTITIES = new Set([
   "budgets",
   "credit_card_details",
   "credit_card_cycles",
+  "credit_card_installments",
   "credit_card_transactions",
   "credit_card_statements",
 ]);
@@ -272,6 +273,12 @@ const BUDGET_UPDATE_FIELDS = new Set([
   "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
 ]);
 
+const CREDIT_CARD_INSTALLMENT_CREATE_FIELDS = new Set([
+  "account_id", "transaction_id", "description", "original_principal_centavos",
+  "remaining_principal_centavos", "term_months", "remaining_months", "monthly_amortization_centavos",
+  "interest_rate_bps", "interest_type", "settlement_status",
+]);
+
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
   "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos",
 ]);
@@ -399,6 +406,35 @@ async function validateCreatePayload(
     return sanitized;
   }
 
+  if (entity === "credit_card_installments") {
+    assertOnlyAllowed(payload, CREDIT_CARD_INSTALLMENT_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, CREDIT_CARD_INSTALLMENT_CREATE_FIELDS);
+    for (const field of ["account_id", "transaction_id", "description", "interest_type", "settlement_status"]) requireString(sanitized, field);
+    for (const field of ["original_principal_centavos", "remaining_principal_centavos", "term_months", "remaining_months", "monthly_amortization_centavos"]) requireBigInt(sanitized, field);
+    if (sanitized.interest_rate_bps === undefined) sanitized.interest_rate_bps = 0;
+    requireBigInt(sanitized, "interest_rate_bps");
+    const original = sanitized.original_principal_centavos as number;
+    const remaining = sanitized.remaining_principal_centavos as number;
+    const term = sanitized.term_months as number;
+    const remainingMonths = sanitized.remaining_months as number;
+    if (original <= 0 || remaining < 0 || remaining > original || term <= 0 || remainingMonths < 0 || remainingMonths > term || (sanitized.monthly_amortization_centavos as number) <= 0 || (sanitized.interest_rate_bps as number) < 0) throw new Error("credit-card installment amounts are invalid");
+    if (!["zero_interest", "interest_bearing"].includes(sanitized.interest_type as string)) throw new Error("interest_type is invalid");
+    if (!["active", "early_settlement_requested"].includes(sanitized.settlement_status as string)) throw new Error("settlement_status is invalid");
+    await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
+    const { data: transaction, error: transactionError } = await supabase
+      .from("transactions")
+      .select("id, transaction_type, source_account_id")
+      .eq("id", sanitized.transaction_id as string)
+      .eq("user_id", userId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (transactionError) throw new Error(`installment transaction validation failed: ${transactionError.message}`);
+    if (!transaction || transaction.transaction_type !== "expense" || transaction.source_account_id !== sanitized.account_id) {
+      throw new Error("installment transaction does not belong to the selected credit card");
+    }
+    return sanitized;
+  }
+
   if (entity === "credit_card_transactions") {
     assertOnlyAllowed(payload, CREDIT_CARD_TRANSACTION_FIELDS);
     const sanitized = sanitizePayload(payload, CREDIT_CARD_TRANSACTION_FIELDS);
@@ -406,9 +442,11 @@ async function validateCreatePayload(
     requireString(sanitized, "account_id");
     requireString(sanitized, "cycle_id");
     requireString(sanitized, "purchase_type");
-    if (sanitized.purchase_type !== "regular") {
-      throw new Error("purchase_type must be regular for this transaction slice");
+    if (sanitized.purchase_type !== "regular" && sanitized.purchase_type !== "installment") {
+      throw new Error("purchase_type must be regular or installment");
     }
+    if (sanitized.purchase_type === "installment") requireString(sanitized, "installment_id");
+    if (sanitized.purchase_type === "regular" && sanitized.installment_id != null) throw new Error("regular purchases cannot reference an installment");
     await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
     return sanitized;
   }
