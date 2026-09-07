@@ -4,6 +4,7 @@ import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
+import { createCreditCardInstallmentInTransaction, type CreateCreditCardInstallmentInput } from "./creditCardInstallments";
 import { validateIsoDate } from "./creditCardCycleDates";
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
@@ -77,6 +78,7 @@ export type CreateExpenseInput = {
   counterparty_name?: string;
   notes?: string;
   client_mutation_id?: string;
+  installment?: CreateCreditCardInstallmentInput;
 };
 
 export type CreateTransferInput = {
@@ -341,6 +343,12 @@ async function validateExpenseShape(
   if (!isCreditCard && input.credit_card_posting_date != null) {
     throw new LocalDbError("VALIDATION_ERROR", "credit_card_posting_date is only valid for credit-card expenses");
   }
+  if (!isCreditCard && input.installment) {
+    throw new LocalDbError("VALIDATION_ERROR", "Installments can only be recorded on a credit card.");
+  }
+  if (input.installment && input.installment.original_principal_centavos !== input.amount_centavos) {
+    throw new LocalDbError("VALIDATION_ERROR", "Installment original principal must match the transaction amount.");
+  }
   if (input.credit_card_posting_date != null) validateIsoDate(input.credit_card_posting_date, "credit_card_posting_date");
   await verifySubcategoryOwnership(db, userId, input.subcategory_id, "expense");
 }
@@ -596,10 +604,11 @@ export async function createExpenseInTransaction(
   }
   const { sql, params } = buildTransactionInsert(id, userId, "expense", input, ts);
   await db.runAsync(sql, ...params);
+  const { installment: _installment, ...transactionInput } = input;
   const operation = await enqueueOperation(db, {
     userId, deviceId, entity: "transactions", recordId: id, operationType: "create",
     baseVersion: null, changedFields: [],
-     payload: { ...input, transaction_type: "expense", destination_account_id: null },
+     payload: { ...transactionInput, transaction_type: "expense", destination_account_id: null },
     failureMessage: "This expense transaction could not be created.",
   });
   if (isCreditCard) {
@@ -619,15 +628,29 @@ export async function createExpenseInTransaction(
         "Credit-card transactions cannot be recorded until billing-cycle routing is available.",
       );
     }
+    const installment = input.installment
+      ? await createCreditCardInstallmentInTransaction(
+          db,
+          userId,
+          deviceId,
+          input.source_account_id,
+          id,
+          input.installment,
+          ts,
+        )
+      : null;
+    const purchaseType = installment ? "installment" : "regular";
     await db.runAsync(
       `INSERT INTO credit_card_transactions
         (transaction_id, user_id, account_id, cycle_id, purchase_type, installment_id,
          client_mutation_id, applied_credit_centavos, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'regular', NULL, ?, 0, 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, 0, ?, ?)`,
       id,
       userId,
       input.source_account_id,
       cycle.id,
+      purchaseType,
+      installment?.installment.id ?? null,
       input.client_mutation_id ?? id,
       ts,
       ts,
@@ -656,7 +679,8 @@ export async function createExpenseInTransaction(
         transaction_id: id,
         account_id: input.source_account_id,
         cycle_id: cycle.id,
-        purchase_type: "regular",
+        purchase_type: purchaseType,
+        installment_id: installment?.installment.id ?? null,
         client_mutation_id: input.client_mutation_id ?? id,
       },
       failureMessage: "This credit-card transaction could not be recorded.",
@@ -765,13 +789,17 @@ export async function updateTransaction(
     const cardPurchase = await db.getFirstAsync<{
       account_id: string;
       cycle_id: string;
+      purchase_type: "regular" | "installment";
       version: number;
     }>(
-      `SELECT account_id, cycle_id, version FROM credit_card_transactions
+      `SELECT account_id, cycle_id, purchase_type, version FROM credit_card_transactions
          WHERE transaction_id = ? AND user_id = ? AND deleted = 0`,
       id,
       userId,
     );
+    if (cardPurchase?.purchase_type === "installment") {
+      throw new LocalDbError("VALIDATION_ERROR", "Installment purchases cannot be edited. Record an issuer-recognized settlement separately when applicable.");
+    }
     const cardAmountChanged = Boolean(cardPurchase && input.amount_centavos != null && input.amount_centavos !== current.amount_centavos);
     const newIsCreditCard = newShape.transaction_type === "expense" && newShape.source_account_id
       ? await verifyExpenseAccountCanBeUsed(db, userId, newShape.source_account_id)
