@@ -25,6 +25,7 @@ export const SYNCED_TABLES = [
   "budgets",
   "budget_allocations",
   "credit_card_cycles",
+  "credit_card_installments",
   "credit_card_transactions",
   "credit_card_statements",
 ] as const;
@@ -129,6 +130,11 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   credit_card_cycles: new Set([
     "id", "user_id", "account_id", "cycle_start_date", "cutoff_date", "statement_date",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  credit_card_installments: new Set([
+    "id", "user_id", "account_id", "transaction_id", "description", "original_principal_centavos",
+    "remaining_principal_centavos", "term_months", "remaining_months", "monthly_amortization_centavos",
+    "interest_rate_bps", "interest_type", "settlement_status", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   credit_card_transactions: new Set([
     "transaction_id", "user_id", "account_id", "cycle_id", "purchase_type", "installment_id",

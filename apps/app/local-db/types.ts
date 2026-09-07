@@ -21,6 +21,7 @@ export type SyncableEntity =
   | "credit_card_cycles"
   | "credit_card_details"
   | "credit_card_transactions"
+  | "credit_card_installments"
   | "credit_card_statements"
   ;
 
