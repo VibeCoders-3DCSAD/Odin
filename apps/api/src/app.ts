@@ -14,6 +14,8 @@ import profileRoutes from "./routes/profile.js";
 import syncRoutes from "./routes/sync.js";
 import recurringRoutes from "./routes/recurring.js";
 import forecastRoutes from "./routes/forecast.js";
+import alertsRoutes from "./routes/alerts.js";
+import alertEvaluationRoutes from "./routes/alert-evaluations.js";
 
 const app = express();
 app.disable("etag");
@@ -58,6 +60,8 @@ app.use("/odin/api", profileRoutes);
 app.use("/odin/api/sync", syncRoutes);
 app.use("/odin/api/recurring", recurringRoutes);
 app.use("/odin/api/forecast", forecastRoutes);
+app.use("/odin/api/alerts", alertsRoutes);
+app.use("/odin/api/alert-evaluations", alertEvaluationRoutes);
 
 app.use((error: Error, request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };

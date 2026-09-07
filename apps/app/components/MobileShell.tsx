@@ -30,6 +30,10 @@ import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import SpendingForecastScreen from "../features/forecast/SpendingForecastScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
+import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
+import DebtManagerOverview from "../features/debt-manager/DebtManagerOverview";
+import AnomalyAlertsScreen from "../features/alerts/AnomalyAlertsScreen";
+import { getActiveAlerts } from "../local-db/repositories/alerts";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
@@ -81,6 +85,8 @@ type Page =
   | "financial-accounts"
   | "income-sources"
   | "financial-obligations"
+   | "debt-manager"
+   | "credit-cards"
   | "settings";
 
 type MobileShellProps = {
@@ -153,6 +159,7 @@ const drawerSections: DrawerSection[] = [
       { page: "financial-accounts", icon: "wallet-outline", label: "Financial Accounts" },
       { page: "income-sources", icon: "cash-multiple", label: "Income Sources" },
       { page: "financial-obligations", icon: "calendar-check-outline", label: "Obligations" },
+      { page: "debt-manager", icon: "credit-card-outline", label: "Debt Manager" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
       { page: "budgeting", icon: "phosphor-wallet", label: "Budgeting" },
@@ -165,7 +172,7 @@ const drawerSections: DrawerSection[] = [
     label: "Intelligence",
     items: [
       { page: "spending-forecast", icon: "chart-timeline-variant", label: "Spending Forecast" },
-      { page: "anomaly-alerts", icon: "alert-outline", label: "Anomaly Alerts", badge: "3" },
+       { page: "anomaly-alerts", icon: "alert-outline", label: "Anomaly Alerts" },
       { page: "budget-advice", icon: "message-text-outline", label: "Budget Advice" },
     ],
   },
@@ -196,6 +203,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
   "financial-obligations": { title: "Obligations", subtitle: "Manage recurring obligations" },
+  "debt-manager": { title: "Debt Manager", subtitle: "Credit-card billing cycles" },
+  "credit-cards": { title: "Credit Cards", subtitle: "Billing cycles and statements" },
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
@@ -220,6 +229,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [syncIssues, setSyncIssues] = useState<SyncQueueIssue[]>([]);
   const [syncIssueTotal, setSyncIssueTotal] = useState(0);
   const [failedIssueTotal, setFailedIssueTotal] = useState(0);
+  const [unreadAlertCount, setUnreadAlertCount] = useState(0);
   const [pendingIssueTotal, setPendingIssueTotal] = useState(0);
   const [syncIssuesLoading, setSyncIssuesLoading] = useState(false);
   const [allowDiscardLogout, setAllowDiscardLogout] = useState(false);
@@ -291,6 +301,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       .then(cleanupDiscardedSyncRows)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    getActiveAlerts(userId, 50).then((alerts) => setUnreadAlertCount(alerts.filter((alert) => alert.status === "unread").length)).catch(() => {});
+  }, [currentPage, syncVersion, userId]);
 
   function clearSyncMessageSoon() {
     if (syncMessageTimer.current) clearTimeout(syncMessageTimer.current);
@@ -802,6 +816,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       return <FinancialObligationsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
     }
 
+    if (currentPage === "debt-manager") {
+      return <DebtManagerOverview userId={userId} onOpenCreditCards={() => setCurrentPage("credit-cards")} />;
+    }
+
+    if (currentPage === "credit-cards") {
+      return <DebtManagerScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("debt-manager")} />;
+    }
+
     if (currentPage === "budgeting") {
       return <BudgetingScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} />;
     }
@@ -812,6 +834,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "spending-forecast") {
       return <SpendingForecastScreen userId={userId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
+    }
+
+    if (currentPage === "anomaly-alerts") {
+      return <AnomalyAlertsScreen userId={userId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} onNavigate={setCurrentPage as (page: string) => void} />;
     }
 
     const meta = pageMeta[currentPage];
@@ -1257,9 +1283,9 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                         >
                           {item.label}
                         </Text>
-                        {item.badge ? (
+                        {(item.page === "anomaly-alerts" ? unreadAlertCount > 0 : !!item.badge) ? (
                           <View className="bg-[#ba1a1a]/80 rounded-full px-[7px] py-[2px]">
-                            <Text className="text-white text-[10px] font-semibold">{item.badge}</Text>
+                            <Text className="text-white text-[10px] font-semibold">{item.page === "anomaly-alerts" ? unreadAlertCount : item.badge}</Text>
                           </View>
                         ) : null}
                       </Pressable>

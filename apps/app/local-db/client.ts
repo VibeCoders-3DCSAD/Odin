@@ -84,7 +84,14 @@ export async function loadMigrations(): Promise<Migration[]> {
   const { default: m031 } = await import("./migrations/031_credit_card_pull_cycle_guard");
   const { default: m032 } = await import("./migrations/032_drop_account_credit_limit");
   const { default: m033 } = await import("./migrations/033_credit_card_day_of_month_columns");
-  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033];
+  const { default: m034 } = await import("./migrations/034_credit_card_cycle_snapshot_identity");
+  const { default: m035 } = await import("./migrations/035_alert_cache");
+  const { default: m036 } = await import("./migrations/036_optional_credit_card_statements");
+  const { default: m037 } = await import("./migrations/037_repair_credit_card_cycle_trigger");
+  const { default: m038 } = await import("./migrations/038_credit_card_statement_dates");
+  const { default: m039 } = await import("./migrations/039_edit_credit_card_statements");
+  const { default: m040 } = await import("./migrations/040_validate_credit_card_statement_selection");
+  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040];
 }
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
