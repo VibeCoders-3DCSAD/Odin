@@ -28,6 +28,7 @@ export type CreditCardCycleTransaction = {
   account_id: string;
   cycle_id: string;
   purchase_type: "regular" | "installment";
+  installment_id: string | null;
   transaction_date: string;
   merchant_name: string | null;
   amount_centavos: number;
@@ -38,6 +39,7 @@ type CycleRow = Omit<CreditCardCycle, "deleted"> & { deleted: number };
 export type CreditCardCycleDefaults = {
   account_id: string;
   cutoff_day: number;
+  billing_cycle_days: number | null;
 };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -67,12 +69,20 @@ export async function listCreditCardCycles(userId: string, accountId?: string): 
   const db = await getDb();
   const rows = accountId
     ? await db.getAllAsync<CycleRow>(
-        "SELECT * FROM credit_card_cycles WHERE user_id = ? AND account_id = ? AND deleted = 0 ORDER BY cutoff_date DESC",
+        `SELECT c.* FROM credit_card_cycles c
+          JOIN financial_accounts a ON a.id = c.account_id AND a.user_id = c.user_id
+         WHERE c.user_id = ? AND c.account_id = ? AND c.deleted = 0
+           AND a.kind = 'credit_card' AND a.status = 'active' AND a.deleted = 0
+         ORDER BY c.cutoff_date DESC`,
         userId,
         accountId,
       )
     : await db.getAllAsync<CycleRow>(
-        "SELECT * FROM credit_card_cycles WHERE user_id = ? AND deleted = 0 ORDER BY cutoff_date DESC",
+        `SELECT c.* FROM credit_card_cycles c
+          JOIN financial_accounts a ON a.id = c.account_id AND a.user_id = c.user_id
+         WHERE c.user_id = ? AND c.deleted = 0
+           AND a.kind = 'credit_card' AND a.status = 'active' AND a.deleted = 0
+         ORDER BY c.cutoff_date DESC`,
         userId,
       );
   return rows.map(mapCycle);
@@ -121,16 +131,34 @@ export async function listCreditCardCycleTransactions(
   cycleId?: string,
 ): Promise<CreditCardCycleTransaction[]> {
   const db = await getDb();
-  const sql = `SELECT cct.transaction_id, cct.account_id, cct.cycle_id, cct.purchase_type,
-            t.transaction_date, t.merchant_name, t.amount_centavos
-       FROM credit_card_transactions cct
-       JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id AND t.deleted = 0
-      WHERE cct.user_id = ? AND cct.deleted = 0
-        ${cycleId ? "AND cct.cycle_id = ?" : ""}
-      ORDER BY t.transaction_date DESC, t.created_at DESC`;
-  return cycleId
-    ? db.getAllAsync<CreditCardCycleTransaction>(sql, userId, cycleId)
-    : db.getAllAsync<CreditCardCycleTransaction>(sql, userId);
+  const sql = `WITH scheduled_installments AS (
+        SELECT cct.transaction_id, cct.account_id, target_cycle.id AS cycle_id,
+          cct.purchase_type, cct.installment_id, t.transaction_date, t.merchant_name,
+          i.monthly_amortization_centavos AS amount_centavos, t.created_at
+        FROM credit_card_transactions cct
+        JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id AND t.deleted = 0
+        JOIN credit_card_installments i ON i.id = cct.installment_id AND i.user_id = cct.user_id AND i.deleted = 0
+        JOIN credit_card_cycles origin_cycle ON origin_cycle.id = cct.cycle_id AND origin_cycle.user_id = cct.user_id AND origin_cycle.deleted = 0
+        JOIN credit_card_cycles target_cycle ON target_cycle.account_id = cct.account_id AND target_cycle.user_id = cct.user_id AND target_cycle.deleted = 0
+        WHERE cct.user_id = ? AND cct.deleted = 0 AND cct.purchase_type = 'installment'
+          AND target_cycle.cycle_start_date >= origin_cycle.cycle_start_date
+          AND (SELECT COUNT(*) FROM credit_card_cycles ordinal_cycle
+                WHERE ordinal_cycle.user_id = cct.user_id AND ordinal_cycle.account_id = cct.account_id
+                  AND ordinal_cycle.deleted = 0 AND ordinal_cycle.cycle_start_date >= origin_cycle.cycle_start_date
+                  AND ordinal_cycle.cycle_start_date <= target_cycle.cycle_start_date) <= i.term_months
+      ), cycle_purchases AS (
+        SELECT cct.transaction_id, cct.account_id, cct.cycle_id, cct.purchase_type, cct.installment_id,
+          t.transaction_date, t.merchant_name, t.amount_centavos, t.created_at
+        FROM credit_card_transactions cct
+        JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id AND t.deleted = 0
+        WHERE cct.user_id = ? AND cct.deleted = 0 AND cct.purchase_type = 'regular'
+        UNION ALL SELECT * FROM scheduled_installments
+      )
+      SELECT transaction_id, account_id, cycle_id, purchase_type, installment_id, transaction_date, merchant_name, amount_centavos
+      FROM cycle_purchases
+      WHERE (? IS NULL OR cycle_id = ?)
+      ORDER BY transaction_date DESC, created_at DESC`;
+  return db.getAllAsync<CreditCardCycleTransaction>(sql, userId, userId, cycleId ?? null, cycleId ?? null);
 }
 
 export async function createCreditCardCycle(
@@ -209,14 +237,6 @@ export async function updateCreditCardCycle(
     if (today < current.cycle_start_date || today > current.cutoff_date) {
       throw new LocalDbError("VALIDATION_ERROR", "Only the open credit-card billing cycle can be changed.");
     }
-    const details = await db.getFirstAsync<{ billing_cycle_days: number | null }>(
-      "SELECT billing_cycle_days FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0",
-      current.account_id,
-      userId,
-    );
-    if (!details?.billing_cycle_days || details.billing_cycle_days < 1) {
-      throw new LocalDbError("VALIDATION_ERROR", "A billing-cycle length is required before changing this cycle.");
-    }
     const duplicate = await db.getFirstAsync<{ id: string }>(
       `SELECT id FROM credit_card_cycles
         WHERE user_id = ? AND account_id = ? AND cycle_start_date = ? AND cutoff_date = ?
@@ -230,36 +250,18 @@ export async function updateCreditCardCycle(
     if (duplicate) {
       throw new LocalDbError("VALIDATION_ERROR", "A billing cycle with these dates already exists.");
     }
-    const futureCycles = await db.getAllAsync<CycleRow>(
-      `SELECT * FROM credit_card_cycles
+    const overlappingCycle = await db.getFirstAsync<{ id: string }>(
+      `SELECT id FROM credit_card_cycles
         WHERE user_id = ? AND account_id = ? AND id != ? AND deleted = 0
-          AND cycle_start_date > ?`,
+          AND cycle_start_date <= ? AND cutoff_date >= ?`,
       userId,
       current.account_id,
       id,
       input.cutoff_date,
+      input.cycle_start_date,
     );
-    for (const future of futureCycles) {
-      const protectedRecord = await db.getFirstAsync<{ id: string }>(
-        `SELECT id FROM credit_card_statements WHERE user_id = ? AND cycle_id = ? AND deleted = 0
-         UNION ALL SELECT transaction_id AS id FROM credit_card_transactions WHERE user_id = ? AND cycle_id = ? AND deleted = 0
-         UNION ALL SELECT id FROM credit_card_payments WHERE user_id = ? AND cycle_id = ? AND deleted = 0
-         LIMIT 1`,
-        userId, future.id, userId, future.id, userId, future.id,
-      );
-      if (protectedRecord) {
-        throw new LocalDbError("VALIDATION_ERROR", "This change would alter a future billing cycle with recorded activity.");
-      }
-    }
-    for (const future of futureCycles) {
-      await db.runAsync(
-        "UPDATE credit_card_cycles SET deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?",
-        ts, future.id, userId,
-      );
-      await enqueueOperation(db, {
-        userId, deviceId, entity: "credit_card_cycles", recordId: future.id, operationType: "delete", baseVersion: future.version,
-        changedFields: [], payload: {}, failureMessage: "This credit-card billing cycle could not be saved.",
-      });
+    if (overlappingCycle) {
+      throw new LocalDbError("VALIDATION_ERROR", "This change would overlap an existing billing cycle.");
     }
     await db.runAsync(
       `UPDATE credit_card_cycles
@@ -282,20 +284,6 @@ export async function updateCreditCardCycle(
       payload: { cycle_start_date: input.cycle_start_date, cutoff_date: input.cutoff_date },
       failureMessage: "This credit-card billing cycle could not be saved.",
     });
-    const successor = calculateSuccessorCreditCardCycle(input.cutoff_date, details.billing_cycle_days);
-    const successorId = randomUUID();
-    await db.runAsync(
-      `INSERT INTO credit_card_cycles
-        (id, user_id, account_id, cycle_start_date, cutoff_date, statement_date, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, NULL, 1, 0, ?, ?)`,
-      successorId, userId, current.account_id, successor.cycle_start_date, successor.cutoff_date, ts, ts,
-    );
-    await enqueueOperation(db, {
-      userId, deviceId, entity: "credit_card_cycles", recordId: successorId, operationType: "create", baseVersion: null,
-      changedFields: Object.keys(cyclePayload({ account_id: current.account_id, ...successor })),
-      payload: cyclePayload({ account_id: current.account_id, ...successor }),
-      failureMessage: "This credit-card billing cycle could not be saved.",
-    });
     const row = await db.getFirstAsync<CycleRow>("SELECT * FROM credit_card_cycles WHERE id = ? AND user_id = ?", id, userId);
     if (!row) throw new LocalDbError("INTERNAL_ERROR", "failed to read updated credit-card cycle");
     result = { cycle: mapCycle(row), operation };
@@ -308,7 +296,7 @@ export async function ensureCurrentCreditCardCycles(userId: string, deviceId: st
   const date = asOfDate ?? new Date().toISOString().slice(0, 10);
   validateIsoDate(date, "asOfDate");
   const rows = await db.getAllAsync<CreditCardCycleDefaults>(
-    `SELECT fa.id AS account_id, cc.cutoff_day
+    `SELECT fa.id AS account_id, cc.cutoff_day, cc.billing_cycle_days
      FROM financial_accounts fa
      JOIN credit_card_details cc ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
      WHERE fa.user_id = ? AND fa.kind = 'credit_card' AND fa.status = 'active' AND fa.deleted = 0`,
@@ -318,69 +306,60 @@ export async function ensureCurrentCreditCardCycles(userId: string, deviceId: st
 
   await db.withTransactionAsync(async () => {
     for (const defaults of rows) {
-      const existingCurrent = await db.getFirstAsync<CycleRow>(
-        `SELECT * FROM credit_card_cycles
-          WHERE user_id = ? AND account_id = ? AND deleted = 0
-            AND cycle_start_date <= ? AND cutoff_date >= ?
-          ORDER BY cycle_start_date DESC LIMIT 1`,
-        userId,
-        defaults.account_id,
-        date,
-        date,
-      );
-      if (existingCurrent) {
-        ensured.push(mapCycle(existingCurrent));
-        continue;
-      }
-      const calculated = calculateCurrentCreditCardCycle(defaults, date);
-      let row = await db.getFirstAsync<CycleRow>(
-        `SELECT * FROM credit_card_cycles
-           WHERE user_id = ? AND account_id = ? AND cycle_start_date = ? AND cutoff_date = ? AND deleted = 0`,
-        userId,
-        calculated.account_id,
-        calculated.cycle_start_date,
-        calculated.cutoff_date,
-      );
-      if (!row) {
+      while (true) {
+        const existingCurrent = await db.getFirstAsync<CycleRow>(
+          `SELECT * FROM credit_card_cycles
+            WHERE user_id = ? AND account_id = ? AND deleted = 0
+              AND cycle_start_date <= ? AND cutoff_date >= ?
+            ORDER BY cycle_start_date DESC LIMIT 1`,
+          userId,
+          defaults.account_id,
+          date,
+          date,
+        );
+        if (existingCurrent) {
+          ensured.push(mapCycle(existingCurrent));
+          break;
+        }
+        const latestCycle = await db.getFirstAsync<CycleRow>(
+          `SELECT * FROM credit_card_cycles
+            WHERE user_id = ? AND account_id = ? AND deleted = 0 AND cutoff_date < ?
+            ORDER BY cutoff_date DESC LIMIT 1`,
+          userId,
+          defaults.account_id,
+          date,
+        );
+        const calculated = latestCycle
+          ? calculateSuccessorCreditCardCycle(latestCycle.cutoff_date, defaults.billing_cycle_days ?? 0)
+          : calculateCurrentCreditCardCycle(defaults, date);
         const id = randomUUID();
         const ts = now();
         const insertResult = await db.runAsync(
           `INSERT OR IGNORE INTO credit_card_cycles
              (id, user_id, account_id, cycle_start_date, cutoff_date, statement_date, version, deleted, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, NULL, 1, 0, ?, ?)`,
           id,
           userId,
-          calculated.account_id,
+          defaults.account_id,
           calculated.cycle_start_date,
           calculated.cutoff_date,
-          calculated.statement_date,
-           ts,
-           ts,
-         );
-         if (insertResult.changes > 0) {
-           await enqueueOperation(db, {
-             userId,
-             deviceId,
-             entity: "credit_card_cycles",
-             recordId: id,
-             operationType: "create",
-             baseVersion: null,
-             changedFields: Object.keys(cyclePayload(calculated)),
-             payload: cyclePayload(calculated),
-             failureMessage: "This credit-card billing cycle could not be saved.",
-           });
-           row = await db.getFirstAsync<CycleRow>("SELECT * FROM credit_card_cycles WHERE id = ? AND user_id = ?", id, userId);
-         } else {
-           row = await db.getFirstAsync<CycleRow>(
-             `SELECT * FROM credit_card_cycles
-                WHERE user_id = ? AND account_id = ? AND cycle_start_date = ? AND deleted = 0`,
-             userId,
-             calculated.account_id,
-             calculated.cycle_start_date,
-           );
-         }
+          ts,
+          ts,
+        );
+        if (insertResult.changes > 0) {
+          await enqueueOperation(db, {
+            userId,
+            deviceId,
+            entity: "credit_card_cycles",
+            recordId: id,
+            operationType: "create",
+            baseVersion: null,
+            changedFields: Object.keys(cyclePayload({ account_id: defaults.account_id, ...calculated })),
+            payload: cyclePayload({ account_id: defaults.account_id, ...calculated }),
+            failureMessage: "This credit-card billing cycle could not be saved.",
+          });
+        }
       }
-      if (row) ensured.push(mapCycle(row));
     }
   });
 
