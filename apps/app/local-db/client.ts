@@ -91,7 +91,9 @@ export async function loadMigrations(): Promise<Migration[]> {
   const { default: m038 } = await import("./migrations/038_credit_card_statement_dates");
   const { default: m039 } = await import("./migrations/039_edit_credit_card_statements");
   const { default: m040 } = await import("./migrations/040_validate_credit_card_statement_selection");
-  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040];
+  const { default: m041 } = await import("./migrations/041_harden_credit_card_statements");
+  const { default: m042 } = await import("./migrations/042_credit_card_installment_purchases");
+  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040, m041, m042];
 }
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
