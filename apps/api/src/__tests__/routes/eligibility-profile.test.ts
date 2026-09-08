@@ -132,7 +132,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
     });
   }
 
-  function upsertChainResult(returnData = { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" }) {
+  function upsertChainResult(returnData = { user_id: validUserId, updated_at: "2026-06-12T12:00:00Z" }) {
     return { data: returnData, error: null };
   }
 
@@ -166,9 +166,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
       .send(validEligibilityPayload());
 
     expect(response.status).toBe(200);
-    expect(response.body.payload.profile).toMatchObject({
-      id: validProfileId,
-    });
+    expect(response.body.payload.profile).toMatchObject({ id: validUserId });
   });
 
   it("includes eligibility_confirmed_at when all required fields are present and is_filipino is true", async () => {

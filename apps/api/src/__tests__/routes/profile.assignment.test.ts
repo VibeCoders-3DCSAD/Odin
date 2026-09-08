@@ -56,7 +56,7 @@ describe("GET /odin/api/profile/assignment/current", () => {
 
     mockFrom
       .mockReturnValueOnce(createMockQuery({
-        data: { id: "assign-1", user_id: validUserId, assessment_id: "assess-1", profile_label: "stable_flexible", is_active: true, confirmation_required: true, effective_from: "2026-07-08T00:00:00Z", confirmed_at: null, rejected_at: null, explanation: "test", created_at: "2026-07-08T00:00:00Z" },
+        data: { id: "assign-1", user_id: validUserId, assessment_id: "assess-1", profile_label: "STABLE_FLEXIBLE_AT_RISK", is_active: true, confirmation_required: true, effective_from: "2026-07-08T00:00:00Z", confirmed_at: null, rejected_at: null, explanation: "test", created_at: "2026-07-08T00:00:00Z" },
         error: null,
       }))
       .mockReturnValueOnce({ select: mockDriversSelect });
@@ -66,7 +66,7 @@ describe("GET /odin/api/profile/assignment/current", () => {
       .set(authHeader());
 
     expect(response.status).toBe(200);
-    expect(response.body.payload.assignment.profile_label).toBe("stable_flexible");
+    expect(response.body.payload.assignment.profile_label).toBe("STABLE_FLEXIBLE_AT_RISK");
     expect(response.body.payload.drivers).toHaveLength(1);
   });
 
@@ -86,7 +86,7 @@ describe("GET /odin/api/profile/assignment/current", () => {
   it("returns 200 with empty drivers when assignment has no assessment_id", async () => {
     mockAuth();
     mockFrom.mockReturnValueOnce(createMockQuery({
-      data: { id: "assign-1", user_id: validUserId, assessment_id: null, profile_label: "stable_flexible", is_active: true, confirmation_required: false },
+      data: { id: "assign-1", user_id: validUserId, assessment_id: null, profile_label: "STABLE_FLEXIBLE_AT_RISK", is_active: true, confirmation_required: false },
       error: null,
     }));
 
@@ -300,17 +300,17 @@ describe("POST /odin/api/profile/assignment/select", () => {
   it("returns 200 with selected assignment", async () => {
     mockAuth();
     mockRpc.mockResolvedValue({
-      data: { success: true, assignment_id: "assign-2", profile_label: "variable_obligated", previous_deactivated: true },
+      data: { success: true, assignment_id: "assign-2", profile_label: "VARIABLE_OBLIGATED_AT_RISK", previous_deactivated: true },
       error: null,
     });
 
     const response = await request(app)
       .post(`${basePath}/assignment/select`)
       .set(authHeader())
-      .send({ payload: { profile_label: "variable_obligated" } });
+      .send({ payload: { profile_label: "VARIABLE_OBLIGATED_AT_RISK" } });
 
     expect(response.status).toBe(200);
-    expect(response.body.payload.profile_label).toBe("variable_obligated");
+    expect(response.body.payload.profile_label).toBe("VARIABLE_OBLIGATED_AT_RISK");
   });
 
   it("passes rejection intent to the atomic selection RPC", async () => {
@@ -320,11 +320,11 @@ describe("POST /odin/api/profile/assignment/select", () => {
     await request(app)
       .post(`${basePath}/assignment/select`)
       .set(authHeader())
-      .send({ payload: { profile_label: "variable_obligated", reject_current: true } });
+      .send({ payload: { profile_label: "VARIABLE_OBLIGATED_AT_RISK", reject_current: true } });
 
     expect(mockRpc).toHaveBeenCalledWith("select_profile_assignment", {
       p_user_id: validUserId,
-      p_profile_label: "variable_obligated",
+      p_profile_label: "VARIABLE_OBLIGATED_AT_RISK",
       p_reject_current: true,
     });
   });
@@ -354,7 +354,7 @@ describe("POST /odin/api/profile/assignment/select", () => {
   it("returns 401 when no authorization header", async () => {
     const response = await request(app)
       .post(`${basePath}/assignment/select`)
-      .send({ payload: { profile_label: "stable_flexible" } });
+      .send({ payload: { profile_label: "STABLE_FLEXIBLE_AT_RISK" } });
 
     expect(response.status).toBe(401);
   });
@@ -457,6 +457,7 @@ describe("POST /odin/api/profile/reassess", () => {
 
   it("returns 500 when rpc fails", async () => {
     mockAuth();
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
     mockRpc.mockResolvedValue({
       data: null,
       error: { message: "RPC error" },
@@ -468,5 +469,11 @@ describe("POST /odin/api/profile/reassess", () => {
       .send({ payload: { reason: "test" } });
 
     expect(response.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalledWith("request_profile_reassessment RPC error", {
+      user_id: validUserId,
+      assessment_method: "standard",
+      error: { message: "RPC error" },
+    });
+    errorSpy.mockRestore();
   });
 });

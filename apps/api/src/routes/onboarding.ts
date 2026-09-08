@@ -2,29 +2,28 @@ import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
-import { ONBOARDING_ERRORS, VALID_EMPLOYMENT_CLASSIFICATIONS, VALID_METRO_MANILA_PRESENCE } from "../lib/constants.js";
+import { EMERGENCY_RUNWAYS, INCOME_PATTERNS, OBLIGATION_LOADS, ONBOARDING_ERRORS, VALID_EMPLOYMENT_CLASSIFICATIONS, VALID_METRO_MANILA_PRESENCE } from "../lib/constants.js";
+import { classifyPfpQuestionnaire } from "../lib/mlClient.js";
 import { getServiceRoleClient } from "../lib/supabase.js";
 
 const router = Router();
 
 const ONBOARDING_ANSWER_KEYS = new Set([
   "display_name", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
-  "primary_employment_classification", "employment_status", "income_stability",
-  "income_type", "pay_frequency", "monthly_income", "fixed_obligation_types",
-  "monthly_obligations", "protected_categories", "has_dependents",
+  "primary_employment_classification", "employment_status", "monthly_income",
+  "income_pattern", "obligation_load", "emergency_runway", "protected_categories", "has_dependents",
 ]);
 
-const ARRAY_ANSWER_KEYS = new Set(["fixed_obligation_types", "protected_categories"]);
+const ARRAY_ANSWER_KEYS = new Set(["protected_categories"]);
 const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && key !== "has_dependents"));
 const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   is_filipino: ["true", "false"],
   metro_manila_presence: VALID_METRO_MANILA_PRESENCE,
   primary_employment_classification: VALID_EMPLOYMENT_CLASSIFICATIONS,
   employment_status: ["employed_full_time", "employed_part_time", "self_employed", "unemployed", "retired", "student"],
-  income_stability: ["very_stable", "stable", "somewhat_unstable", "very_unstable"],
-  income_type: ["stable", "variable"],
-  pay_frequency: ["weekly", "bi_weekly", "semi_monthly", "monthly", "irregular", "annual"],
-  fixed_obligation_types: ["rent_mortgage", "loan_payments", "insurance", "utilities", "tuition", "support_payments", "none"],
+  income_pattern: INCOME_PATTERNS,
+  obligation_load: OBLIGATION_LOADS,
+  emergency_runway: EMERGENCY_RUNWAYS,
   protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
 };
 
@@ -46,7 +45,7 @@ function validateOnboardingPayload(
       const options = ANSWER_OPTIONS[key];
       if (options && typeof value === "string" && value !== "" && !options.includes(value)) return `Invalid ${key}.`;
       if (options && Array.isArray(value) && value.some((item) => !options.includes(item))) return `Invalid ${key}.`;
-      if ((key === "monthly_income" || key === "monthly_obligations") && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
+      if (key === "monthly_income" && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
         return `${key} must be a non-negative whole number.`;
       }
     }
@@ -310,19 +309,17 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     "metro_manila_locality_code",
     "primary_employment_classification",
     "employment_status",
-    "income_stability",
-    "income_type",
-    "pay_frequency",
     "monthly_income",
-    "fixed_obligation_types",
-    "monthly_obligations",
+    "income_pattern",
+    "obligation_load",
+    "emergency_runway",
     "protected_categories",
   ];
   const missing = requiredFields.filter((f) => {
     const v = rawAnswers[f];
-    if (f === "monthly_income" || f === "monthly_obligations")
+    if (f === "monthly_income")
       return typeof v !== "string" || v === "";
-    if (f === "fixed_obligation_types" || f === "protected_categories")
+    if (f === "protected_categories")
       return !Array.isArray(v) || v.length === 0;
     return typeof v !== "string" || v === "";
   });
@@ -360,14 +357,11 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     response.status(400).json({ error: "Bad Request", message: "monthly_income must be a non-negative whole number." });
     return;
   }
-  if (typeof rawAnswers.monthly_obligations === "string" && !/^\d+$/.test(rawAnswers.monthly_obligations)) {
-    response.status(400).json({ error: "Bad Request", message: "monthly_obligations must be a non-negative whole number." });
-    return;
-  }
-  if (typeof rawAnswers.income_stability === "string" && typeof rawAnswers.income_type === "string") {
-    const expectedIncomeType = ["very_stable", "stable"].includes(rawAnswers.income_stability) ? "stable" : "variable";
-    if (rawAnswers.income_type !== expectedIncomeType) {
-      response.status(400).json({ error: "Bad Request", message: "income_type must match income_stability." });
+  if (typeof rawAnswers.monthly_income === "string" && typeof rawAnswers.income_pattern === "string") {
+    const isZeroIncome = rawAnswers.monthly_income === "0";
+    if ((isZeroIncome && rawAnswers.income_pattern !== "no_current_income")
+      || (!isZeroIncome && rawAnswers.income_pattern === "no_current_income")) {
+      response.status(400).json({ error: "Bad Request", message: "monthly_income and income_pattern must agree about current income." });
       return;
     }
   }
@@ -376,8 +370,19 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     return;
   }
 
+  const classification = await classifyPfpQuestionnaire(userId, rawAnswers);
+  if (!classification.ok) {
+    console.warn("PFP questionnaire classifier unavailable", { user_id: userId, session_id: sessionId, reason: classification.reason });
+  }
   const { data: result, error: rpcError } = await getServiceRoleClient()
-    .rpc("submit_onboarding_session", { p_session_id: sessionId, p_user_id: userId });
+    .rpc("submit_onboarding_session_with_classification", {
+      p_session_id: sessionId,
+      p_user_id: userId,
+      p_profile_label: classification.ok ? classification.classification.prediction : null,
+      p_confidence_score: classification.ok ? classification.classification.confidence : null,
+      p_model_kind: classification.ok ? classification.classification.modelName : null,
+      p_model_version: classification.ok ? classification.classification.modelVersion : null,
+    });
 
   if (rpcError) {
     console.error("submit_onboarding_session RPC error", {

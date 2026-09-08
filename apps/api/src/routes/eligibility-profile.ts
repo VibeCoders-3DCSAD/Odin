@@ -196,7 +196,7 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
   const { data, error } = await authenticatedSupabase
     .from("user_eligibility_profiles")
     .upsert(upsertData, { onConflict: "user_id" })
-    .select("id, updated_at")
+    .select("user_id, updated_at")
     .single();
 
   if (error) {
@@ -210,7 +210,7 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
   response.status(200).json({
     payload: {
       profile: {
-        id: data.id,
+        id: data.user_id,
         updated_at: data.updated_at,
       },
     },

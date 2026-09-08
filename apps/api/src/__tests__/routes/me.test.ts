@@ -54,7 +54,7 @@ describe("GET /odin/api/me", () => {
         error: null,
       }))
       .mockReturnValueOnce(createMockQuery({
-        data: { profile_label: "stable_obligated", confirmed_at: "2026-06-10T00:00:00Z" },
+        data: { profile_label: "STABLE_OBLIGATED_AT_RISK", confirmed_at: "2026-06-10T00:00:00Z" },
         error: null,
       }));
 
@@ -73,7 +73,7 @@ describe("GET /odin/api/me", () => {
         notifications_opt_in: true,
       },
       current_profile: {
-        profile_label: "stable_obligated",
+        profile_label: "STABLE_OBLIGATED_AT_RISK",
         confirmed: true,
       },
     });

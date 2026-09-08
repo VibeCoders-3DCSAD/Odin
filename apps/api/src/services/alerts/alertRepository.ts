@@ -71,11 +71,19 @@ export class AlertRepository {
   async saveEvaluation(result: DetectionResult, transactionId?: string): Promise<string> {
     if (result.category === "anomaly_detection") {
       if (!transactionId || !result.references.subcategory_id) throw new Error("Anomaly evaluations require source references");
+      const { data: assignment, error: assignmentError } = await this.client
+        .from("financial_profile_assignments")
+        .select("profile_label")
+        .eq("user_id", this.userId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+      if (!assignment) throw new Error("Anomaly evaluations require an active financial profile assignment");
       const { data, error } = await this.client.from("anomaly_evaluations").insert({
         id: randomUUID(),
         user_id: this.userId,
         transaction_id: transactionId,
-        profile_label: "stable_flexible",
+        profile_label: assignment.profile_label,
         history_days: 90,
         subcategory_id: result.references.subcategory_id,
         amount_centavos: result.feature_drivers[0]?.value_centavos ?? 0,

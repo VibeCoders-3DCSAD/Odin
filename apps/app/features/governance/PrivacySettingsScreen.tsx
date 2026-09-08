@@ -447,7 +447,12 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
   }
 
   if (subPage === "financial-profile") {
-    const profileOptions = ["stable_flexible", "stable_obligated", "variable_flexible", "variable_obligated"];
+    const profileOptions = [
+      "STABLE_FLEXIBLE_TOLERANT", "STABLE_FLEXIBLE_AT_RISK",
+      "STABLE_OBLIGATED_TOLERANT", "STABLE_OBLIGATED_AT_RISK",
+      "VARIABLE_FLEXIBLE_TOLERANT", "VARIABLE_FLEXIBLE_AT_RISK",
+      "VARIABLE_OBLIGATED_TOLERANT", "VARIABLE_OBLIGATED_AT_RISK",
+    ];
     const refreshProfile = async () => {
       const current = await getProfileAssignment(accessToken);
       const assignment = current.body.payload?.assignment ?? null;
@@ -547,7 +552,11 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
             setReassessmentMessage(null);
             try {
               const { response, body } = await requestProfileReassessment(accessToken, reassessmentReason, useRecentTransactions);
-              setReassessmentMessage(response.ok ? "Reassessment requested. We'll update your profile when it is ready." : body.message ?? "Couldn't request reassessment.");
+              if (response.ok) {
+                onRequestReassessment?.();
+              } else {
+                setReassessmentMessage(body.message ?? "Couldn't request reassessment.");
+              }
             } catch {
               setReassessmentMessage("Can't request reassessment while offline.");
             } finally {

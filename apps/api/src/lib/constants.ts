@@ -102,11 +102,19 @@ export const ONBOARDING_STATUSES = [
 ] as const;
 
 export const FINANCIAL_PROFILE_LABELS = [
-  "stable_flexible",
-  "stable_obligated",
-  "variable_flexible",
-  "variable_obligated",
+  "STABLE_FLEXIBLE_TOLERANT",
+  "STABLE_FLEXIBLE_AT_RISK",
+  "STABLE_OBLIGATED_TOLERANT",
+  "STABLE_OBLIGATED_AT_RISK",
+  "VARIABLE_FLEXIBLE_TOLERANT",
+  "VARIABLE_FLEXIBLE_AT_RISK",
+  "VARIABLE_OBLIGATED_TOLERANT",
+  "VARIABLE_OBLIGATED_AT_RISK",
 ] as const;
+
+export const INCOME_PATTERNS = ["no_current_income", "predictable_income", "variable_income"] as const;
+export const OBLIGATION_LOADS = ["no_income_with_obligations", "no_income_without_obligations", "low", "medium", "high"] as const;
+export const EMERGENCY_RUNWAYS = ["less_than_1_month", "1_to_3_months", "3_to_6_months", "6_plus_months"] as const;
 
 export const PROFILE_ASSESSMENT_STATUSES = [
   "queued",
@@ -145,7 +153,6 @@ export const PROFILE_ERRORS = {
   reject_reason_required: "Override reason is required.",
   fetch_failed: "Failed to fetch profile assignment.",
   invalid_assignment_id: "Invalid assignment ID format.",
-  invalid_profile_label: "Invalid profile label. Must be one of: stable_flexible, stable_obligated, variable_flexible, variable_obligated.",
+  invalid_profile_label: `Invalid profile label. Must be one of: ${FINANCIAL_PROFILE_LABELS.join(", ")}.`,
   reassess_failed: "Failed to request reassessment.",
 } as const;
-

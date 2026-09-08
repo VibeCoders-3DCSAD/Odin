@@ -1,8 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 const LOCAL_API_URL = process.env.SUPABASE_URL ?? "http://127.0.0.1:54321";
-const LOCAL_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!LOCAL_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for integration tests");
+const LOCAL_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "test-key";
 
 const serviceRole = createClient(LOCAL_API_URL, LOCAL_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -12,11 +11,11 @@ let testUserId: string;
 
 async function ensureLocalSupabase(): Promise<boolean> {
   try {
-    const { error } = await serviceRole.rpc("submit_onboarding_session", {
+    const { error } = await serviceRole.rpc("submit_onboarding_session_with_classification", {
       p_session_id: "00000000-0000-0000-0000-000000000000",
       p_user_id: "00000000-0000-0000-0000-000000000000",
     });
-    return error?.message !== "Could not find the function 'public.submit_onboarding_session'";
+    return error?.message !== "Could not find the function 'public.submit_onboarding_session_with_classification'";
   } catch {
     return false;
   }
@@ -49,6 +48,8 @@ async function setupUser(): Promise<string> {
 }
 
 beforeAll(async () => {
+  if (!process.env.RUN_INTEGRATION_TESTS) return;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for integration tests");
   const available = await ensureLocalSupabase();
   if (!available) {
     throw new Error("Local Supabase not available. Start with: npx supabase start");
@@ -89,7 +90,7 @@ async function submitWithAnswers(answers: Record<string, unknown>) {
   }
 
   const { data: result, error: rpcError } = await serviceRole.rpc(
-    "submit_onboarding_session",
+    "submit_onboarding_session_with_classification",
     { p_session_id: session.id, p_user_id: testUserId }
   );
 
@@ -98,45 +99,44 @@ async function submitWithAnswers(answers: Record<string, unknown>) {
   return result as { assessment_id: string; assignment_id: string; profile_label: string };
 }
 
-describe("submit_onboarding_session (integration)", () => {
+describe("submit_onboarding_session_with_classification (integration)", () => {
   if (!process.env.RUN_INTEGRATION_TESTS) {
     it.skip("skipped — set RUN_INTEGRATION_TESTS=true to run", () => {});
     return;
   }
 
-  it("returns stable_flexible for stable income with low obligations", async () => {
+  it("uses the questionnaire fallback for stable income, low obligations, and runway", async () => {
     const result = await submitWithAnswers({
-      income_type: "stable",
-      monthly_income: 50000,
-      monthly_obligations: 5000,
+      income_pattern: "predictable_income",
+      obligation_load: "low",
+      emergency_runway: "3_to_6_months",
     });
-    expect(result.profile_label).toBe("stable_flexible");
+    expect(result.profile_label).toBe("STABLE_FLEXIBLE_TOLERANT");
   }, 15000);
 
-  it("returns variable_obligated for variable income with high obligations", async () => {
+  it("returns variable obligated at risk for variable income with high obligations", async () => {
     const result = await submitWithAnswers({
-      income_type: "variable",
-      monthly_income: 30000,
-      monthly_obligations: 12000,
+      income_pattern: "variable_income",
+      obligation_load: "high",
+      emergency_runway: "less_than_1_month",
     });
-    expect(result.profile_label).toBe("variable_obligated");
+    expect(result.profile_label).toBe("VARIABLE_OBLIGATED_AT_RISK");
   }, 15000);
 
-  it("returns variable_flexible for no income with dependents", async () => {
+  it("maps zero-income users without required payments to flexible", async () => {
     const result = await submitWithAnswers({
-      income_type: "variable",
-      monthly_income: 0,
-      monthly_obligations: 0,
-      has_dependents: true,
+      income_pattern: "no_current_income",
+      obligation_load: "no_income_without_obligations",
+      emergency_runway: "1_to_3_months",
     });
-    expect(result.profile_label).toBe("variable_flexible");
+    expect(result.profile_label).toBe("VARIABLE_FLEXIBLE_AT_RISK");
   }, 15000);
 
   it("persists assessment with heuristic_v1 model_kind and rule", async () => {
     const result = await submitWithAnswers({
-      income_type: "stable",
-      monthly_income: 40000,
-      monthly_obligations: 8000,
+      income_pattern: "predictable_income",
+      obligation_load: "low",
+      emergency_runway: "1_to_3_months",
     });
 
     const { data: assessment, error } = await serviceRole
@@ -148,10 +148,9 @@ describe("submit_onboarding_session (integration)", () => {
     expect(error).toBeNull();
     expect(assessment!.model_kind).toBe("heuristic_v1");
     expect(assessment!.assessment_method).toBe("questionnaire");
-    expect(assessment!.proposed_profile_label).toBe("stable_flexible");
+    expect(assessment!.proposed_profile_label).toBe("STABLE_FLEXIBLE_AT_RISK");
     expect(assessment!.output_snapshot).toMatchObject({
-      profile_label: "stable_flexible",
-      rule: "deterministic_heuristic_v1",
+      profile_label: "STABLE_FLEXIBLE_AT_RISK",
     });
   }, 15000);
 });

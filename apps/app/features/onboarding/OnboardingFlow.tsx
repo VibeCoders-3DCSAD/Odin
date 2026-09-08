@@ -40,7 +40,6 @@ const INK2 = "#414942";
 const LINE = "#EAEAE6";
 const MUTED = "#6B7A6F";
 const ERROR = "#D9001F";
-const MONTHLY_OBLIGATIONS_KEY = "monthly_obligations";
 
 type OnboardingFlowProps = {
   accessToken: string;
@@ -71,7 +70,6 @@ export default function OnboardingFlow({
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [obligationAmount, setObligationAmount] = useState("");
   const [incomeText, setIncomeText] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -112,7 +110,6 @@ export default function OnboardingFlow({
             if (sess.raw_answers) {
               const raw = sess.raw_answers as Record<string, unknown>;
               setAnswers(raw);
-              if (typeof raw.monthly_obligations === "string") setObligationAmount(raw.monthly_obligations);
               if (typeof raw.monthly_income === "string") setIncomeText(raw.monthly_income);
             }
             const savedStepKey = sess.current_step_key;
@@ -164,11 +161,10 @@ export default function OnboardingFlow({
     const incomplete = currentStep.kind === "input"
       ? (currentStep.key === "monthly_income" ? incomeText === "" : typeof value !== "string" || value.trim() === "")
       : currentStep.kind === "card_multi_select"
-        ? !Array.isArray(value) || value.length === 0 || (currentStep.key === "fixed_obligations" && obligationAmount === "")
+        ? !Array.isArray(value) || value.length === 0
         : currentStep.kind !== "review" && (typeof value !== "string" || value === "");
     if (incomplete) {
-      const errorKey = currentStep.key === "fixed_obligations" && Array.isArray(value) && value.length > 0 && obligationAmount === "" ? MONTHLY_OBLIGATIONS_KEY : currentStep.questionKey;
-      setFieldErrors({ [errorKey]: currentStep.kind === "card_multi_select" ? "Select at least one answer." : "This answer is required." });
+      setFieldErrors({ [currentStep.questionKey]: currentStep.kind === "card_multi_select" ? "Select at least one answer." : "This answer is required." });
       return;
     }
     setFieldErrors({});
@@ -178,7 +174,7 @@ export default function OnboardingFlow({
     setStepIndex(next);
     if (sessionRef.current)
       persistStep(sessionRef.current, nextStep.key, answersRef.current);
-  }, [stepIndex, persistStep, incomeText, obligationAmount]);
+  }, [stepIndex, persistStep, incomeText]);
 
   const goBack = useCallback(() => {
     if (stepIndex <= 0) return;
@@ -190,18 +186,6 @@ export default function OnboardingFlow({
       setAnswers((prev) => ({ ...prev, [key]: value }));
       setFieldErrors((errors) => {
         const { [key]: _, ...remaining } = errors;
-        return remaining;
-      });
-    },
-    [],
-  );
-
-  const handleIncomeStabilitySelect = useCallback(
-    (val: string) => {
-      const mapped = val === "very_stable" || val === "stable" ? "stable" : "variable";
-      setAnswers((prev) => ({ ...prev, income_stability: val, income_type: mapped }));
-      setFieldErrors((errors) => {
-        const { income_stability: _, ...remaining } = errors;
         return remaining;
       });
     },
@@ -244,12 +228,10 @@ export default function OnboardingFlow({
       if (item.kind === "card_multi_select") return !Array.isArray(answer) || answer.length === 0;
       return typeof answer !== "string" || answer === "";
     });
-    if (firstIncomplete >= 0 || obligationAmount === "") {
-      const obligationStepIndex = STEPS.findIndex((item) => item.key === "fixed_obligations");
-      const targetIndex = firstIncomplete >= 0 ? firstIncomplete : obligationStepIndex;
-      setStepIndex(targetIndex);
-      const missingStep = STEPS[targetIndex];
-      if (missingStep) setFieldErrors({ [firstIncomplete >= 0 ? missingStep.questionKey : MONTHLY_OBLIGATIONS_KEY]: "This answer is required." });
+    if (firstIncomplete >= 0) {
+      setStepIndex(firstIncomplete);
+      const missingStep = STEPS[firstIncomplete];
+      if (missingStep) setFieldErrors({ [missingStep.questionKey]: "This answer is required." });
       return;
     }
     setSubmitting(true);
@@ -292,7 +274,7 @@ export default function OnboardingFlow({
       setSubmitError("Network error. Please try again.");
     }
     setSubmitting(false);
-  }, [accessToken, showToast, obligationAmount]);
+  }, [accessToken, showToast]);
 
   // ── Offline guard ──
   if (!online) {
@@ -453,11 +435,7 @@ export default function OnboardingFlow({
           <CardSelectStep
             step={step}
             selected={answers[step.questionKey] as string | undefined}
-            onSelect={
-              step.key === "income_stability"
-                ? handleIncomeStabilitySelect
-                : (val) => saveAnswer(step.questionKey, val)
-            }
+            onSelect={(val) => saveAnswer(step.questionKey, val)}
           />
         )}
 
@@ -529,7 +507,6 @@ export default function OnboardingFlow({
           <ReviewStep
             answers={answers}
             onEdit={(idx) => setStepIndex(idx)}
-            obligationAmount={obligationAmount}
             incomeText={incomeText}
           />
         )}
@@ -540,68 +517,6 @@ export default function OnboardingFlow({
           </Text>
         ) : null}
 
-        {/* Obligation amount sub-input on the obligations step */}
-        {step.key === "fixed_obligations" && (
-          <View style={{ marginTop: 20 }}>
-            <Text
-              style={{
-                fontFamily: "Manrope",
-                fontWeight: "600",
-                fontSize: 14,
-                color: INK2,
-                marginBottom: 8,
-              }}
-            >
-              Total Monthly Obligations
-            </Text>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                borderWidth: 1.5,
-                borderColor: LINE,
-                borderRadius: 14,
-                backgroundColor: CARD,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: "Manrope",
-                  fontWeight: "600",
-                  fontSize: 16,
-                  color: MUTED,
-                  paddingLeft: 16,
-                }}
-              >
-                PHP
-              </Text>
-              <TextInput
-                value={obligationAmount ? Number(obligationAmount).toLocaleString() : ""}
-                onChangeText={(t) => {
-                  const digits = t.replace(/[^0-9]/g, "");
-                  setObligationAmount(digits);
-                  saveAnswer("monthly_obligations", digits === "" ? "" : digits);
-                }}
-                keyboardType="numeric"
-                placeholder="0"
-                placeholderTextColor={MUTED}
-                style={{
-                  flex: 1,
-                  fontFamily: "Manrope",
-                  fontWeight: "600",
-                  fontSize: 18,
-                  color: INK,
-                  padding: 16,
-                }}
-              />
-            </View>
-            {fieldErrors[MONTHLY_OBLIGATIONS_KEY] ? (
-              <Text style={{ color: ERROR, fontFamily: "Manrope", fontSize: 13, fontWeight: "600", marginTop: 8 }}>
-                {fieldErrors[MONTHLY_OBLIGATIONS_KEY]}
-              </Text>
-            ) : null}
-          </View>
-        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -1033,82 +948,48 @@ function InputStep({
 function ReviewStep({
   answers,
   onEdit,
-  obligationAmount,
   incomeText,
 }: {
   answers: Record<string, unknown>;
   onEdit: (stepIndex: number) => void;
-  obligationAmount: string;
   incomeText: string;
 }) {
   const rows: { label: string; value: string; stepIndex: number }[] = [];
-
-  const DOB_STEP = STEPS[1]!;
-  const NAT_STEP = STEPS[2]!;
-  const MM_STEP = STEPS[3]!;
-  const LOCALITY_STEP = STEPS[4]!;
-  const EMP_CLASS_STEP = STEPS[5]!;
-  const EMP_STEP = STEPS[6]!;
-  const STAB_STEP = STEPS[7]!;
-  const FREQ_STEP = STEPS[8]!;
-  const OBL_STEP = STEPS[10]!;
-  const DEP_STEP = STEPS[11]!;
+  const stepFor = (key: string) => STEPS.find((step) => step.questionKey === key);
+  const addOptionRow = (label: string, questionKey: string) => {
+    const step = stepFor(questionKey);
+    const option = step?.options?.find((item) => item.key === answers[questionKey]);
+    if (step && option) rows.push({ label, value: option.label, stepIndex: STEPS.indexOf(step) });
+  };
 
   const displayName = answers.display_name;
-  if (displayName && displayName !== "") rows.push({ label: "Name", value: displayName as string, stepIndex: 0 });
+  if (displayName && displayName !== "") rows.push({ label: "Name", value: displayName as string, stepIndex: STEPS.findIndex((step) => step.questionKey === "display_name") });
 
   const dob = answers.date_of_birth;
-  if (dob && dob !== "") rows.push({ label: "Date of Birth", value: dob as string, stepIndex: 1 });
-
-  const natLabel = NAT_STEP.options?.find((o) => o.key === answers.is_filipino);
-  if (natLabel) rows.push({ label: "Filipino Citizen", value: natLabel.label, stepIndex: 2 });
-
-  const mmLabel = MM_STEP.options?.find((o) => o.key === answers.metro_manila_presence);
-  if (mmLabel) rows.push({ label: "Metro Manila", value: mmLabel.label, stepIndex: 3 });
-
-  const localityLabel = LOCALITY_STEP.options?.find((o) => o.key === answers.metro_manila_locality_code);
-  if (localityLabel) rows.push({ label: "Locality", value: localityLabel.label, stepIndex: 4 });
-
-  const empClassLabel = EMP_CLASS_STEP.options?.find((o) => o.key === answers.primary_employment_classification);
-  if (empClassLabel) rows.push({ label: "Employment", value: empClassLabel.label, stepIndex: 5 });
-
-  const empLabel = EMP_STEP.options?.find((o) => o.key === answers.employment_status);
-  if (empLabel) rows.push({ label: "Employment Status", value: empLabel.label, stepIndex: 6 });
-
-  const stabLabel = STAB_STEP.options?.find((o) => o.key === answers.income_stability);
-  if (stabLabel) rows.push({ label: "Income Stability", value: stabLabel.label, stepIndex: 7 });
-
-  const freqLabel = FREQ_STEP.options?.find((o) => o.key === answers.pay_frequency);
-  if (freqLabel) rows.push({ label: "Pay Frequency", value: freqLabel.label, stepIndex: 8 });
+  if (dob && dob !== "") rows.push({ label: "Date of Birth", value: dob as string, stepIndex: STEPS.findIndex((step) => step.questionKey === "date_of_birth") });
+  addOptionRow("Filipino Citizen", "is_filipino");
+  addOptionRow("Metro Manila", "metro_manila_presence");
+  addOptionRow("Locality", "metro_manila_locality_code");
+  addOptionRow("Employment", "primary_employment_classification");
+  addOptionRow("Employment Status", "employment_status");
 
   if (incomeText)
     rows.push({
       label: "Monthly Income",
       value: `PHP ${Number(incomeText).toLocaleString()}`,
-      stepIndex: 9,
+      stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_income"),
     });
-
-  const obligations = (answers.fixed_obligation_types as string[] | undefined) ?? [];
-  const oblLabels = obligations
-    .map((k) => OBL_STEP.options?.find((o) => o.key === k)?.label)
-    .filter(Boolean)
-    .join(", ");
-  if (oblLabels) {
-    rows.push({ label: "Obligations", value: oblLabels, stepIndex: 10 });
-    if (obligationAmount)
-      rows.push({
-        label: "Total",
-        value: `PHP ${Number(obligationAmount).toLocaleString()}`,
-        stepIndex: 10,
-      });
-  }
+  addOptionRow("Income Pattern", "income_pattern");
+  addOptionRow("Obligation Load", "obligation_load");
+  addOptionRow("Emergency Runway", "emergency_runway");
 
   const protectedCats = (answers.protected_categories as string[] | undefined) ?? [];
   const catLabels = protectedCats
-    .map((k) => DEP_STEP.options?.find((o) => o.key === k)?.label)
+    .map((k) => stepFor("protected_categories")?.options?.find((o) => o.key === k)?.label)
     .filter(Boolean)
     .join(", ");
-  if (catLabels) rows.push({ label: "Categories", value: catLabels, stepIndex: 11 });
+  const protectedStep = stepFor("protected_categories");
+  if (catLabels && protectedStep) rows.push({ label: "Categories", value: catLabels, stepIndex: STEPS.indexOf(protectedStep) });
 
   return (
     <View>

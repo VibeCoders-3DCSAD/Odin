@@ -219,6 +219,14 @@ router.post("/profile/reassess", requireAuth, async (request: AuthenticatedReque
       p_metadata: metadata,
     });
 
+  if (rpcError) {
+    console.error("request_profile_reassessment RPC error", {
+      user_id: userId,
+      assessment_method: method,
+      error: rpcError,
+    });
+  }
+
   handleRpcResult(result as { success: boolean; code?: string } | null, rpcError, response, PROFILE_ERRORS.reassess_failed, () => {
     response.status(201).json({ payload: result });
   });
