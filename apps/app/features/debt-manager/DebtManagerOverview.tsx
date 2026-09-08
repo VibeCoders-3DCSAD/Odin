@@ -1,26 +1,27 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialFoundations";
-import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
-import NonCreditDebtDetail from "./NonCreditDebtDetail";
+import { listDebtAccounts, type DebtAccount, type DebtListVisibility } from "../../local-db/repositories/debtAccounts";
+import type { DebtPayment } from "../../local-db/repositories/debtPayments";
 import NonCreditDebtForm from "./NonCreditDebtForm";
 import NonCreditDebtList from "./NonCreditDebtList";
 
-type Props = { userId: string; deviceId: string; onOpenCreditCards: () => void };
+type Props = { userId: string; deviceId: string; onOpenCreditCards: () => void; onRecordDebtPayment: (debtId: string) => void; onEditDebtPayment: (payment: DebtPayment) => void };
 
 const P = { shell: "#fcf8f0", brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#EAEAE6" } as const;
+const DEBT_VISIBILITY_LABELS = { active: "Active", finished: "Finished", archived: "Archived", deleted: "Deleted" } as const;
 
-export default function DebtManagerOverview({ userId, deviceId, onOpenCreditCards }: Props) {
+export default function DebtManagerOverview({ userId, deviceId, onOpenCreditCards, onRecordDebtPayment, onEditDebtPayment }: Props) {
   const [cards, setCards] = useState<FinancialAccount[] | null>(null);
   const [debts, setDebts] = useState<DebtAccount[] | null>(null);
-  const [selectedDebt, setSelectedDebt] = useState<DebtAccount | null>(null);
   const [editingDebt, setEditingDebt] = useState<DebtAccount | null | undefined>(undefined);
+  const [visibility, setVisibility] = useState<DebtListVisibility>("active");
 
-  async function load() { const [accounts, debtRows] = await Promise.all([listFinancialAccounts(userId), listDebtAccounts(userId)]); setCards(accounts.filter((account) => account.kind === "credit_card" && account.status === "active")); setDebts(debtRows); setSelectedDebt((current) => current ? debtRows.find((item) => item.id === current.id) ?? null : debtRows[0] ?? null); }
-  useEffect(() => { load().catch(() => { setCards([]); setDebts([]); }); }, [userId]);
+  async function load() { const [accounts, debtRows] = await Promise.all([listFinancialAccounts(userId), listDebtAccounts(userId, visibility)]); setCards(accounts.filter((account) => account.kind === "credit_card" && account.status === "active")); setDebts(debtRows); }
+  useEffect(() => { load().catch(() => { setCards([]); setDebts([]); }); }, [userId, visibility]);
 
   if (cards === null || debts === null) return <ActivityIndicator color={P.brand} />;
-  if (editingDebt !== undefined) return <NonCreditDebtForm userId={userId} deviceId={deviceId} debt={editingDebt} onCancel={() => setEditingDebt(undefined)} onSaved={(debt) => { setEditingDebt(undefined); setSelectedDebt(debt); load().catch(() => {}); }} />;
+  if (editingDebt !== undefined) return <NonCreditDebtForm userId={userId} deviceId={deviceId} debt={editingDebt} onCancel={() => setEditingDebt(undefined)} onSaved={() => { setEditingDebt(undefined); load().catch(() => {}); }} />;
 
   return <View>
     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>Debt Manager</Text>
@@ -31,7 +32,7 @@ export default function DebtManagerOverview({ userId, deviceId, onOpenCreditCard
       <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.brand, marginTop: 12 }}>Manage credit cards</Text>
     </Pressable>
     <Pressable accessibilityRole="button" accessibilityLabel="Add non-credit-card debt" onPress={() => setEditingDebt(null)} style={{ marginTop: 16, backgroundColor: P.brand, borderRadius: 14, padding: 12 }}><Text style={{ color: "white", fontWeight: "800" }}>Add debt</Text></Pressable>
-    <NonCreditDebtList debts={debts} selectedDebtId={selectedDebt?.id ?? null} onSelectDebt={setSelectedDebt} />
-    {selectedDebt ? <NonCreditDebtDetail userId={userId} deviceId={deviceId} debt={selectedDebt} onEdit={setEditingDebt} onChanged={() => load().catch(() => {})} /> : null}
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 }}>{(["active", "finished", "archived", "deleted"] as const).map((status) => <Pressable key={status} accessibilityRole="button" accessibilityLabel={`Show ${status} debts`} onPress={() => setVisibility(status)} style={{ borderWidth: 1, borderColor: visibility === status ? P.brand : P.line, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: visibility === status ? P.shell : "transparent" }}><Text style={{ color: P.ink, fontWeight: "700" }}>{DEBT_VISIBILITY_LABELS[status]}</Text></Pressable>)}</View>
+    <NonCreditDebtList userId={userId} deviceId={deviceId} debts={debts} onEdit={setEditingDebt} onRecordPayment={onRecordDebtPayment} onEditPayment={onEditDebtPayment} onChanged={() => load().catch(() => {})} />
   </View>;
 }

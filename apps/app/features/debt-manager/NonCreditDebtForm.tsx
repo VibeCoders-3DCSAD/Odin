@@ -136,6 +136,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
   const [payment, setPayment] = useState(debt ? String(debt.minimumPaymentCentavos / 100) : "");
   const [startDate, setStartDate] = useState(debt?.typeSpecific.startDate ?? "");
   const [nextDueDate, setNextDueDate] = useState(debt?.nextDueDate ?? "");
+  const [targetPayoffDate, setTargetPayoffDate] = useState(debt?.targetPayoffDate ?? "");
   const [rate, setRate] = useState(debt ? String(debt.annualInterestRateBps / 100) : "0");
   const [frequency, setFrequency] = useState<PaymentFrequency>(debt?.paymentFrequency ?? "monthly");
   const [period, setPeriod] = useState<InterestRatePeriod>(debt?.interestPeriod ?? "annual");
@@ -155,7 +156,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
 
   async function save() {
     const input: CreateDebtAccountInput = {
-      type, name, lenderName: lender, originalBalanceCentavos: pesos(original), currentBalanceCentavos: pesos(balance), annualInterestRateBps: Math.round(Number(rate) * 100), minimumPaymentCentavos: pesos(payment), paymentFrequency: frequency, startDate, nextDueDate, interestPeriod: period, interestMethod: method,
+      type, name, lenderName: lender, originalBalanceCentavos: pesos(original), currentBalanceCentavos: pesos(balance), annualInterestRateBps: Math.round(Number(rate) * 100), minimumPaymentCentavos: pesos(payment), paymentFrequency: frequency, startDate, nextDueDate, targetPayoffDate, interestPeriod: period, interestMethod: method,
       typeSpecific: {
         startDate, feesCentavos: 0, penaltyInfo: null, termMonths: null,
         personalLoan: type === "personal_loan" ? { purpose: purpose || null } : undefined,
@@ -166,7 +167,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
       },
     };
 
-    if (!name.trim() || !lender.trim() || !Number.isFinite(input.originalBalanceCentavos) || !Number.isFinite(input.currentBalanceCentavos) || !Number.isFinite(input.minimumPaymentCentavos) || !startDate || !nextDueDate) {
+    if (!name.trim() || !lender.trim() || !Number.isFinite(input.originalBalanceCentavos) || !Number.isFinite(input.currentBalanceCentavos) || !Number.isFinite(input.minimumPaymentCentavos) || !startDate || !nextDueDate || !targetPayoffDate) {
       setMessage("Some debt details are not valid. Check the highlighted fields and try again.");
       return;
     }
@@ -217,10 +218,11 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
         <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Payment frequency</Text><Options values={PAYMENT_FREQUENCY_OPTIONS} selected={frequency} onChange={setFrequency} compact /></View>
         </Section>
 
-        <Section eyebrow="Calendar" title="Anchor the payment plan">
-        <Field label="Start date" placeholder={DEBT_PLACEHOLDERS.startDate} value={startDate} onChangeText={setStartDate} invalid={invalid && !startDate} />
-        <Field label="Next payment date" placeholder={DEBT_PLACEHOLDERS.nextPaymentDate} value={nextDueDate} onChangeText={setNextDueDate} invalid={invalid && !nextDueDate} />
-        </Section>
+         <Section eyebrow="Calendar" title="Anchor the payment plan">
+         <Field label="Start date" placeholder={DEBT_PLACEHOLDERS.startDate} value={startDate} onChangeText={setStartDate} invalid={invalid && !startDate} />
+         <Field label="Next payment date" placeholder={DEBT_PLACEHOLDERS.nextPaymentDate} value={nextDueDate} onChangeText={setNextDueDate} invalid={invalid && !nextDueDate} />
+         <Field label="When do you want to get this debt paid?" placeholder={DEBT_PLACEHOLDERS.targetPayoffDate} value={targetPayoffDate} onChangeText={setTargetPayoffDate} invalid={invalid && !targetPayoffDate} />
+         </Section>
 
         {type !== "custom_debt" ? <Section eyebrow="Additional details" title="Add the details that matter">{renderTypeFields()}</Section> : null}
 

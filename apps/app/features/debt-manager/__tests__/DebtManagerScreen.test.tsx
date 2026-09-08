@@ -10,6 +10,7 @@ const mockListCreditCardCycleTransactions = jest.fn();
 const mockListCreditCardStatements = jest.fn();
 const mockCreateCreditCardStatement = jest.fn();
 const mockListCreditCardInstallments = jest.fn();
+const mockListCreditCardPayments = jest.fn();
 const mockDatePickerRef: { props: { onChange: (event: { type: string }, date?: Date) => void; minimumDate?: Date } | null } = { props: null };
 
 jest.mock("../../../local-db/repositories/financialFoundations", () => ({
@@ -31,6 +32,12 @@ jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({
   listCreditCardInstallments: (...args: unknown[]) => mockListCreditCardInstallments(...args),
 }));
 
+jest.mock("../../../local-db/repositories/creditCardPayments", () => ({
+  listCreditCardPayments: (...args: unknown[]) => mockListCreditCardPayments(...args),
+  calculateCreditCardPaymentStatus: (amount: number, balance: number, minimum: number) => amount >= balance ? "fully_paid" : amount >= minimum ? "minimum_satisfied" : "partially_paid",
+  creditBalanceCentavos: (amount: number, balance: number) => Math.max(0, amount - balance),
+}));
+
 jest.mock("@react-native-community/datetimepicker", () => ({
   __esModule: true,
   default: (props: { onChange: (event: { type: string }, date?: Date) => void; minimumDate?: Date }) => {
@@ -46,6 +53,7 @@ beforeEach(() => {
   mockListCreditCardCycleTransactions.mockResolvedValue([]);
   mockListCreditCardStatements.mockResolvedValue([]);
   mockListCreditCardInstallments.mockResolvedValue([]);
+  mockListCreditCardPayments.mockResolvedValue([]);
   mockCreateCreditCardStatement.mockResolvedValue({});
   mockDatePickerRef.props = null;
   jest.restoreAllMocks();

@@ -9,6 +9,7 @@ import {
 import { LocalDbError } from "../../local-db/helpers";
 import { listCreditCardStatements, type CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import { listCreditCardInstallments, type CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
+import { listCreditCardPayments, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
 import CreditCardCollections from "./CreditCardCollections";
 
 const P = {
@@ -21,14 +22,15 @@ const P = {
   error: "#D9001F",
 } as const;
 
-type Props = { userId: string; deviceId: string; onBack?: () => void };
+type Props = { userId: string; deviceId: string; onBack?: () => void; onPayStatement?: (context: StatementPaymentContext) => void; onEditPayment?: (payment: CreditCardPayment) => void };
 
-export default function DebtManagerScreen({ userId, deviceId, onBack }: Props) {
+export default function DebtManagerScreen({ userId, deviceId, onBack, onPayStatement, onEditPayment }: Props) {
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [cycles, setCycles] = useState<CreditCardCycle[]>([]);
   const [cycleTransactions, setCycleTransactions] = useState<CreditCardCycleTransaction[]>([]);
   const [statements, setStatements] = useState<CreditCardStatement[]>([]);
   const [installments, setInstallments] = useState<CreditCardInstallment[]>([]);
+  const [payments, setPayments] = useState<CreditCardPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [stale, setStale] = useState(false);
@@ -64,6 +66,7 @@ export default function DebtManagerScreen({ userId, deviceId, onBack }: Props) {
        setCycleTransactions(await listCreditCardCycleTransactions(userId));
        setStatements(await listCreditCardStatements(userId));
        setInstallments(await listCreditCardInstallments(userId));
+       setPayments(await listCreditCardPayments(userId));
       setError(cycleLoadFailed);
       setStale(cycleLoadFailed && hasLoadedData.current);
     } catch (loadError) {
@@ -151,11 +154,14 @@ export default function DebtManagerScreen({ userId, deviceId, onBack }: Props) {
         transactions={cycleTransactions}
         statements={statements}
         installments={installments}
+        payments={payments}
         statementCycle={statementCycle}
         onManageCycle={openCycleEditor}
         onAddStatement={setStatementCycle}
         onCancelStatement={() => setStatementCycle(null)}
         onStatementSaved={load}
+        onPayStatement={onPayStatement}
+        onEditPayment={onEditPayment}
       />
     </View>
   );

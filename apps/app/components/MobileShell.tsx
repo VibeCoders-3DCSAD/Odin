@@ -31,6 +31,8 @@ import SpendingForecastScreen from "../features/forecast/SpendingForecastScreen"
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
 import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
+import type { CreditCardPayment, StatementPaymentContext } from "../local-db/repositories/creditCardPayments";
+import type { DebtPayment, DebtPaymentContext } from "../local-db/repositories/debtPayments";
 import DebtManagerOverview from "../features/debt-manager/DebtManagerOverview";
 import AnomalyAlertsScreen from "../features/alerts/AnomalyAlertsScreen";
 import { getActiveAlerts } from "../local-db/repositories/alerts";
@@ -213,6 +215,9 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
+  const [statementPaymentContext, setStatementPaymentContext] = useState<StatementPaymentContext | null>(null);
+  const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
+  const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -785,7 +790,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "add-transaction") {
-      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} onClose={() => { setTransactionToEdit(null); setCurrentPage(transactionReturnPage); }} />;
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} statementPaymentContext={statementPaymentContext ?? undefined} debtPaymentDebtId={debtPaymentDebtId ?? undefined} debtPaymentContext={debtPaymentContext ?? undefined} onClose={() => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setCurrentPage(transactionReturnPage); }} />;
     }
 
     if (currentPage === "add-recurring-transaction") {
@@ -817,11 +822,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "debt-manager") {
-      return <DebtManagerOverview userId={userId} deviceId={deviceId} onOpenCreditCards={() => setCurrentPage("credit-cards")} />;
+      return <DebtManagerOverview userId={userId} deviceId={deviceId} onOpenCreditCards={() => setCurrentPage("credit-cards")} onRecordDebtPayment={(debtId) => { setDebtPaymentDebtId(debtId); setDebtPaymentContext(null); setStatementPaymentContext(null); setTransactionToEdit(null); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} onEditDebtPayment={async (payment: DebtPayment) => { const transaction = await getTransaction(userId, payment.transaction_id); if (!transaction) return; setDebtPaymentDebtId(null); setDebtPaymentContext({ paymentId: payment.id, debtAccountId: payment.debt_account_id }); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} />;
     }
 
     if (currentPage === "credit-cards") {
-      return <DebtManagerScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("debt-manager")} />;
+      return <DebtManagerScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("debt-manager")} onPayStatement={(context) => { setStatementPaymentContext(context); setTransactionToEdit(null); setTransactionReturnPage("credit-cards"); setCurrentPage("add-transaction"); }} onEditPayment={async (payment: CreditCardPayment) => { const transaction = await getTransaction(userId, payment.transaction_id); if (!transaction) return; setStatementPaymentContext({ statementId: payment.statement_id, cycleId: payment.cycle_id }); setTransactionToEdit(transaction); setTransactionReturnPage("credit-cards"); setCurrentPage("add-transaction"); }} />;
     }
 
     if (currentPage === "budgeting") {

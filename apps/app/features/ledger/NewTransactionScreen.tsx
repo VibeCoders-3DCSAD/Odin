@@ -17,6 +17,10 @@ import { CategorySelectorTree, type CategorySelection } from "../../components/C
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
 import { createExpense, createIncome, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../local-db/repositories/ledger";
+import { createStatementPayment, getCreditCardPaymentByStatement, updateStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
+import { getCreditCardStatementByCycle, type CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
+import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
+import { createTransactionDebtPayment, updateTransactionDebtPayment, type DebtPaymentContext } from "../../local-db/repositories/debtPayments";
 import { getCreditCardPurchaseMetadataForTransaction, type CreateCreditCardInstallmentInput } from "../../local-db/repositories/creditCardInstallments";
 import { createRecurringTemplate } from "../../local-db/repositories/recurringTransactions";
 import { runSync } from "../../local-db/sync/runSync";
@@ -48,14 +52,23 @@ type Props = {
   accessToken: string;
   onClose: () => void;
   transaction?: Transaction;
+  statementPaymentContext?: StatementPaymentContext;
+  debtPaymentDebtId?: string;
+  debtPaymentContext?: DebtPaymentContext;
 };
 
-export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction }: Props) {
+export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, statementPaymentContext, debtPaymentDebtId, debtPaymentContext }: Props) {
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
   const isEdit = !!transaction;
 
-  const [txType, setTxType] = useState<TransactionType>((transaction?.transaction_type as TransactionType) ?? "expense");
+  const [txType, setTxType] = useState<TransactionType>(statementPaymentContext ? "expense" : (transaction?.transaction_type as TransactionType) ?? "expense");
+  const [statementPayment, setStatementPayment] = useState<CreditCardStatement | null>(null);
+  const [existingStatementPayment, setExistingStatementPayment] = useState<CreditCardPayment | null>(null);
+  const [isDebtPayment, setIsDebtPayment] = useState(Boolean(debtPaymentDebtId || debtPaymentContext));
+  const [debtPaymentId, setDebtPaymentId] = useState(debtPaymentDebtId ?? debtPaymentContext?.debtAccountId ?? "");
+  const [activeDebts, setActiveDebts] = useState<DebtAccount[]>([]);
+  const isStatementPayment = Boolean(statementPaymentContext);
 
   useEffect(() => {
     if (!isEdit) setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
@@ -104,6 +117,33 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   } | null>(null);
 
   const { accounts, groups, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
+
+  useEffect(() => { listDebtAccounts(userId).then(setActiveDebts).catch(() => setActiveDebts([])); }, [userId]);
+
+  useEffect(() => {
+    if (!debtPaymentDebtId) return;
+    setIsDebtPayment(true);
+    setDebtPaymentId(debtPaymentDebtId);
+    const debt = activeDebts.find((item) => item.id === debtPaymentDebtId);
+    if (debt) setDescription(`Payment to ${debt.name}`);
+  }, [activeDebts, debtPaymentDebtId]);
+
+  useEffect(() => {
+    if (!statementPaymentContext) return;
+    let active = true;
+    getCreditCardStatementByCycle(userId, statementPaymentContext.cycleId)
+      .then((statement) => {
+        if (!active) return;
+        if (!statement || statement.id !== statementPaymentContext.statementId || !statement.authoritative) {
+          setFormError("The selected credit-card statement is no longer available.");
+          return;
+        }
+        setStatementPayment(statement);
+        return getCreditCardPaymentByStatement(userId, statement.id).then((payment) => { if (active) setExistingStatementPayment(payment); });
+      })
+      .catch(() => { if (active) setFormError("The selected credit-card statement is no longer available."); });
+    return () => { active = false; };
+  }, [statementPaymentContext, userId]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -391,6 +431,10 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       setFormError("Select a category");
       return;
     }
+    if (isDebtPayment && !debtPaymentId) {
+      setFormError("Select a debt before continuing");
+      return;
+    }
     if (selectedSourceIsCreditCard() && postingDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(postingDate.trim())) {
       setFormError("Some credit-card details are not valid. Check the highlighted fields and try again.");
       return;
@@ -443,7 +487,18 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     console.log("[DEBUG-TX-SAVE] validation passed", { isEdit, txType });
     setSaving(true);
     try {
-      if (isEdit) {
+      if (isStatementPayment && (!statementPayment || (isEdit && !existingStatementPayment))) {
+        setFormError("The selected credit-card statement is no longer available.");
+        return;
+      }
+       if (isEdit && isStatementPayment && existingStatementPayment) {
+        await updateStatementPayment(userId, deviceId, existingStatementPayment.id, {
+          amount_centavos: centavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId,
+          transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined,
+        });
+       } else if (isEdit && debtPaymentContext) {
+         await updateTransactionDebtPayment(userId, deviceId, debtPaymentContext.paymentId, { amount_centavos: centavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
+       } else if (isEdit) {
         savePhase = "updateTransaction";
         console.log("[DEBUG-TX-SAVE] calling updateTransaction");
         const updateInput: Record<string, unknown> = {
@@ -471,7 +526,20 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
          await updateTransaction(userId, deviceId, transaction!.id, updateInput as UpdateTransactionInput);
          console.log("[DEBUG-TX-SAVE] updateTransaction completed");
-           } else if (txType === "expense") {
+            } else if (isStatementPayment && statementPaymentContext) {
+            await createStatementPayment(userId, deviceId, {
+              statementId: statementPaymentContext.statementId,
+              cycleId: statementPaymentContext.cycleId,
+              amount_centavos: centavos,
+              source_account_id: sourceAccountId,
+              subcategory_id: effectiveSubcategoryId,
+              transaction_date: dateStr,
+              merchant_name: description.trim() || undefined,
+              notes: notes.trim() || undefined,
+            });
+          } else if (isDebtPayment && txType === "expense") {
+            await createTransactionDebtPayment(userId, deviceId, { debt_account_id: debtPaymentId, amount_centavos: centavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
+          } else if (txType === "expense") {
             savePhase = "createExpense";
            console.log("[DEBUG-TX-SAVE] calling createExpense");
            await createExpense(userId, deviceId, {
@@ -533,7 +601,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         });
       }
 
-      showToast(isEdit ? "Transaction updated" : "Transaction saved", "success");
+      showToast(isStatementPayment ? "Your credit-card payment was recorded. Review the statement status to confirm the update." : isEdit ? "Transaction updated" : "Transaction saved", "success");
       savePhase = "runSync";
       console.log("[DEBUG-TX-SAVE] starting runSync");
       runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch((error) => {
@@ -577,7 +645,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                         No financial accounts available
                       </Text>
                     ) : (
-                      accounts.map((a) => {
+                       accounts.filter((a) => !isStatementPayment || a.kind !== "credit_card").map((a) => {
                         const selected = isSource ? sourceAccountId === a.id : destAccountId === a.id;
                         return (
                           <Pressable
@@ -823,7 +891,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
         {showCategoryPicker ? renderCategoryPickerPage() : (
           <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 18 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-             {!isEdit ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+             {!isEdit && !isStatementPayment ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+             {isStatementPayment ? <View style={{ borderRadius: 14, backgroundColor: palette.card, padding: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>Credit-card statement payment</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>{statementPayment ? `Statement due ${statementPayment.due_date} · Balance ${formatCurrency(statementPayment.statement_balance_centavos)}` : "Checking the selected statement..."}</Text></View> : null}
 
             <View style={{ alignItems: "center", paddingTop: 6, paddingBottom: 2 }}>
               <Text style={{ fontFamily: "Manrope", fontSize: 15, color: palette.mut, marginBottom: 2 }}>PHP</Text>
@@ -939,7 +1008,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
              </View>
             )}
 
-            {selectedSourceIsCreditCard() ? (
+             {selectedSourceIsCreditCard() && !isStatementPayment ? (
               <>
                 <View>
                   {renderFieldLabel("PURCHASE TYPE")}
@@ -978,7 +1047,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                   }
                 }} /> : null}
               </>
-            ) : null}
+             ) : null}
+
+             {txType === "expense" && !isStatementPayment && !selectedSourceIsCreditCard() ? <View><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: isDebtPayment, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => { setIsDebtPayment((current) => !current); setDebtPaymentId(""); }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Record as a debt payment</Text></Pressable><Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>Choose this when this expense pays down one of your debts.</Text>{isDebtPayment ? <View style={{ gap: 6, marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Select the debt this payment applies to</Text>{activeDebts.length === 0 ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>No active debts are available. Add a debt before recording a debt payment.</Text> : activeDebts.map((debt) => <Pressable key={debt.id} accessibilityRole="radio" accessibilityState={{ selected: debtPaymentId === debt.id, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => setDebtPaymentId(debt.id)} style={{ padding: 10, borderWidth: 1, borderColor: debtPaymentId === debt.id ? palette.brand : palette.line, borderRadius: 10 }}><Text style={{ color: palette.ink }}>{debt.name} · {formatCurrency(debt.currentBalanceCentavos)}</Text></Pressable>)}</View> : null}</View> : null}
 
             {needsCategory ? (
               <View>
@@ -1006,7 +1077,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               />
             </View>
 
-              {!isEdit && !(selectedSourceIsCreditCard() && creditCardPurchaseType === "installment") ? (
+               {!isEdit && !isStatementPayment && !(selectedSourceIsCreditCard() && creditCardPurchaseType === "installment") ? (
               <>
                 <View style={{ borderRadius: 18, backgroundColor: "#f4ead2", paddingHorizontal: 16, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>

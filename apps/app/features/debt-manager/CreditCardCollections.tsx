@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { CreditCardCycle, CreditCardCycleTransaction } from "../../local-db/repositories/creditCardCycles";
 import type { CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import type { CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
 import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import CreditCardStatementForm from "./CreditCardStatementForm";
+import { calculateCreditCardPaymentStatus, creditBalanceCentavos, deleteStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
 
 const P = {
   shell: "#fcf8f0",
@@ -24,11 +25,14 @@ type Props = {
   transactions: CreditCardCycleTransaction[];
   statements: CreditCardStatement[];
   installments: CreditCardInstallment[];
+  payments: CreditCardPayment[];
   statementCycle: CreditCardCycle | null;
   onManageCycle: (account: FinancialAccount, cycle: CreditCardCycle | null) => void;
   onAddStatement: (cycle: CreditCardCycle) => void;
   onCancelStatement: () => void;
   onStatementSaved: () => Promise<void>;
+  onPayStatement?: (context: StatementPaymentContext) => void;
+  onEditPayment?: (payment: CreditCardPayment) => void;
   today?: string;
 };
 
@@ -84,21 +88,26 @@ function CreditCardInventory({ accounts, cycles, onManageCycle, today }: Pick<Pr
   );
 }
 
-function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, today, userId, deviceId }: {
+function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, payment, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, today, userId, deviceId }: {
   account: FinancialAccount;
   accountCycleCount: number;
   cycle: CreditCardCycle;
   transactions: CreditCardCycleTransaction[];
   statement: CreditCardStatement | undefined;
+  payment: CreditCardPayment | undefined;
   statementCycle: CreditCardCycle | null;
   onManageCycle: Props["onManageCycle"];
   onAddStatement: Props["onAddStatement"];
   onCancelStatement: Props["onCancelStatement"];
   onStatementSaved: Props["onStatementSaved"];
+  onPayStatement: Props["onPayStatement"];
+  onEditPayment: Props["onEditPayment"];
   today: string;
   userId: string;
   deviceId: string;
 }) {
+  const [confirmingPaymentDelete, setConfirmingPaymentDelete] = useState(false);
+  const [deletingPayment, setDeletingPayment] = useState(false);
   const current = isCurrentCycle(cycle, today) || accountCycleCount === 1;
   const needsStatement = cycle.cutoff_date < today && !cycle.statement_date && !statement;
   return (
@@ -124,13 +133,24 @@ function BillingCycleCard({ account, accountCycleCount, cycle, transactions, sta
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>Statement: <Text style={{ color: P.ink }}>{cycle.statement_date ?? "Not recorded"}</Text></Text>
           </View>
         </View>
-        {statement ? (
-          <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12 }}>
+         {statement ? (
+           <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12 }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink }}>Recorded statement</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 5 }}>Statement date: {statement.statement_date} · Due: {statement.due_date}</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Balance: {formatPeso(statement.statement_balance_centavos)} · Minimum: {formatPeso(statement.minimum_due_centavos)}</Text>
-            <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Finance charges: {formatPeso(statement.finance_charge_centavos)}</Text>
-          </View>
+             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Finance charges: {formatPeso(statement.finance_charge_centavos)}</Text>
+             {payment ? (() => {
+               const status = calculateCreditCardPaymentStatus(payment.amount_centavos, statement.statement_balance_centavos, statement.minimum_due_centavos);
+               const remaining = Math.max(0, statement.statement_balance_centavos - payment.amount_centavos);
+               const creditBalance = creditBalanceCentavos(payment.amount_centavos, statement.statement_balance_centavos);
+               const message = status === "fully_paid"
+                 ? "This statement is fully paid. No remaining statement balance is currently recorded."
+                 : status === "minimum_satisfied"
+                   ? "The minimum payment is satisfied, but the remaining balance may incur finance charges."
+                   : "This statement is not fully paid and the minimum amount due is not yet satisfied. Review the remaining payment.";
+               return <View style={{ marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.ink }}>Payment: {formatPeso(payment.amount_centavos)} · Remaining: {formatPeso(remaining)}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>{message}</Text>{creditBalance > 0 ? <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>This payment created a credit balance of {formatPeso(creditBalance)}. Apply it to a future charge only when the user or issuer confirms it.</Text> : null}{confirmingPaymentDelete ? <View style={{ marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>Deleting this payment removes it from the statement history and reverses its related transaction. Cancel to keep it or confirm deletion to continue.</Text><View style={{ flexDirection: "row", gap: 12, marginTop: 6 }}><Pressable onPress={() => setConfirmingPaymentDelete(false)}><Text style={{ color: P.muted, fontWeight: "700", fontFamily: "Manrope", fontSize: 12 }}>Cancel</Text></Pressable><Pressable disabled={deletingPayment} onPress={() => { setDeletingPayment(true); deleteStatementPayment(userId, deviceId, payment.id).then(onStatementSaved).finally(() => { setDeletingPayment(false); setConfirmingPaymentDelete(false); }); }}><Text style={{ color: "#D9001F", fontWeight: "700", fontFamily: "Manrope", fontSize: 12 }}>{deletingPayment ? "Deleting..." : "Confirm delete"}</Text></Pressable></View></View> : <View style={{ flexDirection: "row", gap: 12, marginTop: 7 }}><Pressable accessibilityRole="button" accessibilityLabel={`Edit payment for ${account.name}`} onPress={() => onEditPayment?.(payment)}><Text style={{ color: P.brand, fontWeight: "700", fontFamily: "Manrope", fontSize: 12 }}>Edit payment</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Delete payment for ${account.name}`} onPress={() => setConfirmingPaymentDelete(true)}><Text style={{ color: "#D9001F", fontWeight: "700", fontFamily: "Manrope", fontSize: 12 }}>Delete payment</Text></Pressable></View>}</View>;
+             })() : <Pressable accessibilityRole="button" accessibilityLabel={`Pay statement for ${account.name}`} onPress={() => onPayStatement?.({ statementId: statement.id, cycleId: cycle.id })} style={{ marginTop: 8 }}><Text style={{ color: P.brand, fontWeight: "700", fontFamily: "Manrope", fontSize: 12 }}>Pay statement</Text></Pressable>}
+           </View>
         ) : null}
         {needsStatement ? (
           <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12 }}>
@@ -156,7 +176,7 @@ function BillingCycleCard({ account, accountCycleCount, cycle, transactions, sta
   );
 }
 
-export default function CreditCardCollections({ userId, deviceId, accounts, cycles, transactions, statements, installments, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, today = localToday() }: Props) {
+export default function CreditCardCollections({ userId, deviceId, accounts, cycles, transactions, statements, installments, payments, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, today = localToday() }: Props) {
   const accountsById = new Map(accounts.map((account) => [account.id, account]));
   return (
     <View>
@@ -179,7 +199,8 @@ export default function CreditCardCollections({ userId, deviceId, accounts, cycl
       {cycles.map((cycle) => {
         const account = accountsById.get(cycle.account_id);
         if (!account) return null;
-        return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={cycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statements.find((item) => item.cycle_id === cycle.id)} statementCycle={statementCycle} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onStatementSaved={onStatementSaved} today={today} userId={userId} deviceId={deviceId} />;
+         const statement = statements.find((item) => item.cycle_id === cycle.id);
+         return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={cycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} statementCycle={statementCycle} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onStatementSaved={onStatementSaved} onPayStatement={onPayStatement} onEditPayment={onEditPayment} today={today} userId={userId} deviceId={deviceId} />;
       })}
     </View>
   );
