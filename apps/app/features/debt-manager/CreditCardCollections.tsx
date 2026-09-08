@@ -167,7 +167,7 @@ export default function CreditCardCollections({ userId, deviceId, accounts, cycl
         {installments.map((installment) => <View key={installment.id} style={{ borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 12, marginTop: 10, backgroundColor: P.shell }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: P.ink }}>{installment.description}</Text>
           <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 4 }}>{formatPeso(installment.monthly_amortization_centavos)} / month · {installment.remaining_months} of {installment.term_months} months remaining</Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Remaining principal: {formatPeso(installment.remaining_principal_centavos)} · {installment.interest_type === "zero_interest" ? "Zero interest" : `Interest: ${(installment.interest_rate_bps / 100).toFixed(2)}%`}</Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Remaining principal: {formatPeso(installment.remaining_principal_centavos)} · {installment.interest_type === "zero_interest" ? "Zero interest" : `Interest: ${((installment.interest_rate_bps ?? 0) / 100).toFixed(2)}%`}</Text>
         </View>)}
       </View> : null}
       <View style={{ height: 1, backgroundColor: P.line, marginVertical: 18 }} />

@@ -817,7 +817,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "debt-manager") {
-      return <DebtManagerOverview userId={userId} onOpenCreditCards={() => setCurrentPage("credit-cards")} />;
+      return <DebtManagerOverview userId={userId} deviceId={deviceId} onOpenCreditCards={() => setCurrentPage("credit-cards")} />;
     }
 
     if (currentPage === "credit-cards") {
