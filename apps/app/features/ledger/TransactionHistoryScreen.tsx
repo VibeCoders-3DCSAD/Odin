@@ -11,6 +11,7 @@ import {
 import { Funnel } from "phosphor-react-native";
 import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
 import { listTransactions, deleteTransaction, type TransactionFilters } from "../../local-db/repositories/ledger";
+import { getCreditCardPurchaseMetadataForTransaction } from "../../local-db/repositories/creditCardInstallments";
 import { listSubcategories } from "../../local-db/repositories/taxonomy";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
@@ -65,6 +66,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [showFilters, setShowFilters] = useState(false);
   const [editTarget, setEditTarget] = useState<Transaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
+  const [deleteBlockedTarget, setDeleteBlockedTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [accountMap, setAccountMap] = useState<Record<string, string>>({});
   const [subcategoryMap, setSubcategoryMap] = useState<Record<string, string>>({});
@@ -119,6 +121,22 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   useEffect(() => {
     load();
   }, [typeFilter, sortBy, sortDir, dateRange]);
+
+  async function requestDelete(transaction: Transaction) {
+    if (transaction.transaction_type === "expense" && transaction.source_account_id) {
+      try {
+        const metadata = await getCreditCardPurchaseMetadataForTransaction(userId, transaction.id);
+        if (metadata?.purchase_type === "installment") {
+          setDeleteBlockedTarget(transaction);
+          return;
+        }
+      } catch {
+        setDeleteBlockedTarget(transaction);
+        return;
+      }
+    }
+    setDeleteTarget(transaction);
+  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -328,7 +346,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                     {typePrefix(tx)}P{formatAmount(tx.amount_centavos)}
                   </Text>
                 </View>
-                <KebabTooltip onEdit={() => setEditTarget(tx)} onDelete={() => setDeleteTarget(tx)} />
+                <KebabTooltip onEdit={() => setEditTarget(tx)} onDelete={() => { requestDelete(tx).catch(() => setDeleteBlockedTarget(tx)); }} />
               </View>
             ))}
           </View>
@@ -503,6 +521,33 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                 </Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Installment delete restriction modal */}
+      <Modal visible={deleteBlockedTarget !== null} transparent animationType="fade" onRequestClose={() => setDeleteBlockedTarget(null)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 }}>
+          <View style={{ borderRadius: 20, backgroundColor: palette.shell, padding: 20 }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
+              Cannot delete installment purchase
+            </Text>
+            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+              Installment transactions cannot be deleted after creation because billing-cycle amortizations, issuer statement values, and available-credit holds may already depend on them.
+            </Text>
+            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+              Record an issuer-recognized settlement or reversal separately when that flow is available.
+            </Text>
+            <Pressable
+              onPress={() => setDeleteBlockedTarget(null)}
+              style={{ minHeight: 50, borderRadius: 14, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", marginTop: 18 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close installment delete restriction"
+            >
+              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#fff" }}>
+                Got it
+              </Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

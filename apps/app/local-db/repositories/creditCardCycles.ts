@@ -145,6 +145,10 @@ export async function listCreditCardCycleTransactions(
           AND (SELECT COUNT(*) FROM credit_card_cycles ordinal_cycle
                 WHERE ordinal_cycle.user_id = cct.user_id AND ordinal_cycle.account_id = cct.account_id
                   AND ordinal_cycle.deleted = 0 AND ordinal_cycle.cycle_start_date >= origin_cycle.cycle_start_date
+                  AND ordinal_cycle.cycle_start_date <= target_cycle.cycle_start_date) > (i.term_months - i.remaining_months)
+          AND (SELECT COUNT(*) FROM credit_card_cycles ordinal_cycle
+                WHERE ordinal_cycle.user_id = cct.user_id AND ordinal_cycle.account_id = cct.account_id
+                  AND ordinal_cycle.deleted = 0 AND ordinal_cycle.cycle_start_date >= origin_cycle.cycle_start_date
                   AND ordinal_cycle.cycle_start_date <= target_cycle.cycle_start_date) <= i.term_months
       ), cycle_purchases AS (
         SELECT cct.transaction_id, cct.account_id, cct.cycle_id, cct.purchase_type, cct.installment_id,

@@ -674,7 +674,7 @@ export async function createExpenseInTransaction(
       recordId: id,
       operationType: "create",
       baseVersion: null,
-      changedFields: ["transaction_id", "account_id", "cycle_id", "purchase_type", "client_mutation_id"],
+      changedFields: ["transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id"],
       payload: {
         transaction_id: id,
         account_id: input.source_account_id,

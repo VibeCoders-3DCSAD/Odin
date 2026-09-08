@@ -17,7 +17,7 @@ const migration: Migration = {
         OR NEW.monthly_amortization_centavos <= 0
         OR NEW.interest_rate_bps < 0
         OR NEW.interest_type NOT IN ('zero_interest', 'interest_bearing')
-        OR NEW.settlement_status NOT IN ('active', 'early_settlement_requested')
+        OR NEW.settlement_status NOT IN ('active', 'early_settlement_requested', 'completed')
       ) BEGIN SELECT RAISE(ABORT, 'Credit-card installment is invalid'); END;
       CREATE INDEX IF NOT EXISTS idx_cc_installments_account ON credit_card_installments(user_id, account_id, deleted);
     `);

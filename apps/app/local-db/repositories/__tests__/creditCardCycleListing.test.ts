@@ -30,4 +30,16 @@ describe("credit-card cycle listing", () => {
       "user-1",
     );
   });
+
+  test("projects only remaining installment cycles for backfilled purchases", async () => {
+    const db = { getAllAsync: jest.fn(async () => []) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { listCreditCardCycleTransactions } = await import("../creditCardCycles");
+    await listCreditCardCycleTransactions("user-1");
+
+    const sql = String((db.getAllAsync.mock.calls as unknown[][])[0]?.[0]);
+    expect(sql).toContain("> (i.term_months - i.remaining_months)");
+    expect(sql).toContain("<= i.term_months");
+  });
 });

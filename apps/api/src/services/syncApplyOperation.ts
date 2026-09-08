@@ -29,6 +29,7 @@ const SYNCED_ENTITIES = new Set([
   "credit_card_installments",
   "credit_card_transactions",
   "credit_card_statements",
+  "debt_accounts",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -279,6 +280,14 @@ const CREDIT_CARD_INSTALLMENT_CREATE_FIELDS = new Set([
   "interest_rate_bps", "interest_type", "settlement_status",
 ]);
 
+const DEBT_ACCOUNT_FIELDS = new Set([
+  "linked_account_id", "name", "lender_name", "preset_key", "status",
+  "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps",
+  "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date",
+  "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes",
+]);
+const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
+
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
   "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos",
 ]);
@@ -419,7 +428,7 @@ async function validateCreatePayload(
     const remainingMonths = sanitized.remaining_months as number;
     if (original <= 0 || remaining < 0 || remaining > original || term <= 0 || remainingMonths < 0 || remainingMonths > term || (sanitized.monthly_amortization_centavos as number) <= 0 || (sanitized.interest_rate_bps as number) < 0) throw new Error("credit-card installment amounts are invalid");
     if (!["zero_interest", "interest_bearing"].includes(sanitized.interest_type as string)) throw new Error("interest_type is invalid");
-    if (!["active", "early_settlement_requested"].includes(sanitized.settlement_status as string)) throw new Error("settlement_status is invalid");
+    if (!["active", "early_settlement_requested", "completed"].includes(sanitized.settlement_status as string)) throw new Error("settlement_status is invalid");
     await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
     const { data: transaction, error: transactionError } = await supabase
       .from("transactions")
@@ -432,6 +441,20 @@ async function validateCreatePayload(
     if (!transaction || transaction.transaction_type !== "expense" || transaction.source_account_id !== sanitized.account_id) {
       throw new Error("installment transaction does not belong to the selected credit card");
     }
+    return sanitized;
+  }
+
+  if (entity === "debt_accounts") {
+    assertOnlyAllowed(payload, DEBT_ACCOUNT_FIELDS);
+    const sanitized = sanitizePayload(payload, DEBT_ACCOUNT_FIELDS);
+    for (const field of ["name", "preset_key", "status", "payment_frequency", "next_due_date"]) requireString(sanitized, field);
+    for (const field of ["original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos"]) requireBigInt(sanitized, field);
+    if (!DEBT_ACCOUNT_TYPES.includes(sanitized.preset_key as string)) throw new Error("preset_key is not a supported non-credit-card debt type");
+    if (sanitized.status !== "active") throw new Error("new debt accounts must be active");
+    if ((sanitized.current_balance_centavos as number) > (sanitized.original_balance_centavos as number)) throw new Error("current_balance_centavos must not exceed original_balance_centavos");
+    if (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data)) throw new Error("preset_data must be an object");
+    for (const field of ["lender_name", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "notes"]) optionalString(sanitized, field);
+    if (sanitized.linked_account_id != null) { requireString(sanitized, "linked_account_id"); await verifyAccountOwnership(supabase, userId, sanitized.linked_account_id as string); }
     return sanitized;
   }
 
@@ -935,6 +958,8 @@ async function validateUpdatePayload(
     allowedFields = INCOME_SOURCE_UPDATE_FIELDS;
   } else if (entity === "financial_obligations") {
     allowedFields = OBLIGATION_UPDATE_FIELDS;
+  } else if (entity === "debt_accounts") {
+    allowedFields = DEBT_ACCOUNT_FIELDS;
   } else if (entity === "transaction_templates") {
     allowedFields = TEMPLATE_FIELDS;
   } else if (entity === "transaction_drafts") {
@@ -986,6 +1011,19 @@ async function validateUpdatePayload(
         await verifyAccountOwnership(supabase, userId, accountId);
       }
     }
+  }
+
+  if (entity === "debt_accounts") {
+    if (sanitized.linked_account_id != null) { if (typeof sanitized.linked_account_id !== "string") throw new Error("linked_account_id must be a string or null"); await verifyAccountOwnership(supabase, userId, sanitized.linked_account_id); }
+    if (sanitized.name !== undefined && (typeof sanitized.name !== "string" || !sanitized.name.trim())) throw new Error("name must be a non-empty string");
+    if (sanitized.preset_key !== undefined && !DEBT_ACCOUNT_TYPES.includes(sanitized.preset_key as string)) throw new Error("preset_key is not a supported non-credit-card debt type");
+    if (sanitized.status !== undefined && !["active", "archived", "paid_off"].includes(sanitized.status as string)) throw new Error("status is invalid");
+    if (sanitized.preset_data !== undefined && (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data))) throw new Error("preset_data must be an object");
+    for (const [key, value] of Object.entries(sanitized)) {
+      if (["original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos"].includes(key) && (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)) throw new Error(`${key} must be a non-negative whole number`);
+      if (["lender_name", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "notes", "next_due_date", "payment_frequency"].includes(key) && value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+    }
+    return sanitized;
   }
 
   for (const [key, value] of Object.entries(sanitized)) {

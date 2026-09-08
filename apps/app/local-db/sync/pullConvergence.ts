@@ -28,6 +28,7 @@ export const SYNCED_TABLES = [
   "credit_card_installments",
   "credit_card_transactions",
   "credit_card_statements",
+  "debt_accounts",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -144,6 +145,14 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "cycle_id", "statement_date", "statement_balance_centavos", "minimum_due_centavos",
     "finance_charge_centavos", "due_date", "authoritative", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
+  debt_accounts: new Set([
+    "id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status",
+    "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps",
+    "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date",
+    "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule",
+    "notes", "paid_off_at", "archived_at", "version", "deleted", "created_at", "updated_at",
+    "last_synced_at",
+  ]),
 };
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -173,7 +182,7 @@ export function normalizePullRow(
       const isProtectedDefault = (row.is_protected_default as boolean) === true;
       const isProtected = (row.is_protected as boolean) === true;
       normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
-    } else if (col === "metadata") {
+    } else if (col === "metadata" || col === "preset_data" || col === "payment_schedule") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
     } else if (table === "budgets" && col === "period_kind") {
@@ -255,8 +264,9 @@ export async function applyPullRow(
     if (
       table === "financial_accounts" ||
       table === "financial_obligations" ||
-      table === "transactions" ||
-      table === "transaction_templates" ||
+       table === "transactions" ||
+       table === "debt_accounts" ||
+       table === "transaction_templates" ||
       table === "recurring_transaction_templates" ||
        table === "recurring_transaction_occurrences"
     ) {

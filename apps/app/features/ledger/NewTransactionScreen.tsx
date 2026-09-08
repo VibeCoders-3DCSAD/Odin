@@ -17,7 +17,7 @@ import { CategorySelectorTree, type CategorySelection } from "../../components/C
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
 import { createExpense, createIncome, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../local-db/repositories/ledger";
-import type { CreateCreditCardInstallmentInput } from "../../local-db/repositories/creditCardInstallments";
+import { getCreditCardPurchaseMetadataForTransaction, type CreateCreditCardInstallmentInput } from "../../local-db/repositories/creditCardInstallments";
 import { createRecurringTemplate } from "../../local-db/repositories/recurringTransactions";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
@@ -64,9 +64,10 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [date, setDate] = useState(transaction ? new Date(transaction.transaction_date + "T00:00:00") : new Date());
   const [postingDate, setPostingDate] = useState(transaction?.credit_card_posting_date ?? "");
   const [creditCardPurchaseType, setCreditCardPurchaseType] = useState<"regular" | "installment">("regular");
+  const [editInstallmentLocked, setEditInstallmentLocked] = useState(false);
   const [installment, setInstallment] = useState<InstallmentFormValue>({
     originalPrincipal: "", termMonths: "", remainingPrincipal: "", remainingMonths: "", monthlyAmortization: "",
-    interestType: "zero_interest", interestRatePercent: "", settlementStatus: "active",
+    interestType: "zero_interest", interestRatePercent: "",
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPostingDatePicker, setShowPostingDatePicker] = useState(false);
@@ -162,6 +163,52 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     }
   }, [txType]);
 
+  useEffect(() => {
+    let active = true;
+    if (!isEdit || transaction?.transaction_type !== "expense") return () => { active = false; };
+    getCreditCardPurchaseMetadataForTransaction(userId, transaction.id)
+      .then((metadata) => {
+        if (!active) return;
+        if (!metadata) {
+          setCreditCardPurchaseType("regular");
+          setEditInstallmentLocked(false);
+          return;
+        }
+        setCreditCardPurchaseType(metadata.purchase_type);
+        setEditInstallmentLocked(metadata.purchase_type === "installment");
+        if (metadata.installment) {
+          setInstallment({
+            originalPrincipal: formatCentavosForInput(metadata.installment.original_principal_centavos),
+            termMonths: String(metadata.installment.term_months),
+            remainingPrincipal: formatCentavosForInput(metadata.installment.remaining_principal_centavos),
+            remainingMonths: String(metadata.installment.remaining_months),
+            monthlyAmortization: formatCentavosForInput(metadata.installment.monthly_amortization_centavos),
+            interestType: metadata.installment.interest_type,
+            interestRatePercent: metadata.installment.interest_type === "interest_bearing" ? ((metadata.installment.interest_rate_bps ?? 0) / 100).toFixed(2) : "",
+          });
+        }
+      })
+      .catch((error) => {
+        console.error("[ledger] failed to load credit-card purchase metadata", {
+          transactionId: transaction.id,
+          error: error instanceof Error ? error.message : "unknown error",
+        });
+      });
+    return () => { active = false; };
+  }, [isEdit, transaction?.id, transaction?.transaction_type, userId]);
+
+  useEffect(() => {
+    const isCardExpense = txType === "expense" && accounts.some((account) => account.id === sourceAccountId && account.kind === "credit_card");
+    if (isEdit || !isCardExpense || creditCardPurchaseType !== "installment") return;
+    const nextOriginalPrincipal = amount.trim();
+    setInstallment((current) => {
+      const shouldDefaultRemainingPrincipal = !current.remainingPrincipal.trim() || current.remainingPrincipal === current.originalPrincipal;
+      const nextRemainingPrincipal = shouldDefaultRemainingPrincipal ? nextOriginalPrincipal : current.remainingPrincipal;
+      if (current.originalPrincipal === nextOriginalPrincipal && current.remainingPrincipal === nextRemainingPrincipal) return current;
+      return { ...current, originalPrincipal: nextOriginalPrincipal, remainingPrincipal: nextRemainingPrincipal };
+    });
+  }, [accounts, amount, creditCardPurchaseType, isEdit, sourceAccountId, txType]);
+
   function resetForm(keepType = false) {
     setAmount("");
     setDescription("");
@@ -171,7 +218,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     setDestAccountId("");
     setPostingDate("");
     setCreditCardPurchaseType("regular");
-    setInstallment({ originalPrincipal: "", termMonths: "", remainingPrincipal: "", remainingMonths: "", monthlyAmortization: "", interestType: "zero_interest", interestRatePercent: "", settlementStatus: "active" });
+    setInstallment({ originalPrincipal: "", termMonths: "", remainingPrincipal: "", remainingMonths: "", monthlyAmortization: "", interestType: "zero_interest", interestRatePercent: "" });
     setInstallmentErrors({});
     setFormError(null);
     if (!keepType) setTxType("expense");
@@ -187,6 +234,10 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
   function parseAmount(): number {
     return parseMoney(amount);
+  }
+
+  function formatCentavosForInput(centavos: number): string {
+    return (centavos / 100).toFixed(2);
   }
 
   function formatDate(value: Date): string {
@@ -345,7 +396,12 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       return;
     }
 
-    const isInstallmentPurchase = selectedSourceIsCreditCard() && creditCardPurchaseType === "installment";
+    if (editInstallmentLocked) {
+      setFormError("Installment transactions cannot be edited after creation because amortizations and available-credit holds may already be linked to billing cycles.");
+      return;
+    }
+
+    const isInstallmentPurchase = !isEdit && selectedSourceIsCreditCard() && creditCardPurchaseType === "installment";
     let installmentInput: CreateCreditCardInstallmentInput | undefined;
     if (isInstallmentPurchase) {
       const originalPrincipal = parseMoney(installment.originalPrincipal);
@@ -373,7 +429,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         remaining_months: remainingMonths, monthly_amortization_centavos: monthlyAmortization,
         interest_type: installment.interestType,
         interest_rate_bps: installment.interestType === "zero_interest" ? 0 : interestRateBps,
-        settlement_status: installment.settlementStatus,
+        settlement_status: "active",
       };
     }
 
@@ -890,11 +946,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                   <View style={{ flexDirection: "row", gap: 10 }}>
                     {(["regular", "installment"] as const).map((type) => {
                       const selected = creditCardPurchaseType === type;
-                      return <Pressable key={type} onPress={() => setCreditCardPurchaseType(type)} accessibilityRole="radio" accessibilityState={{ selected }} style={{ flex: 1, borderWidth: 1, borderColor: selected ? palette.brand : "#e8deca", backgroundColor: selected ? palette.successCard : palette.softCard, borderRadius: 14, padding: 13 }}>
+                      const purchaseTypeLocked = isEdit;
+                      return <Pressable key={type} disabled={purchaseTypeLocked} onPress={() => setCreditCardPurchaseType(type)} accessibilityRole="radio" accessibilityState={{ selected, disabled: purchaseTypeLocked }} style={{ flex: 1, borderWidth: 1, borderColor: selected ? palette.brand : "#e8deca", backgroundColor: selected ? palette.successCard : palette.softCard, borderRadius: 14, padding: 13, opacity: purchaseTypeLocked && !selected ? 0.55 : 1 }}>
                         <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>{type === "regular" ? "Regular Purchase" : "Installment Purchase"}</Text>
                       </Pressable>;
                     })}
                   </View>
+                  {isEdit ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 6 }}>Purchase type is locked after creation. Installment transactions cannot be converted or edited once billing-cycle amortizations may exist.</Text> : null}
                 </View>
                 <View>
                 {renderFieldLabel("POSTING DATE (OPTIONAL)")}
@@ -910,10 +968,14 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                   Use YYYY-MM-DD when the issuer provides a posting date. Otherwise Odin uses the transaction date as an estimate.
                 </Text>
                 </View>
-                {creditCardPurchaseType === "installment" ? <CreditCardInstallmentFields value={installment} errors={installmentErrors} onChange={(next) => {
+                {creditCardPurchaseType === "installment" ? <CreditCardInstallmentFields value={installment} errors={installmentErrors} readOnly={editInstallmentLocked} onChange={(next) => {
                   const changed = (Object.keys(next) as (keyof InstallmentFormValue)[]).find((key) => next[key] !== installment[key]);
                   if (changed) setInstallmentErrors((current) => ({ ...current, [changed]: undefined }));
-                  setInstallment(next);
+                  if (changed === "termMonths" && (!installment.remainingMonths.trim() || installment.remainingMonths === installment.termMonths)) {
+                    setInstallment({ ...next, remainingMonths: next.termMonths });
+                  } else {
+                    setInstallment(next);
+                  }
                 }} /> : null}
               </>
             ) : null}

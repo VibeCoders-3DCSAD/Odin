@@ -33,22 +33,38 @@ it("preserves transaction_id when preparing a credit-card relationship", async (
   });
 });
 
-it("prepares an installment linked to the user-owned credit-card expense", async () => {
+it("prepares a backfilled installment linked to the user-owned credit-card expense", async () => {
   const prepared = await prepareOperation(createSupabaseStub(), "user-1", {
     operation_id: "operation-installment", entity: "credit_card_installments", record_id: "installment-1",
     operation_type: "create", base_version: null, changed_fields: [],
     payload: {
       account_id: "card-1", transaction_id: "transaction-1", description: "Laptop",
-      original_principal_centavos: 120000, remaining_principal_centavos: 120000,
-      term_months: 12, remaining_months: 12, monthly_amortization_centavos: 10000,
+      original_principal_centavos: 120000, remaining_principal_centavos: 70000,
+      term_months: 12, remaining_months: 7, monthly_amortization_centavos: 10000,
       interest_rate_bps: 0, interest_type: "zero_interest", settlement_status: "active",
     },
   });
 
   expect(prepared.payload).toMatchObject({
     account_id: "card-1", transaction_id: "transaction-1", interest_type: "zero_interest",
+    remaining_principal_centavos: 70000, remaining_months: 7,
     settlement_status: "active",
   });
+});
+
+it("accepts the canonical completed installment lifecycle value", async () => {
+  const prepared = await prepareOperation(createSupabaseStub(), "user-1", {
+    operation_id: "operation-completed-installment", entity: "credit_card_installments", record_id: "installment-2",
+    operation_type: "create", base_version: null, changed_fields: [],
+    payload: {
+      account_id: "card-1", transaction_id: "transaction-1", description: "Closed installment",
+      original_principal_centavos: 120000, remaining_principal_centavos: 0,
+      term_months: 12, remaining_months: 0, monthly_amortization_centavos: 10000,
+      interest_rate_bps: 0, interest_type: "zero_interest", settlement_status: "completed",
+    },
+  });
+
+  expect(prepared.payload).toMatchObject({ settlement_status: "completed", remaining_months: 0 });
 });
 
 it("prepares every editable credit-card detail field for updates", async () => {

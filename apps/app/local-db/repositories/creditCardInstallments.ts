@@ -5,7 +5,7 @@ import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 
 export type CreditCardInstallmentInterestType = "zero_interest" | "interest_bearing";
-export type CreditCardInstallmentSettlementStatus = "active" | "early_settlement_requested";
+export type CreditCardInstallmentSettlementStatus = "active" | "early_settlement_requested" | "completed";
 
 export type CreateCreditCardInstallmentInput = {
   description: string;
@@ -28,6 +28,12 @@ export type CreditCardInstallment = CreateCreditCardInstallmentInput & {
   deleted: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type CreditCardPurchaseMetadata = {
+  purchase_type: "regular" | "installment";
+  installment_id: string | null;
+  installment: CreditCardInstallment | null;
 };
 
 type InstallmentRow = Omit<CreditCardInstallment, "deleted"> & { deleted: number };
@@ -65,20 +71,52 @@ export function validateCreditCardInstallment(input: CreateCreditCardInstallment
   if (input.interest_type === "interest_bearing") {
     assertNonNegativeInteger(input.interest_rate_bps ?? -1, "Interest rate");
   }
-  if (input.settlement_status !== "active" && input.settlement_status !== "early_settlement_requested") {
+  if (!["active", "early_settlement_requested", "completed"].includes(input.settlement_status)) {
     throw new LocalDbError("VALIDATION_ERROR", "Choose a valid settlement status.");
   }
+}
+
+function mapInstallment(row: InstallmentRow): CreditCardInstallment {
+  return { ...row, deleted: row.deleted === 1 };
 }
 
 export async function listCreditCardInstallments(userId: string): Promise<CreditCardInstallment[]> {
   const db = await initDatabase();
   const rows = await db.getAllAsync<InstallmentRow>(
     `SELECT * FROM credit_card_installments
-      WHERE user_id = ? AND deleted = 0
+      WHERE user_id = ? AND deleted = 0 AND settlement_status != 'completed'
       ORDER BY settlement_status = 'active' DESC, created_at DESC`,
     userId,
   );
-  return rows.map((row) => ({ ...row, deleted: row.deleted === 1 }));
+  return rows.map(mapInstallment);
+}
+
+export async function getCreditCardPurchaseMetadataForTransaction(
+  userId: string,
+  transactionId: string,
+): Promise<CreditCardPurchaseMetadata | null> {
+  const db = await initDatabase();
+  const purchase = await db.getFirstAsync<{ purchase_type: "regular" | "installment"; installment_id: string | null }>(
+    `SELECT purchase_type, installment_id FROM credit_card_transactions
+      WHERE user_id = ? AND transaction_id = ? AND deleted = 0`,
+    userId,
+    transactionId,
+  );
+  if (!purchase) return null;
+  const installment = purchase.installment_id
+    ? await db.getFirstAsync<InstallmentRow>(
+      `SELECT * FROM credit_card_installments
+        WHERE user_id = ? AND id = ? AND transaction_id = ? AND deleted = 0`,
+      userId,
+      purchase.installment_id,
+      transactionId,
+    )
+    : null;
+  return {
+    purchase_type: purchase.purchase_type,
+    installment_id: purchase.installment_id,
+    installment: installment ? mapInstallment(installment) : null,
+  };
 }
 
 export async function createCreditCardInstallmentInTransaction(

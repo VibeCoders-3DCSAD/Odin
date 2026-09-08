@@ -55,6 +55,7 @@ const SYNCED_TABLES = [
   "credit_card_installments",
   "credit_card_transactions",
   "credit_card_statements",
+  "debt_accounts",
 ] as const;
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -78,9 +79,11 @@ export async function pushOperations(
       auditPayload = { redacted: true, fields: Object.keys(prepared.payload) };
       const rpcName = prepared.entity === "budgets"
         ? "apply_budget_sync_operation_v2"
-        : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements"
-          ? "apply_credit_card_sync_operation"
-          : "apply_sync_operation";
+        : prepared.entity === "debt_accounts" || prepared.entity === "debt_payments" || prepared.entity === "user_debt_priorities" || prepared.entity === "debt_strategy_preferences"
+          ? "apply_debt_sync_operation"
+          : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements"
+            ? "apply_credit_card_sync_operation"
+            : "apply_sync_operation";
       const { data, error } = await supabase.rpc(rpcName, {
         p_operation_id: prepared.operation_id,
         p_device_id: deviceId,
@@ -190,7 +193,8 @@ export async function pullChanges(
         || table === "credit_card_details"
          || table === "credit_card_installments"
          || table === "credit_card_transactions"
-         || table === "credit_card_statements"
+          || table === "credit_card_statements"
+          || table === "debt_accounts"
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);

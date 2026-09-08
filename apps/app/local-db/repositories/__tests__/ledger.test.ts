@@ -52,7 +52,8 @@ describe("credit-card expense inserts", () => {
       client_mutation_id: "mutation-1",
     });
 
-    const insert = db.runAsync.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO transactions"));
+    const runCalls = db.runAsync.mock.calls as unknown[][];
+    const insert = runCalls.find(([sql]) => String(sql).includes("INSERT INTO transactions"));
     const sql = String(insert?.[0]);
     const columns = sql.match(/\(([^)]+)\)\s*VALUES/)?.[1]?.split(",").length;
     const values = sql.match(/VALUES\s*\(([^)]+)\)/)?.[1]?.split(",").length;
@@ -66,7 +67,7 @@ describe("credit-card expense inserts", () => {
       "user-1",
     );
 
-    const creditUpdate = db.runAsync.mock.calls.find(([sql]) => String(sql).includes("SET available_credit_centavos"));
+    const creditUpdate = runCalls.find(([sql]) => String(sql).includes("SET available_credit_centavos"));
     expect(creditUpdate?.[0]).not.toContain("available_credit_centavos, credit_limit_centavos) >= ?");
   });
 
@@ -109,12 +110,13 @@ describe("credit-card expense inserts", () => {
       },
     });
 
-    const insertIndex = db.runAsync.mock.calls.findIndex(([sql]) => String(sql).includes("INSERT INTO credit_card_installments"));
-    const relationshipIndex = db.runAsync.mock.calls.findIndex(([sql]) => String(sql).includes("INSERT INTO credit_card_transactions"));
+    const runCalls = db.runAsync.mock.calls as unknown[][];
+    const insertIndex = runCalls.findIndex(([sql]) => String(sql).includes("INSERT INTO credit_card_installments"));
+    const relationshipIndex = runCalls.findIndex(([sql]) => String(sql).includes("INSERT INTO credit_card_transactions"));
     expect(insertIndex).toBeGreaterThan(-1);
     expect(relationshipIndex).toBeGreaterThan(insertIndex);
-    expect(db.runAsync.mock.calls[relationshipIndex]?.[1]).toBe("transaction-1");
-    expect(db.runAsync.mock.calls[relationshipIndex]?.[5]).toBe("installment");
+    expect(runCalls[relationshipIndex]?.[1]).toBe("transaction-1");
+    expect(runCalls[relationshipIndex]?.[5]).toBe("installment");
     expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ entity: "credit_card_installments" }));
     expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       entity: "credit_card_transactions", payload: expect.objectContaining({ purchase_type: "installment", installment_id: "installment-1" }),
