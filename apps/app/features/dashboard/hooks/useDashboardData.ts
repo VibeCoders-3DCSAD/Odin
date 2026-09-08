@@ -3,7 +3,8 @@ import { getDashboardSummary, getDailyTrends } from "../../../local-db/repositor
 import type { DashboardSummary, DailyTrend } from "../../../local-db/repositories/dashboardSummary";
 import { getAllSnapshots, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
 import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboardSnapshots";
-import { getForecast } from "../../forecast/api";
+import { requestForecast } from "../../forecast/api";
+import { listForecastTransactions } from "../../../local-db/repositories/forecastTransactions";
 import { evaluateAlerts, getAlerts } from "../../alerts/api";
 import { replaceAlertPage } from "../../../local-db/repositories/alerts";
 import { runSync } from "../../../local-db/sync/runSync";
@@ -46,9 +47,16 @@ export async function refreshDashboardData(userId: string, deviceId: string, acc
     const result = await runSync(userId, deviceId, accessToken, { maxAttempts: 3 });
     if (!result.successful) return false;
     try {
-      const forecast = await getForecast(accessToken);
-      if (forecast.response.ok && forecast.body.payload) {
-        await upsertSnapshot(userId, "forecast", forecast.body.payload);
+      const historicalTransactions = await listForecastTransactions(userId);
+      if (historicalTransactions.length > 0) {
+        const forecast = await requestForecast(accessToken, {
+          historicalTransactions,
+          forecastHorizon: "MONTHLY",
+          forecastLevel: "TOTAL",
+        });
+        if (forecast.response.ok && forecast.body.payload) {
+          await upsertSnapshot(userId, "forecast", forecast.body.payload);
+        }
       }
     } catch {
       // ponytail: forecast is best-effort; a stale snapshot beats failing the refresh
