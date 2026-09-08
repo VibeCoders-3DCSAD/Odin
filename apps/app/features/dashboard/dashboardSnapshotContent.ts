@@ -1,22 +1,10 @@
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
-import type { ForecastHorizon, ForecastPoint } from "../forecast/types";
+import type { ForecastHorizon, ForecastLevel, ForecastPayload } from "../forecast/types";
 
 type BudgetItem = { label: string; spent: number; budget: number };
 type BudgetStatus = "on_track" | "warning" | "critical" | "unknown";
 
-export type ForecastContent = {
-  text: string | null;
-  projectedBalanceCentavos: number | null;
-  period: string | null;
-  insights: string[];
-  incomeCentavos: number | null;
-  expenseCentavos: number | null;
-  categories: { label: string; amountCentavos: number }[];
-  events: { label: string; date: string | null }[];
-  freshness: string | null;
-  confidence: string | null;
-  horizons: { key: ForecastHorizon; label: string; period: string; points: ForecastPoint[] }[];
-};
+export type ForecastContent = ForecastPayload;
 
 function payload(snapshot: DashboardSnapshotWithMeta | null | undefined): Record<string, unknown> {
   if (!snapshot) return {};
@@ -46,55 +34,42 @@ export function getSnapshotCount(snapshot: DashboardSnapshotWithMeta | null | un
 
 export function getSnapshotCentavos(snapshot: DashboardSnapshotWithMeta | null | undefined, keys: string[]): number | null {
   const value = payload(snapshot);
-  for (const key of keys) {
-    if (typeof value[key] === "number" && Number.isFinite(value[key])) return value[key];
-  }
+  for (const key of keys) if (typeof value[key] === "number" && Number.isFinite(value[key])) return value[key];
   return null;
 }
 
 export function getBudgetContent(snapshot: DashboardSnapshotWithMeta | null | undefined): { items: BudgetItem[]; status: BudgetStatus } {
   const value = payload(snapshot);
-  const items = Array.isArray(value.items)
-    ? value.items.filter((item): item is BudgetItem => !!item && typeof item === "object" && typeof item.label === "string" && typeof item.spent === "number" && Number.isFinite(item.spent) && typeof item.budget === "number" && Number.isFinite(item.budget))
-    : [];
+  const items = Array.isArray(value.items) ? value.items.filter((item): item is BudgetItem => !!item && typeof item === "object" && typeof item.label === "string" && typeof item.spent === "number" && Number.isFinite(item.spent) && typeof item.budget === "number" && Number.isFinite(item.budget)) : [];
   const status = value.status === "on_track" || value.status === "warning" || value.status === "critical" ? value.status : "unknown";
   const start = value.period_start ?? value.periodStart;
   const end = value.period_end ?? value.periodEnd;
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const current = typeof start !== "string" || typeof end !== "string" || (start <= today && end >= today);
-  return current ? { items, status } : { items: [], status: "unknown" };
+  return typeof start !== "string" || typeof end !== "string" || (start <= today && end >= today) ? { items, status } : { items: [], status: "unknown" };
 }
 
-export function getForecastContent(snapshot: DashboardSnapshotWithMeta | null | undefined): ForecastContent {
+function isHorizon(value: unknown): value is ForecastHorizon {
+  return value === "WEEKLY" || value === "SEMI_MONTHLY" || value === "MONTHLY" || value === "YEARLY";
+}
+
+function isLevel(value: unknown): value is ForecastLevel {
+  return value === "TOTAL" || value === "CATEGORY_GROUP";
+}
+
+export function getForecastContent(snapshot: DashboardSnapshotWithMeta | null | undefined): ForecastContent | null {
   const value = payload(snapshot);
-  const projectedBalanceCentavos = typeof value.projected_balance_centavos === "number"
-    ? value.projected_balance_centavos
-    : typeof value.projectedBalanceCentavos === "number"
-      ? value.projectedBalanceCentavos
-      : null;
-  const period = typeof value.period === "string" ? value.period : null;
-  const insights = Array.isArray(value.insights) ? value.insights.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 3) : [];
-  const amount = (key: string): number | null => typeof value[key] === "number" && Number.isFinite(value[key]) ? value[key] : null;
-  const categories = Array.isArray(value.categories)
-    ? value.categories.filter((item): item is Record<string, unknown> => !!item && typeof item === "object").map((item) => ({ label: typeof item.label === "string" ? item.label : "Other", amountCentavos: typeof item.amount_centavos === "number" && Number.isFinite(item.amount_centavos) ? item.amount_centavos : typeof item.amountCentavos === "number" && Number.isFinite(item.amountCentavos) ? item.amountCentavos : 0 })).filter((item) => item.amountCentavos > 0).slice(0, 4)
-    : [];
-  const events = Array.isArray(value.expected_events)
-    ? value.expected_events.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && typeof item.label === "string").map((item) => ({ label: item.label as string, date: typeof item.date === "string" ? item.date : null })).slice(0, 3)
-    : [];
-  const horizons = Array.isArray(value.horizons)
-    ? value.horizons.filter((item): item is Record<string, unknown> => !!item && typeof item === "object").flatMap((item) => {
-        const key = item.key;
-        const points = Array.isArray(item.points)
-          ? item.points.filter((point): point is Record<string, unknown> => !!point && typeof point === "object").flatMap((point) => {
-              if (typeof point.label !== "string") return [];
-              if (typeof point.projected_balance_centavos !== "number" || typeof point.income_centavos !== "number" || typeof point.expense_centavos !== "number") return [];
-              return [{ label: point.label, projected_balance_centavos: point.projected_balance_centavos, income_centavos: point.income_centavos, expense_centavos: point.expense_centavos }];
-            })
-          : [];
-        if (!(["next_day", "weekly", "monthly", "yearly"] as const).includes(key as ForecastHorizon) || typeof item.label !== "string" || typeof item.period !== "string" || points.length === 0) return [];
-        return [{ key: key as ForecastHorizon, label: item.label, period: item.period, points }];
-      })
-    : [];
-  return { text: getSnapshotText(snapshot), projectedBalanceCentavos, period, insights, incomeCentavos: amount("income_centavos"), expenseCentavos: amount("expense_centavos"), categories, events, freshness: typeof value.freshness === "string" ? value.freshness : null, confidence: typeof value.confidence === "string" ? value.confidence : null, horizons };
+  if (!isHorizon(value.forecastHorizon) || !isLevel(value.forecastLevel) || typeof value.modelVersion !== "string" || (value.status !== "SUCCESS" && value.status !== "FALLBACK")) return null;
+  const interval = value.confidenceInterval;
+  if (!interval || typeof interval !== "object" || Array.isArray(interval)) return null;
+  const bounds = interval as Record<string, unknown>;
+  const numbers = [bounds.lower80Centavos, bounds.upper80Centavos, bounds.lower95Centavos, bounds.upper95Centavos];
+  if (!numbers.every((number) => typeof number === "number" && Number.isFinite(number))) return null;
+  const forecasts = Array.isArray(value.forecasts) ? value.forecasts.flatMap((point) => {
+    if (!point || typeof point !== "object" || Array.isArray(point)) return [];
+    const row = point as Record<string, unknown>;
+    if (typeof row.date !== "string" || typeof row.amountCentavos !== "number" || !Number.isFinite(row.amountCentavos) || (row.category !== null && typeof row.category !== "string")) return [];
+    return [{ date: row.date, amountCentavos: row.amountCentavos, category: row.category ?? null }];
+  }) : [];
+  return { forecasts, forecastHorizon: value.forecastHorizon, forecastLevel: value.forecastLevel, confidenceInterval: { lower80Centavos: bounds.lower80Centavos as number, upper80Centavos: bounds.upper80Centavos as number, lower95Centavos: bounds.lower95Centavos as number, upper95Centavos: bounds.upper95Centavos as number }, modelVersion: value.modelVersion, status: value.status };
 }

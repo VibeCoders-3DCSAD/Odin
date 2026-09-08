@@ -1,29 +1,36 @@
-export type ForecastHorizon = "next_day" | "weekly" | "monthly" | "yearly";
+export const FORECAST_HORIZONS = ["WEEKLY", "SEMI_MONTHLY", "MONTHLY", "YEARLY"] as const;
+export const FORECAST_LEVELS = ["TOTAL", "CATEGORY_GROUP"] as const;
 
-export type ForecastPoint = {
-  label: string;
-  projected_balance_centavos: number;
-  income_centavos: number;
-  expense_centavos: number;
+export type ForecastHorizon = (typeof FORECAST_HORIZONS)[number];
+export type ForecastLevel = (typeof FORECAST_LEVELS)[number];
+
+export type ForecastTransaction = {
+  transactionId: string;
+  date: string;
+  amount: number;
+  category: string;
+  transactionType: "income" | "expense";
+  description?: string;
 };
 
-export type ForecastHorizonResult = {
-  key: ForecastHorizon;
-  label: string;
-  period: string;
-  points: ForecastPoint[];
+export type ForecastRequest = {
+  historicalTransactions: ForecastTransaction[];
+  forecastHorizon: ForecastHorizon;
+  forecastLevel: ForecastLevel;
 };
 
 export type ForecastPayload = {
-  projected_balance_centavos: number | null;
-  income_centavos: number | null;
-  expense_centavos: number | null;
-  categories: { label: string; amount_centavos: number }[];
-  expected_events: { label: string; date: string }[];
-  insights: string[];
-  text: string | null;
-  period: string | null;
-  freshness: string | null;
-  confidence: string | null;
-  horizons: ForecastHorizonResult[];
+  forecasts: { date: string; amountCentavos: number; category: string | null }[];
+  forecastHorizon: ForecastHorizon;
+  forecastLevel: ForecastLevel;
+  confidenceInterval: {
+    lower80Centavos: number;
+    upper80Centavos: number;
+    lower95Centavos: number;
+    upper95Centavos: number;
+  };
+  modelVersion: string;
+  status: "SUCCESS" | "FALLBACK";
 };
+
+export type ForecastContent = ForecastPayload;

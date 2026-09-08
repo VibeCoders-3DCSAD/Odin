@@ -19,17 +19,13 @@ test("normalizes dashboard snapshot content without accepting malformed values",
   });
   expect(getBudgetContent(snapshot({ status: "unknown", items: [{ label: "Food", spent: Number.NaN, budget: Infinity }] }))).toEqual({ status: "unknown", items: [] });
   expect(getBudgetContent(snapshot({ status: "warning", period_start: "2000-01-01", period_end: "2000-01-31", items: [{ label: "Food", spent: 1200, budget: 2000 }] }))).toEqual({ status: "unknown", items: [] });
-  expect(getForecastContent(snapshot({ summary: "You are on track", projected_balance_centavos: 125000, period: "month end", income_centavos: 800000, expense_centavos: 600000, categories: [{ label: "Food", amount_centavos: 200000 }], expected_events: [{ label: "Rent", date: "Aug 31" }], freshness: "Updated today", confidence: "High confidence", insights: ["Keep groceries below PHP 2,000", 1] }))).toEqual({
-    text: "You are on track",
-    projectedBalanceCentavos: 125000,
-    period: "month end",
-    insights: ["Keep groceries below PHP 2,000"],
-    incomeCentavos: 800000,
-    expenseCentavos: 600000,
-    categories: [{ label: "Food", amountCentavos: 200000 }],
-    events: [{ label: "Rent", date: "Aug 31" }],
-    freshness: "Updated today",
-    confidence: "High confidence",
-    horizons: [],
+  expect(getForecastContent(snapshot({ forecasts: [{ date: "2026-10", amountCentavos: 125000, category: "Essentials" }], forecastHorizon: "MONTHLY", forecastLevel: "CATEGORY_GROUP", confidenceInterval: { lower80Centavos: 100000, upper80Centavos: 150000, lower95Centavos: 90000, upper95Centavos: 160000 }, modelVersion: "v2.4.0", status: "FALLBACK" }))).toEqual({
+    forecasts: [{ date: "2026-10", amountCentavos: 125000, category: "Essentials" }],
+    forecastHorizon: "MONTHLY",
+    forecastLevel: "CATEGORY_GROUP",
+    confidenceInterval: { lower80Centavos: 100000, upper80Centavos: 150000, lower95Centavos: 90000, upper95Centavos: 160000 },
+    modelVersion: "v2.4.0",
+    status: "FALLBACK",
   });
+  expect(getForecastContent(snapshot({ forecasts: [], forecastHorizon: "YEARLY", forecastLevel: "TOTAL", confidenceInterval: { lower80Centavos: 100000, upper80Centavos: 150000, lower95Centavos: 90000, upper95Centavos: 160000 }, modelVersion: "v2.4.0", status: "SUCCESS" }))).toEqual(expect.objectContaining({ forecastHorizon: "YEARLY" }));
 });
