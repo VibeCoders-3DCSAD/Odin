@@ -974,14 +974,16 @@ This document defines product-level capabilities, user-facing form fields, domai
 
 ### 7.7 Credit Card Payments and Credit Balances
 
-- Record a payment amount, payment date, billing cycle, source account when a related transaction is recorded, and notes
+- Record a payment amount, payment date, billing cycle, source account, related expense transaction, and notes
 - Associate payments with the billing cycle or statement they settle
+- Allow only one active Credit Card payment for each billing cycle
+- Edit a Credit Card payment and its required related transaction together
+- Delete a Credit Card payment with confirmation and reverse its required related transaction
 - Mark a statement Fully Paid when total associated payments meet or exceed its statement balance
 - Mark a statement Minimum Satisfied when payments meet the minimum amount due but remain below the statement balance
 - Mark a statement Partially Paid when payments are below the statement balance and the minimum amount due is not yet satisfied
 - Warn that the remaining balance may incur finance charges when a statement is not fully paid
-- Permit payments greater than the statement balance and record the excess as a credit balance or overpayment
-- Apply a credit balance against future credit-card charges when the user or issuer records that it was applied
+- Prevent a payment from exceeding the statement balance
 - Keep the official credit limit unchanged by an overpayment
 - Do not automatically settle, shorten, or reduce an installment because of an overpayment
 - Allow a user to record a separate installment early-settlement request with settlement date, remaining principal, settlement amount, pre-termination fee when applicable, and settlement status
@@ -994,8 +996,9 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Payment amount
 - Payment date
 - Billing cycle or statement
-- Source account, when a related transaction is recorded
+- Source account
 - Notes
+- Debt Manager's Pay action opens Transaction Management with the selected statement context; all editable payment and expense inputs remain on the Transaction screen
 
 ### 7.7.2 Credit Card Payment Form Placeholders
 
@@ -1010,8 +1013,9 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Require a valid positive payment amount
 - Require a payment date
 - Require a billing cycle or statement
-- Require a source account when recording a related transaction
-- Allow payments greater than the statement balance and classify the excess as a credit balance or overpayment
+- Require a source account and related expense transaction
+- Prevent a second active payment from being recorded for the same billing cycle
+- Prevent payments from exceeding the statement balance
 - Preserve valid entries after validation failure
 - Clear field errors when corrected
 
@@ -1090,8 +1094,6 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Fully-paid state: payments meet or exceed the statement balance
 - Minimum-satisfied state: payments meet the minimum amount due but not the statement balance
 - Partially-paid state: payments do not yet meet the minimum amount due
-- Overpaid state: payments exceed the statement balance and create a credit balance
-- Credit-balance-applied state: a recorded credit balance was applied to a future charge
 - Installment-active state: an installment has remaining principal or months
 - Early-settlement-requested state: an early settlement was recorded and awaits issuer recognition
 - Installment-completed state: the issuer recognized the early settlement or final payment
@@ -1120,7 +1122,6 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Fully paid: `This statement is fully paid. No remaining statement balance is currently recorded.`
 - Minimum satisfied: `The minimum payment is satisfied, but the remaining balance may incur finance charges.`
 - Partially paid: `This statement is not fully paid and the minimum amount due is not yet satisfied. Review the remaining payment.`
-- Overpaid: `This payment created a credit balance. Apply it to a future charge only when the user or issuer confirms it.`
 - Early settlement pending: `The early settlement request was recorded. The installment remains active until the issuer recognizes it.`
 - Installment completed: `The installment settlement was recognized. Review the updated installment history.`
 - Stale credit-card data: `Credit-card information may be out of date. Refresh or reconcile it with the latest issuer records.`
@@ -1145,6 +1146,10 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Payment error: `Your credit-card payment could not be recorded. Check the details and try again.`
 - Credit-card recovery: `Your credit-card changes could not be completed. Review the details and try again.`
 - Issuer reconciliation notice: `The issuer's records may differ from this estimate. Review the latest statement and available credit before relying on the total.`
+
+#### Confirmation Messages
+
+- Credit Card payment deletion confirmation: `Deleting this payment removes it from the statement history and reverses its related transaction. Cancel to keep it or confirm deletion to continue.`
 
 ### 7.8.6 Credit Card Scope Boundaries
 
@@ -1183,6 +1188,16 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Finished status: debt balance has been paid in full
 - Display status and progress independently
 - Do not treat an archived debt as a finished debt
+
+### 7.10.1 Non-Credit-Card Debt Repayment Forecast
+
+- Ask `When do you want to get this debt paid?` and require a target payoff date when creating or editing an active debt
+- Forecast the payoff date from the current balance, configured payment amount, payment frequency, and next payment date
+- Advanced: the configured payment amount exceeds the amount required to clear the balance by the target payoff date
+- On track: the configured payment amount meets the amount required to clear the balance by the target payoff date
+- Underpaid: the configured payment amount is insufficient to clear the balance by the target payoff date
+- Not in schedule: a target payoff date, next payment date, payment amount, or supported recurring payment frequency is unavailable
+- Display the repayment forecast independently from the debt record status and payment-history progress
 
 ### 7.11 Transaction-Triggered Debt Recording
 
@@ -1382,7 +1397,7 @@ Debt types are selectable presets. Existing debt records must remain readable if
 - Require a valid positive payment or amortization amount when the selected debt type has a repayment schedule
 - Require a payment frequency
 - Require a valid due date when a due date applies
-- Require a valid target payoff date when provided
+- Require a valid target payoff date on or after the next payment date
 - Require type-specific inputs for the selected debt type
 - Require the linked income source for Salary Loans
 - Require the repayment method for Salary Loans
@@ -2238,6 +2253,8 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Allow the user to select a savings goal for the contribution
 - Allow the user to record the transaction as an obligation payment
 - Allow the user to select an obligation for the payment
+- Allow the user to record the transaction as a Credit Card statement payment
+- Preserve selected Credit Card statement-payment context when Debt Manager opens the transaction form
 
 ### 12.2 Transaction Form
 
@@ -2259,6 +2276,8 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Debt selector when the option is enabled
 - Record as obligation payment option
 - Obligation selector when the option is enabled
+- Record as Credit Card statement payment option
+- Credit Card statement selector when the option is enabled
 
 ### 12.3 Transaction Form Placeholders
 
@@ -2276,6 +2295,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Savings goal: `Select savings goal`
 - Debt: `Select debt`
 - Obligation: `Select obligation`
+- Credit Card statement: `Select credit card statement`
 
 ### 12.4 Transaction Selectors
 
@@ -2288,6 +2308,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Savings goal selector for explicit savings contributions
 - Debt selector for explicit debt payments
 - Obligation selector for explicit obligation payments
+- Credit Card statement selector for explicit Credit Card statement payments
 - Only show eligible active accounts and related records
 - Show an empty selector state when no eligible account or related record exists
 
@@ -2301,8 +2322,8 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Prevent the same account from being both source and destination
 - Require a category or subcategory when applicable
 - Require a recurrence schedule when recurring is enabled
-- Allow at most one explicit savings, debt, or obligation relationship per transaction
-- Require the selected savings goal, debt, or obligation when its option is enabled
+- Allow at most one explicit savings, non-credit-card debt, obligation, or Credit Card statement-payment relationship per transaction
+- Require the selected savings goal, debt, obligation, or Credit Card statement when its option is enabled
 - Prevent unsupported links between transaction types and related records
 - Display validation feedback beside the affected field
 - Preserve valid entries after validation failure
@@ -2346,6 +2367,15 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - The selected debt displays the payment and updated balance or progress
 - Ordinary transactions remain unrelated to debts
 
+### 12.9.1 Credit Card Statement Payment Transaction Flow
+
+- User selects Pay for a recorded Credit Card statement in Debt Manager
+- Odin opens the transaction form with the selected Credit Card statement and billing-cycle context
+- User completes or confirms the expense transaction details
+- Odin creates the expense transaction and Credit Card statement payment together
+- The statement displays the payment, updated payment status, and remaining balance or credit balance
+- Ordinary transactions remain unrelated to Credit Card statements
+
 ### 12.10 Obligation Payment Transaction Flow
 
 - User selects the obligation-payment option
@@ -2381,6 +2411,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Correct account balance effects after changes
 - Preserve deleted transactions for synchronization
 - Protect linked debt-payment transactions from unsupported generic changes
+- Protect linked Credit Card statement-payment transactions from unsupported generic changes
 
 ### 12.14 Recurring Transactions
 
@@ -2402,6 +2433,8 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Linked savings contributions update the selected goal's current amount and progress
 - Linked debt payments update the selected debt's remaining balance and progress
 - Linked obligation payments update the selected obligation occurrence's paid and remaining amounts
+- Linked Credit Card statement payments update the selected statement's paid amount, payment status, and credit balance
+- Editing or deleting a linked Credit Card statement-payment transaction updates or removes its payment relationship and account-balance effects together
 - Recurring transactions generate entries according to their configured schedule
 
 ### 12.16 Transaction States
@@ -2416,6 +2449,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Savings-contribution state: transaction is explicitly linked to a savings goal
 - Debt-payment state: transaction is explicitly linked to a debt
 - Obligation-payment state: transaction is explicitly linked to an obligation
+- Credit-card-statement-payment state: transaction is explicitly linked to a Credit Card statement payment
 - Credit-card-routing state: transaction requires Debt Manager details
 - Recurring-entry state: recurring transaction settings are being configured
 - Validation-failure state: transaction inputs are invalid
@@ -2427,6 +2461,8 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Edit state: an existing transaction is being changed
 - Delete-confirmation state: the user must confirm deletion
 - Protected-link state: a linked debt-payment transaction cannot be changed through unsupported generic edits
+- Credit-card-statement-payment-edit state: a linked Credit Card statement payment is being changed through its supported payment flow
+- Credit-card-statement-payment-delete-confirmation state: the user must confirm deletion of a linked Credit Card statement payment
 - Error state: transaction data could not be loaded or saved
 - Success state: transaction and any selected relationship were saved
 
@@ -2442,6 +2478,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - No eligible transaction option: `No eligible account or related record is available. Add or choose a different option.`
 - Transaction sync failed: `Your transaction could not be sent. Check your connection and try again.`
 - Protected transaction link: `This linked debt payment cannot be changed here. Open the debt details to make supported changes.`
+- Protected Credit Card statement-payment link: `This linked Credit Card statement payment cannot be changed here. Open the statement payment to make supported changes.`
 - Transaction error: `Your transaction could not be loaded or saved. Try again.`
 - Transaction loading failure: `Your transaction data could not be loaded. Refresh and try again.`
 
@@ -2456,10 +2493,12 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Savings contribution: `This transaction will be linked to a savings goal. Choose the goal and save the transaction to record the contribution.`
 - Debt payment: `This transaction will be linked to a debt payment. Choose the debt and save the transaction to record the payment.`
 - Obligation payment: `This transaction will be linked to an obligation payment. Choose the obligation and save the transaction to record the payment.`
+- Credit Card statement payment: `This transaction will be linked to a Credit Card statement payment. Review the statement and save the transaction to record the payment.`
 - Credit card routing: `This credit card transaction needs debt details. Continue to Debt Manager to finish it.`
 - Offline transaction: `Your transaction was saved on this device. Reconnect to send it to your account.`
 - Offline pending transaction: `Your transaction is waiting to sync from this device. Reconnect to send it to your account.`
 - Protected link: `This linked debt-payment transaction cannot be changed through generic edits. Open the debt details to make supported changes.`
+- Protected Credit Card statement-payment link: `This linked Credit Card statement payment cannot be changed through generic edits. Open the statement payment to make supported changes.`
 - Recurring entry: `Recurring transaction settings are ready to configure. Choose a schedule before saving the transaction.`
 - Linked-record update: `The related savings, debt, or obligation record is being updated. Wait for the update to finish before leaving this screen.`
 - Edit state: `You are editing an existing transaction. Review the changes and save them when you are ready.`
@@ -2474,6 +2513,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 #### Confirmation Messages
 
 - Transaction deletion confirmation: `Deleting this transaction removes its active account and summary effects. Cancel to keep it or confirm deletion to continue.`
+- Credit Card statement-payment deletion confirmation: `Deleting this Credit Card statement payment removes its payment and active transaction effects. Cancel to keep it or confirm deletion to continue.`
 
 #### Recovery Messages
 
