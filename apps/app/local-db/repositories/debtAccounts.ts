@@ -9,8 +9,9 @@ export const DEBT_STATUSES = ["active", "archived", "deleted", "paid_off"] as co
 
 export type DebtTypePreset = typeof DEBT_TYPES[number];
 export type DebtAccountStatus = typeof DEBT_STATUSES[number];
-export type DebtListVisibility = "active" | "archived" | "deleted" | "all";
+export type DebtListVisibility = "active" | "finished" | "archived" | "deleted" | "all";
 export type DebtProgressStatus = "ahead" | "on_schedule" | "behind" | "finished" | "no_payments";
+export type DebtRepaymentStatus = "advanced" | "on_track" | "underpaid" | "not_in_schedule";
 export type InterestMethod = "flat_add_on" | "diminishing_balance" | "provider_calculated" | "no_interest";
 export type InterestRatePeriod = "annual" | "monthly" | "per_term" | "none";
 export type PaymentFrequency = "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "custom";
@@ -36,6 +37,11 @@ export type DebtAccount = {
   interestPeriod: InterestRatePeriod | null; interestMethod: InterestMethod | null; notes: string | null;
   typeSpecific: DebtPresetData; hasPaymentHistory: boolean; archivedAt: string | null;
   paidOffAt: string | null; version: number;
+};
+
+export type DebtRepaymentForecast = {
+  status: DebtRepaymentStatus;
+  estimatedPayoffDate: string | null;
 };
 
 export type CreateDebtAccountInput = {
@@ -98,6 +104,7 @@ export async function listDebtAccounts(userId: string, visibility: DebtListVisib
   let sql = `${SELECT_DEBTS} WHERE da.user_id = ?`;
   const params: SQLite.SQLiteBindValue[] = [userId];
   if (visibility === "active" || visibility === "archived") { sql += " AND da.deleted = 0 AND da.status = ?"; params.push(visibility); }
+  if (visibility === "finished") { sql += " AND da.deleted = 0 AND da.status = 'paid_off'"; }
   if (visibility === "deleted") sql += " AND da.deleted = 1";
   if (visibility === "all") sql += " AND (da.deleted = 0 OR da.status = 'deleted')";
   sql += " ORDER BY da.updated_at DESC, da.name COLLATE NOCASE ASC";
@@ -126,6 +133,8 @@ function validate(input: CreateDebtAccountInput): CreateDebtAccountInput {
   if (input.currentBalanceCentavos > input.originalBalanceCentavos) throw new LocalDbError("VALIDATION_ERROR", "current balance cannot exceed original balance");
   assertDate(input.startDate, "start date", true); assertDate(input.nextDueDate, "first or next payment date", true);
   assertDate(input.maturityDate, "maturity date", false); assertDate(input.targetPayoffDate, "target payoff date", false);
+  if (!input.targetPayoffDate) throw new LocalDbError("VALIDATION_ERROR", "target payoff date is required");
+  if (input.targetPayoffDate < input.nextDueDate) throw new LocalDbError("VALIDATION_ERROR", "target payoff date must be on or after the next payment date");
   if (!input.interestMethod) throw new LocalDbError("VALIDATION_ERROR", "interest method is required");
   assertInteger(input.typeSpecific.feesCentavos ?? 0, "feesCentavos");
   if (input.typeSpecific.termMonths != null) assertInteger(input.typeSpecific.termMonths, "termMonths", true);
@@ -139,8 +148,8 @@ function validate(input: CreateDebtAccountInput): CreateDebtAccountInput {
   if (auto?.vehiclePurchasePriceCentavos != null && auto.downpaymentCentavos != null && auto.downpaymentCentavos > auto.vehiclePurchasePriceCentavos) throw new LocalDbError("VALIDATION_ERROR", "auto loan downpayment cannot exceed vehicle purchase price");
   return { ...input, name, lenderName: input.lenderName.trim() };
 }
-function payload(input: CreateDebtAccountInput): Record<string, unknown> {
-  return { linked_account_id: input.linkedAccountId ?? null, name: input.name.trim(), lender_name: input.lenderName?.trim() ?? null, preset_key: input.type, status: "active", original_balance_centavos: input.originalBalanceCentavos, current_balance_centavos: input.currentBalanceCentavos, annual_interest_rate_bps: input.annualInterestRateBps, minimum_payment_centavos: input.minimumPaymentCentavos, payment_frequency: input.paymentFrequency, next_due_date: input.nextDueDate, maturity_date: input.maturityDate ?? null, target_payoff_date: input.targetPayoffDate ?? null, interest_period: input.interestPeriod, interest_method: input.interestMethod, preset_data: { ...input.typeSpecific, startDate: input.startDate }, notes: input.notes ?? null };
+function payload(input: CreateDebtAccountInput, status: DebtAccountStatus = "active"): Record<string, unknown> {
+  return { linked_account_id: input.linkedAccountId ?? null, name: input.name.trim(), lender_name: input.lenderName?.trim() ?? null, preset_key: input.type, status, original_balance_centavos: input.originalBalanceCentavos, current_balance_centavos: input.currentBalanceCentavos, annual_interest_rate_bps: input.annualInterestRateBps, minimum_payment_centavos: input.minimumPaymentCentavos, payment_frequency: input.paymentFrequency, next_due_date: input.nextDueDate, maturity_date: input.maturityDate ?? null, target_payoff_date: input.targetPayoffDate ?? null, interest_period: input.interestPeriod, interest_method: input.interestMethod, preset_data: { ...input.typeSpecific, startDate: input.startDate }, notes: input.notes ?? null };
 }
 async function readOwnedDebt(db: SQLite.SQLiteDatabase, userId: string, id: string) {
   const row = await db.getFirstAsync<DebtAccountRow>("SELECT * FROM debt_accounts WHERE user_id = ? AND id = ? AND deleted = 0", userId, id);
@@ -176,8 +185,8 @@ function inputFromRow(row: DebtAccountRow): CreateDebtAccountInput {
 export async function updateDebtAccount(userId: string, deviceId: string, id: string, input: UpdateDebtAccountInput): Promise<{ debt: DebtAccount; operation: SyncOperation }> {
   const db = await getDb(); let result!: { debt: DebtAccount; operation: SyncOperation };
   await db.withTransactionAsync(async () => {
-    const current = await readOwnedDebt(db, userId, id); const merged = validate({ ...inputFromRow(current), ...input, typeSpecific: input.typeSpecific ?? inputFromRow(current).typeSpecific }); await assertAccessibleLinkedAccount(db, userId, merged.linkedAccountId); const next = payload(merged);
-    const currentPayload = payload(inputFromRow(current)); const changed = Object.keys(next).filter((key) => JSON.stringify(next[key]) !== JSON.stringify(currentPayload[key]));
+    const current = await readOwnedDebt(db, userId, id); const merged = validate({ ...inputFromRow(current), ...input, typeSpecific: input.typeSpecific ?? inputFromRow(current).typeSpecific }); await assertAccessibleLinkedAccount(db, userId, merged.linkedAccountId); const status = normalizeStatus(current.status, current.deleted); const next = payload(merged, status);
+    const currentPayload = payload(inputFromRow(current), status); const changed = Object.keys(next).filter((key) => JSON.stringify(next[key]) !== JSON.stringify(currentPayload[key]));
     if (changed.length === 0) { result = { debt: await readResult(db, userId, id), operation: null as unknown as SyncOperation }; return; }
     const clauses = changed.map((field) => `${field} = ?`); const values = changed.map((field) => field === "preset_data" ? JSON.stringify(next[field]) : next[field]) as SQLite.SQLiteBindValue[]; const ts = now();
     await db.runAsync(`UPDATE debt_accounts SET ${clauses.join(", ")}, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?`, ...values, ts, id, userId);

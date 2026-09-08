@@ -23,7 +23,9 @@ export type SyncableEntity =
   | "credit_card_transactions"
   | "credit_card_installments"
   | "credit_card_statements"
+  | "credit_card_payments"
   | "debt_accounts"
+  | "debt_payments"
   ;
 
 export type SyncOperation = {

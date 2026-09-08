@@ -133,6 +133,7 @@ describe("credit-card expense inserts", () => {
     };
     const db = {
       getFirstAsync: jest.fn(async (sql: string) => {
+        if (sql.includes("FROM credit_card_payments")) return null;
         if (sql.includes("FROM credit_card_transactions")) return { account_id: "account-1", cycle_id: "cycle-september", version: 1 };
         if (sql.includes("FROM credit_card_cycles")) return { id: "cycle-august" };
         if (sql.includes("FROM transactions")) return transaction;

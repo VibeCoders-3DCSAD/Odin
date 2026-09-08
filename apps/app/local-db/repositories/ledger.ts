@@ -770,19 +770,26 @@ export async function updateTransaction(
   deviceId: string,
   id: string,
   input: UpdateTransactionInput,
+  options?: { allowStatementPayment?: boolean; allowDebtPayment?: boolean; db?: SQLite.SQLiteDatabase },
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
-  const db = await getDb();
+  const db = options?.db ?? await getDb();
   const ts = now();
 
   let result: { transaction: Transaction; operation: SyncOperation };
 
-  await db.withTransactionAsync(async () => {
+  const update = async () => {
     const current = await db.getFirstAsync<TransactionRow>(
       "SELECT * FROM transactions WHERE user_id = ? AND id = ? AND deleted = 0",
       userId,
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
+    if (!options?.allowStatementPayment && await db.getFirstAsync<{ id: string }>(
+      "SELECT id FROM credit_card_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
+    )) throw new LocalDbError("VALIDATION_ERROR", "Edit this transaction from its credit-card statement payment.");
+    if (!options?.allowDebtPayment && await db.getFirstAsync<{ id: string }>(
+      "SELECT id FROM debt_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
+    )) throw new LocalDbError("VALIDATION_ERROR", "Edit this transaction from its debt payment.");
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
     const newAmount = input.amount_centavos ?? current.amount_centavos;
@@ -945,7 +952,10 @@ export async function updateTransaction(
       id,
     );
     result = { transaction: mapTransaction(row!), operation };
-  });
+  };
+
+  if (options?.db) await update();
+  else await db.withTransactionAsync(update);
 
   return result!;
 }
@@ -954,19 +964,26 @@ export async function deleteTransaction(
   userId: string,
   deviceId: string,
   id: string,
+  options?: { allowStatementPayment?: boolean; allowDebtPayment?: boolean; db?: SQLite.SQLiteDatabase },
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
-  const db = await getDb();
+  const db = options?.db ?? await getDb();
   const ts = now();
 
   let result: { transaction: Transaction; operation: SyncOperation };
 
-  await db.withTransactionAsync(async () => {
+  const remove = async () => {
     const current = await db.getFirstAsync<TransactionRow>(
       "SELECT * FROM transactions WHERE user_id = ? AND id = ? AND deleted = 0",
       userId,
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Transaction not found");
+    if (!options?.allowStatementPayment && await db.getFirstAsync<{ id: string }>(
+      "SELECT id FROM credit_card_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
+    )) throw new LocalDbError("VALIDATION_ERROR", "Delete this transaction from its credit-card statement payment.");
+    if (!options?.allowDebtPayment && await db.getFirstAsync<{ id: string }>(
+      "SELECT id FROM debt_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
+    )) throw new LocalDbError("VALIDATION_ERROR", "Delete this transaction from its debt payment.");
     const cardPurchase = await db.getFirstAsync<{
       account_id: string;
       amount_centavos: number;
@@ -1043,7 +1060,10 @@ export async function deleteTransaction(
       id,
     );
     result = { transaction: mapTransaction(row!), operation };
-  });
+  };
+
+  if (options?.db) await remove();
+  else await db.withTransactionAsync(remove);
 
   return result!;
 }

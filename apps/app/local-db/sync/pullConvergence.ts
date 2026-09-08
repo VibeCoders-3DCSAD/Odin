@@ -28,7 +28,9 @@ export const SYNCED_TABLES = [
   "credit_card_installments",
   "credit_card_transactions",
   "credit_card_statements",
+  "credit_card_payments",
   "debt_accounts",
+  "debt_payments",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -145,6 +147,11 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "cycle_id", "statement_date", "statement_balance_centavos", "minimum_due_centavos",
     "finance_charge_centavos", "due_date", "authoritative", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
+  credit_card_payments: new Set([
+    "id", "user_id", "cycle_id", "statement_id", "transaction_id", "amount_centavos", "payment_date",
+    "source_account_id", "notes", "issuer_recognized", "client_mutation_id", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
+  ]),
   debt_accounts: new Set([
     "id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status",
     "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps",
@@ -153,6 +160,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "notes", "paid_off_at", "archived_at", "version", "deleted", "created_at", "updated_at",
     "last_synced_at",
   ]),
+  debt_payments: new Set(["id", "debt_account_id", "user_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -309,7 +317,7 @@ export async function applyPullRow(
         now,
         ...identityParams,
       );
-    } else if (table === "credit_card_cycles" || table === "credit_card_details") {
+    } else if (table === "credit_card_cycles" || table === "credit_card_details" || table === "credit_card_payments" || table === "debt_payments") {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, version = ?,
           updated_at = ? WHERE ${identityWhere}`,

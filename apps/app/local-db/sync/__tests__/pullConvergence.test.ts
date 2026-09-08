@@ -51,3 +51,13 @@ describe("debt account pull convergence", () => {
     expect(String(db.runAsync.mock.calls[0]?.[0])).not.toContain("is_active");
   });
 });
+
+describe("credit-card payment pull convergence", () => {
+  it("soft-deletes a payment without writing an unrelated is_active column", async () => {
+    const db = { getFirstAsync: jest.fn(async () => ({ version: 1, user_id: "user-1" })), runAsync: jest.fn<(...args: any[]) => any>(async () => ({ changes: 1 })) };
+    await applyPullRow(db as never, "credit_card_payments", { id: "payment-1", user_id: "user-1", version: 2, deleted: true });
+    const sql = String(db.runAsync.mock.calls[0]?.[0]);
+    expect(sql).toContain("deleted = 1");
+    expect(sql).not.toContain("is_active");
+  });
+});

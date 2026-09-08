@@ -29,7 +29,9 @@ const SYNCED_ENTITIES = new Set([
   "credit_card_installments",
   "credit_card_transactions",
   "credit_card_statements",
+  "credit_card_payments",
   "debt_accounts",
+  "debt_payments",
 ]);
 
 const SERVER_COLUMNS = new Set([
@@ -123,6 +125,15 @@ const CREDIT_CARD_STATEMENT_CREATE_FIELDS = new Set([
 const CREDIT_CARD_STATEMENT_UPDATE_FIELDS = new Set([
   "statement_date", "statement_balance_centavos", "minimum_due_centavos",
   "finance_charge_centavos", "due_date",
+]);
+
+const CREDIT_CARD_PAYMENT_CREATE_FIELDS = new Set([
+  "cycle_id", "statement_id", "transaction_id", "amount_centavos", "payment_date",
+  "source_account_id", "notes", "client_mutation_id",
+]);
+
+const CREDIT_CARD_PAYMENT_UPDATE_FIELDS = new Set([
+  "amount_centavos", "payment_date", "source_account_id", "notes",
 ]);
 
 const CREDIT_CARD_DETAILS_CREATE_FIELDS = new Set([
@@ -286,6 +297,7 @@ const DEBT_ACCOUNT_FIELDS = new Set([
   "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date",
   "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes",
 ]);
+const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
 
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
@@ -397,6 +409,18 @@ async function validateCreatePayload(
     return sanitized;
   }
 
+  if (entity === "credit_card_payments") {
+    assertOnlyAllowed(payload, CREDIT_CARD_PAYMENT_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, CREDIT_CARD_PAYMENT_CREATE_FIELDS);
+    for (const field of ["cycle_id", "statement_id", "transaction_id", "source_account_id", "client_mutation_id"]) requireString(sanitized, field);
+    requireDateString(sanitized, "payment_date");
+    requirePositiveInteger(sanitized, "amount_centavos");
+    optionalString(sanitized, "notes");
+    await verifyCreditCardPaymentReferences(supabase, userId, sanitized);
+    sanitized.issuer_recognized = false;
+    return sanitized;
+  }
+
   if (entity === "credit_card_details") {
     assertOnlyAllowed(payload, CREDIT_CARD_DETAILS_CREATE_FIELDS);
     const sanitized = sanitizePayload(payload, CREDIT_CARD_DETAILS_CREATE_FIELDS);
@@ -455,6 +479,14 @@ async function validateCreatePayload(
     if (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data)) throw new Error("preset_data must be an object");
     for (const field of ["lender_name", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "notes"]) optionalString(sanitized, field);
     if (sanitized.linked_account_id != null) { requireString(sanitized, "linked_account_id"); await verifyAccountOwnership(supabase, userId, sanitized.linked_account_id as string); }
+    return sanitized;
+  }
+  if (entity === "debt_payments") {
+    assertOnlyAllowed(payload, DEBT_PAYMENT_FIELDS);
+    const sanitized = sanitizePayload(payload, DEBT_PAYMENT_FIELDS);
+    for (const field of ["debt_account_id", "transaction_id", "source", "payment_date", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]) requireString(sanitized, field);
+    requirePositiveInteger(sanitized, "amount_centavos"); requireBigInt(sanitized, "principal_centavos"); requireBigInt(sanitized, "interest_centavos");
+    if (sanitized.source !== "transaction" || sanitized.linked_transaction_type !== "expense") throw new Error("debt payment must link an expense transaction");
     return sanitized;
   }
 
@@ -723,6 +755,10 @@ async function validateTaxonomyCreatePayload(
   }
 
   if (entity === "transactions") {
+    // Older clients briefly queued this UI-only routing context with the
+    // transaction. It is not a transaction column and must not reach the RPC.
+    const { debt_account_id: _debtAccountId, ...transactionPayload } = payload;
+    payload = transactionPayload;
     assertOnlyAllowed(payload, TRANSACTION_CREATE_FIELDS);
     const sanitized = sanitizePayload(payload, TRANSACTION_CREATE_FIELDS);
     requireString(sanitized, "transaction_type");
@@ -950,6 +986,8 @@ async function validateUpdatePayload(
     allowedFields = CREDIT_CARD_CYCLE_FIELDS;
   } else if (entity === "credit_card_statements") {
     allowedFields = CREDIT_CARD_STATEMENT_UPDATE_FIELDS;
+  } else if (entity === "credit_card_payments") {
+    allowedFields = CREDIT_CARD_PAYMENT_UPDATE_FIELDS;
   } else if (entity === "credit_card_details") {
     allowedFields = CREDIT_CARD_DETAILS_UPDATE_FIELDS;
   } else if (entity === "transactions") {
@@ -960,6 +998,8 @@ async function validateUpdatePayload(
     allowedFields = OBLIGATION_UPDATE_FIELDS;
   } else if (entity === "debt_accounts") {
     allowedFields = DEBT_ACCOUNT_FIELDS;
+  } else if (entity === "debt_payments") {
+    allowedFields = DEBT_PAYMENT_FIELDS;
   } else if (entity === "transaction_templates") {
     allowedFields = TEMPLATE_FIELDS;
   } else if (entity === "transaction_drafts") {
@@ -1023,6 +1063,27 @@ async function validateUpdatePayload(
       if (["original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos"].includes(key) && (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)) throw new Error(`${key} must be a non-negative whole number`);
       if (["lender_name", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "notes", "next_due_date", "payment_frequency"].includes(key) && value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
     }
+    return sanitized;
+  }
+
+  if (entity === "credit_card_payments") {
+    for (const [key, value] of Object.entries(sanitized)) {
+      if (key === "amount_centavos") requirePositiveInteger(sanitized, key);
+      else if (key === "payment_date") requireDateString(sanitized, key);
+      else if (key === "source_account_id") {
+        if (typeof value !== "string" || !value) throw new Error("source_account_id must be a non-empty string");
+        await verifyAccountOwnership(supabase, userId, value);
+      } else if (key === "notes" && value !== null && typeof value !== "string") {
+        throw new Error("notes must be a string or null");
+      }
+    }
+    return sanitized;
+  }
+
+  if (entity === "debt_payments") {
+    for (const field of ["debt_account_id", "transaction_id", "source", "payment_date", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]) requireString(sanitized, field);
+    requirePositiveInteger(sanitized, "amount_centavos"); requireBigInt(sanitized, "principal_centavos"); requireBigInt(sanitized, "interest_centavos");
+    if (sanitized.source !== "transaction" || sanitized.linked_transaction_type !== "expense") throw new Error("debt payment must link an expense transaction");
     return sanitized;
   }
 
@@ -1637,6 +1698,49 @@ async function verifyStatementCycle(
     .maybeSingle();
   if (accountError) throw new Error(`credit-card account validation failed: ${accountError.message}`);
   if (!account) throw new Error("credit-card statement cycle is invalid");
+}
+
+async function verifyCreditCardPaymentReferences(
+  supabase: SupabaseClient,
+  userId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const { data: statement, error: statementError } = await supabase
+    .from("credit_card_statements")
+    .select("id, authoritative, statement_balance_centavos")
+    .eq("id", payload.statement_id as string)
+    .eq("cycle_id", payload.cycle_id as string)
+    .eq("user_id", userId)
+    .eq("deleted", false)
+    .maybeSingle();
+  if (statementError) throw new Error(`credit-card statement validation failed: ${statementError.message}`);
+  if (!statement || statement.authoritative !== true) throw new Error("payment must reference an authoritative statement in its billing cycle");
+  if ((payload.amount_centavos as number) > statement.statement_balance_centavos) throw new Error("payment amount cannot exceed the statement balance");
+
+  const { data: source, error: sourceError } = await supabase
+    .from("financial_accounts")
+    .select("id")
+    .eq("id", payload.source_account_id as string)
+    .eq("user_id", userId)
+    .neq("kind", "credit_card")
+    .eq("status", "active")
+    .eq("deleted", false)
+    .maybeSingle();
+  if (sourceError) throw new Error(`payment source-account validation failed: ${sourceError.message}`);
+  if (!source) throw new Error("payment source account must be an active non-credit-card account");
+
+  const { data: transaction, error: transactionError } = await supabase
+    .from("transactions")
+    .select("id")
+    .eq("id", payload.transaction_id as string)
+    .eq("user_id", userId)
+    .eq("transaction_type", "expense")
+    .eq("source_account_id", payload.source_account_id as string)
+    .eq("amount_centavos", payload.amount_centavos as number)
+    .eq("deleted", false)
+    .maybeSingle();
+  if (transactionError) throw new Error(`payment transaction validation failed: ${transactionError.message}`);
+  if (!transaction) throw new Error("payment transaction must match its amount and source account");
 }
 
 async function verifyCategoryOwnership(
