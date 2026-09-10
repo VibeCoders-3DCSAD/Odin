@@ -4,6 +4,20 @@ import type { DetectionResult } from "./types.js";
 
 export type AlertRow = Record<string, unknown>;
 
+type AlertCursor = { triggered_at: string; id: string };
+
+function decodeCursor(cursor: string): AlertCursor {
+  try {
+    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as AlertCursor;
+    if (!value.triggered_at || !value.id || Number.isNaN(Date.parse(value.triggered_at))) throw new Error("invalid cursor");
+    return value;
+  } catch { throw new Error("invalid alert cursor"); }
+}
+
+function encodeCursor(alert: AlertRow): string {
+  return Buffer.from(JSON.stringify({ triggered_at: alert.triggered_at, id: alert.id })).toString("base64url");
+}
+
 export class AlertRepository {
   constructor(private readonly client: SupabaseClient, private readonly userId: string) {}
 
@@ -13,15 +27,19 @@ export class AlertRepository {
       .select("*, alert_related_entities(*)")
       .eq("user_id", this.userId)
       .neq("status", "cleared")
-      .neq("status", "expired")
-      .order("triggered_at", { ascending: false })
-      .limit(limit + 1);
-    if (cursor) query = query.lt("triggered_at", cursor);
+       .neq("status", "expired")
+       .order("triggered_at", { ascending: false })
+       .order("id", { ascending: false })
+       .limit(limit + 1);
+    if (cursor) {
+      const decoded = decodeCursor(cursor);
+      query = query.or(`triggered_at.lt.${decoded.triggered_at},and(triggered_at.eq.${decoded.triggered_at},id.lt.${decoded.id})`);
+    }
     const { data, error } = await query;
     if (error) throw error;
     const rows = (data ?? []) as AlertRow[];
     const page = rows.slice(0, limit);
-    return { alerts: page, nextCursor: rows.length > limit ? String(page[page.length - 1]?.triggered_at ?? "") : null };
+    return { alerts: page, nextCursor: rows.length > limit && page.length ? encodeCursor(page[page.length - 1]!) : null };
   }
 
   async get(alertId: string): Promise<AlertRow | null> {

@@ -316,3 +316,16 @@ curl -X POST https://your-api.com/odin/api/recurring/run \
 ```
 
 Optional payload: `{ "payload": { "as_of": "2024-01-15", "limit": 200 } }`
+
+### Daily Financial Reports
+
+Configure an external cron host for `0 18 * * *` in `Asia/Manila` to invoke the scheduler-owned report endpoint. It handles missed current-week daily dates and completed-week weekly catch-up itself.
+
+```bash
+curl -X POST https://your-api.com/odin/internal/daily-financial-reports/run \
+  -H "x-scheduler-secret: ${DAILY_REPORT_SCHEDULER_SECRET}" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Do not call this endpoint with a user session or from the mobile app.

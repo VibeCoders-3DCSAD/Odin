@@ -1,100 +1,217 @@
-# Anomaly Alerts Execution Plan
+# Daily Financial Report Execution Plan
 
 ## Goal
 
-Deliver a usable, offline-readable anomaly and overspending alert inbox backed by Odin's existing alert schema. Detection will initially use deterministic, explainable server-side rules behind a provider interface; a future `odin-ml` adapter will implement the same normalized result contract, so the API, persistence, user actions, cache, and React Native UI remain unchanged.
+Replace foreground, transaction-triggered anomaly evaluation with a daily,
+server-owned financial report. The report evaluates the user's posted
+transactions and active budgets once per day, persists any model-derived
+findings as alerts, and is available to the app on its next sync or refresh.
 
-## Source Of Truth
+The model is still under experimentation. This work establishes the scheduling,
+input, persistence, and sync boundaries without shipping a deterministic rules
+provider or a product alert inbox.
 
-- Requirements: `docs/requirements-engineering/feature-modules.md` sections 13 and 14.3-14.5
-- Alert and anomaly schema: `supabase/migrations/20260616064145_priority_modules_v3.sql`
-- Forecast-provider precedent: `apps/api/src/routes/forecast.ts` and `apps/api/src/services/forecastService.ts`
-- Dashboard cache precedent: `apps/app/local-db/repositories/dashboardSnapshots.ts`
-- Existing placeholder route: `apps/app/components/MobileShell.tsx`
+## Decisions
+
+- Do not call anomaly detection from transaction entry, sync completion, or
+  dashboard refresh.
+- Do not implement a rules provider. A model adapter will be selected only when
+  experimentation produces a stable, versioned result contract.
+- Run one daily report per active user at 18:00 Philippine time
+  (`Asia/Manila`).
+- Evaluate the prior six months of posted financial data for every report.
+- Backfill missed report dates individually during the current week. For a
+  fully missed prior week, create one weekly report covering that Monday through
+  Sunday period instead of recreating seven daily reports.
+- Defer alert inbox, alert detail, dashboard badge, and related-record UI.
+- Sync `alert_notification_preferences`, `anomaly_whitelist_rules`, and
+  `alert_suppression_rules` through the local CRUD queue. Alerts and evaluation
+  records remain server-owned, read-only cache data.
 
 ## Non-Goals
 
-- Do not add `odin-ml`, deploy a microservice, or call an ML endpoint in this work.
-- Do not add push delivery, background jobs, or external notification providers; alerts are in-app and fetched on foreground refresh.
-- Do not implement every alert source from section 13.3. This release owns anomaly detection and budget overspending only; forecast, savings, debt, and synchronization sources can use the same persistence contract later.
-- Do not duplicate the remote `alerts` or `anomaly_evaluations` schema in the local sync queue. The app has a read-only local inbox cache and uses authenticated alert-action endpoints.
+- Do not add `odin-ml`, deploy a model, or select a production anomaly model.
+- Do not add push delivery or background processing in the mobile app.
+- Do not build alert product UI while the report output and model behavior are
+  still experimental.
+- Do not evaluate transactions on every input or accept raw financial payloads
+  from the app for evaluation.
+
+## Anomaly Configuration
+
+Add `apps/api/src/services/alerts/anomalyConfig.ts` as the single source of
+non-secret report behavior. Keep model URLs, API keys, and other secrets in the
+environment rather than this file.
+
+```ts
+export const anomalyConfig = {
+  schedule: {
+    cron: "0 18 * * *",
+    timezone: "Asia/Manila",
+    weekStartsOn: "monday",
+  },
+  history: { lookbackMonths: 6 },
+  scoring: {
+    anomalousAtScore: 0.7,
+    criticalAtScore: 0.9,
+  },
+  reports: {
+    currentWeekCadence: "daily",
+    pastWeekCadence: "weekly",
+    backfillCurrentWeekDaily: true,
+    backfillPastWeeksWeekly: true,
+  },
+  idempotency: {
+    reportKey: "user_id + report_date + cadence + model_version",
+  },
+  retries: { maxAttempts: 3, backoffMs: [1_000, 5_000, 25_000] },
+  findings: {
+    createAlertsFor: ["unusual_transaction", "budget_overspending"],
+    reportOnly: ["insufficient_history", "model_unavailable"],
+  },
+  severity: {
+    budgetOverspending: {
+      warningAtPercentOverBudget: 10,
+      criticalAtPercentOverBudget: 25,
+    },
+  },
+  retention: { reportDays: 28, evaluationDays: 28, failureDays: 28 },
+} as const;
+```
+
+The configuration maps model `anomaly_score` values at or above `0.7` to an
+unusual-transaction finding. Overspending is derived from actual category spend,
+the budgeted amount, `budget_excess`, and the report period. The report is
+financial data, not financial advice.
+
+## Preconditions
+
+1. Choose the scheduler host and invocation mechanism. The current API has no
+   durable job scheduler, so the 18:00 `Asia/Manila` cron job cannot be
+   implemented solely as an Express route.
+2. Define the model adapter's versioned normalized result contract, including
+   the model version, candidate identity, finding category, severity,
+   explanation, source references, and no-finding/failure result.
+   For now, derive the anomaly decision in the API adapter from
+   `anomaly_score >= 0.70`; the model does not need to return a separate boolean.
+
+## Data And Idempotency Contract
+
+- Add a forward Supabase migration. The existing alert tables do not provide a
+  transactional report-write RPC, a unique report candidate identity, or an
+  alert revision timestamp.
+- Persist each report run keyed by `user_id`, report date, cadence, and model
+  version. A retry resumes or replaces that same run rather than creating a
+  second report. Weekly catch-up reports use the week's Monday date and the
+  `weekly` cadence.
+- Persist each evaluated candidate with a deterministic key scoped to the run.
+  Enforce it with a unique constraint so concurrent scheduler invocations
+  cannot duplicate evaluations or alerts.
+- Write the report run, evaluations, alert rows, related entities, and events
+  through one database RPC/transaction. The API must not chain independent
+  Supabase inserts for a logically atomic report.
+- Add a monotonic alert revision, updated timestamp, or equivalent server
+  revision token. Cursor pagination must order by `(triggered_at DESC, id DESC)`
+  and encode both fields in the cursor.
+- Update the alert source enum before model integration. `isolation_forest`
+  cannot describe an arbitrary experimental model; store the selected model in
+  a truthful source type/model-version field.
 
 ## Execution Order
 
-1. Define stable contracts and deterministic detection providers.
-2. Add server orchestration, user-scoped alert APIs, and evaluation triggers.
-3. Add local offline alert cache and app API client.
-4. Build the alert inbox, details, and actions, then connect dashboard refresh and navigation.
-5. Verify server, app, and end-to-end user behavior.
+### 1. Establish Daily Report Infrastructure
 
-## PR Stacking Strategy
+- Add the forward migration for report runs, deterministic evaluation identity,
+  alert revision, required indexes, and an atomic user-scoped report-write RPC.
+- Add RLS and ownership constraints for each new user-owned record. The RPC
+  receives a user ID only from trusted scheduler authentication, never from a
+  mobile request body.
+- Implement a scheduler entrypoint that finds eligible users by timezone and
+  invokes the report service idempotently at 18:00 `Asia/Manila`. Every active
+  user is eligible. Authenticate the scheduler with a server-only secret, use
+  explicit timeouts, and log only safe IDs, run IDs, counts, status, and model
+  version.
+- Add retry and failure recording. A failed user report must not block reports
+  for other users or alter existing alerts. Retry each report three times with
+  exponential backoffs of one, five, and twenty-five seconds.
+- For a successful current-week run, backfill each missed daily report date.
+  For fully missed completed weeks, create one weekly report per week.
+- Test duplicate scheduler delivery, concurrent runs, timezone boundaries,
+  retry behavior, and transaction rollback.
 
-Inline execution on the current checkout. Do not create a Git worktree or branch; keep changes and commits in the active working tree.
+### 2. Define The Experimental Model Boundary
 
-```text
-current checkout
-├─ contracts and deterministic providers
-├─ alert APIs and evaluation orchestration
-├─ local cache and client
-└─ inbox UI, dashboard integration, and verification
-```
+- Add one provider interface describing a versioned normalized result. It must
+  represent `unusual_transaction`, `budget_overspending`, no finding,
+  `insufficient_history`, and `model_unavailable`.
+- Map `anomaly_score >= 0.7` to an unusual-transaction finding. Map scores at
+  or above `0.9` to critical severity; lower qualifying scores are warnings.
+- Derive overspending findings from actual spend, budgeted amount,
+  `budget_excess`, and the report period. Map 10% over budget to warning and
+  25% over budget to critical.
+- Do not add `ruleBasedAnomalyProvider`, `ruleBasedOverspendingProvider`, or an
+  `ALERT_INTELLIGENCE_PROVIDER=rules` fallback.
+- Keep the model adapter disabled until a model is selected. Its eventual HTTP
+  client needs explicit authentication, timeout, response validation, and a
+  bounded retry policy.
+- A model failure records the run/evaluation outcome but creates no alert and
+  never deletes existing alerts.
+- Treat insufficient history and model unavailability as report-only status,
+  never as alerts or financial advice.
+- Add contract fixtures that the selected model must pass before it is enabled.
 
-## Linear Sub-Issue Tracking
+### 3. Sync User Feedback And Cache Server Results
 
-Create sub-issues from this plan when ready. No Linear parent issue or branch strategy was supplied; execute the numbered phases inline in order.
+- Add `alert_notification_preferences`, `anomaly_whitelist_rules`, and
+  `alert_suppression_rules` to the local `SyncableEntity` type, queue payload
+  validation, API sync routing, Supabase RPC allowlist/handler, and pull-table
+  list together.
+- Add/update the necessary forward Supabase migration for the remote sync RPC.
+  Verify it with `supabase migration list --linked` and `supabase db push
+  --dry-run`; do not deploy it without approval.
+- Keep `alerts`, report runs, and evaluation records out of the mutation queue.
+  Add a bounded, user-scoped local alert cache only when a read surface is
+  scheduled.
+- When the inbox returns, use the composite cursor and server revision contract
+  above. On a failed refresh, retain the prior cache and mark it stale.
+- Test local queue payloads, user scoping, remote allowlists, pull behavior,
+  and stale-cache preservation.
 
-### 1. Define The Alert Intelligence Boundary
+### 4. Defer Product Surfaces
 
-- Add `apps/api/src/services/alerts/types.ts`, `apps/api/src/services/alerts/providers.ts`, `apps/api/src/services/alerts/ruleBasedAnomalyProvider.ts`, and `apps/api/src/services/alerts/ruleBasedOverspendingProvider.ts`; define normalized detection inputs and outputs, including transaction/budget references, severity, explanation, feature drivers, and suppression decision, without exposing provider-specific scores to the app.
-- Add provider selection in `apps/api/src/services/alerts/alertProviderFactory.ts`, controlled by `ALERT_INTELLIGENCE_PROVIDER=rules`; reserve an `ml` value for a later adapter that calls `odin-ml` with an explicit timeout and maps its response into the same contract. The factory is the only seam that may know which provider is active.
-- Use explainable baseline rules for this release: compare an expense to the user's historical subcategory/merchant amounts after a documented minimum-history threshold, and compare current-cycle actual spending with the active budget allocation. Return an insufficient-history result rather than manufacturing an anomaly.
-- Add focused unit tests under `apps/api/src/__tests__/services/alerts/` for cold start, normal activity, anomalous amount, expected recurring spending, and overspending severity; inject `now` and inputs so tests are deterministic.
+- Remove or disable unfinished alert evaluation calls from dashboard refresh.
+- Do not ship the alert inbox, alert detail, badge, action UI, or Maestro alert
+  flow in this phase. Preserve any in-progress code only if it compiles and is
+  isolated from active navigation.
+- Create the UI implementation plan only after the daily report produces
+  stable, seeded results and the model contract is approved.
 
-### 2. Persist, Suppress, And Serve Alerts
+### 5. Verify
 
-- Add `apps/api/src/services/alerts/alertService.ts` and `apps/api/src/services/alerts/alertRepository.ts`; read all source records with `.eq("user_id", userId)`, persist `anomaly_evaluations`/`overspending_evaluations`, create deduplicated `alerts`, and write `alert_events` in a transaction or single database RPC so an evaluation and its alert cannot diverge.
-- Implement suppression evaluation against `anomaly_whitelist_rules`, `alert_suppression_rules`, and `alert_notification_preferences` before an alert is created. Record the suppression reason on the evaluation, retain the evaluation for auditability, and never let a client select another user's source IDs or suppression rule.
-- Add `apps/api/src/routes/alerts.ts` and register it in `apps/api/src/app.ts`: `GET /odin/api/alerts` returns a bounded, cursor-paginated active inbox with related record summaries; `GET /:alertId` returns detail; `PATCH /:alertId` supports only whitelisted read, acknowledge, dismiss, snooze, expected, and unexpected actions; and `POST /clear` requires an explicit confirmation token in its payload.
-- Ensure action routes check alert ownership in every read/update, validate status transitions and snooze timestamps, append immutable `alert_events`, and return safe client messages. Marking an anomaly expected may create or update a user-scoped whitelist/suppression rule only after an explicit request option, never implicitly.
-- Add `apps/api/src/routes/alert-evaluations.ts` or an internal authenticated orchestration endpoint for foreground evaluation after a completed sync. It must accept no raw financial payload from the app, load the user's posted transactions and active budget data server-side, and trigger only new or changed candidates idempotently.
-- Add `apps/api/src/__tests__/routes/alerts.test.ts` and service tests covering unauthenticated access, user scoping, invalid action payloads, action-event persistence, confirmation-required clear, suppression, deduplication, and no-data/cold-start results.
-
-### 3. Add Offline Alert Storage And Client Integration
-
-- Add `apps/app/local-db/migrations/035_alert_cache.ts` and register it through the local migration runner. Create a read-only, user-scoped `alert_cache` table plus cached related-record data sufficient to render the inbox and details offline; include remote revision/timestamps, current status, payload JSON where needed, and indexes by `user_id`, active status, and trigger time.
-- Add `apps/app/local-db/repositories/alerts.ts` with bounded `replaceAlertPage`, `getActiveAlerts`, `getAlertDetail`, and cache-expiry helpers. Local data is a cache, not a second source of truth: remote action success updates the matching cache row, and a later pull reconciles it from the server.
-- Add `apps/app/features/alerts/types.ts` and `apps/app/features/alerts/api.ts`, following `features/forecast/api.ts` for timeout and bearer authentication. Keep the app contract provider-agnostic: it consumes alert category, severity, explanation, state, related entities, and allowed actions, not rule scores or ML-specific fields.
-- Add alert evaluation and refresh to `apps/app/features/dashboard/hooks/useDashboardData.ts` after successful `runSync`, independently from forecast refresh: request server-side evaluation, then fetch the inbox cache. Upsert the alert summary snapshot only after the inbox cache refresh succeeds; failures remain partial-data failures and must preserve an existing stale cache.
-- Add repository and migration tests beside the local database code for user scoping, stale cache, replacement/upsert behavior, and retaining readable cached alerts when network refresh fails.
-
-### 4. Build The Alert Inbox And Related Navigation
-
-- Add `apps/app/features/alerts/AnomalyAlertsScreen.tsx` and focused presentational components under `apps/app/features/alerts/components/`. Replace the `anomaly-alerts` placeholder branch in `apps/app/components/MobileShell.tsx`, remove the hard-coded badge of `3`, and derive the unread badge from cached data.
-- The inbox must render loading, empty, unread, offline/stale, error, and success states using the messages in section 13.5. Each alert shows severity, category, plain-language title/body, explanation, and timestamp; details expose mark-read, acknowledge, dismiss, snooze, mark-expected, and related-record actions only when the API identifies them as valid.
-- Use explicit confirmation UI before clearing alerts and before creating a persistent expected-spending suppression rule. Item-level actions must track pending/error state by alert ID so one action never disables unrelated alerts.
-- Connect related-record navigation to existing transaction, budgeting, debt, and savings destinations only where those screens support the referenced record. For unsupported routes, preserve the alert detail and show the specified safe recovery message rather than sending the user to a broken destination.
-- Add React Native Testing Library coverage for empty, cached offline, severity rendering, per-alert pending state, destructive clear confirmation, expected-spending confirmation, and navigation requests. Add a Maestro flow once the app screen is installed on an emulator: refresh with seeded alert data, open an anomaly, acknowledge it, and confirm its inbox state changes.
-
-### 5. Prepare The ML Adapter Without Coupling To It
-
-- Document the required future adapter at `apps/api/src/services/alerts/mlAlertProvider.ts` as an unimplemented module or architecture note, specifying the request fields, normalized response contract, authentication mechanism, request timeout, retries, and fallback behavior. Do not import or call `odin-ml` until that service ships.
-- When `ALERT_INTELLIGENCE_PROVIDER=ml` is enabled later, the adapter must fail closed to a recorded `model_failure`/no-alert evaluation and let the in-app alert API continue serving existing alerts. It must not block sync, erase cached alerts, or make the React Native feature branch on model availability.
-- Add contract tests shared by the rules provider and future adapter fixture data. The tests must prove both providers produce the same normalized decisions and that the alert service, routes, cache, and UI need no changes for the provider swap.
-
-### 6. Verify
-
-- Run `pnpm --filter api test` and `pnpm --filter app test`; add the new suites to the relevant test discovery configuration if necessary.
-- Run `pnpm --filter api build` and `pnpm --filter app exec tsc --noEmit`, then run `pnpm test` as the final suite.
-- Manual smoke: create sufficient historical spending, sync, trigger evaluation, refresh the dashboard, open an anomaly alert, mark it expected, confirm a matching later transaction is suppressed, go offline, and verify the cached inbox remains readable.
-- Verify the remote schema migration containing `alerts`, `anomaly_evaluations`, suppression tables, ownership constraints, and RLS is applied in the target Supabase environment before enabling the routes. Do not add a parallel schema migration for tables that already exist.
+- Run the API and app test suites, builds, and type checks after each phase.
+- Verify forward migrations locally and with `supabase db push --dry-run`.
+- Run a scheduler smoke test with one eligible user, a duplicate delivery, a
+  model failure, a successful result set, current-week daily backfill, and a
+  completed-week weekly catch-up. Confirm one report run per user/date/cadence/
+  model version and no duplicate alerts.
+- Verify feedback changes travel through the local sync queue and affect the
+  next eligible daily report without requiring a mobile foreground evaluation.
 
 ## Acceptance Criteria
 
-- A signed-in user can view a bounded, user-scoped anomaly/overspending inbox with category, severity, explanation, related record summary, and the required empty/loading/error/offline states.
-- The app stores a readable local alert cache and shows stale cached alerts when an online refresh fails.
-- Deterministic rules create auditable anomaly and overspending evaluations only from server-loaded, user-scoped data; insufficient history does not produce false alerts.
-- Users can read, acknowledge, dismiss, snooze, and explicitly mark anomaly spending expected; actions validate ownership, persist alert events, and update only the selected item in the UI.
-- Clearing alerts and creating persistent expected-spending suppression rules require explicit confirmation.
-- Suppression, notification preference, duplicate cooldown, and repeated-evaluation behavior prevent unwanted duplicate anomaly alerts while preserving evaluations for audit.
-- Dashboard alert count and summary refresh independently of forecasts and never cause a full dashboard failure when alert refresh is unavailable.
-- No app screen, API route, repository, or UI component depends on an ML-specific request or response shape; replacing the rules provider with an `odin-ml` adapter requires changes only inside the alert provider boundary and configuration.
+- Transaction entry, sync, and dashboard refresh do not invoke anomaly
+  detection.
+- A trusted scheduler can run one idempotent 18:00 `Asia/Manila` report per
+  active user and uses daily or weekly catch-up according to the configuration.
+- Daily report writes are atomic and cannot create duplicate evaluations or
+  alerts during retries or concurrent invocations.
+- The model boundary is versioned and provider-agnostic, with no deterministic
+  rules fallback in production code.
+- Findings use the configured score and overspending thresholds, while
+  insufficient history and model unavailability remain data-only report states.
+- Alert preferences, whitelist rules, and suppression rules use the local CRUD
+  sync queue end-to-end.
+- Existing alerts survive model failures; reports, evaluations, and failures are
+  retained for four weeks and remain available for a future cached read surface.
+- No unfinished alert UI is reachable from the product while model experiments
+  continue.

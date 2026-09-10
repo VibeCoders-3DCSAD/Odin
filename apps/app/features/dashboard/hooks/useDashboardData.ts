@@ -5,8 +5,6 @@ import { getAllSnapshots, upsertSnapshot } from "../../../local-db/repositories/
 import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboardSnapshots";
 import { requestForecast } from "../../forecast/api";
 import { listForecastTransactions } from "../../../local-db/repositories/forecastTransactions";
-import { evaluateAlerts, getAlerts } from "../../alerts/api";
-import { replaceAlertPage } from "../../../local-db/repositories/alerts";
 import { runSync } from "../../../local-db/sync/runSync";
 
 const EMPTY_SUMMARY: DashboardSummary = {
@@ -60,18 +58,6 @@ export async function refreshDashboardData(userId: string, deviceId: string, acc
       }
     } catch {
       // ponytail: forecast is best-effort; a stale snapshot beats failing the refresh
-    }
-    try {
-      await evaluateAlerts(accessToken);
-      const alertPage = await getAlerts(accessToken, undefined, 50);
-      if (!alertPage.response.ok || !alertPage.body.alerts) throw new Error("alerts_fetch_failed");
-      await replaceAlertPage(userId, alertPage.body.alerts, { replace_before: null });
-      await upsertSnapshot(userId, "alerts", {
-        count: alertPage.body.alerts.filter((alert) => alert.status === "unread").length,
-        text: alertPage.body.alerts.length === 0 ? "There are no alerts to review." : `${alertPage.body.alerts.length} alert${alertPage.body.alerts.length === 1 ? "" : "s"} to review.`,
-      });
-    } catch {
-      // Alerts are independent from forecast and must not invalidate dashboard data.
     }
     return true;
   } catch {

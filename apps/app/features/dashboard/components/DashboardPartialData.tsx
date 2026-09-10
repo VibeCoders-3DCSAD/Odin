@@ -10,10 +10,8 @@ type Props = { trends: DailyTrend[]; snapshots: Record<string, DashboardSnapshot
 
 export function DashboardPartialData({ trends, snapshots, snapshotsUnavailable, onRefresh, onNavigate }: Props) {
   const savings = snapshots.savings_goals;
-  const alerts = snapshots.alerts;
   const forecastSnapshot = snapshots.forecast;
   const savingsCount = getSnapshotCount(savings);
-  const alertCount = getSnapshotCount(alerts);
   const unavailable = (snapshot: DashboardSnapshotWithMeta | null | undefined) => snapshotsUnavailable && !snapshot;
   const stale = (snapshot: DashboardSnapshotWithMeta | null | undefined) => !!snapshot && (snapshot.stale || snapshotsUnavailable);
 
@@ -23,7 +21,6 @@ export function DashboardPartialData({ trends, snapshots, snapshotsUnavailable, 
     <View style={{ flexDirection: "row", gap: 11 }}>
       <SnapshotCard title="Savings goals" stale={stale(savings)} unavailable={unavailable(savings)} onRefresh={onRefresh} onNavigate={() => onNavigate("savings-goals")} actionLabel={!savings || savingsCount === 0 ? "Create a goal" : undefined} copy={getSnapshotText(savings) ?? (unavailable(savings) ? "Savings information is unavailable." : !savings || savingsCount === 0 ? "No savings goals yet." : savingsCount === null ? "Savings goal summary is unavailable. Refresh to try again." : `${savingsCount} savings goals in progress.`)} />
     </View>
-    <SnapshotCard title={typeof alertCount === "number" && alertCount > 0 ? `${alertCount} alerts` : "Alerts"} stale={stale(alerts)} unavailable={unavailable(alerts)} onRefresh={onRefresh} onNavigate={() => onNavigate("anomaly-alerts")} copy={getSnapshotText(alerts) ?? (unavailable(alerts) ? "Alerts are unavailable." : !alerts || alertCount === 0 ? "There are no alerts to review." : "Alert summary is unavailable. Refresh to try again.")} />
     <ForecastPanel forecast={getForecastContent(forecastSnapshot)} stale={stale(forecastSnapshot)} unavailable={unavailable(forecastSnapshot)} onRefresh={onRefresh} onNavigate={() => onNavigate("spending-forecast")} />
   </View>;
 }

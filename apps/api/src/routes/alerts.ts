@@ -75,7 +75,7 @@ router.post("/clear", requireAuth, async (request: AuthenticatedRequest, respons
 function withActions(alert: Record<string, unknown>) {
   const status = String(alert.status);
   const severity = alert.severity === "informational" ? "low" : alert.severity === "warning" ? "medium" : alert.severity;
-  return { ...alert, severity, related_entities: alert.alert_related_entities ?? [], remote_revision: String(alert.updated_at ?? alert.triggered_at ?? ""), allowed_actions: allowedActions(alert, status) };
+  return { ...alert, severity, related_entities: alert.alert_related_entities ?? [], remote_revision: String(alert.revision ?? 0), allowed_actions: allowedActions(alert, status) };
 }
 
 function allowedActions(alert: Record<string, unknown>, status = String(alert.status)) {

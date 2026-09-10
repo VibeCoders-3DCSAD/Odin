@@ -35,10 +35,6 @@ export function getAlertDetail(accessToken: string, alertId: string) {
   return apiFetch<ApiBody<{ alert: Alert }>>(accessToken, `/odin/api/alerts/${encodeURIComponent(alertId)}`);
 }
 
-export function evaluateAlerts(accessToken: string) {
-  return apiFetch<ApiBody<{ evaluated: boolean }>>(accessToken, "/odin/api/alert-evaluations", { method: "POST" });
-}
-
 export function updateAlert(accessToken: string, alertId: string, action: AlertAction, snoozeUntil?: string, createWhitelist = false) {
   return apiFetch<ApiBody<{ alert: Alert }>>(accessToken, `/odin/api/alerts/${encodeURIComponent(alertId)}`, {
     method: "PATCH",

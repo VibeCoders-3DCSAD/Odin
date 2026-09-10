@@ -91,14 +91,10 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
    const forecastSnap = snapshots.forecast;
   const forecast = getForecastContent(forecastSnap);
    const savingsSnap = snapshots.savings_goals;
-   const alertsSnap = snapshots.alerts;
   const savingsText = getSnapshotText(savingsSnap);
-  const alertsText = getSnapshotText(alertsSnap);
   const savingsCount = getSnapshotCount(savingsSnap);
-  const alertCount = getSnapshotCount(alertsSnap);
   const savingsCentavos = getSnapshotCentavos(savingsSnap, ["saved_centavos", "current_amount_centavos"]);
   const savingsUnavailable = (snapshotsUnavailable && !savingsSnap) || (!!savingsSnap && !savingsText && savingsCount === null);
-  const alertsUnavailable = (snapshotsUnavailable && !alertsSnap) || (!!alertsSnap && !alertsText && alertCount === null);
   const forecastUnavailable = snapshotsUnavailable && !forecastSnap;
   const staleSnapshot = (snapshot: typeof savingsSnap) => !!snapshot && (snapshot.stale || snapshotsUnavailable);
   const remainingBudget = budgetItems.reduce((total, item) => total + item.budget - item.spent, 0);
@@ -322,11 +318,6 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
           <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.aqua700, marginTop: 6 }}>{budgetUnavailable ? "Refresh" : s.budgetCount === 0 ? "Create budget" : "View budget"}</Text>
         </Pressable>
       )}
-
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24, marginBottom: 12 }}>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: P.ink }}>Alerts</Text>
-      </View>
-      <SnapshotCard title={typeof alertCount === "number" && alertCount > 0 ? `${alertCount} alert${alertCount === 1 ? "" : "s"}` : "Alerts"} stale={staleSnapshot(alertsSnap)} unavailable={alertsUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("anomaly-alerts")} copy={alertsText ?? (alertsUnavailable ? "Alerts are unavailable." : !alertsSnap || alertCount === 0 ? "There are no alerts to review." : "Alert summary is unavailable. Refresh to try again.")} />
 
       <ForecastPanel forecast={forecast} stale={staleSnapshot(forecastSnap)} unavailable={forecastUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("spending-forecast")} />
        {refreshing ? <View style={{ alignItems: "center", marginTop: 12 }}><ActivityIndicator size="small" color={P.aqua700} /></View> : null}

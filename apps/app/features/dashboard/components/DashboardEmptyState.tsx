@@ -8,7 +8,6 @@ const actions = [
   { label: "Add an income source", page: "income-sources", copy: "Set expected income to make your monthly plan more useful." },
   { label: "Create a budget", page: "budgeting", copy: "Set a budget to see spending health." },
   { label: "Create a savings goal", page: "savings-goals", copy: "No savings goals yet." },
-  { label: "Review alerts", page: "anomaly-alerts", copy: "There are no alerts to review." },
   { label: "View forecast", page: "spending-forecast", copy: "Forecast information will appear after you record activity." },
 ];
 
