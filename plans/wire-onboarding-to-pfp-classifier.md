@@ -2,10 +2,12 @@
 
 ## Goal
 
-Add an emergency-runway question to onboarding and use the PFP classifier's
+Replace the current financial-profile questionnaire with three questions that
+directly represent the PFP dimensions, while retaining the existing demographic
+questions and monthly-income collection. Use the PFP classifier's
 `QUESTIONNAIRE` mode to generate the financial-profile suggestion. The API
-falls back to a deterministic questionnaire heuristic only when the classifier
-is unavailable. Transaction-based (`STANDARD`) PFP classification is explicitly
+falls back to the same deterministic mapping only when the classifier is
+unavailable. Transaction-based (`STANDARD`) PFP classification is explicitly
 out of scope.
 
 The classifier service owns the questionnaire request and response contract:
@@ -49,7 +51,10 @@ must describe it accurately as `questionnaire_rule`.
 
 ## Scope
 
-- Add the required `emergency_runway` onboarding answer and review row.
+- Retain existing demographic and monthly-income questions, but replace the
+  old income-stability, pay-frequency, fixed-obligation, and
+  monthly-obligations profiling inputs with the three dimension-backed answers
+  below and their review rows.
 - Replace the four-value persisted financial-profile label domain with the
   classifier's eight three-dimensional labels.
 - Call only `QUESTIONNAIRE` mode during onboarding.
@@ -61,7 +66,9 @@ must describe it accurately as `questionnaire_rule`.
 
 - Do not call `STANDARD` mode or send historical transactions.
 - Do not change odin-ml's API, rules, schema, or authentication model.
-- Do not change forecast, anomaly, budget, local sync, or local DB schema.
+- Do not change forecast, anomaly, budget, local sync, or local DB schema
+  beyond migrating their persisted profile-label columns and updating affected
+  label consumers.
 - Do not add Node dependencies.
 
 ## Important Data Decision
@@ -83,7 +90,7 @@ retroactively claim the new classifier evaluated historical users.
 ## Execution Order
 
 1. Define the canonical eight-label domain across API, database, and UI.
-2. Add and validate the emergency-runway onboarding answer.
+2. Replace the financial-profile questionnaire and validate its answers.
 3. Add the contract-validated ML client.
 4. Add a forward database migration that replaces the enum and creates the
    classification-aware submit RPC.
@@ -114,16 +121,37 @@ retroactively claim the new classifier evaluated historical users.
   and tests. Schema-draft files may be updated only if they are maintained
   references; do not rewrite historical migrations.
 
-## 2. Add Emergency-Runway Validation
+## 2. Replace The Financial-Profile Questionnaire
 
 - **File**: `apps/api/src/lib/constants.ts`
-  - Add `VALID_EMERGENCY_RUNWAY`:
-    `less_than_1_month`, `1_to_3_months`, `3_to_6_months`, `6_plus_months`.
+  - Add canonical option lists for `income_pattern`, `obligation_load`, and
+    `emergency_runway`. Do not derive a profile dimension by dividing one raw
+    answer by another.
 - **File**: `apps/api/src/routes/onboarding.ts`
-  - Add `emergency_runway` to `ONBOARDING_ANSWER_KEYS`, `STRING_ANSWER_KEYS`,
-    `ANSWER_OPTIONS`, and the submit handler's required fields.
-  - Import and use `VALID_EMERGENCY_RUNWAY`; keep the accepted values
-    whitelisted at the API boundary.
+  - Replace the legacy profiling answer keys in `ONBOARDING_ANSWER_KEYS`,
+    `STRING_ANSWER_KEYS`, `ANSWER_OPTIONS`, and required-field validation with
+    these whitelisted answers. Remove `monthly_obligations` from required-field
+    and numeric validation because the replacement question supplies the
+    obligation dimension directly:
+    - **Income pattern / Financial Stability**: `no_current_income`,
+      `predictable_income`, `variable_income`. Map the first and third values
+      to ML `variable`; map `predictable_income` to ML `stable`.
+    - **Obligation load / Financial Weight**: `no_income_with_obligations`,
+      `no_income_without_obligations`, `low`, `medium`, `high`. Map the first
+      and `high` to ML `high`; map `medium` to ML `medium`; map the remaining
+      values to ML `low`.
+    - **Emergency runway / Financial Tolerance**: `less_than_1_month`,
+      `1_to_3_months`, `3_to_6_months`, `6_plus_months`. Map these to ML
+      `low`, `medium`, `3`, and `high`, respectively.
+  - Keep `monthly_income` as a required non-negative whole number, but make
+    its zero value explicit and consistent: `monthly_income = 0` requires
+    `income_pattern = no_current_income`; a positive income rejects that
+    answer. Thus zero income always maps to `VARIABLE`.
+  - The two no-income obligation answers define the full zero-income rule:
+    `no_income_with_obligations` maps to `OBLIGATED`;
+    `no_income_without_obligations` maps to `FLEXIBLE`. Both the ML payload
+    builder and database fallback must use these mappings, never
+    `monthly_obligations / monthly_income`.
 
 ## 3. Create The Questionnaire Classifier Client
 
@@ -133,23 +161,22 @@ retroactively claim the new classifier evaluated historical users.
   classifyPfpQuestionnaire(
     userId: string,
     answers: Record<string, unknown>,
-  ): Promise<PfpQuestionnaireClassification | null>
+  ): Promise<PfpQuestionnaireResult>
   ```
 - Build the contract payload using these mappings:
-  - `income_variability`: `answers.income_type` (`stable` or `variable`).
-  - `obligation_level`: `(monthly_obligations / monthly_income) * 100`:
-    `high` at 30% or more, `medium` at 15% or more, otherwise `low`.
-  - `emergency_runway`:
-    `less_than_1_month -> low`, `1_to_3_months -> medium`,
-    `3_to_6_months -> 3`, `6_plus_months -> high`.
+  - `income_variability` from `income_pattern`.
+  - `obligation_level` from `obligation_load`.
+  - `emergency_runway` from `emergency_runway`.
 - Return a result only after runtime-validating the response:
   - prediction is exactly one of the eight canonical labels.
   - confidence is a finite number from 0 through 1.
   - model name and model version are non-empty strings.
   - strategy is `QUESTIONNAIRE`.
-- Return `null` for an unset URL, timeout, network error, non-2xx response,
-  malformed JSON, or invalid response. Never log raw answers or the full ML
-  response.
+- Return a discriminated result, not `null`:
+  ` { ok: true, classification }` or `{ ok: false, reason }`. `reason` is a
+  safe enum such as `not_configured`, `timeout`, `network_error`,
+  `http_error`, or `invalid_response`; it must not contain raw answers, URLs,
+  response bodies, or exception messages.
 - Use native `fetch` with an `AbortController` timeout of five seconds.
 - **File**: `apps/api/.env.example`
   - Document optional `ML_SERVICE_URL` as a private, trusted service URL. The
@@ -167,9 +194,12 @@ retroactively claim the new classifier evaluated historical users.
   - Rename the old enum, create the eight-value replacement with the original
     type name, and convert every dependent column using an explicit `CASE`
     legacy mapping.
-  - Convert `financial_profile_assessments.proposed_profile_label`,
-    `financial_profile_assignments.profile_label`, and every other dependent
-    column discovered from the catalog/migration sweep.
+  - Convert all four known dependent columns using the documented `CASE`
+    mapping: `financial_profile_assessments.proposed_profile_label`,
+    `financial_profile_assignments.profile_label`,
+    `budget_recommendations.profile_label`, and
+    `anomaly_evaluations.profile_label`. Confirm no additional dependent
+    columns with a catalog query before dropping the renamed enum.
   - Drop and restore affected defaults, constraints, functions, and RPCs as
     needed by the type replacement.
   - Drop the renamed legacy enum only after no dependency remains.
@@ -187,39 +217,67 @@ retroactively claim the new classifier evaluated historical users.
   confidence, model kind, model version, and classifier data in output or
   metadata snapshots. When the label is `NULL`, execute the existing heuristic
   branch and identify it as `heuristic_v1`.
-  - The fallback retains its income and obligation rules, then appends a
-    canonical tolerance suffix from the runway answer: `less_than_1_month`
-    becomes `AT_RISK`; every other validated runway value becomes `TOLERANT`,
-    matching the classifier's current `QUESTIONNAIRE` rule at its decision
-    boundary. It must never emit a removed four-value legacy label.
+  - The fallback maps the same normalized `income_pattern`,
+    `obligation_load`, and `emergency_runway` values as the client. It emits
+    `VARIABLE` for `no_current_income`, `OBLIGATED` for
+    `no_income_with_obligations`, and `FLEXIBLE` for
+    `no_income_without_obligations`. Its tolerance boundary must match the
+    service exactly: `less_than_1_month` and `1_to_3_months` are `AT_RISK`;
+    `3_to_6_months` and `6_plus_months` are `TOLERANT`. It must never emit a
+    removed four-value legacy label.
 - Keep explanation drivers truthful: income type and obligation load are
   direct drivers; add an emergency-runway driver for classifier results. Do
   not claim a model-derived cause beyond the questionnaire inputs.
 - Revoke default public execution, then grant execute only to `service_role`.
+- Replace `select_profile_assignment(uuid, text, boolean)` in the same forward
+  migration. Its allowlist must accept exactly the eight canonical labels and
+  retain its existing user-scoped active-assignment lock, deactivation, events,
+  and service-role-only grant. This RPC remains callable after onboarding.
+- Update `apps/api/src/services/alerts/alertRepository.ts` so anomaly writes
+  fetch the current active `financial_profile_assignments.profile_label` scoped
+  to `this.userId`; do not replace `stable_flexible` with a new global default.
+  If no active assignment exists, fail the evaluation rather than persisting a
+  fabricated profile label.
 
 ## 5. Wire Submission With Availability Fallback
 
 - **File**: `apps/api/src/routes/onboarding.ts`
 - After complete-answer validation and before the service-role RPC call:
-  1. Call `classifyPfpQuestionnaire(userId, rawAnswers)`.
-  2. Always call `submit_onboarding_session_with_classification`.
-  3. Pass validated prediction, confidence, `model_name`, and `model_version`
-     when available; otherwise pass `NULL` classifier fields so the RPC uses
-     the heuristic fallback.
+1. Call `classifyPfpQuestionnaire(userId, rawAnswers)`.
+2. Always call `submit_onboarding_session_with_classification`.
+3. Pass validated prediction, confidence, `model_name`, and `model_version`
+      when `ok` is true; otherwise pass `NULL` classifier fields so the RPC
+      uses the heuristic fallback.
 - Keep the existing response shape. Both the assessment and assignment labels
   come from the RPC result.
-- Log only safe diagnostic context for classifier fallback, such as user ID,
-  session ID, and failure category. Do not make classifier unavailability
-  user-visible and do not fail a confirmed onboarding submission because of it.
+- Log only the discriminated result's safe failure category with user ID and
+  session ID. Do not make classifier unavailability user-visible and do not
+  fail a confirmed onboarding submission because of it.
 
-## 6. Add The Frontend Step And Review Row
+## 6. Replace The Frontend Questionnaire And Review Rows
 
 - **File**: `apps/app/features/onboarding/types.ts`
-  - Insert the `emergency_runway` `card_select` step immediately before
-    `review`, using the four API-approved keys and existing card UI.
+  - Keep the existing demographic and monthly-income steps. Replace the old
+    financial-profile questions with three `card_select` steps immediately
+    before review: Income Pattern, Obligation Load, and Emergency Runway.
+  - Use these question prompts and choices:
+    - **Which best describes your income right now?**: “I do not currently
+      receive income”, “It is about the same each month”, or “It changes from
+      month to month”.
+    - **How much of your income goes to required monthly payments?**: “I have
+      no current income, but I have required payments”, “I have no current
+      income or required payments”, “A small amount”, “A moderate amount”, or
+      “A large amount”.
+    - **If your income stopped today, how long could your savings cover
+      essential expenses?**: “Less than 1 month”, “1 to 3 months”, “3 to 6
+      months”, or “More than 6 months”.
+  - Use the exact API-approved keys and user-facing choices described in step
+    2. The zero-income choices must be present in both Income Pattern and
+    Obligation Load so the user, client, and fallback agree on the mapping.
 - **File**: `apps/app/features/onboarding/OnboardingFlow.tsx`
-  - Add an Emergency Runway row that resolves its option from `STEPS` and
-    navigates to the new step on edit.
+  - Replace legacy questionnaire rows with Income Pattern, Obligation Load,
+    and Emergency Runway review rows that resolve their options from `STEPS`
+    and navigate to the matching step on edit.
   - Do not hard-code new indices if avoidable. Resolve existing review steps
     by `STEPS.find(...)` or centralize their key-to-index lookup so future
     questionnaire changes cannot silently edit the wrong answer.
@@ -229,23 +287,39 @@ retroactively claim the new classifier evaluated historical users.
 - **API unit tests**: mock `mlClient.ts`; do not call a live microservice.
   - Complete ML response calls the new RPC with the eight-label prediction,
     confidence, model kind, and model version.
-  - Unset URL, timeout, non-2xx, malformed response, and invalid prediction
-    call the same RPC with `NULL` classifier fields.
-  - Missing and invalid emergency-runway answers return 400.
+  - Each client failure reason calls the same RPC with `NULL` classifier fields
+    and produces only the corresponding safe log category.
+  - Missing and invalid dimension answers return 400. Verify `monthly_income
+    = 0` accepts only `no_current_income`, and that both no-income obligation
+    options produce their defined classifier payload and fallback labels.
   - Response shape is identical for classifier and heuristic paths.
 - **Fixtures**: create one complete valid onboarding-answer factory, including
-  `metro_manila_locality_code`, `income_stability`, and `emergency_runway`.
-  Derive each invalid fixture from it. The current submit unit fixture is
-  already incomplete, so updating only the new runway field is insufficient.
+  `metro_manila_locality_code`, `income_pattern`, `obligation_load`, and
+  `emergency_runway`. Derive each invalid fixture from it. Remove the legacy
+  profiling inputs, including `monthly_obligations`, from the complete-answer
+  requirement and update the replacement submit RPC so it does not read them.
 - **Database integration tests**:
   - Verify all eight classifier labels persist in assessment and assignment
-    rows.
-  - Verify the four legacy labels migrate to their documented `*_AT_RISK`
-    replacements.
-  - Verify an unavailable classifier uses the heuristic branch atomically.
+    rows, and are accepted by the replacement `select_profile_assignment` RPC.
+  - Add a dedicated migration test script using an isolated disposable local
+    Postgres database, not the normal full-schema integration setup. Apply
+    migrations in lexical order only through the migration immediately before
+    this new migration, seed all four legacy labels into each of
+    `financial_profile_assessments`, `financial_profile_assignments`,
+    `budget_recommendations`, and `anomaly_evaluations`, then apply only the
+    new migration. Assert every seeded row has its documented `*_AT_RISK`
+    replacement and the old enum no longer has dependencies. Clean up the
+    disposable database after the test.
+  - Verify an unavailable classifier uses the heuristic branch atomically,
+    including both zero-income obligation mappings.
+- **Alert repository tests**: verify anomaly evaluations write the active,
+  user-scoped profile label and reject a write when the user has no active
+  assignment.
+- **Manual-selection tests**: verify the API and replacement RPC accept each
+  canonical label, reject each legacy label, and preserve user scoping.
 - **Frontend tests or Maestro flow**:
-  - Complete the new runway step, confirm it appears in review, edit it, and
-    submit successfully.
+  - Complete all three new dimension questions, confirm each appears in review,
+    edit each one, and submit successfully. Cover the no-income path.
 - Run:
   ```bash
   pnpm --filter api test:unit
@@ -258,11 +332,17 @@ retroactively claim the new classifier evaluated historical users.
 
 ## Acceptance Criteria
 
-- Onboarding requires and reviews an emergency-runway answer.
+- Onboarding retains demographics and monthly income, and requires and reviews
+  the three dimension-backed answers.
 - The only onboarding classifier request uses `QUESTIONNAIRE` mode and the
   documented service contract.
 - Valid classifier predictions persist as one of the eight canonical labels.
-- Existing four-label data migrates to the documented conservative values.
+- Existing four-label data migrates to the documented conservative values in
+  assessments, assignments, budget recommendations, and anomaly evaluations.
+- Manual profile selection accepts the eight new labels and rejects removed
+  legacy labels.
+- Zero income always maps to `VARIABLE`; its two explicit obligation answers
+  map identically in the ML payload and heuristic fallback.
 - Classifier failure falls back to the existing heuristic without a user error.
 - No transaction payload or `STANDARD` request is introduced.
 - Unit, integration, build, and migration dry-run verification pass.
