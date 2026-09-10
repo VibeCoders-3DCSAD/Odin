@@ -16,8 +16,9 @@ export type SyncableEntity =
   | "recurring_transaction_occurrences"
   | "budgets"
   | "savings_goals"
-  | "alerts"
-  | "notification_preferences"
+  | "alert_notification_preferences"
+  | "anomaly_whitelist_rules"
+  | "alert_suppression_rules"
   | "credit_card_cycles"
   | "credit_card_details"
   | "credit_card_transactions"
@@ -26,6 +27,10 @@ export type SyncableEntity =
   | "credit_card_payments"
   | "debt_accounts"
   | "debt_payments"
+  | "debt_strategy_preferences"
+  | "user_debt_priorities"
+  | "credit_card_settlements"
+  | "credit_card_statement_strategies"
   ;
 
 export type SyncOperation = {

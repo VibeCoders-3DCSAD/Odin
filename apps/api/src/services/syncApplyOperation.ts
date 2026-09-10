@@ -32,7 +32,21 @@ const SYNCED_ENTITIES = new Set([
   "credit_card_payments",
   "debt_accounts",
   "debt_payments",
+  "debt_strategy_preferences",
+  "user_debt_priorities",
+  "credit_card_settlements",
+  "credit_card_statement_strategies",
+  "alert_notification_preferences",
+  "anomaly_whitelist_rules",
+  "alert_suppression_rules",
 ]);
+
+const ALERT_PREFERENCE_CREATE_FIELDS = new Set(["category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until"]);
+const ALERT_PREFERENCE_UPDATE_FIELDS = new Set(["mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until"]);
+const ANOMALY_WHITELIST_CREATE_FIELDS = new Set(["merchant_name", "subcategory_id", "base_amount_centavos", "tolerance_bps", "allow_any_amount", "status", "notes"]);
+const ANOMALY_WHITELIST_UPDATE_FIELDS = new Set(["status", "notes"]);
+const ALERT_SUPPRESSION_CREATE_FIELDS = new Set(["category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata"]);
+const ALERT_SUPPRESSION_UPDATE_FIELDS = new Set(["status", "ends_at", "reason"]);
 
 const SERVER_COLUMNS = new Set([
   "id",
@@ -298,6 +312,10 @@ const DEBT_ACCOUNT_FIELDS = new Set([
   "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes",
 ]);
 const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]);
+const DEBT_STRATEGY_FIELDS = new Set(["strategy"]);
+const DEBT_PRIORITY_FIELDS = new Set(["priorities"]);
+const CREDIT_CARD_SETTLEMENT_FIELDS = new Set(["installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status"]);
+const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy", "custom_amount_centavos", "percentage_bps"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
 
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
@@ -487,6 +505,43 @@ async function validateCreatePayload(
     for (const field of ["debt_account_id", "transaction_id", "source", "payment_date", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]) requireString(sanitized, field);
     requirePositiveInteger(sanitized, "amount_centavos"); requireBigInt(sanitized, "principal_centavos"); requireBigInt(sanitized, "interest_centavos");
     if (sanitized.source !== "transaction" || sanitized.linked_transaction_type !== "expense") throw new Error("debt payment must link an expense transaction");
+    return sanitized;
+  }
+  if (entity === "debt_strategy_preferences") {
+    assertOnlyAllowed(payload, DEBT_STRATEGY_FIELDS); const sanitized = sanitizePayload(payload, DEBT_STRATEGY_FIELDS);
+    if (sanitized.strategy !== "snowball" && sanitized.strategy !== "avalanche") throw new Error("strategy must be snowball or avalanche");
+    return sanitized;
+  }
+  if (entity === "user_debt_priorities") {
+    assertOnlyAllowed(payload, DEBT_PRIORITY_FIELDS); const sanitized = sanitizePayload(payload, DEBT_PRIORITY_FIELDS);
+    if (!Array.isArray(sanitized.priorities) || !sanitized.priorities.every((value) => typeof value === "string")) throw new Error("priorities must be debt IDs");
+    return sanitized;
+  }
+  if (entity === "credit_card_settlements") {
+    assertOnlyAllowed(payload, CREDIT_CARD_SETTLEMENT_FIELDS); const sanitized = sanitizePayload(payload, CREDIT_CARD_SETTLEMENT_FIELDS);
+    for (const field of ["installment_id", "settlement_date", "status"]) requireString(sanitized, field);
+    for (const field of ["remaining_principal_centavos", "settlement_amount_centavos"]) requireBigInt(sanitized, field);
+    if (sanitized.pretermination_fee_centavos !== undefined) requireBigInt(sanitized, "pretermination_fee_centavos");
+    if (!["requested", "recognized", "rejected"].includes(sanitized.status as string)) throw new Error("settlement status is invalid");
+    const { data: installment, error } = await supabase.from("credit_card_installments").select("id").eq("id", sanitized.installment_id as string).eq("user_id", userId).eq("deleted", false).maybeSingle();
+    if (error) throw new Error(`settlement installment validation failed: ${error.message}`);
+    if (!installment) throw new Error("settlement installment is not accessible");
+    return sanitized;
+  }
+  if (entity === "credit_card_statement_strategies") {
+    assertOnlyAllowed(payload, CREDIT_CARD_STATEMENT_STRATEGY_FIELDS); const sanitized = sanitizePayload(payload, CREDIT_CARD_STATEMENT_STRATEGY_FIELDS);
+    for (const field of ["statement_id", "strategy"]) requireString(sanitized, field);
+    if (!["pay_in_full", "pay_minimum", "percentage_of_statement", "custom_payment"].includes(sanitized.strategy as string)) throw new Error("statement repayment strategy is invalid");
+    const { data: statement, error } = await supabase.from("credit_card_statements").select("statement_balance_centavos, minimum_due_centavos").eq("id", sanitized.statement_id as string).eq("user_id", userId).eq("authoritative", true).eq("deleted", false).maybeSingle();
+    if (error) throw new Error(`statement repayment strategy validation failed: ${error.message}`);
+    if (!statement) throw new Error("statement repayment strategy requires an authoritative owned statement");
+    const balance = Number(statement.statement_balance_centavos);
+    const minimum = Number(statement.minimum_due_centavos);
+    const strategy = sanitized.strategy as string;
+    if (strategy === "custom_payment") requirePositiveInteger(sanitized, "custom_amount_centavos");
+    if (strategy === "percentage_of_statement" && (!Number.isSafeInteger(sanitized.percentage_bps) || (sanitized.percentage_bps as number) <= 0 || (sanitized.percentage_bps as number) > 10_000)) throw new Error("percentage_bps must be between 1 and 10000");
+    const target = strategy === "pay_in_full" ? balance : strategy === "pay_minimum" ? minimum : strategy === "custom_payment" ? sanitized.custom_amount_centavos : Math.round(balance * Number(sanitized.percentage_bps) / 10_000);
+    if (!Number.isSafeInteger(target) || (target as number) < minimum || (target as number) > balance) throw new Error("statement repayment target must be between the minimum due and statement balance");
     return sanitized;
   }
 
@@ -704,6 +759,15 @@ async function validateCreatePayload(
       .maybeSingle();
     if (templateErr) throw new Error(`recurring template validation failed: ${templateErr.message}`);
     if (!template) throw new Error("recurring template not found or inaccessible");
+    return sanitized;
+  }
+  if (entity === "alert_notification_preferences" || entity === "anomaly_whitelist_rules" || entity === "alert_suppression_rules") {
+    const fields = entity === "alert_notification_preferences" ? ALERT_PREFERENCE_CREATE_FIELDS : entity === "anomaly_whitelist_rules" ? ANOMALY_WHITELIST_CREATE_FIELDS : ALERT_SUPPRESSION_CREATE_FIELDS;
+    assertOnlyAllowed(payload, fields);
+    const sanitized = sanitizePayload(payload, fields);
+    if (entity === "alert_notification_preferences") requireString(sanitized, "category");
+    if (entity === "anomaly_whitelist_rules") { requireString(sanitized, "merchant_name"); requireString(sanitized, "subcategory_id"); }
+    if (entity === "alert_suppression_rules") { requireString(sanitized, "category"); requireString(sanitized, "reason"); }
     return sanitized;
   }
 
@@ -1000,6 +1064,14 @@ async function validateUpdatePayload(
     allowedFields = DEBT_ACCOUNT_FIELDS;
   } else if (entity === "debt_payments") {
     allowedFields = DEBT_PAYMENT_FIELDS;
+  } else if (entity === "debt_strategy_preferences") {
+    allowedFields = DEBT_STRATEGY_FIELDS;
+  } else if (entity === "user_debt_priorities") {
+    allowedFields = DEBT_PRIORITY_FIELDS;
+  } else if (entity === "credit_card_settlements") {
+    allowedFields = CREDIT_CARD_SETTLEMENT_FIELDS;
+  } else if (entity === "credit_card_statement_strategies") {
+    allowedFields = CREDIT_CARD_STATEMENT_STRATEGY_FIELDS;
   } else if (entity === "transaction_templates") {
     allowedFields = TEMPLATE_FIELDS;
   } else if (entity === "transaction_drafts") {
@@ -1013,12 +1085,28 @@ async function validateUpdatePayload(
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else if (entity === "budgets") {
     return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS, recordId);
+  } else if (entity === "alert_notification_preferences" || entity === "anomaly_whitelist_rules" || entity === "alert_suppression_rules") {
+    const fields = entity === "alert_notification_preferences" ? ALERT_PREFERENCE_UPDATE_FIELDS : entity === "anomaly_whitelist_rules" ? ANOMALY_WHITELIST_UPDATE_FIELDS : ALERT_SUPPRESSION_UPDATE_FIELDS;
+    assertOnlyAllowed(payload, fields);
+    return sanitizePayload(payload, fields);
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
 
   assertOnlyAllowed(payload, allowedFields);
   const sanitized = sanitizePayload(payload, allowedFields);
+
+  if (entity === "debt_strategy_preferences") {
+    if (sanitized.strategy !== "snowball" && sanitized.strategy !== "avalanche") throw new Error("strategy must be snowball or avalanche");
+    return sanitized;
+  }
+  if (entity === "user_debt_priorities") {
+    if (!Array.isArray(sanitized.priorities) || !sanitized.priorities.every((value) => typeof value === "string")) throw new Error("priorities must be debt IDs");
+    return sanitized;
+  }
+  if (entity === "credit_card_settlements" || entity === "credit_card_statement_strategies") {
+    return validateCreatePayload(supabase, userId, entity, sanitized);
+  }
 
   if (entity === "credit_card_cycles") {
     if (sanitized.account_id !== undefined) {

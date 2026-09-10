@@ -31,6 +31,13 @@ export const SYNCED_TABLES = [
   "credit_card_payments",
   "debt_accounts",
   "debt_payments",
+  "debt_strategy_preferences",
+  "user_debt_priorities",
+  "credit_card_settlements",
+  "credit_card_statement_strategies",
+  "alert_notification_preferences",
+  "anomaly_whitelist_rules",
+  "alert_suppression_rules",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -161,11 +168,20 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "last_synced_at",
   ]),
   debt_payments: new Set(["id", "debt_account_id", "user_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  debt_strategy_preferences: new Set(["user_id", "strategy", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  user_debt_priorities: new Set(["id", "user_id", "debt_account_id", "priority_rank", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  credit_card_settlements: new Set(["id", "user_id", "installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  credit_card_statement_strategies: new Set(["statement_id", "user_id", "strategy", "custom_amount_centavos", "percentage_bps", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  alert_notification_preferences: new Set(["id", "user_id", "category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until", "version", "deleted", "updated_at"]),
+  anomaly_whitelist_rules: new Set(["id", "user_id", "merchant_name", "subcategory_id", "base_amount_centavos", "tolerance_bps", "allow_any_amount", "status", "notes", "version", "deleted", "updated_at"]),
+  alert_suppression_rules: new Set(["id", "user_id", "category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata", "version", "deleted", "updated_at"]),
 };
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
   credit_card_details: "account_id",
   credit_card_transactions: "transaction_id",
+  debt_strategy_preferences: "user_id",
+  credit_card_statement_strategies: "statement_id",
 };
 
 export function normalizePullRow(
