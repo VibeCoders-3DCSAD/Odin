@@ -19,6 +19,11 @@ export async function listDebtPayments(userId: string, debtAccountId: string): P
   return db.getAllAsync<DebtPayment>("SELECT id, debt_account_id, transaction_id, payment_date, amount_centavos, notes, version FROM debt_payments WHERE user_id = ? AND debt_account_id = ? AND deleted = 0 ORDER BY payment_date DESC, created_at DESC", userId, debtAccountId);
 }
 
+export async function listAllDebtPayments(userId: string): Promise<DebtPayment[]> {
+  const db = await getDb();
+  return db.getAllAsync<DebtPayment>("SELECT id, debt_account_id, transaction_id, payment_date, amount_centavos, notes, version FROM debt_payments WHERE user_id = ? AND deleted = 0 ORDER BY payment_date ASC, created_at ASC", userId);
+}
+
 export async function createTransactionDebtPayment(userId: string, deviceId: string, input: Pick<CreateExpenseInput, "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name" | "notes"> & { debt_account_id: string }): Promise<void> {
   if (!Number.isSafeInteger(input.amount_centavos) || input.amount_centavos <= 0) throw new LocalDbError("VALIDATION_ERROR", "Payment amount must be a positive whole number.");
   const db = await getDb(); const id = randomUUID(); const ts = new Date().toISOString();

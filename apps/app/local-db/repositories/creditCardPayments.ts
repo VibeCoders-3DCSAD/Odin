@@ -156,6 +156,15 @@ export async function createStatementPayment(
       id, userId, input.cycleId, input.statementId, transaction.id, input.amount_centavos,
       input.transaction_date, input.source_account_id, input.notes ?? null, clientMutationId, ts, ts,
     );
+    await db.runAsync(
+      `UPDATE credit_card_details
+          SET available_credit_centavos = MIN(credit_limit_centavos,
+                COALESCE(available_credit_centavos, credit_limit_centavos) + ?),
+              version = version + 1, updated_at = ?
+        WHERE account_id = (SELECT account_id FROM credit_card_cycles WHERE id = ? AND user_id = ? AND deleted = 0)
+          AND user_id = ? AND deleted = 0`,
+      input.amount_centavos, ts, input.cycleId, userId, userId,
+    );
     const paymentOperation = await enqueueOperation(db, {
       userId, deviceId, entity: "credit_card_payments", recordId: id, operationType: "create", baseVersion: null,
       changedFields: Object.keys(paymentPayload), payload: paymentPayload,
@@ -197,6 +206,17 @@ export async function updateStatementPayment(
        version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?`,
       input.amount_centavos, input.transaction_date, input.source_account_id, input.notes ?? null, ts, paymentId, userId,
     );
+    if (payment.amount_centavos !== input.amount_centavos) {
+      await db.runAsync(
+        `UPDATE credit_card_details
+            SET available_credit_centavos = MIN(credit_limit_centavos,
+                  COALESCE(available_credit_centavos, credit_limit_centavos) + ? - ?),
+                version = version + 1, updated_at = ?
+          WHERE account_id = (SELECT account_id FROM credit_card_cycles WHERE id = ? AND user_id = ? AND deleted = 0)
+            AND user_id = ? AND deleted = 0`,
+        payment.amount_centavos, input.amount_centavos, ts, payment.cycle_id, userId, userId,
+      );
+    }
     await enqueueOperation(db, {
       userId, deviceId, entity: "credit_card_payments", recordId: paymentId, operationType: "update", baseVersion: payment.version,
       changedFields: ["amount_centavos", "payment_date", "source_account_id", "notes"],
@@ -215,6 +235,14 @@ export async function deleteStatementPayment(userId: string, deviceId: string, p
     );
     if (!payment) throw new LocalDbError("NOT_FOUND", "Credit-card payment not found.");
     await db.runAsync("UPDATE credit_card_payments SET deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", ts, paymentId, userId);
+    await db.runAsync(
+      `UPDATE credit_card_details
+          SET available_credit_centavos = COALESCE(available_credit_centavos, credit_limit_centavos) - ?,
+              version = version + 1, updated_at = ?
+        WHERE account_id = (SELECT account_id FROM credit_card_cycles WHERE id = ? AND user_id = ? AND deleted = 0)
+          AND user_id = ? AND deleted = 0`,
+      payment.amount_centavos, ts, payment.cycle_id, userId, userId,
+    );
     await enqueueOperation(db, {
       userId, deviceId, entity: "credit_card_payments", recordId: paymentId, operationType: "delete", baseVersion: payment.version,
       changedFields: [], payload: { id: paymentId }, failureMessage: "This credit-card payment could not be deleted.",

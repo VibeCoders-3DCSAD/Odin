@@ -532,7 +532,7 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
                         <TextInput
                           value={cutoffDay}
                           onChangeText={(t) => { setCutoffDay(t); clearFieldError("cutoffDay"); }}
-                          placeholder="Enter cut-off day"
+                          placeholder="Enter default cut-off day"
                           placeholderTextColor={P.muted}
                           keyboardType="number-pad"
                           style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: fieldErrors.cutoffDay ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}

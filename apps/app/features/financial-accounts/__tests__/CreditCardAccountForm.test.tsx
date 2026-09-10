@@ -73,7 +73,7 @@ it("shows credit card fields only when the Credit Card kind is selected", () => 
 
   expect(view.getByPlaceholderText("Enter credit limit")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter billing cycle in days")).toBeTruthy();
-  expect(view.getByPlaceholderText("Enter cut-off day")).toBeTruthy();
+  expect(view.getByPlaceholderText("Enter default cut-off day")).toBeTruthy();
   expect(view.getByText("When your billing cycle ends each month. Enter 1-31; check your card statement.")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter alert percentage")).toBeTruthy();
 });
@@ -86,7 +86,7 @@ it("submits credit card details when creating a credit card account", async () =
   fireEvent.press(view.getByLabelText("Credit Card"));
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "25000");
   fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "30");
-  fireEvent.changeText(view.getByPlaceholderText("Enter cut-off day"), "15");
+  fireEvent.changeText(view.getByPlaceholderText("Enter default cut-off day"), "15");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "80");
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 
@@ -122,7 +122,7 @@ it("shows per-field validation errors without submitting and keeps entered value
   fireEvent.changeText(view.getByPlaceholderText("Enter account name"), "Keep Me");
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "abc");
   fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "27");
-  fireEvent.changeText(view.getByPlaceholderText("Enter cut-off day"), "0");
+  fireEvent.changeText(view.getByPlaceholderText("Enter default cut-off day"), "0");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "120");
   expect(view.queryByText("Account name is required.")).toBeNull();
 
@@ -136,7 +136,7 @@ it("shows per-field validation errors without submitting and keeps entered value
 
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "5000");
   fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "30");
-  fireEvent.changeText(view.getByPlaceholderText("Enter cut-off day"), "10");
+  fireEvent.changeText(view.getByPlaceholderText("Enter default cut-off day"), "10");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "90");
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 

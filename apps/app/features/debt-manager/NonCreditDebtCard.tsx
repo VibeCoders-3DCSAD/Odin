@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { archiveDebtAccount, markDebtAccountDeleted, type DebtAccount } from "../../local-db/repositories/debtAccounts";
 import { deleteTransactionDebtPayment, listDebtPayments, type DebtPayment } from "../../local-db/repositories/debtPayments";
-import { getDebtRepaymentForecast } from "./debtForecast";
+import { getDebtPaymentProgress, getDebtRepaymentForecast } from "./debtForecast";
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#EAEAE6", shell: "#FCF8F0", danger: "#B42318" } as const;
 const PAYMENT_LIMIT = 3;
@@ -18,7 +18,7 @@ type Props = {
 };
 
 function money(value: number) { return `PHP ${(value / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`; }
-function progressLabel(debt: DebtAccount) { return debt.status === "paid_off" ? "Paid off" : debt.progress === "no_payments" ? "No payments yet" : debt.progress.replace("_", " "); }
+function progressLabel(debt: DebtAccount, payments: DebtPayment[] | null) { const progress = payments === null ? debt.progress : getDebtPaymentProgress(debt, payments.map((payment) => ({ paymentDate: payment.payment_date, amountCentavos: payment.amount_centavos }))); return debt.status === "paid_off" ? "Paid off" : progress === "no_payments" ? "No payments yet" : progress.replace("_", " "); }
 function repaymentLabel(status: ReturnType<typeof getDebtRepaymentForecast>["status"]) { return status.replaceAll("_", " "); }
 
 export default function NonCreditDebtCard({ userId, deviceId, debt, onEdit, onRecordPayment, onEditPayment, onChanged }: Props) {
@@ -47,7 +47,7 @@ export default function NonCreditDebtCard({ userId, deviceId, debt, onEdit, onRe
     <View style={{ padding: 16, backgroundColor: P.shell }}>
       <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
         <View style={{ flex: 1 }}><Text style={{ fontFamily: "Manrope", fontSize: 17, fontWeight: "800", color: P.ink }}>{debt.name}</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>{debt.lenderName ?? "No lender listed"}</Text></View>
-        <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: "800", color: P.brand, textTransform: "uppercase" }}>{progressLabel(debt)}</Text>
+         <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: "800", color: P.brand, textTransform: "uppercase" }}>{progressLabel(debt, payments)}</Text>
       </View>
        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16, gap: 12 }}>
         <View><Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.muted }}>REMAINING</Text><Text style={{ fontFamily: "Manrope", fontSize: 18, fontWeight: "800", color: P.ink, marginTop: 2 }}>{money(debt.currentBalanceCentavos)}</Text></View>

@@ -1,6 +1,6 @@
 import type { DebtAccount, DebtRepaymentForecast, PaymentFrequency } from "../../local-db/repositories/debtAccounts";
 
-const PAYMENT_INTERVAL_DAYS: Partial<Record<PaymentFrequency, number>> = {
+export const PAYMENT_INTERVAL_DAYS: Partial<Record<PaymentFrequency, number>> = {
   weekly: 7,
   biweekly: 14,
   semi_monthly: 15,
@@ -28,4 +28,22 @@ export function getDebtRepaymentForecast(debt: Pick<DebtAccount, "currentBalance
   const status = debt.minimumPaymentCentavos > requiredPaymentCentavos ? "advanced" : debt.minimumPaymentCentavos === requiredPaymentCentavos ? "on_track" : "underpaid";
 
   return { status, estimatedPayoffDate };
+}
+
+export type ScheduledDebtPayment = { paymentDate: string; amountCentavos: number };
+
+export function getDebtPaymentProgress(
+  debt: Pick<DebtAccount, "currentBalanceCentavos" | "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "status">,
+  payments: ScheduledDebtPayment[],
+  asOf = new Date().toISOString().slice(0, 10),
+): DebtAccount["progress"] {
+  if (debt.status === "paid_off" || debt.currentBalanceCentavos === 0) return "finished";
+  const interval = PAYMENT_INTERVAL_DAYS[debt.paymentFrequency];
+  if (!debt.nextDueDate || !interval || debt.minimumPaymentCentavos <= 0) return "no_payments";
+  let dueCount = 0;
+  for (let date = debt.nextDueDate; date <= asOf; date = addDays(date, interval)) dueCount += 1;
+  if (dueCount === 0) return payments.length > 0 ? "ahead" : "on_schedule";
+  const paid = payments.filter((payment) => payment.paymentDate <= asOf).reduce((sum, payment) => sum + payment.amountCentavos, 0);
+  const expected = dueCount * debt.minimumPaymentCentavos;
+  return paid > expected ? "ahead" : paid >= expected ? "on_schedule" : "behind";
 }

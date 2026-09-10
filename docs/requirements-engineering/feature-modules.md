@@ -371,7 +371,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Opening date: `Select opening date`
 - Credit limit: `Enter credit limit`
 - Billing cycle: `Enter billing cycle in days`
-- Cut-off day: `Enter cut-off day`
+- Cut-off day: `Enter default cut-off day`
 - Alert threshold percentage: `Enter alert percentage`
 
 ### 4.4 Account States
@@ -1053,6 +1053,7 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Require the user to select a repayment strategy for every active statement before its due date is planned
 - Pay in Full target: statement balance
 - Pay Minimum target: minimum amount due, with a warning that finance charges may apply
+- Percentage target: a user-selected percentage of the authoritative statement balance, rounded to centavos and constrained to at least the minimum amount due and no more than the statement balance, with a warning that finance charges may apply
 - Custom Payment target: an amount at least equal to the minimum amount due and less than the statement balance, with a warning that finance charges may apply
 - Use the selected statement target as the credit card's payment requirement in the debt budget
 - Keep each credit-card statement's repayment strategy independent; do not apply Snowball or Avalanche to statement targets
@@ -1060,13 +1061,15 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 ### 7.8.1 Credit Card Repayment Strategy Form
 
 - Billing cycle or statement
-- Repayment strategy: Pay in Full / Pay Minimum / Custom Payment
+- Repayment strategy: Pay in Full / Pay Minimum / Percentage / Custom Payment
+- Repayment percentage, when applicable
 - Custom payment amount, when applicable
 
 ### 7.8.2 Credit Card Repayment Strategy Placeholders
 
 - Billing cycle or statement: `Select billing cycle or statement`
 - Repayment strategy: `Select repayment strategy`
+- Repayment percentage: `Enter repayment percentage`
 - Custom payment amount: `Enter custom payment amount`
 
 ### 7.8.3 Credit Card Repayment Strategy Validation
@@ -1074,6 +1077,7 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Require a repayment strategy for every active statement before its due date is planned
 - Set Pay in Full target to the statement balance
 - Set Pay Minimum target to the minimum amount due
+- Derive Percentage from the authoritative statement balance and require its rounded target to be at least the minimum amount due and no more than the statement balance
 - Require Custom Payment to be at least the minimum amount due and less than the statement balance
 - Warn when Pay Minimum or Custom Payment may result in finance charges
 - Keep each statement strategy independent from Snowball and Avalanche
@@ -1171,9 +1175,7 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Edit a debt
 - Archive a debt
 - Prioritize or remove priority from a debt
-- Record a debt payment
-- Record a debt payment with or without a related transaction
-- Create a related transaction from an existing debt payment
+- Record a debt payment through an expense transaction
 - Manage hardship information when supported
 - View active, archived, and deleted debt records according to their visibility rules
 
@@ -1210,14 +1212,13 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 
 ### 7.12 Non-Credit-Card Debt Payment Transaction Flow
 
-- User records a payment for a debt
-- User selects the option to record a related transaction, when applicable
-- Odin opens the transaction form with the debt-payment context
+- User selects Record payment for a debt in Debt Manager, or selects Record as debt payment while entering an expense transaction
+- Debt Manager opens the transaction form with the selected debt-payment context
 - User completes or confirms the transaction details
-- Odin links the transaction to the debt payment
+- Odin creates the expense transaction and linked debt payment together
 - The debt displays the payment and related transaction
 
-The Transaction screen may also initiate this flow when the user explicitly selects “Record as debt payment” and chooses a debt.
+Ordinary transactions remain unrelated to debts. A non-credit-card debt payment cannot be created without its linked expense transaction.
 
 ### 7.13 Non-Credit-Card Debt Form
 
@@ -1300,20 +1301,18 @@ Debt types are selectable presets. Existing debt records must remain readable if
 
 - Payment amount
 - Payment date
-- Source account
 - Principal amount, when available
 - Interest or fee amount, when available
-- Record related transaction option
 - Payment notes
+
+Debt Manager's Record payment action opens Transaction Management with the selected debt context; source account, category, and all editable expense inputs remain on the Transaction screen.
 
 ### 7.18 Non-Credit-Card Debt Payment Form Placeholders
 
 - Payment amount: `Enter payment amount`
 - Payment date: `Select payment date`
-- Source account: `Select source account`
 - Principal amount: `Enter principal amount`
 - Interest or fee amount: `Enter interest or fee amount`
-- Related transaction option: `Record a transaction`
 - Payment notes: `Add payment notes`
 
 ### 7.19 Non-Credit-Card Debt Payment Validation
@@ -1321,7 +1320,7 @@ Debt types are selectable presets. Existing debt records must remain readable if
 - Prevent submission when required payment fields are empty
 - Require a valid positive payment amount
 - Require a payment date
-- Require a source account when recording a related transaction
+- Require a linked expense transaction with a valid source account and category
 - Prevent payment amounts greater than the current non-credit-card debt balance unless explicitly supported
 - Require principal and interest amounts to be non-negative
 - Prevent principal and interest amounts from exceeding the payment amount
@@ -1335,8 +1334,8 @@ Debt types are selectable presets. Existing debt records must remain readable if
 - Empty-input state: required payment fields are blank
 - Validation-failure state: payment inputs are invalid
 - Saving state: payment is being recorded
-- Transaction-linking state: a related transaction is being created
-- Success state: payment and any selected transaction were recorded
+- Transaction-entry state: the required expense transaction is being entered
+- Success state: the payment and linked transaction were recorded
 - Error state: payment could not be recorded
 - Empty-source-account state: no eligible source account is available
 - Delete-confirmation state: the user must confirm payment deletion when supported
@@ -1361,7 +1360,7 @@ Debt types are selectable presets. Existing debt records must remain readable if
 
 - Payment saving: `Your payment is being recorded. Please wait before trying again.`
 - Payment saved: `Your payment was recorded. Review the debt details to confirm the update.`
-- Payment transaction linking: `Your related transaction is being created. Wait for the link to finish before leaving this screen.`
+- Payment transaction entry: `Complete the expense transaction to record this debt payment. Wait for the save to finish before leaving this screen.`
 
 #### Confirmation Messages
 

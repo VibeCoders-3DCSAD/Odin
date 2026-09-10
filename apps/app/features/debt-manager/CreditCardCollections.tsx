@@ -1,11 +1,15 @@
 import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 import type { CreditCardCycle, CreditCardCycleTransaction } from "../../local-db/repositories/creditCardCycles";
 import type { CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import type { CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
 import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import CreditCardStatementForm from "./CreditCardStatementForm";
 import { calculateCreditCardPaymentStatus, creditBalanceCentavos, deleteStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
+import { recognizeCreditCardSettlement, requestCreditCardSettlement, type CreditCardSettlement } from "../../local-db/repositories/creditCardSettlements";
+import type { CreditCardStatementStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
+import CreditCardRepaymentStrategy from "./CreditCardRepaymentStrategy";
 
 const P = {
   shell: "#fcf8f0",
@@ -26,6 +30,8 @@ type Props = {
   statements: CreditCardStatement[];
   installments: CreditCardInstallment[];
   payments: CreditCardPayment[];
+  strategies: CreditCardStatementStrategy[];
+  settlements: CreditCardSettlement[];
   statementCycle: CreditCardCycle | null;
   onManageCycle: (account: FinancialAccount, cycle: CreditCardCycle | null) => void;
   onAddStatement: (cycle: CreditCardCycle) => void;
@@ -33,6 +39,7 @@ type Props = {
   onStatementSaved: () => Promise<void>;
   onPayStatement?: (context: StatementPaymentContext) => void;
   onEditPayment?: (payment: CreditCardPayment) => void;
+  accountId?: string;
   today?: string;
 };
 
@@ -49,6 +56,9 @@ function localToday(): string {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+
+function dateFromIso(value: string): Date { return new Date(`${value}T12:00:00`); }
+function dateToIso(value: Date): string { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
 
 function CreditCardInventory({ accounts, cycles, onManageCycle, today }: Pick<Props, "accounts" | "cycles" | "onManageCycle"> & { today: string }) {
   return (
@@ -88,13 +98,14 @@ function CreditCardInventory({ accounts, cycles, onManageCycle, today }: Pick<Pr
   );
 }
 
-function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, payment, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, today, userId, deviceId }: {
+function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, payment, strategy, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, today, userId, deviceId }: {
   account: FinancialAccount;
   accountCycleCount: number;
   cycle: CreditCardCycle;
   transactions: CreditCardCycleTransaction[];
   statement: CreditCardStatement | undefined;
   payment: CreditCardPayment | undefined;
+  strategy: CreditCardStatementStrategy | undefined;
   statementCycle: CreditCardCycle | null;
   onManageCycle: Props["onManageCycle"];
   onAddStatement: Props["onAddStatement"];
@@ -138,7 +149,8 @@ function BillingCycleCard({ account, accountCycleCount, cycle, transactions, sta
             <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink }}>Recorded statement</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 5 }}>Statement date: {statement.statement_date} · Due: {statement.due_date}</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Balance: {formatPeso(statement.statement_balance_centavos)} · Minimum: {formatPeso(statement.minimum_due_centavos)}</Text>
-             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Finance charges: {formatPeso(statement.finance_charge_centavos)}</Text>
+              <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Finance charges: {formatPeso(statement.finance_charge_centavos)}</Text>
+              <CreditCardRepaymentStrategy userId={userId} deviceId={deviceId} statement={statement} strategy={strategy} onSaved={onStatementSaved} />
              {payment ? (() => {
                const status = calculateCreditCardPaymentStatus(payment.amount_centavos, statement.statement_balance_centavos, statement.minimum_due_centavos);
                const remaining = Math.max(0, statement.statement_balance_centavos - payment.amount_centavos);
@@ -176,31 +188,43 @@ function BillingCycleCard({ account, accountCycleCount, cycle, transactions, sta
   );
 }
 
-export default function CreditCardCollections({ userId, deviceId, accounts, cycles, transactions, statements, installments, payments, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, today = localToday() }: Props) {
-  const accountsById = new Map(accounts.map((account) => [account.id, account]));
+export default function CreditCardCollections({ userId, deviceId, accounts, cycles, transactions, statements, installments, payments, strategies, settlements, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, accountId, today = localToday() }: Props) {
+  const visibleAccounts = accountId ? accounts.filter((account) => account.id === accountId) : accounts;
+  const visibleCycles = accountId ? cycles.filter((cycle) => cycle.account_id === accountId) : cycles;
+  const visibleInstallments = accountId ? installments.filter((installment) => installment.account_id === accountId) : installments;
+  const accountsById = new Map(visibleAccounts.map((account) => [account.id, account]));
+  const [settlingInstallmentId, setSettlingInstallmentId] = useState<string | null>(null);
+  const [settlementAmount, setSettlementAmount] = useState("");
+  const [settlementFee, setSettlementFee] = useState("");
+  const [settlementDate, setSettlementDate] = useState(today);
+  const [settlementDatePickerVisible, setSettlementDatePickerVisible] = useState(false);
+  const [settlementMessage, setSettlementMessage] = useState<string | null>(null);
   return (
     <View>
-      <CreditCardInventory accounts={accounts} cycles={cycles} onManageCycle={onManageCycle} today={today} />
-      {installments.length > 0 ? <View style={{ borderTopWidth: 1, borderTopColor: P.line, marginTop: 18, paddingTop: 16 }}>
+      {accountId ? null : <CreditCardInventory accounts={visibleAccounts} cycles={visibleCycles} onManageCycle={onManageCycle} today={today} />}
+      {visibleInstallments.length > 0 ? <View style={{ borderTopWidth: 1, borderTopColor: P.line, marginTop: 18, paddingTop: 16 }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>Active installments</Text>
         <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 4 }}>Monthly due amounts are estimates until the issuer confirms them.</Text>
-        {installments.map((installment) => <View key={installment.id} style={{ borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 12, marginTop: 10, backgroundColor: P.shell }}>
+        {visibleInstallments.map((installment) => <View key={installment.id} style={{ borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 12, marginTop: 10, backgroundColor: P.shell }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: P.ink }}>{installment.description}</Text>
           <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 4 }}>{formatPeso(installment.monthly_amortization_centavos)} / month · {installment.remaining_months} of {installment.term_months} months remaining</Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Remaining principal: {formatPeso(installment.remaining_principal_centavos)} · {installment.interest_type === "zero_interest" ? "Zero interest" : `Interest: ${((installment.interest_rate_bps ?? 0) / 100).toFixed(2)}%`}</Text>
-        </View>)}
+           <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Remaining principal: {formatPeso(installment.remaining_principal_centavos)} · {installment.interest_type === "zero_interest" ? "Zero interest" : `Interest: ${((installment.interest_rate_bps ?? 0) / 100).toFixed(2)}%`}</Text>
+           {settlements.filter((settlement) => settlement.installment_id === installment.id).map((settlement) => <View key={settlement.id} style={{ marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>Settlement {settlement.status}: {formatPeso(settlement.settlement_amount_centavos)} on {settlement.settlement_date}{settlement.pretermination_fee_centavos > 0 ? ` | Fee ${formatPeso(settlement.pretermination_fee_centavos)}` : ""}</Text>{settlement.status === "requested" ? <Pressable accessibilityRole="button" accessibilityLabel="Mark settlement issuer recognized" onPress={() => { recognizeCreditCardSettlement(userId, deviceId, settlement.id).then(onStatementSaved).catch(() => setSettlementMessage("The issuer recognition could not be recorded.")); }} style={{ marginTop: 4 }}><Text style={{ color: P.brand, fontWeight: "700", fontSize: 11 }}>Mark issuer recognized</Text></Pressable> : null}</View>)}
+           {settlingInstallmentId === installment.id ? <View style={{ gap: 8, marginTop: 10 }}><TextInput accessibilityLabel="Early settlement amount" value={settlementAmount} onChangeText={setSettlementAmount} placeholder="Enter settlement amount" keyboardType="decimal-pad" style={{ backgroundColor: P.card, borderRadius: 8, padding: 9 }} /><TextInput accessibilityLabel="Pre-termination fee" value={settlementFee} onChangeText={setSettlementFee} placeholder="Enter pre-termination fee" keyboardType="decimal-pad" style={{ backgroundColor: P.card, borderRadius: 8, padding: 9 }} /><Pressable accessibilityRole="button" accessibilityLabel="Select early settlement date" onPress={() => setSettlementDatePickerVisible(true)} style={{ backgroundColor: P.card, borderRadius: 8, padding: 9 }}><Text style={{ color: P.ink }}>{settlementDate}</Text></Pressable>{settlementDatePickerVisible ? <DateTimePicker value={dateFromIso(settlementDate)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(event, date) => { if (event.type === "set" && date) setSettlementDate(dateToIso(date)); if (Platform.OS !== "ios") setSettlementDatePickerVisible(false); }} /> : null}<View style={{ flexDirection: "row", gap: 12 }}><Pressable onPress={() => setSettlingInstallmentId(null)}><Text style={{ color: P.muted, fontWeight: "700" }}>Cancel</Text></Pressable><Pressable onPress={() => { const amount = Math.round(Number(settlementAmount) * 100); const fee = Math.round(Number(settlementFee || "0") * 100); requestCreditCardSettlement(userId, deviceId, { installmentId: installment.id, settlementDate, remainingPrincipalCentavos: installment.remaining_principal_centavos, settlementAmountCentavos: amount, preterminationFeeCentavos: fee }).then(async () => { setSettlementMessage("The early settlement request was recorded. The installment remains active until the issuer recognizes it."); setSettlingInstallmentId(null); await onStatementSaved(); }).catch(() => setSettlementMessage("Some early-settlement details are not valid.")); }}><Text style={{ color: P.brand, fontWeight: "700" }}>Record early settlement</Text></Pressable></View></View> : <Pressable accessibilityRole="button" accessibilityLabel={`Record early settlement for ${installment.description}`} onPress={() => { setSettlingInstallmentId(installment.id); setSettlementAmount((installment.remaining_principal_centavos / 100).toFixed(2)); setSettlementFee(""); setSettlementDate(today); }} style={{ marginTop: 9 }}><Text style={{ color: P.brand, fontWeight: "700", fontSize: 12 }}>Record early settlement</Text></Pressable>}
+         </View>)}
+         {settlementMessage ? <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 8 }}>{settlementMessage}</Text> : null}
       </View> : null}
       <View style={{ height: 1, backgroundColor: P.line, marginVertical: 18 }} />
       <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>Billing Cycles</Text>
-        <Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.muted }}>{cycles.length} recorded</Text>
+         <Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.muted }}>{visibleCycles.length} recorded</Text>
       </View>
       <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginBottom: 12 }}>Statements and purchases stay with the cycle they belong to.</Text>
-      {cycles.map((cycle) => {
+       {visibleCycles.map((cycle) => {
         const account = accountsById.get(cycle.account_id);
         if (!account) return null;
          const statement = statements.find((item) => item.cycle_id === cycle.id);
-         return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={cycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} statementCycle={statementCycle} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onStatementSaved={onStatementSaved} onPayStatement={onPayStatement} onEditPayment={onEditPayment} today={today} userId={userId} deviceId={deviceId} />;
+         return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={visibleCycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} strategy={statement ? strategies.find((item) => item.statementId === statement.id) : undefined} statementCycle={statementCycle} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onStatementSaved={onStatementSaved} onPayStatement={onPayStatement} onEditPayment={onEditPayment} today={today} userId={userId} deviceId={deviceId} />;
       })}
     </View>
   );
