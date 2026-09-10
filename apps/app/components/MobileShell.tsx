@@ -34,6 +34,8 @@ import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
 import type { CreditCardPayment, StatementPaymentContext } from "../local-db/repositories/creditCardPayments";
 import type { DebtPayment, DebtPaymentContext } from "../local-db/repositories/debtPayments";
 import DebtManagerOverview from "../features/debt-manager/DebtManagerOverview";
+import NonCreditDebtListScreen from "../features/debt-manager/NonCreditDebtListScreen";
+import NonCreditDebtDetailScreen from "../features/debt-manager/NonCreditDebtDetailScreen";
 import { useConnectivityStore } from "../services/connectivity";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
@@ -87,6 +89,8 @@ type Page =
    | "debt-manager"
     | "credit-cards"
     | "credit-card-detail"
+    | "non-credit-card-debts"
+    | "non-credit-card-debt-detail"
   | "settings";
 
 type MobileShellProps = {
@@ -204,6 +208,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   "debt-manager": { title: "Debt Manager", subtitle: "Credit-card billing cycles" },
   "credit-cards": { title: "Credit Cards", subtitle: "Billing cycles and statements" },
   "credit-card-detail": { title: "Credit Card", subtitle: "Billing cycles and statements" },
+  "non-credit-card-debts": { title: "Non Credit Card Debts", subtitle: "Loans and repayment plans" },
+  "non-credit-card-debt-detail": { title: "Non Credit Card Debts", subtitle: "Debt details and payments" },
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
@@ -214,6 +220,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
   const [statementPaymentContext, setStatementPaymentContext] = useState<StatementPaymentContext | null>(null);
   const [selectedCreditCardId, setSelectedCreditCardId] = useState<string | null>(null);
+  const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -815,7 +822,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "debt-manager") {
-      return <DebtManagerOverview userId={userId} deviceId={deviceId} onOpenCreditCards={() => setCurrentPage("credit-cards")} onRecordDebtPayment={(debtId) => { setDebtPaymentDebtId(debtId); setDebtPaymentContext(null); setStatementPaymentContext(null); setTransactionToEdit(null); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} onEditDebtPayment={async (payment: DebtPayment) => { const transaction = await getTransaction(userId, payment.transaction_id); if (!transaction) return; setDebtPaymentDebtId(null); setDebtPaymentContext({ paymentId: payment.id, debtAccountId: payment.debt_account_id }); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("debt-manager"); setCurrentPage("add-transaction"); }} />;
+      return <DebtManagerOverview userId={userId} onOpenCreditCards={() => setCurrentPage("credit-cards")} onOpenNonCreditDebts={() => setCurrentPage("non-credit-card-debts")} />;
     }
 
     if (currentPage === "credit-cards") {
@@ -824,6 +831,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "credit-card-detail" && selectedCreditCardId) {
       return <DebtManagerScreen userId={userId} deviceId={deviceId} accountId={selectedCreditCardId} onBack={() => setCurrentPage("credit-cards")} onPayStatement={(context) => { setStatementPaymentContext(context); setTransactionToEdit(null); setTransactionReturnPage("credit-card-detail"); setCurrentPage("add-transaction"); }} onEditPayment={async (payment: CreditCardPayment) => { const transaction = await getTransaction(userId, payment.transaction_id); if (!transaction) return; setStatementPaymentContext({ statementId: payment.statement_id, cycleId: payment.cycle_id }); setTransactionToEdit(transaction); setTransactionReturnPage("credit-card-detail"); setCurrentPage("add-transaction"); }} />;
+    }
+
+    if (currentPage === "non-credit-card-debts") {
+      return <NonCreditDebtListScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("debt-manager")} onOpenDebt={(debtId) => { setSelectedDebtId(debtId); setCurrentPage("non-credit-card-debt-detail"); }} />;
+    }
+
+    if (currentPage === "non-credit-card-debt-detail" && selectedDebtId) {
+      return <NonCreditDebtDetailScreen userId={userId} deviceId={deviceId} debtId={selectedDebtId} onBack={() => setCurrentPage("non-credit-card-debts")} onRecordPayment={(debtId) => { setDebtPaymentDebtId(debtId); setDebtPaymentContext(null); setStatementPaymentContext(null); setTransactionToEdit(null); setTransactionReturnPage("non-credit-card-debt-detail"); setCurrentPage("add-transaction"); }} onEditPayment={async (payment: DebtPayment) => { const transaction = await getTransaction(userId, payment.transaction_id); if (!transaction) return; setDebtPaymentDebtId(null); setDebtPaymentContext({ paymentId: payment.id, debtAccountId: payment.debt_account_id }); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("non-credit-card-debt-detail"); setCurrentPage("add-transaction"); }} />;
     }
 
     if (currentPage === "budgeting") {
