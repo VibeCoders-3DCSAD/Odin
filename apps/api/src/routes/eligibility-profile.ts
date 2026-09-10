@@ -72,9 +72,14 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
   } = request.body?.payload ?? {};
 
   if (date_of_birth !== undefined) {
-    const birthDate = new Date(date_of_birth);
+    const birthDate = typeof date_of_birth === "string"
+      ? new Date(`${date_of_birth}T00:00:00Z`)
+      : new Date(Number.NaN);
 
-    if (Number.isNaN(birthDate.getTime())) {
+    if (
+      Number.isNaN(birthDate.getTime())
+      || formatDateOnly(birthDate) !== date_of_birth
+    ) {
       response.status(400).json({
         error: "Bad Request",
         message: "Date of birth must be a valid date",
@@ -85,6 +90,17 @@ router.patch("/eligibility-profile", requireAuth, async (request: AuthenticatedR
     const normalizedBirthDate = formatDateOnly(birthDate);
     if (normalizedBirthDate > formatDateOnly(new Date())) {
       response.status(400).json({ error: "Bad Request", message: "Date of birth cannot be in the future" });
+      return;
+    }
+
+    if (
+      normalizedBirthDate > getEligibleBirthDateBoundary(20)
+      || normalizedBirthDate < getEligibleBirthDateBoundary(40)
+    ) {
+      response.status(400).json({
+        error: "Bad Request",
+        message: "Age must be between 20 and 40",
+      });
       return;
     }
   }
