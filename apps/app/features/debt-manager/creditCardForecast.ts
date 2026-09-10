@@ -1,7 +1,7 @@
 import type { CreditCardCycle, CreditCardCycleTransaction } from "../../local-db/repositories/creditCardCycles";
 import type { CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
 import type { CreditCardPayment } from "../../local-db/repositories/creditCardPayments";
-import { statementPaymentTargetCentavos, type CreditCardStatementStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
+import { statementPaymentTargetCentavos, type CreditCardStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
 import type { CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 
 export type CreditCardForecastPoint = { cycleId: string; date: string; availableCreditCentavos: number; targetCentavos: number };
@@ -11,7 +11,7 @@ type Input = {
   cycles: CreditCardCycle[];
   transactions: CreditCardCycleTransaction[];
   statements: CreditCardStatement[];
-  strategies: CreditCardStatementStrategy[];
+  strategy?: CreditCardStrategy;
   payments: CreditCardPayment[];
   installments: CreditCardInstallment[];
   availableCreditCentavos: number;
@@ -29,8 +29,7 @@ function addMonths(isoDate: string, months: number): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function buildCreditCardForecast({ cycles, transactions, statements, strategies, payments, installments, availableCreditCentavos, creditLimitCentavos, asOfDate }: Input): { points: CreditCardForecastPoint[]; status: CreditCardScheduleStatus } {
-  const strategyByStatement = new Map(strategies.map((strategy) => [strategy.statementId, strategy]));
+export function buildCreditCardForecast({ cycles, transactions, statements, strategy, payments, installments, availableCreditCentavos, creditLimitCentavos, asOfDate }: Input): { points: CreditCardForecastPoint[]; status: CreditCardScheduleStatus } {
   const movementByDate = new Map<string, number>();
   for (const transaction of transactions) movementByDate.set(transaction.transaction_date, (movementByDate.get(transaction.transaction_date) ?? 0) - transaction.amount_centavos);
   for (const payment of payments) movementByDate.set(payment.payment_date, (movementByDate.get(payment.payment_date) ?? 0) + payment.amount_centavos);
@@ -45,7 +44,7 @@ export function buildCreditCardForecast({ cycles, transactions, statements, stra
   let expectedThroughToday = 0;
   let recordedThroughToday = 0;
   const latestStatement = statements.slice().sort((left, right) => right.due_date.localeCompare(left.due_date))[0];
-  const target = latestStatement ? statementPaymentTargetCentavos(latestStatement, strategyByStatement.get(latestStatement.id)) ?? 0 : 0;
+  const target = latestStatement ? statementPaymentTargetCentavos(latestStatement, strategy) ?? 0 : 0;
   if (latestStatement && latestStatement.due_date <= asOfDate) {
     expectedThroughToday = target;
     recordedThroughToday = payments.filter((payment) => payment.statement_id === latestStatement.id && payment.payment_date <= asOfDate).reduce((sum, payment) => sum + payment.amount_centavos, 0);

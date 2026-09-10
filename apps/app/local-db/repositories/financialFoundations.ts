@@ -36,6 +36,9 @@ type FinancialAccountRow = {
   cc_cutoff_day: number | null;
   cc_statement_day: number | null;
   cc_alert_threshold_percent: number | null;
+  cc_repayment_strategy: CreditCardRepaymentStrategy | null;
+  cc_repayment_custom_amount_centavos: number | null;
+  cc_repayment_percentage_bps: number | null;
 };
 
 type CreditCardDetailsSyncRow = {
@@ -149,7 +152,12 @@ export type CreditCardDetails = {
   cutoffDay: number;
   statementDay: number | null;
   alertThresholdPercent: number | null;
+  repaymentStrategy: CreditCardRepaymentStrategy | null;
+  repaymentCustomAmountCentavos: number | null;
+  repaymentPercentageBps: number | null;
 };
+
+export type CreditCardRepaymentStrategy = "pay_in_full" | "pay_minimum" | "percentage_of_statement" | "custom_payment";
 
 export type CreditCardDetailsInput = {
   creditLimitCentavos: number;
@@ -353,6 +361,9 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
             cutoffDay: row.cc_cutoff_day ?? 0,
             statementDay: row.cc_statement_day,
             alertThresholdPercent: row.cc_alert_threshold_percent,
+            repaymentStrategy: row.cc_repayment_strategy,
+            repaymentCustomAmountCentavos: row.cc_repayment_custom_amount_centavos,
+            repaymentPercentageBps: row.cc_repayment_percentage_bps,
           }
         : null,
   };
@@ -703,9 +714,12 @@ export async function listFinancialAccounts(userId: string): Promise<FinancialAc
              cc.issuer AS cc_issuer,
              cc.notes AS cc_notes,
              cc.billing_cycle_days AS cc_billing_cycle_days,
-            cc.cutoff_day AS cc_cutoff_day,
-            cc.statement_day AS cc_statement_day,
-            cc.alert_threshold_percent AS cc_alert_threshold_percent
+             cc.cutoff_day AS cc_cutoff_day,
+             cc.statement_day AS cc_statement_day,
+             cc.alert_threshold_percent AS cc_alert_threshold_percent,
+             cc.repayment_strategy AS cc_repayment_strategy,
+             cc.repayment_custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+             cc.repayment_percentage_bps AS cc_repayment_percentage_bps
      FROM financial_accounts fa
      LEFT JOIN credit_card_details cc
        ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
@@ -727,9 +741,12 @@ export async function getFinancialAccount(
              cc.issuer AS cc_issuer,
              cc.notes AS cc_notes,
              cc.billing_cycle_days AS cc_billing_cycle_days,
-            cc.cutoff_day AS cc_cutoff_day,
-            cc.statement_day AS cc_statement_day,
-            cc.alert_threshold_percent AS cc_alert_threshold_percent
+             cc.cutoff_day AS cc_cutoff_day,
+             cc.statement_day AS cc_statement_day,
+             cc.alert_threshold_percent AS cc_alert_threshold_percent,
+             cc.repayment_strategy AS cc_repayment_strategy,
+             cc.repayment_custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+             cc.repayment_percentage_bps AS cc_repayment_percentage_bps
      FROM financial_accounts fa
      LEFT JOIN credit_card_details cc
        ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0

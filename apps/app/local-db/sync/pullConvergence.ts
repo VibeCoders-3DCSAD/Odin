@@ -68,6 +68,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   credit_card_details: new Set([
     "account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
     "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
+    "repayment_strategy", "repayment_custom_amount_centavos", "repayment_percentage_bps",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   income_sources: new Set([

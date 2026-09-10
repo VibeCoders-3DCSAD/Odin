@@ -38,6 +38,14 @@ jest.mock("../../../local-db/repositories/creditCardPayments", () => ({
   creditBalanceCentavos: (amount: number, balance: number) => Math.max(0, amount - balance),
 }));
 
+jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
+  listCreditCardStrategies: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock("../../../local-db/repositories/creditCardSettlements", () => ({
+  listCreditCardSettlements: jest.fn().mockResolvedValue([]),
+}));
+
 jest.mock("@react-native-community/datetimepicker", () => ({
   __esModule: true,
   default: (props: { onChange: (event: { type: string }, date?: Date) => void; minimumDate?: Date }) => {
@@ -67,7 +75,7 @@ it("opens native date pickers for a closed cycle statement", async () => {
     id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-01-01", cutoff_date: "2026-01-31",
     statement_date: null, version: 1, deleted: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z",
   }]);
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => expect(view.getByText("Add statement")).toBeTruthy());
   fireEvent.press(view.getByText("Add statement"));
   fireEvent.press(view.getByLabelText("Select statement date"));
@@ -89,7 +97,7 @@ it("lets the statement date be changed after it is selected", async () => {
     id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-01-01", cutoff_date: "2026-01-31",
     statement_date: null, version: 1, deleted: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z",
   }]);
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => expect(view.getByText("Add statement")).toBeTruthy());
   fireEvent.press(view.getByText("Add statement"));
   fireEvent.press(view.getByLabelText("Select statement date"));
@@ -109,7 +117,7 @@ it("keeps the iOS statement-date picker open while the date spins", async () => 
     id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-01-01", cutoff_date: "2026-01-31",
     statement_date: null, version: 1, deleted: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z",
   }]);
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => expect(view.getByText("Add statement")).toBeTruthy());
   fireEvent.press(view.getByText("Add statement"));
   fireEvent.press(view.getByLabelText("Select statement date"));
@@ -129,7 +137,7 @@ it("identifies missing dates when otherwise valid statement amounts are entered"
     id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-01-01", cutoff_date: "2026-01-31",
     statement_date: null, version: 1, deleted: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z",
   }]);
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => expect(view.getByText("Add statement")).toBeTruthy());
   fireEvent.press(view.getByText("Add statement"));
   fireEvent.changeText(view.getByPlaceholderText("Enter statement balance"), "70000");
@@ -144,7 +152,7 @@ it("identifies missing dates when otherwise valid statement amounts are entered"
 
 it("shows the requirements-aligned empty card message", async () => {
   mockListFinancialAccounts.mockResolvedValue([]);
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => expect(view.getByText("No credit cards are recorded yet. Add a credit card to track billing cycles and payments.")).toBeTruthy());
 });
 
@@ -185,9 +193,9 @@ it("shows card details and all current cycle dates", async () => {
     updated_at: "2024-01-01T00:00:00.000Z",
   }]);
 
-    const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+    const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
     await waitFor(() => {
-      expect(view.getByText("Credit Cards")).toBeTruthy();
+      expect(view.getByText("Billing cycles and statement activity")).toBeTruthy();
       expect(view.getByText("Billing Cycles")).toBeTruthy();
       expect(view.getAllByText("Visa Platinum")).toHaveLength(2);
     expect(view.getByText("Cycle start: 2024-01-16")).toBeTruthy();
@@ -206,7 +214,7 @@ it("keeps the card visible when current-cycle generation fails", async () => {
   }]);
   mockEnsureCurrentCreditCardCycles.mockRejectedValue(new Error("cycle constraint"));
 
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => {
     expect(view.getByText("Visa Platinum")).toBeTruthy();
     expect(view.getByText("Credit-card information may be out of date. Refresh or reconcile it with the latest issuer records.")).toBeTruthy();
@@ -243,7 +251,7 @@ it("shows current-cycle credit-card transactions", async () => {
     amount_centavos: 125000,
   }]);
 
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => {
     expect(view.getByText("Grocery Store")).toBeTruthy();
     expect(view.getByText("₱1,250.00")).toBeTruthy();
@@ -296,6 +304,6 @@ it("keeps transactions from a prior billing cycle visible", async () => {
     amount_centavos: 125000,
   }]);
 
-  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" />);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => expect(view.getByText("Prior cycle purchase")).toBeTruthy());
 });

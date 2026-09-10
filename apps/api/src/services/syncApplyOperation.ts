@@ -153,11 +153,13 @@ const CREDIT_CARD_PAYMENT_UPDATE_FIELDS = new Set([
 const CREDIT_CARD_DETAILS_CREATE_FIELDS = new Set([
   "account_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
   "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
+  "repayment_strategy", "repayment_custom_amount_centavos", "repayment_percentage_bps",
 ]);
 
 const CREDIT_CARD_DETAILS_UPDATE_FIELDS = new Set([
   "account_id", "issuer", "credit_limit_centavos", "cutoff_day", "statement_day",
   "notes", "billing_cycle_days", "alert_threshold_percent",
+  "repayment_strategy", "repayment_custom_amount_centavos", "repayment_percentage_bps",
 ]);
 
 const TRANSACTION_CREATE_FIELDS = new Set([
@@ -451,6 +453,11 @@ async function validateCreatePayload(
     optionalFiniteInteger(sanitized, "available_credit_centavos");
     optionalFiniteInteger(sanitized, "billing_cycle_days");
     optionalFiniteInteger(sanitized, "alert_threshold_percent");
+    if (sanitized.repayment_strategy !== undefined && !["pay_in_full", "pay_minimum", "percentage_of_statement", "custom_payment"].includes(sanitized.repayment_strategy as string)) throw new Error("repayment_strategy is invalid");
+    optionalFiniteInteger(sanitized, "repayment_custom_amount_centavos");
+    optionalFiniteInteger(sanitized, "repayment_percentage_bps");
+    if (sanitized.repayment_custom_amount_centavos !== undefined && sanitized.repayment_custom_amount_centavos !== null && (sanitized.repayment_custom_amount_centavos as number) <= 0) throw new Error("repayment_custom_amount_centavos must be positive");
+    validateOptionalRange(sanitized, "repayment_percentage_bps", 1, 10_000);
     validateOptionalRange(sanitized, "billing_cycle_days", 28, 31);
     validateOptionalRange(sanitized, "alert_threshold_percent", 0, 100);
     await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
@@ -1169,9 +1176,16 @@ async function validateUpdatePayload(
   }
 
   if (entity === "debt_payments") {
-    for (const field of ["debt_account_id", "transaction_id", "source", "payment_date", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]) requireString(sanitized, field);
-    requirePositiveInteger(sanitized, "amount_centavos"); requireBigInt(sanitized, "principal_centavos"); requireBigInt(sanitized, "interest_centavos");
-    if (sanitized.source !== "transaction" || sanitized.linked_transaction_type !== "expense") throw new Error("debt payment must link an expense transaction");
+    for (const field of ["debt_account_id", "transaction_id", "source", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]) {
+      if (sanitized[field] !== undefined) requireString(sanitized, field);
+    }
+    if (sanitized.payment_date !== undefined) requireDateString(sanitized, "payment_date");
+    if (sanitized.amount_centavos !== undefined) requirePositiveInteger(sanitized, "amount_centavos");
+    if (sanitized.principal_centavos !== undefined) requireBigInt(sanitized, "principal_centavos");
+    if (sanitized.interest_centavos !== undefined) requireBigInt(sanitized, "interest_centavos");
+    if (sanitized.notes !== undefined && sanitized.notes !== null && typeof sanitized.notes !== "string") throw new Error("notes must be a string or null");
+    if (sanitized.source !== undefined && sanitized.source !== "transaction") throw new Error("debt payment must link an expense transaction");
+    if (sanitized.linked_transaction_type !== undefined && sanitized.linked_transaction_type !== "expense") throw new Error("debt payment must link an expense transaction");
     return sanitized;
   }
 
@@ -1196,7 +1210,7 @@ async function validateUpdatePayload(
     if (entity === "credit_card_details") {
       if (key === "account_id") {
         if (typeof value !== "string" || !value) throw new Error("account_id must be a non-empty string");
-      } else if (["issuer", "notes"].includes(key)) {
+      } else if (["issuer", "notes", "repayment_strategy"].includes(key)) {
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
        } else if (key === "cutoff_day" || key === "statement_day") {
          if (key === "statement_day" && value === null) continue;

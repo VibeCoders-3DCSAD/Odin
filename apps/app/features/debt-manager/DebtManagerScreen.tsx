@@ -15,8 +15,9 @@ import CreditCardCollections from "./CreditCardCollections";
 import CreditCardListScreen from "./CreditCardListScreen";
 import CreditCardForecastSection from "./CreditCardForecastSection";
 import { buildCreditCardForecast } from "./creditCardForecast";
-import { listCreditCardStatementStrategies, type CreditCardStatementStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
+import { listCreditCardStrategies, type CreditCardStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
 import { listCreditCardSettlements, type CreditCardSettlement } from "../../local-db/repositories/creditCardSettlements";
+import CreditCardRepaymentStrategy from "./CreditCardRepaymentStrategy";
 
 const P = {
   shell: "#fcf8f0",
@@ -41,7 +42,7 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
   const [statements, setStatements] = useState<CreditCardStatement[]>([]);
   const [installments, setInstallments] = useState<CreditCardInstallment[]>([]);
   const [payments, setPayments] = useState<CreditCardPayment[]>([]);
-  const [strategies, setStrategies] = useState<CreditCardStatementStrategy[]>([]);
+  const [strategies, setStrategies] = useState<CreditCardStrategy[]>([]);
   const [settlements, setSettlements] = useState<CreditCardSettlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -80,7 +81,7 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
        setStatements(await listCreditCardStatements(userId));
        setInstallments(await listCreditCardInstallments(userId));
         setPayments(await listCreditCardPayments(userId));
-         setStrategies(await listCreditCardStatementStrategies(userId));
+          setStrategies(await listCreditCardStrategies(userId));
          setSettlements(await listCreditCardSettlements(userId));
       setError(cycleLoadFailed);
       setStale(cycleLoadFailed && hasLoadedData.current);
@@ -142,19 +143,23 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
   const selectedAccount = accounts.find((account) => account.id === accountId);
   if (!selectedAccount) return <View><Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.error }}>This credit card is unavailable.</Text><Pressable accessibilityRole="button" accessibilityLabel="Back to Credit Cards" onPress={onBack} style={{ marginTop: 12 }}><Text style={{ color: P.brand, fontWeight: "700" }}>Back to Credit Cards</Text></Pressable></View>;
   const today = new Date().toISOString().slice(0, 10);
-  const forecast = buildCreditCardForecast({ cycles: cycles.filter((cycle) => cycle.account_id === accountId), transactions: cycleTransactions.filter((transaction) => transaction.account_id === accountId), statements, strategies, payments, installments: installments.filter((installment) => installment.account_id === accountId), availableCreditCentavos: selectedAccount.creditCardDetails?.availableCreditCentavos ?? 0, creditLimitCentavos: selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0, asOfDate: today });
+  const latestStatement = statements
+    .filter((statement) => cycles.find((cycle) => cycle.id === statement.cycle_id)?.account_id === accountId)
+    .sort((left, right) => right.due_date.localeCompare(left.due_date))[0];
+  const strategy = strategies.find((item) => item.accountId === accountId);
+  const forecast = buildCreditCardForecast({ cycles: cycles.filter((cycle) => cycle.account_id === accountId), transactions: cycleTransactions.filter((transaction) => transaction.account_id === accountId), statements, strategy, payments, installments: installments.filter((installment) => installment.account_id === accountId), availableCreditCentavos: selectedAccount.creditCardDetails?.availableCreditCentavos ?? 0, creditLimitCentavos: selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0, asOfDate: today });
 
   return (
     <View>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <View>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>{selectedAccount.name}</Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>Billing cycles and statement activity</Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 7 }}>Credit limit: {formatPeso(selectedAccount.creditCardDetails?.creditLimitCentavos)} | Available credit: {formatPeso(selectedAccount.creditCardDetails?.availableCreditCentavos)}</Text>
-        </View>
-        <View style={{ flexDirection: "row", gap: 14 }}>
+      <View style={{ marginBottom: 12 }}>
+        <View style={{ alignSelf: "flex-end", flexDirection: "row", gap: 14, marginBottom: 12 }}>
           {onBack ? <Pressable accessibilityRole="button" accessibilityLabel="Back to Debt Manager" onPress={onBack}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.muted }}>Back</Text></Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Refresh credit-card information" onPress={() => load().catch(() => {})}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.brand }}>Refresh</Text></Pressable>
+        </View>
+        <View style={{ flexShrink: 1 }}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>{selectedAccount.name}</Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>Billing cycles and statement activity</Text>
+          <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 7 }}>Credit limit: {formatPeso(selectedAccount.creditCardDetails?.creditLimitCentavos)} | Available credit: {formatPeso(selectedAccount.creditCardDetails?.availableCreditCentavos)}</Text>
         </View>
       </View>
       {stale ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, backgroundColor: P.card, padding: 10, borderRadius: 10, marginBottom: 12 }}>Credit-card information may be out of date. Refresh or reconcile it with the latest issuer records.</Text> : null}
@@ -170,6 +175,7 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
           <View style={{ flexDirection: "row", gap: 16, marginTop: 10 }}><Pressable onPress={() => setEditingCycle(null)}><Text style={{ color: P.muted, fontWeight: "700" }}>Cancel</Text></Pressable><Pressable disabled={cycleSaving} onPress={() => saveCycle().catch(() => {})}><Text style={{ color: P.brand, fontWeight: "700" }}>{cycleSaving ? "Saving..." : "Save cycle"}</Text></Pressable></View>
         </View>
        ) : null}
+       <CreditCardRepaymentStrategy userId={userId} deviceId={deviceId} accountId={accountId} statement={latestStatement} strategy={strategy} onSaved={load} />
        <CreditCardForecastSection points={forecast.points} status={forecast.status} creditLimitCentavos={selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0} />
        <CreditCardCollections
         userId={userId}
@@ -180,7 +186,6 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
         statements={statements}
         installments={installments}
         payments={payments}
-        strategies={strategies}
         settlements={settlements}
         statementCycle={statementCycle}
         onManageCycle={openCycleEditor}

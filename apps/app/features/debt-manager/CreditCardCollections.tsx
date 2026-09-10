@@ -8,8 +8,6 @@ import type { FinancialAccount } from "../../local-db/repositories/financialFoun
 import CreditCardStatementForm from "./CreditCardStatementForm";
 import { calculateCreditCardPaymentStatus, creditBalanceCentavos, deleteStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
 import { recognizeCreditCardSettlement, requestCreditCardSettlement, type CreditCardSettlement } from "../../local-db/repositories/creditCardSettlements";
-import type { CreditCardStatementStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
-import CreditCardRepaymentStrategy from "./CreditCardRepaymentStrategy";
 
 const P = {
   shell: "#fcf8f0",
@@ -30,7 +28,6 @@ type Props = {
   statements: CreditCardStatement[];
   installments: CreditCardInstallment[];
   payments: CreditCardPayment[];
-  strategies: CreditCardStatementStrategy[];
   settlements: CreditCardSettlement[];
   statementCycle: CreditCardCycle | null;
   onManageCycle: (account: FinancialAccount, cycle: CreditCardCycle | null) => void;
@@ -98,14 +95,13 @@ function CreditCardInventory({ accounts, cycles, onManageCycle, today }: Pick<Pr
   );
 }
 
-function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, payment, strategy, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, today, userId, deviceId }: {
+function BillingCycleCard({ account, accountCycleCount, cycle, transactions, statement, payment, statementCycle, onManageCycle, onAddStatement, onCancelStatement, onStatementSaved, onPayStatement, onEditPayment, today, userId, deviceId }: {
   account: FinancialAccount;
   accountCycleCount: number;
   cycle: CreditCardCycle;
   transactions: CreditCardCycleTransaction[];
   statement: CreditCardStatement | undefined;
   payment: CreditCardPayment | undefined;
-  strategy: CreditCardStatementStrategy | undefined;
   statementCycle: CreditCardCycle | null;
   onManageCycle: Props["onManageCycle"];
   onAddStatement: Props["onAddStatement"];
@@ -150,7 +146,6 @@ function BillingCycleCard({ account, accountCycleCount, cycle, transactions, sta
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 5 }}>Statement date: {statement.statement_date} · Due: {statement.due_date}</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Balance: {formatPeso(statement.statement_balance_centavos)} · Minimum: {formatPeso(statement.minimum_due_centavos)}</Text>
               <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 2 }}>Finance charges: {formatPeso(statement.finance_charge_centavos)}</Text>
-              <CreditCardRepaymentStrategy userId={userId} deviceId={deviceId} statement={statement} strategy={strategy} onSaved={onStatementSaved} />
              {payment ? (() => {
                const status = calculateCreditCardPaymentStatus(payment.amount_centavos, statement.statement_balance_centavos, statement.minimum_due_centavos);
                const remaining = Math.max(0, statement.statement_balance_centavos - payment.amount_centavos);
@@ -224,7 +219,7 @@ export default function CreditCardCollections({ userId, deviceId, accounts, cycl
         const account = accountsById.get(cycle.account_id);
         if (!account) return null;
          const statement = statements.find((item) => item.cycle_id === cycle.id);
-         return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={visibleCycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} strategy={statement ? strategies.find((item) => item.statementId === statement.id) : undefined} statementCycle={statementCycle} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onStatementSaved={onStatementSaved} onPayStatement={onPayStatement} onEditPayment={onEditPayment} today={today} userId={userId} deviceId={deviceId} />;
+         return <BillingCycleCard key={cycle.id} account={account} accountCycleCount={visibleCycles.filter((item) => item.account_id === account.id).length} cycle={cycle} transactions={transactions.filter((transaction) => transaction.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} statementCycle={statementCycle} onManageCycle={onManageCycle} onAddStatement={onAddStatement} onCancelStatement={onCancelStatement} onStatementSaved={onStatementSaved} onPayStatement={onPayStatement} onEditPayment={onEditPayment} today={today} userId={userId} deviceId={deviceId} />;
       })}
     </View>
   );
