@@ -796,7 +796,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 - View the current billing cycle and prior billing-cycle history
 - Record regular purchases, installment purchases, statements, and payments for a billing cycle
 - View the current statement balance, minimum amount due, due date, finance charges, payment status, and credit balance
-- Select a repayment strategy for each active credit-card statement: Pay in Full / Pay Minimum / Custom Payment
+- Select a repayment strategy for each active credit-card account: Pay in Full / Pay Minimum / Percentage / Custom Payment
 
 ### 7.3 Credit Card Account Form
 
@@ -861,7 +861,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Add only the installment amortization due for a billing cycle to that cycle
 - Support zero-interest and interest-bearing installments
 - Treat the full installment purchase as reducing available credit when the issuer does so
-- Restore available credit as installment payments post only to the extent recognized by the issuer
+- Restore available credit when a payment is recorded; reconcile the displayed available credit when issuer records differ
 - Do not create an Obligation Module record for a credit-card installment; its monthly amortization is a payment requirement within the applicable billing cycle
 
 ### 7.5.1 Credit Card Transaction Form
@@ -1050,37 +1050,37 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 
 ### 7.8 Credit Card Budgeting
 
-- Require the user to select a repayment strategy for every active statement before its due date is planned
+- Require the user to select a repayment strategy for every active credit-card account before its statement due dates are planned
 - Pay in Full target: statement balance
 - Pay Minimum target: minimum amount due, with a warning that finance charges may apply
-- Percentage target: a user-selected percentage of the authoritative statement balance, rounded to centavos and constrained to at least the minimum amount due and no more than the statement balance, with a warning that finance charges may apply
+- Percentage target: a user-selected percentage of the authoritative statement balance, rounded to centavos and no more than the statement balance, with a warning that finance charges may apply
 - Custom Payment target: an amount at least equal to the minimum amount due and less than the statement balance, with a warning that finance charges may apply
-- Use the selected statement target as the credit card's payment requirement in the debt budget
-- Keep each credit-card statement's repayment strategy independent; do not apply Snowball or Avalanche to statement targets
+- Apply the selected account repayment strategy to each credit-card statement target in the debt budget
+- Keep each credit-card account's repayment strategy independent from Snowball and Avalanche; do not apply Snowball or Avalanche to statement targets
 
 ### 7.8.1 Credit Card Repayment Strategy Form
 
-- Billing cycle or statement
+- Credit-card account
 - Repayment strategy: Pay in Full / Pay Minimum / Percentage / Custom Payment
 - Repayment percentage, when applicable
 - Custom payment amount, when applicable
 
 ### 7.8.2 Credit Card Repayment Strategy Placeholders
 
-- Billing cycle or statement: `Select billing cycle or statement`
+- Credit-card account: `Select credit card`
 - Repayment strategy: `Select repayment strategy`
 - Repayment percentage: `Enter repayment percentage`
 - Custom payment amount: `Enter custom payment amount`
 
 ### 7.8.3 Credit Card Repayment Strategy Validation
 
-- Require a repayment strategy for every active statement before its due date is planned
+- Require a repayment strategy for every active credit-card account before its statement due dates are planned
 - Set Pay in Full target to the statement balance
 - Set Pay Minimum target to the minimum amount due
-- Derive Percentage from the authoritative statement balance and require its rounded target to be at least the minimum amount due and no more than the statement balance
+- Derive Percentage from the authoritative statement balance and require its rounded target to be no more than the statement balance
 - Require Custom Payment to be at least the minimum amount due and less than the statement balance
 - Warn when Pay Minimum or Custom Payment may result in finance charges
-- Keep each statement strategy independent from Snowball and Avalanche
+- Keep each credit-card account strategy independent from Snowball and Avalanche
 
 ### 7.8.4 Credit Card States
 
@@ -1091,7 +1091,7 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Empty-statement state: a billing cycle has no recorded bank statement
 - Estimated-statement state: the application-calculated balance is shown until the bank statement is recorded
 - Statement-pending state: ask whether the bank-provided statement has been received for the current cycle
-- Repayment-strategy-required state: an active statement has no selected repayment strategy
+- Repayment-strategy-required state: an active credit-card account has no selected repayment strategy
 - Payment-recording state: a credit-card payment is being recorded
 - Transaction-recording state: a regular or installment purchase is being recorded
 - Installment-creation state: a long-term installment record is being created
