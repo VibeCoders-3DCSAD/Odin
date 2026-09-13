@@ -1498,6 +1498,8 @@ Debt Manager's Record payment action opens Transaction Management with the selec
 - Set a goal target and target date
 - Set a goal priority
 - Link a goal to a financial account
+- Treat a linked financial account as the goal's holding account; a savings
+  goal is not itself a financial account
 - View goal details
 - Edit a savings goal
 - Mark a goal as achieved
@@ -1513,9 +1515,27 @@ Debt Manager's Record payment action opens Transaction Management with the selec
 - Target date
 - Priority
 - Linked financial account
+- Yield type: None / Annual Percentage Yield / Fixed Periodic Dividend
+- Annual yield or dividend rate, when applicable
+- Compounding frequency, when applicable
+- Yield accrual start date and crediting schedule, when applicable
+- Target method: Fixed Amount / Essential-Expense Coverage, for Emergency
+  Fund goals
+- Essential-expense coverage period: 3 / 4 / 5 / 6 months, when applicable
+- Product type: Flexible Savings / Time Deposit / Pag-IBIG MP2 / Other Locked
+  Product
+- Maturity date, when applicable
+- Early-withdrawal availability: Allowed / Not Allowed / Unknown
+- Early-withdrawal penalty type and amount or rate, when known
 - Notes
 
 Savings categories remain provisional until validated through RRL, informal interviews, and SME review. Essentially, savings category or type must be validated against the top 10 savings of Filipinos to be financially free (e.g. emergency fund)
+
+For an Emergency Fund goal using Essential-Expense Coverage, the suggested target
+equals the selected coverage period multiplied by the user's current monthly
+essential expenses. The user may override the suggested target. A change to the
+essential-expense baseline refreshes the suggestion but does not silently replace
+a user-approved target.
 
 ### 8.4 Savings Goal Form Placeholders
 
@@ -1526,6 +1546,17 @@ Savings categories remain provisional until validated through RRL, informal inte
 - Target date: `Select target date`
 - Priority: `Select goal priority`
 - Linked financial account: `Select financial account`
+- Yield type: `Select yield type`
+- Annual yield or dividend rate: `Enter annual yield or dividend rate`
+- Compounding frequency: `Select compounding frequency`
+- Yield accrual start date: `Select yield accrual start date`
+- Yield crediting schedule: `Select yield crediting schedule`
+- Target method: `Select target method`
+- Essential-expense coverage period: `Select coverage period`
+- Product type: `Select product type`
+- Maturity date: `Select maturity date`
+- Early-withdrawal availability: `Select early withdrawal availability`
+- Early-withdrawal penalty: `Enter early withdrawal penalty`
 - Notes: `Add goal notes`
 
 ### 8.5 Savings Selectors
@@ -1533,93 +1564,138 @@ Savings categories remain provisional until validated through RRL, informal inte
 - Savings category or type selector
 - Goal priority selector
 - Linked financial account selector
-- Savings goal selector for contributions and transaction links
-- Contribution source selector: Manual / Budget-based / Transaction
+- Savings goal selector for contributions, withdrawals, and transaction links
+- Savings activity selector: Contribution / Withdrawal
 - Savings allocation strategy selector
+- Yield type selector
+- Target method selector
+- Essential-expense coverage-period selector
+- Product type selector
+- Early-withdrawal availability selector
 - Date-range selector for contribution history
 - Include only active goals in allocation selectors
 - Show an empty selector state when no eligible goals or accounts exist
 
-### 8.6 Savings Contributions
+### 8.6 Savings Contributions and Withdrawals
 
-- Add a contribution to a goal
-- View contribution history
-- Edit a contribution
-- Delete a contribution with confirmation
-- Support manual and budget-based contributions
-- Record a transaction as a savings contribution through an explicit transaction-entry action
-- Select the savings goal receiving the contribution
-- Create a contribution and then record its related transaction
-- Display updated goal progress after contribution changes
+- Add a contribution to a goal by opening Transaction Management with the
+  selected goal context
+- Edit a contribution by opening its linked transaction in Transaction
+  Management
+- Use Transaction Management's recurring transaction option to schedule
+  recurring savings contributions
+- Record a transaction as a savings contribution through an explicit
+  transaction-entry action
+- Create a contribution and its linked transaction together when the
+  transaction is saved
+- Record a withdrawal from a goal by opening Transaction Management with the
+  selected goal context
+- Require a withdrawal to use a Transfer transaction from the goal's linked
+  holding account to an eligible destination account
+- Create a withdrawal and its linked transfer together when the transfer is
+  saved
+- View contribution and withdrawal history separately
+- Delete a contribution or withdrawal only as a correction action and require
+  confirmation
+- Display updated goal progress after linked transaction changes
 
-### 8.7 Savings Contribution Form
+### 8.7 Savings Activity Transaction Context
 
-- Contribution amount
-- Contribution date
-- Contribution source
-- Source account
-- Record as savings contribution, when applicable
-- Savings goal, when recording a transaction as a contribution
-- Record transaction from contribution, when applicable
-- Notes
+- Savings goal
+- Savings activity: Contribution / Withdrawal
+- Linked holding account, when recording a withdrawal
+- Transaction Management owns the amount, date, accounts, recurrence schedule,
+  and notes inputs
 
-The user must explicitly choose the savings-contribution action. Supported entry paths are transaction -> contribution and contribution -> transaction. Ordinary transactions do not create or link to savings contributions automatically.
+The user must explicitly choose the savings activity. Savings Goals opens
+Transaction Management with the selected goal and activity context. Ordinary
+transactions do not create or link to savings activities automatically.
 
-### 8.8 Savings Contribution Form Placeholders
+### 8.8 Savings Activity Context Placeholders
 
-- Contribution amount: `Enter contribution amount`
-- Contribution date: `Select contribution date`
-- Contribution source: `Select contribution source`
-- Source account: `Select source account`
 - Savings goal: `Select savings goal`
-- Record transaction from contribution: `Record a transaction`
-- Notes: `Add contribution notes`
+- Savings activity: `Select savings activity`
+- Linked holding account: `Select holding account`
 
 ### 8.9 Savings Validation
 
-- Prevent submission when required goal or contribution fields are empty
+- Prevent submission when required goal or savings activity fields are empty
 - Require a goal name and savings category
 - Require a positive target amount
 - Require a non-negative starting amount
 - Require a target date when the goal is date-based
-- Require a positive contribution amount
-- Require a contribution date
-- Require a savings goal for every contribution
-- Require a source account when recording a related transaction
+- Require a valid non-negative annual yield or dividend rate when applicable
+- Require a valid compounding frequency and yield crediting schedule when yield
+  applies
+- Require a target method and coverage period from 3 to 6 months when an
+  Emergency Fund uses Essential-Expense Coverage
+- Require a maturity date for Time Deposit and Pag-IBIG MP2 goals
+- Require a valid non-negative early-withdrawal penalty when provided
+- Require a linked holding account before recording a withdrawal
+- Require all contribution and withdrawal transaction inputs through
+  Transaction Management
 - Prevent a completed or archived goal from receiving new contributions unless explicitly reopened
+- Require explicit confirmation before an early withdrawal from a locked goal
 - Display validation feedback beside the affected field
 - Preserve valid entries after validation failure
 - Clear field errors when corrected
 
 ### 8.10 Savings Calculations
 
-- Current goal amount is the starting amount plus contributions less deleted contributions
+- Current goal amount is the starting amount plus active contributions plus
+  credited yield less active withdrawals
+- Estimated accrued yield is shown separately from credited yield and does not
+  change the current goal amount
 - Remaining goal amount is the target amount less the current goal amount
 - Progress percentage is current goal amount compared with target amount
 - Required contribution is the remaining goal amount distributed across the remaining contribution periods
 - Current-cycle shortfall is the required contribution less contributions made during the cycle
 - Progress cannot be negative and cannot exceed 100% in the primary progress display
-- Remaining goal amount cannot be negative; excess contributions are shown separately when supported
+- Remaining goal amount cannot be negative
+- An amount that exceeds a goal's required contribution remains available as
+  savings surplus for allocation to eligible goals
+- Savings surplus is allocated using Emergency Fund priority, then the selected
+  Avalanche or Snowball strategy; allocation results do not create transfers
+  without an explicit user-confirmed transaction
 - A goal is achieved when current goal amount meets or exceeds the target amount
-- Deleted contributions do not affect active totals, progress, or projections
+- A withdrawal can return an achieved goal to Active when its current amount
+  falls below the target
+- Deleted contributions and withdrawals do not affect active totals, progress,
+  or projections
 - Archived goals remain in historical totals but are excluded from active allocation
+- Round goal targets, contributions, withdrawals, yield calculations,
+  allocations, and projections to centavos using standard half-up rounding
+- Do not retain fractional-centavo balances
 
 ### 8.11 Savings Allocation
 
-- Select a global savings allocation strategy
+- Select a global savings allocation strategy: Avalanche / Snowball
 - Allocate the Budgeting Module's Savings Envelope across goals
+- Allocate savings surplus across eligible goals
 - Prioritize each goal's required contribution
 - Use the global strategy to resolve surplus allocation
 - View allocation results for the current budget cycle
 - View the reason for each allocation
 - Review and approve supported allocation changes
 
+Savings Avalanche allocates after Emergency Fund priority to the eligible goal
+with the largest current-cycle shortfall. Savings Snowball allocates after
+Emergency Fund priority to the eligible goal with the smallest remaining goal
+amount.
+
 ### 8.12 Savings Allocation Rules
 
 - Budgeting provides one Savings Envelope for the current cycle
 - Savings allocates the envelope across active goals
+- Emergency Fund goals take priority until their selected essential-expense
+  coverage target is met
 - Required contributions are allocated before surplus
-- The global savings strategy breaks ties when surplus remains
+- When the envelope cannot cover all required contributions, fund Emergency
+  Fund goals first, then apply the selected strategy
+- Apply Emergency Fund priority and the selected strategy to all savings
+  surplus after required contributions are allocated
+- Display funded, partially funded, and unfunded amounts with the reason for
+  each allocation
 - Debt payoff surplus is handled by Budgeting before it becomes part of the Savings Envelope
 
 The Budgeting Module provides one Savings Envelope. The Savings Goals Module distributes that envelope across savings goals. Debt payoff surplus is handled by Budgeting before it reaches this allocation step.
@@ -1642,6 +1718,10 @@ The Budgeting Module provides one Savings Envelope. The Savings Goals Module dis
 - Goal target and current progress
 - Target date
 - Contribution history
+- Withdrawal history
+- Scheduled recurring contribution transactions
+- Configured yield assumptions and credited yield
+- Maturity date and known early-withdrawal penalties
 - Current-cycle Savings Envelope
 - Available income and expense forecast data
 - Budget and debt information when available
@@ -1652,7 +1732,10 @@ The Budgeting Module provides one Savings Envelope. The Savings Goals Module dis
 - Receive missed-contribution reminders
 - Receive behind-goal alerts
 - Receive goal-achieved notifications
-- Receive replenishment reminders after an approved goal reduction
+- Receive replenishment reminders after a withdrawal from an Emergency Fund
+  goal
+- Receive reminders for upcoming recurring savings contributions
+- Receive reminders when a recurring savings contribution is missed
 - Acknowledge, dismiss, or snooze savings alerts
 - Configure savings notification preferences
 
@@ -1665,7 +1748,10 @@ The Budgeting Module provides one Savings Envelope. The Savings Goals Module dis
 - Empty-selector state: no eligible goal, account, or category is available
 - Empty-envelope state: no savings money is available for allocation
 - Goal-creation state: goal form is open for input
-- Contribution-entry state: contribution form is open for input
+- Contribution-entry state: contribution transaction context is open in
+  Transaction Management
+- Withdrawal-entry state: withdrawal transfer context is open in Transaction
+  Management
 - Transaction-linking state: a related transaction is being created or linked
 - Validation-failure state: goal or contribution inputs are invalid
 - Saving state: goal or contribution changes are being saved
@@ -1673,6 +1759,8 @@ The Budgeting Module provides one Savings Envelope. The Savings Goals Module dis
 - Behind state: goal is below its required contribution schedule
 - On-track state: goal is meeting its required contribution schedule
 - Achieved state: goal target has been met
+- Locked-withdrawal-warning state: an early withdrawal may be restricted or
+  penalized
 - Archived state: goal is retained for history but excluded from active planning
 - Deleted state: goal or contribution is marked deleted and excluded from active views
 - Projection-fallback state: personalized projection data is unavailable and fallback estimates are shown
@@ -1707,7 +1795,9 @@ The Budgeting Module provides one Savings Envelope. The Savings Goals Module dis
 - Archived savings goal: `This goal is archived and excluded from active planning. Restore it before making new contributions.`
 - Deleted savings goal: `This goal is deleted and unavailable for new contributions. Choose an active goal instead.`
 - Goal creation state: `The savings goal form is ready. Enter the goal details before saving.`
-- Contribution entry state: `The contribution form is ready. Enter the contribution details before saving.`
+- Contribution entry state: `The contribution transaction is ready. Review the account details and recurrence before saving.`
+- Withdrawal entry state: `The withdrawal transfer is ready. Review the source and destination accounts before saving.`
+- Locked withdrawal warning: `This goal may have an early-withdrawal restriction or penalty. Review the terms before continuing.`
 - Active savings goal: `This goal is active and included in current planning. Review its progress and next contribution.`
 
 #### Progress and Success Messages
@@ -1719,7 +1809,8 @@ The Budgeting Module provides one Savings Envelope. The Savings Goals Module dis
 
 #### Confirmation Messages
 
-- Savings deletion confirmation: `Deleting this goal or contribution removes it from active savings records. Cancel to keep it or confirm deletion to continue.`
+- Savings deletion confirmation: `Deleting this goal, contribution, or withdrawal removes it from active savings records. Cancel to keep it or confirm deletion to continue.`
+- Savings withdrawal confirmation: `This withdrawal reduces the goal balance. Cancel to keep the money in this goal or confirm the transfer to continue.`
 - Savings archive confirmation: `Archiving this goal removes it from active planning but preserves its history. Cancel to keep it active or confirm archiving to continue.`
 
 #### Recovery Messages
@@ -2252,6 +2343,8 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Preserve transaction context while credit-card details are completed
 - Allow the user to record the transaction as a savings contribution
 - Allow the user to select a savings goal for the contribution
+- Allow the user to record a transfer as a savings withdrawal
+- Allow the user to select a savings goal for the withdrawal
 - Allow the user to record the transaction as an obligation payment
 - Allow the user to select an obligation for the payment
 - Allow the user to record the transaction as a Credit Card statement payment
@@ -2272,6 +2365,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Posting date, when the source account is a Credit Card
 - Credit-card purchase type: Regular / Installment, when the source account is a Credit Card
 - Record as savings contribution option
+- Record as savings withdrawal option
 - Savings goal selector when the option is enabled
 - Record as debt payment option
 - Debt selector when the option is enabled
@@ -2307,6 +2401,7 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Transaction date selector
 - Recurrence schedule selector when recurring is enabled
 - Savings goal selector for explicit savings contributions
+- Savings goal selector for explicit savings withdrawals
 - Debt selector for explicit debt payments
 - Obligation selector for explicit obligation payments
 - Credit Card statement selector for explicit Credit Card statement payments
@@ -2323,8 +2418,14 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Prevent the same account from being both source and destination
 - Require a category or subcategory when applicable
 - Require a recurrence schedule when recurring is enabled
-- Allow at most one explicit savings, non-credit-card debt, obligation, or Credit Card statement-payment relationship per transaction
+- Allow at most one explicit savings contribution, savings withdrawal,
+  non-credit-card debt, obligation, or Credit Card statement-payment
+  relationship per transaction
 - Require the selected savings goal, debt, obligation, or Credit Card statement when its option is enabled
+- Require a Transfer transaction, source account, destination account, and
+  selected savings goal when recording a savings withdrawal
+- Require the selected savings goal's linked holding account to be the transfer
+  source for a savings withdrawal
 - Prevent unsupported links between transaction types and related records
 - Display validation feedback beside the affected field
 - Preserve valid entries after validation failure
@@ -2352,12 +2453,24 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 
 ### 12.8 Contribution Transaction Flow
 
-- User records a contribution for a savings goal
-- User selects the option to record a related transaction
-- Odin opens the transaction form with the contribution context
-- User completes or confirms the transaction details
-- Odin links the transaction to the contribution
+- User selects Add Contribution for a savings goal
+- Odin opens the transaction form with the selected savings-goal context and
+  savings-contribution option enabled
+- User completes the transaction details and may enable a recurring schedule
+- Odin creates the transaction and contribution together
 - The savings goal displays the contribution and related transaction
+
+### 12.8.1 Savings Withdrawal Transaction Flow
+
+- User selects a savings withdrawal from Savings Goals or Transaction Management
+- Odin opens the transaction form with the selected savings-goal context
+- User completes a Transfer from the goal's linked holding account to an
+  eligible destination account
+- Odin creates the transfer and withdrawal together
+- Odin requires confirmation when the goal is a locked product and the
+  withdrawal occurs before maturity
+- The savings goal displays the withdrawal, related transfer, and updated
+  progress
 
 ### 12.9 Debt Payment Transaction Flow
 
@@ -2432,6 +2545,10 @@ Current category groups are Essentials, Obligatory, Discretionary, and Financial
 - Deleted transactions no longer contribute to active balances or summaries
 - Transfer totals are excluded from income and expense totals
 - Linked savings contributions update the selected goal's current amount and progress
+- Linked savings withdrawals update the selected goal's current amount and
+  progress
+- Each generated recurring transaction with a savings-contribution relationship
+  creates its linked savings contribution
 - Linked debt payments update the selected debt's remaining balance and progress
 - Linked obligation payments update the selected obligation occurrence's paid and remaining amounts
 - Linked Credit Card statement payments update the selected statement's paid amount, payment status, and credit balance
