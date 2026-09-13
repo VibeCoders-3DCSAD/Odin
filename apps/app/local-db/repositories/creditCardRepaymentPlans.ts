@@ -12,11 +12,11 @@ export type CreditCardStrategy = {
 
 export async function listCreditCardStrategies(userId: string): Promise<CreditCardStrategy[]> {
   const db = await initDatabase();
-  const rows = await db.getAllAsync<{ account_id: string; repayment_strategy: CreditCardRepaymentStrategy; repayment_custom_amount_centavos: number | null; repayment_percentage_bps: number | null; version: number }>(
-    "SELECT account_id, repayment_strategy, repayment_custom_amount_centavos, repayment_percentage_bps, version FROM credit_card_details WHERE user_id = ? AND deleted = 0 AND repayment_strategy IS NOT NULL",
+  const rows = await db.getAllAsync<{ account_id: string; strategy: CreditCardRepaymentStrategy; custom_amount_centavos: number | null; percentage_bps: number | null; version: number }>(
+    "SELECT account_id, strategy, custom_amount_centavos, percentage_bps, version FROM credit_card_repayment_preferences WHERE user_id = ? AND deleted = 0",
     userId,
   );
-  return rows.map((row) => ({ accountId: row.account_id, strategy: row.repayment_strategy, customAmountCentavos: row.repayment_custom_amount_centavos, percentageBps: row.repayment_percentage_bps, version: row.version }));
+  return rows.map((row) => ({ accountId: row.account_id, strategy: row.strategy, customAmountCentavos: row.custom_amount_centavos, percentageBps: row.percentage_bps, version: row.version }));
 }
 
 export async function saveCreditCardStrategy(userId: string, deviceId: string, accountId: string, strategy: CreditCardRepaymentStrategy, customAmountCentavos: number | null, percentageBps: number | null = null): Promise<void> {
@@ -26,12 +26,17 @@ export async function saveCreditCardStrategy(userId: string, deviceId: string, a
   const db = await initDatabase();
   const timestamp = new Date().toISOString();
   await db.withTransactionAsync(async () => {
-    const current = await db.getFirstAsync<{ version: number }>("SELECT version FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0", accountId, userId);
-    if (!current) throw new LocalDbError("NOT_FOUND", "Credit card not found.");
+    const current = await db.getFirstAsync<{ version: number }>("SELECT version FROM credit_card_repayment_preferences WHERE account_id = ? AND user_id = ? AND deleted = 0", accountId, userId);
     const custom = strategy === "custom_payment" ? customAmountCentavos : null;
     const percentage = strategy === "percentage_of_statement" ? percentageBps : null;
-    await db.runAsync("UPDATE credit_card_details SET repayment_strategy = ?, repayment_custom_amount_centavos = ?, repayment_percentage_bps = ?, version = version + 1, updated_at = ? WHERE account_id = ? AND user_id = ? AND deleted = 0", strategy, custom, percentage, timestamp, accountId, userId);
-    await enqueueOperation(db, { userId, deviceId, entity: "credit_card_details", recordId: accountId, operationType: "update", baseVersion: current.version, changedFields: ["account_id", "repayment_strategy", "repayment_custom_amount_centavos", "repayment_percentage_bps"], payload: { account_id: accountId, repayment_strategy: strategy, repayment_custom_amount_centavos: custom, repayment_percentage_bps: percentage }, failureMessage: "Your credit-card repayment strategy could not be saved." });
+    if (current) {
+      await db.runAsync("UPDATE credit_card_repayment_preferences SET strategy = ?, custom_amount_centavos = ?, percentage_bps = ?, version = version + 1, updated_at = ? WHERE account_id = ? AND user_id = ? AND deleted = 0", strategy, custom, percentage, timestamp, accountId, userId);
+    } else {
+      const card = await db.getFirstAsync<{ account_id: string }>("SELECT account_id FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0", accountId, userId);
+      if (!card) throw new LocalDbError("NOT_FOUND", "Credit card not found.");
+      await db.runAsync("INSERT INTO credit_card_repayment_preferences (account_id, user_id, strategy, custom_amount_centavos, percentage_bps, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?)", accountId, userId, strategy, custom, percentage, timestamp, timestamp);
+    }
+    await enqueueOperation(db, { userId, deviceId, entity: "credit_card_repayment_preferences", recordId: accountId, operationType: current ? "update" : "create", baseVersion: current?.version ?? null, changedFields: ["account_id", "strategy", "custom_amount_centavos", "percentage_bps"], payload: { account_id: accountId, strategy, custom_amount_centavos: custom, percentage_bps: percentage }, failureMessage: "This credit-card repayment strategy changed elsewhere. Review it before retrying." });
   });
 }
 

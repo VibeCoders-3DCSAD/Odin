@@ -717,12 +717,14 @@ export async function listFinancialAccounts(userId: string): Promise<FinancialAc
              cc.cutoff_day AS cc_cutoff_day,
              cc.statement_day AS cc_statement_day,
              cc.alert_threshold_percent AS cc_alert_threshold_percent,
-             cc.repayment_strategy AS cc_repayment_strategy,
-             cc.repayment_custom_amount_centavos AS cc_repayment_custom_amount_centavos,
-             cc.repayment_percentage_bps AS cc_repayment_percentage_bps
-     FROM financial_accounts fa
-     LEFT JOIN credit_card_details cc
-       ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+              preference.strategy AS cc_repayment_strategy,
+              preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+              preference.percentage_bps AS cc_repayment_percentage_bps
+      FROM financial_accounts fa
+      LEFT JOIN credit_card_details cc
+        ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+      LEFT JOIN credit_card_repayment_preferences preference
+        ON preference.account_id = fa.id AND preference.user_id = fa.user_id AND preference.deleted = 0
      WHERE fa.user_id = ? AND fa.deleted = 0
      ORDER BY fa.sort_order`,
     userId,
@@ -744,12 +746,14 @@ export async function getFinancialAccount(
              cc.cutoff_day AS cc_cutoff_day,
              cc.statement_day AS cc_statement_day,
              cc.alert_threshold_percent AS cc_alert_threshold_percent,
-             cc.repayment_strategy AS cc_repayment_strategy,
-             cc.repayment_custom_amount_centavos AS cc_repayment_custom_amount_centavos,
-             cc.repayment_percentage_bps AS cc_repayment_percentage_bps
-     FROM financial_accounts fa
-     LEFT JOIN credit_card_details cc
-       ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+              preference.strategy AS cc_repayment_strategy,
+              preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+              preference.percentage_bps AS cc_repayment_percentage_bps
+      FROM financial_accounts fa
+      LEFT JOIN credit_card_details cc
+        ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+      LEFT JOIN credit_card_repayment_preferences preference
+        ON preference.account_id = fa.id AND preference.user_id = fa.user_id AND preference.deleted = 0
      WHERE fa.user_id = ? AND fa.id = ? AND fa.deleted = 0`,
     userId,
     id,

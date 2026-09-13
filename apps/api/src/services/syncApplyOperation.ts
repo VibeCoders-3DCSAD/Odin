@@ -25,6 +25,7 @@ const SYNCED_ENTITIES = new Set([
   "recurring_transaction_occurrences",
   "budgets",
   "credit_card_details",
+  "credit_card_repayment_preferences",
   "credit_card_cycles",
   "credit_card_installments",
   "credit_card_transactions",
@@ -153,13 +154,14 @@ const CREDIT_CARD_PAYMENT_UPDATE_FIELDS = new Set([
 const CREDIT_CARD_DETAILS_CREATE_FIELDS = new Set([
   "account_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
   "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
-  "repayment_strategy", "repayment_custom_amount_centavos", "repayment_percentage_bps",
 ]);
 
 const CREDIT_CARD_DETAILS_UPDATE_FIELDS = new Set([
   "account_id", "issuer", "credit_limit_centavos", "cutoff_day", "statement_day",
   "notes", "billing_cycle_days", "alert_threshold_percent",
-  "repayment_strategy", "repayment_custom_amount_centavos", "repayment_percentage_bps",
+]);
+const CREDIT_CARD_REPAYMENT_PREFERENCE_FIELDS = new Set([
+  "account_id", "strategy", "custom_amount_centavos", "percentage_bps",
 ]);
 
 const TRANSACTION_CREATE_FIELDS = new Set([
@@ -453,13 +455,20 @@ async function validateCreatePayload(
     optionalFiniteInteger(sanitized, "available_credit_centavos");
     optionalFiniteInteger(sanitized, "billing_cycle_days");
     optionalFiniteInteger(sanitized, "alert_threshold_percent");
-    if (sanitized.repayment_strategy !== undefined && !["pay_in_full", "pay_minimum", "percentage_of_statement", "custom_payment"].includes(sanitized.repayment_strategy as string)) throw new Error("repayment_strategy is invalid");
-    optionalFiniteInteger(sanitized, "repayment_custom_amount_centavos");
-    optionalFiniteInteger(sanitized, "repayment_percentage_bps");
-    if (sanitized.repayment_custom_amount_centavos !== undefined && sanitized.repayment_custom_amount_centavos !== null && (sanitized.repayment_custom_amount_centavos as number) <= 0) throw new Error("repayment_custom_amount_centavos must be positive");
-    validateOptionalRange(sanitized, "repayment_percentage_bps", 1, 10_000);
     validateOptionalRange(sanitized, "billing_cycle_days", 28, 31);
     validateOptionalRange(sanitized, "alert_threshold_percent", 0, 100);
+    await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
+    return sanitized;
+  }
+
+  if (entity === "credit_card_repayment_preferences") {
+    assertOnlyAllowed(payload, CREDIT_CARD_REPAYMENT_PREFERENCE_FIELDS);
+    const sanitized = sanitizePayload(payload, CREDIT_CARD_REPAYMENT_PREFERENCE_FIELDS);
+    requireString(sanitized, "account_id");
+    requireString(sanitized, "strategy");
+    if (!["pay_in_full", "pay_minimum", "percentage_of_statement", "custom_payment"].includes(sanitized.strategy as string)) throw new Error("repayment strategy is invalid");
+    if (sanitized.strategy === "custom_payment") requirePositiveInteger(sanitized, "custom_amount_centavos");
+    if (sanitized.strategy === "percentage_of_statement" && (!Number.isSafeInteger(sanitized.percentage_bps) || (sanitized.percentage_bps as number) < 1 || (sanitized.percentage_bps as number) > 10_000)) throw new Error("percentage_bps must be between 1 and 10000");
     await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
     return sanitized;
   }
@@ -1061,6 +1070,8 @@ async function validateUpdatePayload(
     allowedFields = CREDIT_CARD_PAYMENT_UPDATE_FIELDS;
   } else if (entity === "credit_card_details") {
     allowedFields = CREDIT_CARD_DETAILS_UPDATE_FIELDS;
+  } else if (entity === "credit_card_repayment_preferences") {
+    allowedFields = CREDIT_CARD_REPAYMENT_PREFERENCE_FIELDS;
   } else if (entity === "transactions") {
     allowedFields = TRANSACTION_UPDATE_FIELDS;
   } else if (entity === "income_sources") {
@@ -1113,6 +1124,17 @@ async function validateUpdatePayload(
   }
   if (entity === "credit_card_settlements" || entity === "credit_card_statement_strategies") {
     return validateCreatePayload(supabase, userId, entity, sanitized);
+  }
+
+  if (entity === "credit_card_repayment_preferences") {
+    if (sanitized.account_id !== undefined) {
+      if (typeof sanitized.account_id !== "string") throw new Error("account_id must be a string");
+      await verifyAccountOwnership(supabase, userId, sanitized.account_id);
+    }
+    if (sanitized.strategy !== undefined && !["pay_in_full", "pay_minimum", "percentage_of_statement", "custom_payment"].includes(sanitized.strategy as string)) throw new Error("repayment strategy is invalid");
+    if (sanitized.custom_amount_centavos !== undefined && sanitized.custom_amount_centavos !== null) requirePositiveInteger(sanitized, "custom_amount_centavos");
+    if (sanitized.percentage_bps !== undefined && sanitized.percentage_bps !== null && (!Number.isSafeInteger(sanitized.percentage_bps) || (sanitized.percentage_bps as number) < 1 || (sanitized.percentage_bps as number) > 10_000)) throw new Error("percentage_bps must be between 1 and 10000");
+    return sanitized;
   }
 
   if (entity === "credit_card_cycles") {
@@ -1210,7 +1232,7 @@ async function validateUpdatePayload(
     if (entity === "credit_card_details") {
       if (key === "account_id") {
         if (typeof value !== "string" || !value) throw new Error("account_id must be a non-empty string");
-      } else if (["issuer", "notes", "repayment_strategy"].includes(key)) {
+      } else if (["issuer", "notes"].includes(key)) {
         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
        } else if (key === "cutoff_day" || key === "statement_day") {
          if (key === "statement_day" && value === null) continue;

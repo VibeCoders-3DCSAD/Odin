@@ -21,6 +21,7 @@ export type SyncableEntity =
   | "alert_suppression_rules"
   | "credit_card_cycles"
   | "credit_card_details"
+  | "credit_card_repayment_preferences"
   | "credit_card_transactions"
   | "credit_card_installments"
   | "credit_card_statements"

@@ -14,6 +14,7 @@ export const SYNCED_TABLES = [
   "subcategories",
   "financial_accounts",
   "credit_card_details",
+  "credit_card_repayment_preferences",
   "transactions",
   "transaction_line_items",
   "transaction_templates",
@@ -68,7 +69,10 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   credit_card_details: new Set([
     "account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
     "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
-    "repayment_strategy", "repayment_custom_amount_centavos", "repayment_percentage_bps",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  credit_card_repayment_preferences: new Set([
+    "account_id", "user_id", "strategy", "custom_amount_centavos", "percentage_bps",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   income_sources: new Set([
@@ -180,6 +184,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
   credit_card_details: "account_id",
+  credit_card_repayment_preferences: "account_id",
   credit_card_transactions: "transaction_id",
   debt_strategy_preferences: "user_id",
   credit_card_statement_strategies: "statement_id",

@@ -51,6 +51,7 @@ const SYNCED_TABLES = [
   "budgets",
   "budget_allocations",
   "credit_card_details",
+  "credit_card_repayment_preferences",
   "credit_card_cycles",
   "credit_card_installments",
   "credit_card_transactions",
@@ -69,6 +70,7 @@ const SYNCED_TABLES = [
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
   credit_card_details: "account_id",
+  credit_card_repayment_preferences: "account_id",
   credit_card_transactions: "transaction_id",
   debt_strategy_preferences: "user_id",
   credit_card_statement_strategies: "statement_id",
@@ -94,7 +96,7 @@ export async function pushOperations(
         ? "apply_budget_sync_operation_v2"
         : prepared.entity === "debt_accounts" || prepared.entity === "debt_payments" || prepared.entity === "user_debt_priorities" || prepared.entity === "debt_strategy_preferences"
           ? "apply_debt_sync_operation"
-          : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements" || prepared.entity === "credit_card_payments" || prepared.entity === "credit_card_settlements" || prepared.entity === "credit_card_statement_strategies"
+          : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_repayment_preferences" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements" || prepared.entity === "credit_card_payments" || prepared.entity === "credit_card_settlements" || prepared.entity === "credit_card_statement_strategies"
             ? "apply_credit_card_sync_operation"
             : "apply_sync_operation";
       const { data, error } = await supabase.rpc(rpcName, {
@@ -203,7 +205,8 @@ export async function pullChanges(
       || table === "budgets"
        || table === "budget_allocations"
         || table === "credit_card_cycles"
-        || table === "credit_card_details"
+         || table === "credit_card_details"
+         || table === "credit_card_repayment_preferences"
          || table === "credit_card_installments"
          || table === "credit_card_transactions"
            || table === "credit_card_statements"
