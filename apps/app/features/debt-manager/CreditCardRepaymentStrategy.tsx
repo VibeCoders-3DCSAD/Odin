@@ -10,7 +10,17 @@ function formatPeso(amount: number): string {
   return `PHP ${(amount / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function CreditCardRepaymentStrategy({ userId, deviceId, accountId, statement, strategy, onSaved }: { userId: string; deviceId: string; accountId: string; statement?: CreditCardStatement; strategy?: CreditCardStrategy; onSaved: () => Promise<void> }) {
+type Props = {
+  userId: string;
+  deviceId: string;
+  accountId: string;
+  statement?: CreditCardStatement;
+  strategy?: CreditCardStrategy;
+  onPreviewChange?: (strategy: CreditCardStrategy) => void;
+  onSaved: () => Promise<void>;
+};
+
+export default function CreditCardRepaymentStrategy({ userId, deviceId, accountId, statement, strategy, onPreviewChange, onSaved }: Props) {
   const [selected, setSelected] = useState(strategy?.strategy ?? "pay_in_full");
   const [percentage, setPercentage] = useState(strategy?.percentageBps == null ? "" : String(strategy.percentageBps / 100));
   const [customAmount, setCustomAmount] = useState(strategy?.customAmountCentavos == null ? "" : (strategy.customAmountCentavos / 100).toFixed(2));
@@ -19,6 +29,18 @@ export default function CreditCardRepaymentStrategy({ userId, deviceId, accountI
   const percentageBps = Math.round(Number(percentage) * 100);
   const customCentavos = Math.round(Number(customAmount) * 100);
   const target = statement ? statementPaymentTargetCentavos(statement, { accountId, strategy: selected, customAmountCentavos: selected === "custom_payment" ? customCentavos : null, percentageBps: selected === "percentage_of_statement" ? percentageBps : null, version: strategy?.version ?? 0 }) : null;
+
+  function preview(nextStrategy: CreditCardStrategy["strategy"], nextPercentage = percentage, nextCustomAmount = customAmount) {
+    const nextPercentageBps = Math.round(Number(nextPercentage) * 100);
+    const nextCustomCentavos = Math.round(Number(nextCustomAmount) * 100);
+    onPreviewChange?.({
+      accountId,
+      strategy: nextStrategy,
+      customAmountCentavos: nextStrategy === "custom_payment" && Number.isFinite(nextCustomCentavos) && nextCustomCentavos > 0 ? nextCustomCentavos : null,
+      percentageBps: nextStrategy === "percentage_of_statement" && Number.isFinite(nextPercentageBps) && nextPercentageBps > 0 && nextPercentageBps <= 10_000 ? nextPercentageBps : null,
+      version: strategy?.version ?? 0,
+    });
+  }
 
   async function save() {
     setSaving(true);
@@ -36,9 +58,9 @@ export default function CreditCardRepaymentStrategy({ userId, deviceId, accountI
   return <View style={{ borderTopWidth: 1, borderTopColor: P.line, marginTop: 10, paddingTop: 10 }}>
     <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink }}>Repayment strategy</Text>
     <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 4 }}>Applies to every billing cycle for this card. Installment amortization is tracked separately.</Text>
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 8 }}>{OPTIONS.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: selected === value }} onPress={() => setSelected(value)} style={{ borderWidth: 1, borderColor: selected === value ? P.brand : P.line, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 7 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: selected === value ? P.brand : P.ink }}>{label}</Text></Pressable>)}</View>
-    {selected === "percentage_of_statement" ? <TextInput accessibilityLabel="Repayment percentage" value={percentage} onChangeText={setPercentage} placeholder="Enter repayment percentage" keyboardType="decimal-pad" style={{ backgroundColor: P.card, borderRadius: 8, padding: 9, marginTop: 8 }} /> : null}
-    {selected === "custom_payment" ? <TextInput accessibilityLabel="Custom repayment amount" value={customAmount} onChangeText={setCustomAmount} placeholder="Enter custom payment amount" keyboardType="decimal-pad" style={{ backgroundColor: P.card, borderRadius: 8, padding: 9, marginTop: 8 }} /> : null}
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 8 }}>{OPTIONS.map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: selected === value }} onPress={() => { setSelected(value); preview(value); }} style={{ borderWidth: 1, borderColor: selected === value ? P.brand : P.line, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 7 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: selected === value ? P.brand : P.ink }}>{label}</Text></Pressable>)}</View>
+    {selected === "percentage_of_statement" ? <TextInput accessibilityLabel="Repayment percentage" value={percentage} onChangeText={(value) => { setPercentage(value); preview(selected, value, customAmount); }} placeholder="Enter repayment percentage" keyboardType="decimal-pad" style={{ backgroundColor: P.card, borderRadius: 8, padding: 9, marginTop: 8 }} /> : null}
+    {selected === "custom_payment" ? <TextInput accessibilityLabel="Custom repayment amount" value={customAmount} onChangeText={(value) => { setCustomAmount(value); preview(selected, percentage, value); }} placeholder="Enter custom payment amount" keyboardType="decimal-pad" style={{ backgroundColor: P.card, borderRadius: 8, padding: 9, marginTop: 8 }} /> : null}
     {statement ? <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 7 }}>Current statement target: {target === null || !Number.isFinite(target) ? "Enter a valid amount" : formatPeso(target)}</Text> : null}
     {selected !== "pay_in_full" ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.error, marginTop: 3 }}>{selected === "custom_payment" ? "Custom payments are not recommended. " : ""}A target below the full balance may incur finance charges.</Text> : null}
     {error ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.error, marginTop: 5 }}>{error}</Text> : null}

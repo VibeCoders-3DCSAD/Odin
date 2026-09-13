@@ -11,6 +11,12 @@ const mockListCreditCardStatements = jest.fn();
 const mockCreateCreditCardStatement = jest.fn();
 const mockListCreditCardInstallments = jest.fn();
 const mockListCreditCardPayments = jest.fn();
+const mockListCreditCardStrategies = jest.fn();
+type ForecastSectionProps = {
+  forecast: { points: Array<{ cycleId: string; targetCentavos: number }> } | null;
+  isLoading: boolean;
+};
+const mockCreditCardForecastSection = jest.fn((_props: ForecastSectionProps) => null);
 const mockDatePickerRef: { props: { onChange: (event: { type: string }, date?: Date) => void; minimumDate?: Date } | null } = { props: null };
 
 jest.mock("../../../local-db/repositories/financialFoundations", () => ({
@@ -39,8 +45,19 @@ jest.mock("../../../local-db/repositories/creditCardPayments", () => ({
 }));
 
 jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
-  listCreditCardStrategies: jest.fn().mockResolvedValue([]),
+  listCreditCardStrategies: (...args: unknown[]) => mockListCreditCardStrategies(...args),
+  saveCreditCardStrategy: jest.fn().mockResolvedValue(undefined),
+  statementPaymentTargetCentavos: (statement: { statement_balance_centavos: number; minimum_due_centavos: number }, strategy: { strategy: string; customAmountCentavos: number | null; percentageBps: number | null }) => {
+    if (strategy.strategy === "pay_in_full") return statement.statement_balance_centavos;
+    if (strategy.strategy === "pay_minimum") return statement.minimum_due_centavos;
+    if (strategy.strategy === "percentage_of_statement") return Math.round(statement.statement_balance_centavos * (strategy.percentageBps ?? 0) / 10_000);
+    return strategy.customAmountCentavos;
+  },
 }));
+
+jest.mock("../CreditCardForecastSection", () => {
+  return (props: ForecastSectionProps) => mockCreditCardForecastSection(props);
+});
 
 jest.mock("../../../local-db/repositories/creditCardSettlements", () => ({
   listCreditCardSettlements: jest.fn().mockResolvedValue([]),
@@ -62,6 +79,8 @@ beforeEach(() => {
   mockListCreditCardStatements.mockResolvedValue([]);
   mockListCreditCardInstallments.mockResolvedValue([]);
   mockListCreditCardPayments.mockResolvedValue([]);
+  mockListCreditCardStrategies.mockResolvedValue([]);
+  mockCreditCardForecastSection.mockClear();
   mockCreateCreditCardStatement.mockResolvedValue({});
   mockDatePickerRef.props = null;
   jest.restoreAllMocks();
@@ -256,6 +275,54 @@ it("shows current-cycle credit-card transactions", async () => {
     expect(view.getByText("Grocery Store")).toBeTruthy();
     expect(view.getByText("₱1,250.00")).toBeTruthy();
     expect(view.getByText("2024-02-01 · Regular purchase")).toBeTruthy();
+  });
+});
+
+it("previews repayment strategy changes before saving", async () => {
+  mockListFinancialAccounts.mockResolvedValue([{
+    id: "card-1", name: "Visa", kind: "credit_card", status: "active", currentBalanceCentavos: 0, openingBalanceCentavos: 0,
+    includeInDashboardBalance: false, institutionName: null, openedOn: null, archivedAt: null, sortOrder: 0,
+    creditCardDetails: { creditLimitCentavos: 10_000_000, availableCreditCentavos: 7_000_000, issuer: null, notes: null, billingCycleDays: 31, cutoffDay: 4, statementDay: null, alertThresholdPercent: null, repaymentStrategy: null, repaymentCustomAmountCentavos: null, repaymentPercentageBps: null },
+  }]);
+  mockListCreditCardCycles.mockResolvedValue([{
+    id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-08-05", cutoff_date: "2026-09-04", statement_date: "2026-09-04",
+    version: 1, deleted: false, created_at: "2026-08-05T00:00:00.000Z", updated_at: "2026-08-05T00:00:00.000Z",
+  }]);
+  mockListCreditCardCycleTransactions.mockResolvedValue([{
+    transaction_id: "transaction-1", account_id: "card-1", cycle_id: "cycle-1", purchase_type: "regular", installment_id: null,
+    transaction_date: "2026-09-01", merchant_name: null, amount_centavos: 3_000_000,
+  }]);
+  mockListCreditCardStatements.mockResolvedValue([{
+    id: "statement-1", user_id: "user-1", cycle_id: "cycle-1", statement_date: "2026-09-04", due_date: "2099-09-15",
+    statement_balance_centavos: 3_000_000, minimum_due_centavos: 500_000, finance_charge_centavos: 0, authoritative: true,
+    version: 1, deleted: false, created_at: "2026-09-04T00:00:00.000Z", updated_at: "2026-09-04T00:00:00.000Z",
+  }]);
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
+  await waitFor(() => {
+    const props = mockCreditCardForecastSection.mock.calls.at(-1)?.[0];
+    expect(props?.forecast?.points.find((point) => point.cycleId.startsWith("forecast"))?.targetCentavos).toBe(3_000_000);
+  });
+  expect(mockCreditCardForecastSection.mock.calls.some(([props]) => props.isLoading)).toBe(true);
+
+  fireEvent.press(view.getByRole("radio", { name: "Minimum Due" }));
+
+  await waitFor(() => {
+    const props = mockCreditCardForecastSection.mock.calls.at(-1)?.[0];
+    expect(props?.forecast?.points.find((point) => point.cycleId.startsWith("forecast"))?.targetCentavos).toBe(500_000);
+  });
+
+  fireEvent.press(view.getByRole("radio", { name: "Percentage" }));
+  fireEvent.changeText(view.getByLabelText("Repayment percentage"), "50");
+  await waitFor(() => {
+    const props = mockCreditCardForecastSection.mock.calls.at(-1)?.[0];
+    expect(props?.forecast?.points.find((point) => point.cycleId.startsWith("forecast"))?.targetCentavos).toBe(1_500_000);
+  });
+
+  fireEvent.press(view.getByRole("radio", { name: "Custom" }));
+  fireEvent.changeText(view.getByLabelText("Custom repayment amount"), "10000");
+  await waitFor(() => {
+    const props = mockCreditCardForecastSection.mock.calls.at(-1)?.[0];
+    expect(props?.forecast?.points.find((point) => point.cycleId.startsWith("forecast"))?.targetCentavos).toBe(1_000_000);
   });
 });
 

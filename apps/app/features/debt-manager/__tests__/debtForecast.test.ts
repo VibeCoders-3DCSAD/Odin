@@ -3,7 +3,7 @@ import { buildDebtBalanceForecast, buildDebtForecast } from "../debtForecast";
 describe("buildDebtBalanceForecast", () => {
   it("projects scheduled payments from the next future due date until payoff", () => {
     expect(buildDebtBalanceForecast({ originalBalanceCentavos: 30000, currentBalanceCentavos: 30000, minimumPaymentCentavos: 10000, nextDueDate: "2026-01-01", paymentFrequency: "monthly", targetPayoffDate: "2026-04-01", status: "active", annualInterestRateBps: 0, interestMethod: "no_interest", interestPeriod: "none", typeSpecific: { startDate: null, feesCentavos: 0, penaltyInfo: null, termMonths: null } }, "2026-01-15")).toEqual([
-      { date: "2026-01-01", balanceCentavos: 30000 },
+      { date: "2026-01-01", balanceCentavos: 30000, eventType: "missed_payment" },
       { date: "2026-01-15", balanceCentavos: 30000 },
       { date: "2026-02-01", balanceCentavos: 20000 },
       { date: "2026-03-01", balanceCentavos: 10000 },
@@ -14,7 +14,7 @@ describe("buildDebtBalanceForecast", () => {
   it("keeps a missed past payment node flat and contributes at the next projected node", () => {
     const points = buildDebtBalanceForecast({ originalBalanceCentavos: 30000, currentBalanceCentavos: 30000, minimumPaymentCentavos: 5000, nextDueDate: "2026-09-16", paymentFrequency: "monthly", targetPayoffDate: "2027-03-16", status: "active", annualInterestRateBps: 0, interestMethod: "no_interest", interestPeriod: "none", typeSpecific: { startDate: "2026-09-01", feesCentavos: 0, penaltyInfo: null, termMonths: null } }, "2026-09-17");
     expect(points.slice(0, 3)).toEqual([
-      { date: "2026-09-16", balanceCentavos: 30000 },
+      { date: "2026-09-16", balanceCentavos: 30000, eventType: "missed_payment" },
       { date: "2026-09-17", balanceCentavos: 30000 },
       { date: "2026-10-16", balanceCentavos: 25000 },
     ]);
@@ -23,7 +23,7 @@ describe("buildDebtBalanceForecast", () => {
   it("keeps a missed node flat until a later recorded payment reduces the balance", () => {
     const points = buildDebtBalanceForecast({ originalBalanceCentavos: 30000, currentBalanceCentavos: 25000, minimumPaymentCentavos: 5000, nextDueDate: "2026-09-16", paymentFrequency: "monthly", targetPayoffDate: "2027-03-16", status: "active", annualInterestRateBps: 0, interestMethod: "no_interest", interestPeriod: "none", typeSpecific: { startDate: "2026-09-01", feesCentavos: 0, penaltyInfo: null, termMonths: null } }, "2026-10-11", [{ paymentDate: "2026-10-10", amountCentavos: 5000 }]);
     expect(points.slice(0, 4)).toEqual([
-      { date: "2026-09-16", balanceCentavos: 30000 },
+      { date: "2026-09-16", balanceCentavos: 30000, eventType: "missed_payment" },
       { date: "2026-10-10", balanceCentavos: 25000 },
       { date: "2026-10-11", balanceCentavos: 25000 },
       { date: "2026-10-16", balanceCentavos: 20000 },

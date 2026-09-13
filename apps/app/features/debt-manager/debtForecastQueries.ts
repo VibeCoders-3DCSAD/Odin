@@ -1,6 +1,7 @@
 import { getDebtAccount } from "../../local-db/repositories/debtAccounts";
 import { listDebtPayments } from "../../local-db/repositories/debtPayments";
 import { buildDebtForecast, getProjectedContributionForDate, type DebtForecast, type DebtForecastStatus } from "./debtForecast";
+import { getPhilippineToday } from "./debtTrendRange";
 
 export async function getDebtForecast(userId: string, debtId: string, asOf?: string): Promise<DebtForecast | null> {
   const debt = await getDebtAccount(userId, debtId);
@@ -13,7 +14,7 @@ export async function getForecastedPaymentDate(userId: string, debtId: string, a
   return (await getDebtForecast(userId, debtId, asOf))?.projectedPayoffDate ?? null;
 }
 
-export async function getForecastedPayment(userId: string, debtId: string, date: string, asOf = new Date().toISOString().slice(0, 10)): Promise<number | null> {
+export async function getForecastedPayment(userId: string, debtId: string, date: string, asOf = getPhilippineToday()): Promise<number | null> {
   const debt = await getDebtAccount(userId, debtId);
   if (!debt) return null;
   const payments = await listDebtPayments(userId, debtId);

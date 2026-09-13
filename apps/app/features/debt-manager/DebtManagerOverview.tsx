@@ -11,6 +11,7 @@ import { listCreditCardStrategies, type CreditCardStrategy } from "../../local-d
 import { buildCreditCardForecast } from "./creditCardForecast";
 import GlobalDebtTrend, { type GlobalDebtPoint } from "./GlobalDebtTrend";
 import { buildDebtForecast } from "./debtForecast";
+import { getPhilippineToday } from "./debtTrendRange";
 import { combineDebtBalanceSeries } from "./globalDebtForecast";
 
 type Props = { userId: string; onOpenCreditCards: () => void; onOpenNonCreditDebts: () => void };
@@ -28,8 +29,8 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
   const globalTrend = useMemo<GlobalDebtPoint[]>(() => {
     const activeCards = cards ?? [];
-    const asOfDate = new Date().toISOString().slice(0, 10);
-    const cardSeries = activeCards.map((card) => ({ points: buildCreditCardForecast({ cycles: cycles.filter((cycle) => cycle.account_id === card.id), transactions: transactions.filter((transaction) => transaction.account_id === card.id), statements, strategy: strategies.find((strategy) => strategy.accountId === card.id), payments, installments: installments.filter((installment) => installment.account_id === card.id), availableCreditCentavos: card.creditCardDetails?.availableCreditCentavos ?? 0, creditLimitCentavos: card.creditCardDetails?.creditLimitCentavos ?? 0, asOfDate }).points.map((point) => ({ date: point.date, balanceCentavos: Math.max(0, (card.creditCardDetails?.creditLimitCentavos ?? 0) - point.availableCreditCentavos) })) }));
+    const asOfDate = getPhilippineToday();
+    const cardSeries = activeCards.map((card) => ({ points: buildCreditCardForecast({ cycles: cycles.filter((cycle) => cycle.account_id === card.id), transactions: transactions.filter((transaction) => transaction.account_id === card.id), statements, strategy: strategies.find((strategy) => strategy.accountId === card.id), payments, installments: installments.filter((installment) => installment.account_id === card.id), availableCreditCentavos: card.creditCardDetails?.availableCreditCentavos ?? 0, creditLimitCentavos: card.creditCardDetails?.creditLimitCentavos ?? 0, billingCycleDays: card.creditCardDetails?.billingCycleDays ?? null, asOfDate }).points.map((point) => ({ date: point.date, balanceCentavos: Math.max(0, (card.creditCardDetails?.creditLimitCentavos ?? 0) - point.availableCreditCentavos) })) }));
     const debtSeries = trendDebts.map((debt) => ({ points: buildDebtForecast(debt, asOfDate, debtPayments.filter((payment) => payment.debt_account_id === debt.id).map((payment) => ({ paymentDate: payment.payment_date, amountCentavos: payment.amount_centavos }))).points }));
     return combineDebtBalanceSeries([...cardSeries, ...debtSeries]).map((point) => ({ date: point.date, debtCentavos: point.balanceCentavos }));
   }, [cards, cycles, debtPayments, installments, payments, strategies, statements, transactions, trendDebts]);

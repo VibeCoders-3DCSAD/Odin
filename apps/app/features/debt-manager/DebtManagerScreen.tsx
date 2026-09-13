@@ -14,10 +14,11 @@ import { listCreditCardPayments, type CreditCardPayment, type StatementPaymentCo
 import CreditCardCollections from "./CreditCardCollections";
 import CreditCardListScreen from "./CreditCardListScreen";
 import CreditCardForecastSection from "./CreditCardForecastSection";
-import { buildCreditCardForecast } from "./creditCardForecast";
 import { listCreditCardStrategies, type CreditCardStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
 import { listCreditCardSettlements, type CreditCardSettlement } from "../../local-db/repositories/creditCardSettlements";
 import CreditCardRepaymentStrategy from "./CreditCardRepaymentStrategy";
+import { getPhilippineToday } from "./debtTrendRange";
+import { useCreditCardForecast } from "./hooks/useCreditCardForecast";
 
 const P = {
   shell: "#fcf8f0",
@@ -43,6 +44,7 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
   const [installments, setInstallments] = useState<CreditCardInstallment[]>([]);
   const [payments, setPayments] = useState<CreditCardPayment[]>([]);
   const [strategies, setStrategies] = useState<CreditCardStrategy[]>([]);
+  const [previewStrategy, setPreviewStrategy] = useState<CreditCardStrategy | null>(null);
   const [settlements, setSettlements] = useState<CreditCardSettlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -98,6 +100,26 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
   }, [deviceId, userId]);
 
   useEffect(() => { load().catch(() => {}); }, [load]);
+  useEffect(() => { setPreviewStrategy(null); }, [accountId]);
+
+  const today = getPhilippineToday();
+  const selectedAccount = accountId ? accounts.find((account) => account.id === accountId) : undefined;
+  const strategy = accountId ? strategies.find((item) => item.accountId === accountId) : undefined;
+  const forecastStrategy = accountId
+    ? previewStrategy ?? strategy ?? { accountId, strategy: "pay_in_full" as const, customAmountCentavos: null, percentageBps: null, version: 0 }
+    : null;
+  const forecast = useCreditCardForecast(selectedAccount && forecastStrategy ? {
+    cycles: cycles.filter((cycle) => cycle.account_id === accountId),
+    transactions: cycleTransactions.filter((transaction) => transaction.account_id === accountId),
+    statements,
+    strategy: forecastStrategy,
+    payments,
+    installments: installments.filter((installment) => installment.account_id === accountId),
+    availableCreditCentavos: selectedAccount.creditCardDetails?.availableCreditCentavos ?? 0,
+    creditLimitCentavos: selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0,
+    billingCycleDays: selectedAccount.creditCardDetails?.billingCycleDays ?? null,
+    asOfDate: today,
+  } : null);
 
   function openCycleEditor(account: FinancialAccount, cycle: CreditCardCycle | null) {
     const defaults = cycle ?? (account.creditCardDetails ? calculateCurrentCreditCardCycle({ account_id: account.id, cutoff_day: account.creditCardDetails.cutoffDay }) : null);
@@ -140,14 +162,10 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
 
   if (!accountId) return <CreditCardListScreen accounts={accounts} cycles={cycles} onOpenCard={onOpenCard ?? (() => {})} />;
 
-  const selectedAccount = accounts.find((account) => account.id === accountId);
   if (!selectedAccount) return <View><Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.error }}>This credit card is unavailable.</Text><Pressable accessibilityRole="button" accessibilityLabel="Back to Credit Cards" onPress={onBack} style={{ marginTop: 12 }}><Text style={{ color: P.brand, fontWeight: "700" }}>Back to Credit Cards</Text></Pressable></View>;
-  const today = new Date().toISOString().slice(0, 10);
   const latestStatement = statements
-    .filter((statement) => cycles.find((cycle) => cycle.id === statement.cycle_id)?.account_id === accountId)
-    .sort((left, right) => right.due_date.localeCompare(left.due_date))[0];
-  const strategy = strategies.find((item) => item.accountId === accountId);
-  const forecast = buildCreditCardForecast({ cycles: cycles.filter((cycle) => cycle.account_id === accountId), transactions: cycleTransactions.filter((transaction) => transaction.account_id === accountId), statements, strategy, payments, installments: installments.filter((installment) => installment.account_id === accountId), availableCreditCentavos: selectedAccount.creditCardDetails?.availableCreditCentavos ?? 0, creditLimitCentavos: selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0, asOfDate: today });
+    .filter((statement) => statement.authoritative && !statement.deleted && statement.statement_date <= today && cycles.find((cycle) => cycle.id === statement.cycle_id)?.account_id === accountId)
+    .sort((left, right) => right.statement_date.localeCompare(left.statement_date))[0];
 
   return (
     <View>
@@ -170,13 +188,13 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
           <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: P.ink, marginBottom: 10 }}>{editingCycle.cycle ? "Override billing cycle" : "Add billing cycle"}</Text>
            <Pressable accessibilityRole="button" accessibilityLabel="Billing-cycle start date" onPress={() => setCyclePicker("start")} style={{ backgroundColor: P.shell, padding: 10, borderRadius: 8, marginBottom: 8 }}><Text style={{ color: P.ink }}>{cycleStart || "Select billing-cycle start date"}</Text></Pressable>
            <Pressable accessibilityRole="button" accessibilityLabel="Cut-off date" onPress={() => setCyclePicker("cutoff")} style={{ backgroundColor: P.shell, padding: 10, borderRadius: 8 }}><Text style={{ color: P.ink }}>{cycleCutoff || "Select cut-off date"}</Text></Pressable>
-           {cyclePicker ? <DateTimePicker value={new Date(`${(cyclePicker === "start" ? cycleStart : cycleCutoff) || new Date().toISOString().slice(0, 10)}T12:00:00`)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(event, date) => { if (event.type === "set" && date) { const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; if (cyclePicker === "start") setCycleStart(value); else setCycleCutoff(value); setCycleError(null); } if (Platform.OS !== "ios") setCyclePicker(null); }} /> : null}
+           {cyclePicker ? <DateTimePicker value={new Date(`${(cyclePicker === "start" ? cycleStart : cycleCutoff) || today}T12:00:00`)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(event, date) => { if (event.type === "set" && date) { const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; if (cyclePicker === "start") setCycleStart(value); else setCycleCutoff(value); setCycleError(null); } if (Platform.OS !== "ios") setCyclePicker(null); }} /> : null}
           {cycleError ? <Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 12, marginTop: 7 }}>{cycleError}</Text> : null}
           <View style={{ flexDirection: "row", gap: 16, marginTop: 10 }}><Pressable onPress={() => setEditingCycle(null)}><Text style={{ color: P.muted, fontWeight: "700" }}>Cancel</Text></Pressable><Pressable disabled={cycleSaving} onPress={() => saveCycle().catch(() => {})}><Text style={{ color: P.brand, fontWeight: "700" }}>{cycleSaving ? "Saving..." : "Save cycle"}</Text></Pressable></View>
         </View>
        ) : null}
-       <CreditCardRepaymentStrategy userId={userId} deviceId={deviceId} accountId={accountId} statement={latestStatement} strategy={strategy} onSaved={load} />
-       <CreditCardForecastSection points={forecast.points} status={forecast.status} creditLimitCentavos={selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0} />
+       <CreditCardRepaymentStrategy key={accountId} userId={userId} deviceId={deviceId} accountId={accountId} statement={latestStatement} strategy={strategy} onPreviewChange={setPreviewStrategy} onSaved={async () => { await load(); setPreviewStrategy(null); }} />
+       <CreditCardForecastSection forecast={forecast.forecast} isLoading={forecast.isLoading} creditLimitCentavos={selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0} />
        <CreditCardCollections
         userId={userId}
         deviceId={deviceId}
