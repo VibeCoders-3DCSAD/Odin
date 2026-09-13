@@ -797,6 +797,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Record regular purchases, installment purchases, statements, and payments for a billing cycle
 - View the current statement balance, minimum amount due, due date, finance charges, payment status, and credit balance
 - Select a repayment strategy for each active credit-card account: Pay in Full / Pay Minimum / Percentage / Custom Payment
+- Reconcile an issuer-reported available-credit amount at the credit-card account level
 
 ### 7.3 Credit Card Account Form
 
@@ -862,6 +863,7 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Support zero-interest and interest-bearing installments
 - Treat the full installment purchase as reducing available credit when the issuer does so
 - Restore available credit when a payment is recorded; reconcile the displayed available credit when issuer records differ
+- Require explicit confirmation before replacing Odin's calculated available credit with an issuer-reported amount
 - Do not create an Obligation Module record for a credit-card installment; its monthly amortization is a payment requirement within the applicable billing cycle
 
 ### 7.5.1 Credit Card Transaction Form
@@ -986,10 +988,10 @@ This document defines product-level capabilities, user-facing form fields, domai
 - Prevent a payment from exceeding the statement balance
 - Keep the official credit limit unchanged by an overpayment
 - Do not automatically settle, shorten, or reduce an installment because of an overpayment
-- Allow a user to record a separate installment early-settlement request with settlement date, remaining principal, settlement amount, pre-termination fee when applicable, and settlement status
-- Mark an installment completed only when the issuer recognizes the settlement
+- Allow a user to record a completed installment early settlement with settlement date, remaining principal, settlement amount, and pre-termination fee when applicable
+- Complete the installment when the early settlement is saved
 
-Credit-card payment status applies to a billing-cycle statement. It does not create an Obligation Module record or change the status of a linked installment unless the issuer recognizes an explicit early settlement.
+Credit-card payment status applies to a billing-cycle statement. It does not create an Obligation Module record or change the status of a linked installment unless the user records an explicit early settlement.
 
 ### 7.7.1 Credit Card Payment Form
 
@@ -1026,7 +1028,6 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Remaining principal
 - Settlement amount
 - Pre-termination fee, when applicable
-- Settlement status
 
 ### 7.7.5 Credit Card Early Settlement Form Placeholders
 
@@ -1035,7 +1036,6 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Remaining principal: `Enter remaining principal`
 - Settlement amount: `Enter settlement amount`
 - Pre-termination fee: `Enter pre-termination fee`
-- Settlement status: `Select settlement status`
 
 ### 7.7.6 Credit Card Early Settlement Validation
 
@@ -1044,13 +1044,13 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Require valid non-negative remaining principal
 - Require a valid positive settlement amount
 - Require a valid non-negative pre-termination fee when provided
-- Do not mark the installment completed until the issuer recognizes the settlement
+- Complete the installment when the early settlement is saved
 - Preserve valid entries after validation failure
 - Clear field errors when corrected
 
 ### 7.8 Credit Card Budgeting
 
-- Require the user to select a repayment strategy for every active credit-card account before its statement due dates are planned
+- Resolve an active credit-card account without a saved repayment strategy to Pay in Full
 - Pay in Full target: statement balance
 - Pay Minimum target: minimum amount due, with a warning that finance charges may apply
 - Percentage target: a user-selected percentage of the authoritative statement balance, rounded to centavos and no more than the statement balance, with a warning that finance charges may apply
@@ -1074,7 +1074,7 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 
 ### 7.8.3 Credit Card Repayment Strategy Validation
 
-- Require a repayment strategy for every active credit-card account before its statement due dates are planned
+- Resolve an absent repayment strategy to Pay in Full
 - Set Pay in Full target to the statement balance
 - Set Pay Minimum target to the minimum amount due
 - Derive Percentage from the authoritative statement balance and require its rounded target to be no more than the statement balance
@@ -1091,7 +1091,6 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Empty-statement state: a billing cycle has no recorded bank statement
 - Estimated-statement state: the application-calculated balance is shown until the bank statement is recorded
 - Statement-pending state: ask whether the bank-provided statement has been received for the current cycle
-- Repayment-strategy-required state: an active credit-card account has no selected repayment strategy
 - Payment-recording state: a credit-card payment is being recorded
 - Transaction-recording state: a regular or installment purchase is being recorded
 - Installment-creation state: a long-term installment record is being created
@@ -1099,7 +1098,6 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Minimum-satisfied state: payments meet the minimum amount due but not the statement balance
 - Partially-paid state: payments do not yet meet the minimum amount due
 - Installment-active state: an installment has remaining principal or months
-- Early-settlement-requested state: an early settlement was recorded and awaits issuer recognition
 - Installment-completed state: the issuer recognized the early settlement or final payment
 - Stale-state: card information may not reflect the latest issuer records
 - Error state: credit-card information could not be loaded or saved
@@ -1116,6 +1114,8 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Invalid repayment strategy: `Choose a valid repayment strategy and payment amount before continuing.`
 - Custom payment below minimum: `Custom payment must meet the minimum amount due. Enter a higher amount and try again.`
 - Custom payment not below statement balance: `Custom payment must be less than the statement balance. Choose Pay in Full or enter a lower amount.`
+- Invalid available credit: `Enter a valid available credit amount.`
+- Available credit exceeds limit: `Available credit cannot exceed the credit limit.`
 
 #### Notice Messages
 
@@ -1126,7 +1126,9 @@ Credit-card payment status applies to a billing-cycle statement. It does not cre
 - Fully paid: `This statement is fully paid. No remaining statement balance is currently recorded.`
 - Minimum satisfied: `The minimum payment is satisfied, but the remaining balance may incur finance charges.`
 - Partially paid: `This statement is not fully paid and the minimum amount due is not yet satisfied. Review the remaining payment.`
-- Early settlement pending: `The early settlement request was recorded. The installment remains active until the issuer recognizes it.`
+- Available-credit reconciliation warning: `Enter the available credit shown by your issuer, then review and confirm the authoritative change.`
+- Available-credit reconciliation confirmation: `This authoritative change replaces Odin's calculated available credit with the issuer-reported amount. Confirm only if it matches the issuer record.`
+- Available-credit reconciled: `Issuer-reported available credit was reconciled.`
 - Installment completed: `The installment settlement was recognized. Review the updated installment history.`
 - Stale credit-card data: `Credit-card information may be out of date. Refresh or reconcile it with the latest issuer records.`
 
