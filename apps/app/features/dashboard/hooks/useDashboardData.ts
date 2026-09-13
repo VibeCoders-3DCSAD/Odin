@@ -42,7 +42,7 @@ export async function loadDashboardData(userId: string) {
 
 export async function refreshDashboardData(userId: string, deviceId: string, accessToken: string): Promise<boolean> {
   try {
-    const result = await runSync(userId, deviceId, accessToken, { maxAttempts: 3 });
+    const result = await runSync(userId, deviceId, accessToken);
     if (!result.successful) return false;
     try {
       const historicalTransactions = await listForecastTransactions(userId);

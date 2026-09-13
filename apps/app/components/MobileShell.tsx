@@ -462,7 +462,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       }
 
       lastAutoSyncAt.current = Date.now();
-      const result = await runSync(userId, deviceId, accessToken, { maxAttempts: MAX_SYNC_ATTEMPTS });
+      const result = await runSync(userId, deviceId, accessToken);
       await refreshQueueCount();
       setSyncPending(result.hasMore);
 
@@ -679,7 +679,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
         let retryable = await getRetryableSyncStats();
         while (retryable.count > 0) {
-          await runSync(userId, deviceId, accessToken, { maxAttempts: MAX_SYNC_ATTEMPTS });
+          await runSync(userId, deviceId, accessToken);
           await refreshQueueCount();
 
           const nextRetryable = await getRetryableSyncStats();

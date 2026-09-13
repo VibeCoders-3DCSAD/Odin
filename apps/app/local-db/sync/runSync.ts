@@ -6,7 +6,9 @@ import {
   applyPullRow,
   SYNCED_TABLES,
 } from "./pullConvergence";
-import { syncQueueOrderByClause } from "./queueOrder";
+import { syncQueueEligibleStatusesClause, syncQueueOrderByClause } from "./queueOrder";
+import { markSyncConflict } from "./syncConflict";
+import { repairCreditCardPaymentCreateRows } from "./repairCreditCardPaymentCreates";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
@@ -32,10 +34,6 @@ type SyncResult = {
   errors: number;
   successful: boolean;
   hasMore: boolean;
-};
-
-type RunSyncOptions = {
-  maxAttempts?: number;
 };
 
 type QueueRow = {
@@ -65,13 +63,12 @@ export async function runSync(
   userId: string,
   deviceId: string,
   accessToken: string,
-  options: RunSyncOptions = {},
 ): Promise<SyncResult> {
   const syncKey = `${userId}:${deviceId}`;
   const existing = syncPromises.get(syncKey);
   if (existing) return existing;
 
-  const syncPromise = runSyncInternal(userId, deviceId, accessToken, options);
+  const syncPromise = runSyncInternal(userId, deviceId, accessToken);
   syncPromises.set(syncKey, syncPromise);
   try {
     return await syncPromise;
@@ -84,7 +81,6 @@ async function runSyncInternal(
   userId: string,
   deviceId: string,
   accessToken: string,
-  options: RunSyncOptions,
 ): Promise<SyncResult> {
   if (!userId || !accessToken || !deviceId) {
     return { pushed: 0, pulled: 0, errors: 0, successful: false, hasMore: false };
@@ -102,7 +98,7 @@ async function runSyncInternal(
     return { pushed: 0, pulled: 0, errors: 0, successful: false, hasMore: syncState.pullPending };
   }
 
-  const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken, options.maxAttempts);
+  const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken);
 
   let pulled = 0;
   let pullSuccessful = true;
@@ -157,17 +153,14 @@ async function pushQueue(
   userId: string,
   deviceId: string,
   accessToken: string,
-  maxAttempts?: number,
 ): Promise<{ pushed: number; errors: number }> {
   const rows = await db.getAllAsync<QueueRow>(
     `SELECT * FROM sync_queue
      WHERE user_id = ? AND device_id = ?
-       AND status IN ('pending', 'failed')
-       ${maxAttempts === undefined ? "" : "AND attempts < ?"}
-          ORDER BY ${syncQueueOrderByClause} LIMIT 50`,
+        AND ${syncQueueEligibleStatusesClause}
+           ORDER BY ${syncQueueOrderByClause} LIMIT 50`,
     userId,
     deviceId,
-    ...(maxAttempts === undefined ? [] : [maxAttempts]),
   );
 
   if (rows.length === 0) return { pushed: 0, errors: 0 };
@@ -181,6 +174,7 @@ async function pushQueue(
   await repairIncomeSourceSyncRows(db, repairedRows);
   await repairCreditCardDetailSyncRows(db, userId, deviceId, repairedRows);
   await repairCreditCardTransactionSyncRows(db, repairedRows);
+  await repairCreditCardPaymentCreateRows(db, userId, repairedRows);
 
   const operations = repairedRows.map((r) => ({
     operation_id: r.operation_id,
@@ -226,13 +220,7 @@ async function pushQueue(
       );
       pushed++;
     } else if (result.status === "conflict") {
-      const metadata = JSON.stringify({ reason: result.reason ?? "conflict", currentVersion: result.current_version ?? null, conflictedFields: result.conflicted_fields ?? [] });
-      await db.runAsync(
-        `UPDATE sync_queue SET status = 'discarded', discarded_at = CURRENT_TIMESTAMP,
-         last_error = ? WHERE operation_id = ?`,
-        metadata,
-        result.operation_id,
-      );
+      await markSyncConflict(db, result);
       errors++;
     } else {
       await db.runAsync(

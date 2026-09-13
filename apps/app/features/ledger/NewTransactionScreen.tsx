@@ -604,7 +604,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       showToast(isStatementPayment ? "Your credit-card payment was recorded. Review the statement status to confirm the update." : isEdit ? "Transaction updated" : "Transaction saved", "success");
       savePhase = "runSync";
       console.log("[DEBUG-TX-SAVE] starting runSync");
-      runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch((error) => {
+      runSync(userId, deviceId, accessToken).catch((error) => {
         console.error("[DEBUG-TX-SAVE] runSync failed", {
           name: error instanceof Error ? error.name : "unknown",
           message: error instanceof Error ? error.message : String(error),

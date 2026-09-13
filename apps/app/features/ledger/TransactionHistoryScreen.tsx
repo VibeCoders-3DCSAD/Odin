@@ -144,7 +144,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     try {
       await deleteTransaction(userId, deviceId, deleteTarget.id);
       showToast("Transaction deleted", "success");
-      runSync(userId, deviceId, accessToken, { maxAttempts: 3 }).catch(() => {});
+      runSync(userId, deviceId, accessToken).catch(() => {});
       setDeleteTarget(null);
       load();
     } catch (e) {
