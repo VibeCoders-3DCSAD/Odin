@@ -66,6 +66,7 @@ const SYNCED_TABLES = [
   "alert_notification_preferences",
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
+  "savings_goals",
 ] as const;
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -219,7 +220,8 @@ export async function pullChanges(
             || table === "credit_card_statement_strategies"
             || table === "alert_notification_preferences"
             || table === "anomaly_whitelist_rules"
-            || table === "alert_suppression_rules"
+             || table === "alert_suppression_rules"
+             || table === "savings_goals"
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);

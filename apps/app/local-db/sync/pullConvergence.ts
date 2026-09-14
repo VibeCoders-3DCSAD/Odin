@@ -39,6 +39,7 @@ export const SYNCED_TABLES = [
   "alert_notification_preferences",
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
+  "savings_goals",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -67,7 +68,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   credit_card_details: new Set([
-    "account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
+    "account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
     "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
@@ -153,7 +154,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   credit_card_transactions: new Set([
     "transaction_id", "user_id", "account_id", "cycle_id", "purchase_type", "installment_id",
-    "client_mutation_id", "applied_credit_centavos", "version", "deleted", "created_at", "updated_at", "last_synced_at",
+    "client_mutation_id", "applied_credit_centavos", "forecast_recorded_at", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   credit_card_statements: new Set([
     "id", "user_id", "cycle_id", "statement_date", "statement_balance_centavos", "minimum_due_centavos",
@@ -162,7 +163,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   credit_card_payments: new Set([
     "id", "user_id", "cycle_id", "statement_id", "transaction_id", "amount_centavos", "payment_date",
     "source_account_id", "notes", "issuer_recognized", "client_mutation_id", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
+    "forecast_recorded_at", "created_at", "updated_at", "last_synced_at",
   ]),
   debt_accounts: new Set([
     "id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status",
@@ -180,6 +181,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   alert_notification_preferences: new Set(["id", "user_id", "category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until", "version", "deleted", "updated_at"]),
   anomaly_whitelist_rules: new Set(["id", "user_id", "merchant_name", "subcategory_id", "base_amount_centavos", "tolerance_bps", "allow_any_amount", "status", "notes", "version", "deleted", "updated_at"]),
   alert_suppression_rules: new Set(["id", "user_id", "category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata", "version", "deleted", "updated_at"]),
+  savings_goals: new Set(["id", "user_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -295,7 +297,8 @@ export async function applyPullRow(
       table === "financial_accounts" ||
       table === "financial_obligations" ||
        table === "transactions" ||
-       table === "debt_accounts" ||
+        table === "debt_accounts" ||
+        table === "savings_goals" ||
        table === "transaction_templates" ||
       table === "recurring_transaction_templates" ||
        table === "recurring_transaction_occurrences"

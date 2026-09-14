@@ -1,0 +1,29 @@
+appId: com.odin.finances
+---
+- launchApp
+- tapOn:
+    text: "Savings"
+- tapOn:
+    text: "Add a savings goal"
+- assertVisible:
+    text: "Add savings goal"
+- assertVisible:
+    text: "Suggested monthly baseline: PHP.*"
+- tapOn:
+    text: "Save goal"
+- assertVisible:
+    text: "Emergency Fund"
+- tapOn:
+    text: "Edit savings goal"
+- tapOn:
+    text: "Save changes"
+- assertVisible:
+    text: "Emergency Fund"
+- tapOn:
+    text: "Delete savings goal"
+- assertVisible:
+    text: "Delete this savings goal\?"
+- tapOn:
+    text: "Confirm delete savings goal"
+- assertVisible:
+    text: "Start your first savings goal"

@@ -31,6 +31,7 @@ import SpendingForecastScreen from "../features/forecast/SpendingForecastScreen"
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
 import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
+import SavingsGoalsScreen from "../features/savings-goals/SavingsGoalsScreen";
 import type { CreditCardPayment, StatementPaymentContext } from "../local-db/repositories/creditCardPayments";
 import type { DebtPayment, DebtPaymentContext } from "../local-db/repositories/debtPayments";
 import DebtManagerOverview from "../features/debt-manager/DebtManagerOverview";
@@ -843,6 +844,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "budgeting") {
       return <BudgetingScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} />;
+    }
+
+    if (currentPage === "savings-goals") {
+      return <SavingsGoalsScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} />;
     }
 
     if (currentPage === "dashboard") {

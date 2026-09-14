@@ -40,6 +40,7 @@ const SYNCED_ENTITIES = new Set([
   "alert_notification_preferences",
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
+  "savings_goals",
 ]);
 
 const ALERT_PREFERENCE_CREATE_FIELDS = new Set(["category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until"]);
@@ -144,7 +145,7 @@ const CREDIT_CARD_STATEMENT_UPDATE_FIELDS = new Set([
 
 const CREDIT_CARD_PAYMENT_CREATE_FIELDS = new Set([
   "cycle_id", "statement_id", "transaction_id", "amount_centavos", "payment_date",
-  "source_account_id", "notes", "client_mutation_id",
+  "source_account_id", "notes", "client_mutation_id", "forecast_recorded_at",
 ]);
 
 const CREDIT_CARD_PAYMENT_UPDATE_FIELDS = new Set([
@@ -154,11 +155,12 @@ const CREDIT_CARD_PAYMENT_UPDATE_FIELDS = new Set([
 const CREDIT_CARD_DETAILS_CREATE_FIELDS = new Set([
   "account_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
   "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
+  "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
 ]);
 
 const CREDIT_CARD_DETAILS_UPDATE_FIELDS = new Set([
-  "account_id", "issuer", "credit_limit_centavos", "cutoff_day", "statement_day",
-  "notes", "billing_cycle_days", "alert_threshold_percent",
+  "account_id", "issuer", "credit_limit_centavos", "available_credit_centavos", "cutoff_day", "statement_day",
+  "notes", "billing_cycle_days", "alert_threshold_percent", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
 ]);
 const CREDIT_CARD_REPAYMENT_PREFERENCE_FIELDS = new Set([
   "account_id", "strategy", "custom_amount_centavos", "percentage_bps",
@@ -321,9 +323,12 @@ const DEBT_PRIORITY_FIELDS = new Set(["priorities"]);
 const CREDIT_CARD_SETTLEMENT_FIELDS = new Set(["installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status"]);
 const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy", "custom_amount_centavos", "percentage_bps"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
+const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos"]);
+const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
+const SAVINGS_GOAL_PRIORITIES = ["low", "medium", "high"];
 
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
-  "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos",
+  "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos", "forecast_recorded_at",
 ]);
 
 export async function prepareOperation(
@@ -436,6 +441,7 @@ async function validateCreatePayload(
     const sanitized = sanitizePayload(payload, CREDIT_CARD_PAYMENT_CREATE_FIELDS);
     for (const field of ["cycle_id", "statement_id", "transaction_id", "source_account_id", "client_mutation_id"]) requireString(sanitized, field);
     requireDateString(sanitized, "payment_date");
+    requireIsoTimestamp(sanitized, "forecast_recorded_at");
     requirePositiveInteger(sanitized, "amount_centavos");
     optionalString(sanitized, "notes");
     await verifyCreditCardPaymentReferences(supabase, userId, sanitized);
@@ -455,6 +461,9 @@ async function validateCreatePayload(
     optionalFiniteInteger(sanitized, "available_credit_centavos");
     optionalFiniteInteger(sanitized, "billing_cycle_days");
     optionalFiniteInteger(sanitized, "alert_threshold_percent");
+    optionalFiniteInteger(sanitized, "reconciled_available_credit_centavos");
+    optionalFiniteInteger(sanitized, "pre_reconciliation_available_credit_centavos");
+    if (sanitized.available_credit_reconciled_at !== undefined && sanitized.available_credit_reconciled_at !== null) requireIsoTimestamp(sanitized, "available_credit_reconciled_at");
     validateOptionalRange(sanitized, "billing_cycle_days", 28, 31);
     validateOptionalRange(sanitized, "alert_threshold_percent", 0, 100);
     await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
@@ -523,6 +532,9 @@ async function validateCreatePayload(
     if (sanitized.source !== "transaction" || sanitized.linked_transaction_type !== "expense") throw new Error("debt payment must link an expense transaction");
     return sanitized;
   }
+  if (entity === "savings_goals") {
+    return validateSavingsGoalPayload(payload, true);
+  }
   if (entity === "debt_strategy_preferences") {
     assertOnlyAllowed(payload, DEBT_STRATEGY_FIELDS); const sanitized = sanitizePayload(payload, DEBT_STRATEGY_FIELDS);
     if (sanitized.strategy !== "snowball" && sanitized.strategy !== "avalanche") throw new Error("strategy must be snowball or avalanche");
@@ -573,6 +585,7 @@ async function validateCreatePayload(
     }
     if (sanitized.purchase_type === "installment") requireString(sanitized, "installment_id");
     if (sanitized.purchase_type === "regular" && sanitized.installment_id != null) throw new Error("regular purchases cannot reference an installment");
+    requireIsoTimestamp(sanitized, "forecast_recorded_at");
     await verifyAccountOwnership(supabase, userId, sanitized.account_id as string);
     return sanitized;
   }
@@ -1080,6 +1093,8 @@ async function validateUpdatePayload(
     allowedFields = OBLIGATION_UPDATE_FIELDS;
   } else if (entity === "debt_accounts") {
     allowedFields = DEBT_ACCOUNT_FIELDS;
+  } else if (entity === "savings_goals") {
+    allowedFields = SAVINGS_GOAL_FIELDS;
   } else if (entity === "debt_payments") {
     allowedFields = DEBT_PAYMENT_FIELDS;
   } else if (entity === "debt_strategy_preferences") {
@@ -1170,6 +1185,18 @@ async function validateUpdatePayload(
     }
   }
 
+  if (entity === "credit_card_details" && sanitized.available_credit_centavos !== undefined && (!Number.isSafeInteger(sanitized.available_credit_centavos) || (sanitized.available_credit_centavos as number) < 0)) {
+    throw new Error("available_credit_centavos must be non-negative");
+  }
+  if (entity === "credit_card_details") {
+    const anchorFields = ["available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at"];
+    if (anchorFields.some((field) => sanitized[field] !== undefined)) {
+      if (Object.keys(sanitized).length !== anchorFields.length || !anchorFields.every((field) => sanitized[field] !== undefined)) throw new Error("reconciliation anchors can only be updated together");
+      for (const field of anchorFields.slice(0, 3)) if (!Number.isSafeInteger(sanitized[field]) || (sanitized[field] as number) < 0) throw new Error(`${field} must be a non-negative whole number`);
+      requireIsoTimestamp(sanitized, "available_credit_reconciled_at");
+    }
+  }
+
   if (entity === "debt_accounts") {
     if (sanitized.linked_account_id != null) { if (typeof sanitized.linked_account_id !== "string") throw new Error("linked_account_id must be a string or null"); await verifyAccountOwnership(supabase, userId, sanitized.linked_account_id); }
     if (sanitized.name !== undefined && (typeof sanitized.name !== "string" || !sanitized.name.trim())) throw new Error("name must be a non-empty string");
@@ -1183,10 +1210,15 @@ async function validateUpdatePayload(
     return sanitized;
   }
 
+  if (entity === "savings_goals") {
+    return validateSavingsGoalPayload(sanitized, false);
+  }
+
   if (entity === "credit_card_payments") {
     for (const [key, value] of Object.entries(sanitized)) {
       if (key === "amount_centavos") requirePositiveInteger(sanitized, key);
       else if (key === "payment_date") requireDateString(sanitized, key);
+      else if (key === "forecast_recorded_at") requireIsoTimestamp(sanitized, key);
       else if (key === "source_account_id") {
         if (typeof value !== "string" || !value) throw new Error("source_account_id must be a non-empty string");
         await verifyAccountOwnership(supabase, userId, value);
@@ -1232,8 +1264,10 @@ async function validateUpdatePayload(
     if (entity === "credit_card_details") {
       if (key === "account_id") {
         if (typeof value !== "string" || !value) throw new Error("account_id must be a non-empty string");
-      } else if (["issuer", "notes"].includes(key)) {
-        if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+       } else if (["issuer", "notes"].includes(key)) {
+         if (value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
+       } else if (key === "available_credit_reconciled_at") {
+         requireIsoTimestamp(sanitized, key);
        } else if (key === "cutoff_day" || key === "statement_day") {
          if (key === "statement_day" && value === null) continue;
         requireNumberInRange(sanitized, key, 1, 31);
@@ -1626,6 +1660,13 @@ function requireDateString(payload: Record<string, unknown>, field: string): voi
   }
 }
 
+function requireIsoTimestamp(payload: Record<string, unknown>, field: string): void {
+  const value = payload[field];
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value)) || !/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    throw new Error(`${field} must be an ISO-8601 timestamp`);
+  }
+}
+
 function parseDateString(value: string): Date {
   const date = new Date(`${value}T00:00:00.000Z`);
   if (date.toISOString().slice(0, 10) !== value) return new Date(NaN);
@@ -1716,6 +1757,26 @@ function requirePositiveInteger(payload: Record<string, unknown>, field: string)
   if (typeof v !== "number" || !Number.isInteger(v) || v <= 0) {
     throw new Error(`${field} must be a positive integer`);
   }
+}
+
+function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: boolean): Record<string, unknown> {
+  assertOnlyAllowed(payload, SAVINGS_GOAL_FIELDS);
+  const sanitized = sanitizePayload(payload, SAVINGS_GOAL_FIELDS);
+  if (creating) {
+    for (const field of ["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "priority"]) {
+      if (!(field in sanitized)) throw new Error(`${field} is required`);
+    }
+  }
+  if (sanitized.name !== undefined && (typeof sanitized.name !== "string" || !sanitized.name.trim())) throw new Error("name must be a non-empty string");
+  if (sanitized.goal_type !== undefined && !SAVINGS_GOAL_TYPES.includes(sanitized.goal_type as string)) throw new Error("goal_type is invalid");
+  if (sanitized.priority !== undefined && !SAVINGS_GOAL_PRIORITIES.includes(sanitized.priority as string)) throw new Error("priority is invalid");
+  if (sanitized.target_amount_centavos !== undefined) requirePositiveInteger(sanitized, "target_amount_centavos");
+  for (const field of ["starting_amount_centavos", "emergency_fund_baseline_centavos"]) {
+    const value = sanitized[field];
+    if (value !== undefined && value !== null && (!Number.isSafeInteger(value) || (value as number) < 0)) throw new Error(`${field} must be a non-negative whole number`);
+  }
+  if (sanitized.target_date !== undefined && sanitized.target_date !== null) requireDateString(sanitized, "target_date");
+  return sanitized;
 }
 
 function requireNumberInRange(payload: Record<string, unknown>, field: string, min: number, max: number): void {

@@ -101,7 +101,9 @@ export async function loadMigrations(): Promise<Migration[]> {
   const { default: m048 } = await import("./migrations/048_credit_card_percentage_strategies");
   const { default: m049 } = await import("./migrations/049_credit_card_account_repayment_strategy");
   const { default: m050 } = await import("./migrations/050_credit_card_repayment_preferences");
-  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040, m041, m042, m043, m044, m045, m046, m047, m048, m049, m050];
+  const { default: m051 } = await import("./migrations/051_savings_goals");
+  const { default: m052 } = await import("./migrations/052_credit_card_reconciliation_anchor");
+  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040, m041, m042, m043, m044, m045, m046, m047, m048, m049, m050, m051, m052];
 }
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
