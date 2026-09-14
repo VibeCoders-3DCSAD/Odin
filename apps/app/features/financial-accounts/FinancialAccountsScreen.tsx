@@ -35,6 +35,7 @@ import {
 } from "../../local-db/repositories/financialFoundations";
 import KebabTooltip from "../../components/KebabTooltip";
 import AvailableBalanceCard from "../../components/AvailableBalanceCard";
+import { getSavingsAccountDetails, SAVINGS_ACCOUNT_TYPES, type SavingsAccountDetailsInput, type SavingsAccountType, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
 
 const P = {
   shell: "#fcf8f0",
@@ -146,17 +147,21 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
     .filter((a) => a.status === "active" && a.includeInDashboardBalance)
     .reduce((sum, a) => sum + a.currentBalanceCentavos, 0);
 
-  const categoryAccounts = accounts.filter((account) => account.kind !== "credit_card");
+  const everydayAccounts = accounts.filter((account) => account.kind !== "credit_card" && account.kind !== "savings");
+  const savingsAccounts = accounts.filter((account) => account.kind === "savings");
   const creditCardAccounts = accounts.filter((account) => account.kind === "credit_card");
 
-  const handleCreate = async (input: CreateFinancialAccountInput) => {
-    await createFinancialAccount(userId, deviceId, input);
+  const handleCreate = async (input: CreateFinancialAccountInput, savingsDetails: SavingsAccountDetailsInput | null) => {
+    if (savingsDetails) validateSavingsAccountDetails(savingsDetails);
+    const { account } = await createFinancialAccount(userId, deviceId, input);
+    if (savingsDetails) await upsertSavingsAccountDetails(userId, deviceId, account.id, savingsDetails);
     setSheetVisible(false); await loadAccounts();
     onSyncRequested?.();
   };
 
-  const handleUpdate = async (input: CreateFinancialAccountInput) => {
+  const handleUpdate = async (input: CreateFinancialAccountInput, savingsDetails: SavingsAccountDetailsInput | null) => {
     if (!editingAccount) return;
+    if (savingsDetails) validateSavingsAccountDetails(savingsDetails);
     const balanceChange = input.openingBalanceCentavos ?? 0;
     await updateFinancialAccount(userId, deviceId, editingAccount.id, {
       ...input,
@@ -165,6 +170,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
         editingAccount.openingBalanceCentavos +
         balanceChange,
     } satisfies UpdateFinancialAccountInput);
+    if (savingsDetails) await upsertSavingsAccountDetails(userId, deviceId, editingAccount.id, savingsDetails);
     setSheetVisible(false); setEditingAccount(null);
     await loadAccounts();
     onSyncRequested?.();
@@ -221,9 +227,14 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
         </View>
       ) : (
         <>
-          {categoryAccounts.length > 0 ? (
-            <AccountGroup title="Categories">
-              {categoryAccounts.map(renderAccount)}
+          {everydayAccounts.length > 0 ? (
+            <AccountGroup title="Accounts">
+              {everydayAccounts.map(renderAccount)}
+            </AccountGroup>
+          ) : null}
+          {savingsAccounts.length > 0 ? (
+            <AccountGroup title="Savings Accounts">
+              {savingsAccounts.map(renderAccount)}
             </AccountGroup>
           ) : null}
           {creditCardAccounts.length > 0 ? (
@@ -233,7 +244,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
           ) : null}
         </>
       )}
-      <AccountFormSheet visible={sheetVisible} editing={editingAccount} onClose={() => { setSheetVisible(false); setEditingAccount(null); }} onSubmit={editingAccount ? handleUpdate : handleCreate} />
+      <AccountFormSheet userId={userId} visible={sheetVisible} editing={editingAccount} onClose={() => { setSheetVisible(false); setEditingAccount(null); }} onSubmit={editingAccount ? handleUpdate : handleCreate} />
     </>
   );
 }
@@ -259,7 +270,7 @@ function AccountTile({ account, negative, tileBg, amountColor, iconColor, onEdit
       <View style={{ flex: 1 }}>
         <Text numberOfLines={1} style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>{account.name}</Text>
         <Text style={{ fontSize: 10.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 2 }}>
-          {negative ? "Over available credit" : creditCardDetails?.availableCreditCentavos != null ? "Available credit" : KIND_LABELS[account.kind] ?? account.kind}
+          {negative ? "Over available credit" : creditCardDetails?.availableCreditCentavos != null ? "Available credit" : account.savingsAccountType === "personal_savings" ? "Personal Savings" : account.savingsAccountType === "high_yield_savings" ? "HYSA" : account.savingsAccountType === "time_deposit" ? "Time Deposit" : KIND_LABELS[account.kind] ?? account.kind}
         </Text>
       </View>
       <View style={{ alignItems: "flex-end", marginRight: 2 }}>
@@ -304,7 +315,7 @@ function DateField({ placeholder, value, error, onPress }: { placeholder: string
   );
 }
 
-function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: boolean; editing: FinancialAccount | null; onClose: () => void; onSubmit: (input: CreateFinancialAccountInput) => Promise<void> }) {
+function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { userId: string; visible: boolean; editing: FinancialAccount | null; onClose: () => void; onSubmit: (input: CreateFinancialAccountInput, savingsDetails: SavingsAccountDetailsInput | null) => Promise<void> }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<FinancialAccountKind>("bank");
   const [openingBalance, setOpeningBalance] = useState("");
@@ -314,6 +325,17 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
   const [billingCycle, setBillingCycle] = useState("");
   const [cutoffDay, setCutoffDay] = useState("");
   const [threshold, setThreshold] = useState("");
+  const [savingsType, setSavingsType] = useState<SavingsAccountType>("personal_savings");
+  const [interestRate, setInterestRate] = useState("");
+  const [minimumBalance, setMinimumBalance] = useState("");
+  const [baseInterestRate, setBaseInterestRate] = useState("");
+  const [effectiveInterestRate, setEffectiveInterestRate] = useState("");
+  const [interestConditions, setInterestConditions] = useState("");
+  const [higherRateEligible, setHigherRateEligible] = useState<boolean | null>(null);
+  const [principal, setPrincipal] = useState("");
+  const [maturityDate, setMaturityDate] = useState("");
+  const [termMonths, setTermMonths] = useState("");
+  const [earlyWithdrawalRule, setEarlyWithdrawalRule] = useState("");
   const [datePicker, setDatePicker] = useState<"opening" | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -332,10 +354,22 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
       setBillingCycle(cc && cc.billingCycleDays != null ? String(cc.billingCycleDays) : "");
       setCutoffDay(cc ? String(cc.cutoffDay) : "");
       setThreshold(cc && cc.alertThresholdPercent != null ? String(cc.alertThresholdPercent) : "");
+      if (editing.kind === "savings") {
+        getSavingsAccountDetails(userId, editing.id).then((details) => {
+          if (!details) return;
+          setSavingsType(details.accountType); setInterestRate(details.interestRateBps == null ? "" : String(details.interestRateBps / 100));
+          setMinimumBalance(details.minimumBalanceCentavos == null ? "" : String(details.minimumBalanceCentavos / 100));
+          setBaseInterestRate(details.baseInterestRateBps == null ? "" : String(details.baseInterestRateBps / 100));
+          setEffectiveInterestRate(details.effectiveInterestRateBps == null ? "" : String(details.effectiveInterestRateBps / 100));
+          setInterestConditions(details.interestConditions ?? ""); setHigherRateEligible(details.higherRateEligible); setPrincipal(details.principalCentavos == null ? "" : String(details.principalCentavos / 100));
+          setMaturityDate(details.maturityDate ?? ""); setTermMonths(details.termMonths == null ? "" : String(details.termMonths)); setEarlyWithdrawalRule(details.earlyWithdrawalRule ?? "");
+        }).catch(() => setFormError("Savings account details could not be loaded."));
+      }
     } else {
       setName(""); setKind("bank"); setOpeningBalance(""); setInstitutionName("");
       setOpenedOn(null);
       setCreditLimit(""); setBillingCycle(""); setCutoffDay(""); setThreshold("");
+      setSavingsType("personal_savings"); setInterestRate(""); setMinimumBalance(""); setBaseInterestRate(""); setEffectiveInterestRate(""); setInterestConditions(""); setHigherRateEligible(null); setPrincipal(""); setMaturityDate(""); setTermMonths(""); setEarlyWithdrawalRule("");
     }
     setDatePicker(null);
     setFieldErrors({});
@@ -405,7 +439,18 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
       }
     }
 
-    if (Object.keys(nextErrors).length > 0) { setFieldErrors(nextErrors); return; }
+    const asRateBps = (value: string) => value.trim() ? Math.round(Number(value) * 100) : null;
+    const asCentavos = (value: string) => value.trim() ? parseSafeCents(value) : null;
+    let savingsDetails: SavingsAccountDetailsInput | null = null;
+    if (kind === "savings") {
+      const interestRateBps = asRateBps(interestRate); const minimumBalanceCentavos = asCentavos(minimumBalance);
+      const baseInterestRateBps = asRateBps(baseInterestRate); const effectiveInterestRateBps = asRateBps(effectiveInterestRate);
+      const principalCentavos = asCentavos(principal); const parsedTermMonths = termMonths.trim() ? Number(termMonths) : null;
+      savingsDetails = { accountType: savingsType, interestRateBps, minimumBalanceCentavos, baseInterestRateBps, effectiveInterestRateBps, interestConditions: interestConditions.trim() || null, higherRateEligible, principalCentavos, maturityDate: maturityDate.trim() || null, termMonths: parsedTermMonths, earlyWithdrawalRule: earlyWithdrawalRule.trim() || null };
+      if ([interestRateBps, minimumBalanceCentavos, baseInterestRateBps, effectiveInterestRateBps, principalCentavos].some((value) => value !== null && (!Number.isSafeInteger(value) || value < 0))) setFormError("Savings amounts and rates must be valid non-negative values.");
+    }
+
+    if (Object.keys(nextErrors).length > 0 || (kind === "savings" && !savingsDetails)) { setFieldErrors(nextErrors); return; }
 
     setSaving(true);
     try {
@@ -424,7 +469,7 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
           alertThresholdPercent: thresholdValue!,
         };
       }
-      await onSubmit(input);
+      await onSubmit(input, savingsDetails);
     } catch (err) { setFormError(err instanceof Error ? err.message : "Something went wrong"); }
     finally { setSaving(false); }
   };
@@ -473,6 +518,25 @@ function AccountFormSheet({ visible, editing, onClose, onSubmit }: { visible: bo
                       ))}
                     </View>
                   </FormField>
+
+                  {kind === "savings" ? (
+                    <>
+                      <FormField label="SAVINGS ACCOUNT TYPE" required>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                          {SAVINGS_ACCOUNT_TYPES.map((type) => (
+                            <Pressable key={type} onPress={() => setSavingsType(type)} accessibilityRole="radio" accessibilityLabel={`Select ${type.replaceAll("_", " ")}`} accessibilityState={{ checked: savingsType === type }} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: savingsType === type ? P.brand : P.card }}>
+                              <Text style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: "600", color: savingsType === type ? P.white : P.ink2 }}>{type === "personal_savings" ? "Personal Savings" : type === "high_yield_savings" ? "HYSA" : "Time Deposit"}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </FormField>
+
+                      {(savingsType === "personal_savings" || savingsType === "time_deposit") ? <FormField label="INTEREST RATE (%)" required><TextInput value={interestRate} onChangeText={setInterestRate} placeholder="Enter interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}
+                      {savingsType === "personal_savings" ? <FormField label="MINIMUM BALANCE (₱)" required><TextInput value={minimumBalance} onChangeText={setMinimumBalance} placeholder="Enter minimum balance" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}
+                      {savingsType === "high_yield_savings" ? <><FormField label="BASE INTEREST RATE (%)" required><TextInput value={baseInterestRate} onChangeText={setBaseInterestRate} placeholder="Enter base interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="EFFECTIVE INTEREST RATE (%)" required><TextInput value={effectiveInterestRate} onChangeText={setEffectiveInterestRate} placeholder="Enter effective interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="REQUIREMENTS TO EARN THIS RATE" hint="These bank rules are saved for reference only." required><TextInput value={interestConditions} onChangeText={setInterestConditions} placeholder="Describe the bank's requirements" placeholderTextColor={P.muted} multiline style={{ minHeight: 70, borderRadius: 12, borderWidth: 1, borderColor: P.line, padding: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="ARE THE REQUIREMENTS CURRENTLY MET?" required><View style={{ flexDirection: "row", gap: 8 }}>{[true, false].map((value) => <Pressable key={String(value)} onPress={() => setHigherRateEligible(value)} accessibilityRole="radio" accessibilityLabel={value ? "Requirements met" : "Requirements not met"} accessibilityState={{ checked: higherRateEligible === value }} style={{ flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: higherRateEligible === value ? P.brand : P.card }}><Text style={{ fontFamily: "Manrope", fontWeight: "600", color: higherRateEligible === value ? P.white : P.ink2 }}>{value ? "Yes" : "No"}</Text></Pressable>)}</View></FormField></> : null}
+                      {savingsType === "time_deposit" ? <><FormField label="PRINCIPAL (₱)" required><TextInput value={principal} onChangeText={setPrincipal} placeholder="Enter principal amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="MATURITY DATE" required><TextInput value={maturityDate} onChangeText={setMaturityDate} placeholder="YYYY-MM-DD" placeholderTextColor={P.muted} style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="TERM (MONTHS)" required><TextInput value={termMonths} onChangeText={setTermMonths} placeholder="Enter deposit term" placeholderTextColor={P.muted} keyboardType="number-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="EARLY-WITHDRAWAL RULE" required><TextInput value={earlyWithdrawalRule} onChangeText={setEarlyWithdrawalRule} placeholder="Describe early-withdrawal rule" placeholderTextColor={P.muted} multiline style={{ minHeight: 70, borderRadius: 12, borderWidth: 1, borderColor: P.line, padding: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField></> : null}
+                    </>
+                  ) : null}
 
                   <FormField label={kind === "credit_card" ? "OUTSTANDING BALANCE (₱) (OPTIONAL)" : "OPENING BALANCE (₱)"} error={fieldErrors.openingBalance}>
                     <TextInput
