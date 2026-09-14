@@ -224,6 +224,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
+  const [savingsActivityContext, setSavingsActivityContext] = useState<{ savingsGoalId: string; kind: "contribution" | "withdrawal" } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -791,7 +792,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "add-transaction") {
-      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} statementPaymentContext={statementPaymentContext ?? undefined} debtPaymentDebtId={debtPaymentDebtId ?? undefined} debtPaymentContext={debtPaymentContext ?? undefined} onClose={() => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setCurrentPage(transactionReturnPage); }} />;
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} statementPaymentContext={statementPaymentContext ?? undefined} debtPaymentDebtId={debtPaymentDebtId ?? undefined} debtPaymentContext={debtPaymentContext ?? undefined} savingsActivityContext={savingsActivityContext ?? undefined} onClose={() => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setSavingsActivityContext(null); setCurrentPage(transactionReturnPage); }} />;
     }
 
     if (currentPage === "add-recurring-transaction") {
@@ -847,7 +848,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "savings-goals") {
-      return <SavingsGoalsScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} />;
+      return <SavingsGoalsScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onRecordActivity={(savingsGoalId, kind) => { setSavingsActivityContext({ savingsGoalId, kind }); setTransactionToEdit(null); setStatementPaymentContext(null); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }} />;
     }
 
     if (currentPage === "dashboard") {

@@ -58,6 +58,8 @@ describe("credit-card expense inserts", () => {
     const columns = sql.match(/\(([^)]+)\)\s*VALUES/)?.[1]?.split(",").length;
     const values = sql.match(/VALUES\s*\(([^)]+)\)/)?.[1]?.split(",").length;
     expect(values).toBe(columns);
+    expect(insert).toBeDefined();
+    expect(insert!.length - 1).toBe((sql.match(/\?/g) ?? []).length);
 
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.stringContaining("SET available_credit_centavos = COALESCE(available_credit_centavos, credit_limit_centavos) - ?"),

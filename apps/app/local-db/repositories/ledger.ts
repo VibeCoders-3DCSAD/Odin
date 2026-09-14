@@ -6,6 +6,7 @@ import { randomUUID } from "../uuid";
 import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
 import { createCreditCardInstallmentInTransaction, type CreateCreditCardInstallmentInput } from "./creditCardInstallments";
 import { validateIsoDate } from "./creditCardCycleDates";
+import { createSavingsGoalActivityInTransaction } from "./savingsGoalActivities";
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
@@ -87,6 +88,8 @@ export type CreateTransferInput = {
   destination_account_id: string;
   transaction_date: string;
   notes?: string;
+  source_savings_goal_id?: string | null;
+  destination_savings_goal_id?: string | null;
 };
 
 export type UpdateTransactionInput = {
@@ -454,15 +457,18 @@ function buildTransactionInsert(
 
   return {
     sql: `INSERT INTO transactions
-      (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at, credit_card_posting_date,
-       amount_centavos, subcategory_id, source_account_id, destination_account_id,
+       (id, user_id, transaction_type, status, entry_source, transaction_date, posted_at, credit_card_posting_date,
+        amount_centavos, subcategory_id, source_account_id, destination_account_id, source_savings_goal_id, destination_savings_goal_id,
        recurring_template_id, merchant_name, counterparty_name, notes,
         client_mutation_id, metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, 'posted', 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
     params: [
       id, userId, transactionType, input.transaction_date, ts, postingDate,
-      input.amount_centavos, subcategoryId, sourceAccountId, destinationAccountId,
-      merchantName, counterpartyName, notes, "client_mutation_id" in input ? input.client_mutation_id ?? null : null, ts, ts,
+       input.amount_centavos, subcategoryId, sourceAccountId, destinationAccountId,
+       "source_savings_goal_id" in input ? input.source_savings_goal_id ?? null : null,
+       "destination_savings_goal_id" in input ? input.destination_savings_goal_id ?? null : null,
+       null, merchantName, counterpartyName, notes,
+       "client_mutation_id" in input ? input.client_mutation_id ?? null : null, ts, ts,
     ],
   };
 }
@@ -765,6 +771,34 @@ export async function createTransfer(
   });
 
   return result!;
+}
+
+export async function createSavingsGoalTransfer(
+  userId: string,
+  deviceId: string,
+  input: { savings_goal_id: string; kind: "contribution" | "withdrawal"; account_id: string; amount_centavos: number; transaction_date: string; notes?: string },
+): Promise<{ transaction: Transaction; operation: SyncOperation }> {
+  validateAmount(input.amount_centavos);
+  const db = await getDb(); const id = randomUUID(); const ts = now();
+  let result!: { transaction: Transaction; operation: SyncOperation };
+  await db.withTransactionAsync(async () => {
+    const goal = await db.getFirstAsync<{ id: string; target_amount_centavos: number; starting_amount_centavos: number; status: string }>("SELECT id, target_amount_centavos, starting_amount_centavos, status FROM savings_goals WHERE id = ? AND user_id = ? AND deleted = 0", input.savings_goal_id, userId);
+    if (!goal || goal.status !== "active") throw new LocalDbError("VALIDATION_ERROR", "Savings activities require an active savings goal.");
+    await verifyAccountOwnership(db, userId, input.account_id, "financial account");
+    const sourceAccountId = input.kind === "contribution" ? input.account_id : null;
+    const destinationAccountId = input.kind === "withdrawal" ? input.account_id : null;
+    const transactionInput: CreateTransferInput = { amount_centavos: input.amount_centavos, source_account_id: sourceAccountId ?? "", destination_account_id: destinationAccountId ?? "", transaction_date: input.transaction_date, notes: input.notes, source_savings_goal_id: input.kind === "withdrawal" ? input.savings_goal_id : null, destination_savings_goal_id: input.kind === "contribution" ? input.savings_goal_id : null };
+    if (sourceAccountId) await applyBalanceEffects(db, userId, "expense", sourceAccountId, null, input.amount_centavos);
+    if (destinationAccountId) await applyBalanceEffects(db, userId, "income", null, destinationAccountId, input.amount_centavos);
+    const { sql, params } = buildTransactionInsert(id, userId, "transfer", transactionInput, ts);
+    await db.runAsync(sql, ...params);
+    const payload = { transaction_type: "transfer", transaction_date: input.transaction_date, amount_centavos: input.amount_centavos, source_account_id: sourceAccountId, destination_account_id: destinationAccountId, source_savings_goal_id: transactionInput.source_savings_goal_id, destination_savings_goal_id: transactionInput.destination_savings_goal_id, subcategory_id: null, notes: input.notes ?? null };
+    const operation = await enqueueOperation(db, { userId, deviceId, entity: "transactions", recordId: id, operationType: "create", baseVersion: null, changedFields: [], payload, failureMessage: "This savings transfer could not be created." });
+    await createSavingsGoalActivityInTransaction(db, userId, deviceId, { savingsGoalId: input.savings_goal_id, transactionId: id, kind: input.kind, amountCentavos: input.amount_centavos, activityDate: input.transaction_date, notes: input.notes });
+    const row = await db.getFirstAsync<TransactionRow>("SELECT * FROM transactions WHERE user_id = ? AND id = ?", userId, id);
+    result = { transaction: mapTransaction(row!), operation };
+  });
+  return result;
 }
 
 export async function updateTransaction(

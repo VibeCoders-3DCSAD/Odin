@@ -16,7 +16,7 @@ import { CalendarBlank, CaretLeft, CaretRight, Repeat, Wallet, X } from "phospho
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
-import { createExpense, createIncome, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../local-db/repositories/ledger";
+import { createExpense, createIncome, createSavingsGoalTransfer, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../local-db/repositories/ledger";
 import { createStatementPayment, getCreditCardPaymentByStatement, updateStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
 import { getCreditCardStatementByCycle, type CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
@@ -55,18 +55,21 @@ type Props = {
   statementPaymentContext?: StatementPaymentContext;
   debtPaymentDebtId?: string;
   debtPaymentContext?: DebtPaymentContext;
+  savingsActivityContext?: { savingsGoalId: string; kind: "contribution" | "withdrawal" };
 };
 
-export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, statementPaymentContext, debtPaymentDebtId, debtPaymentContext }: Props) {
+export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, statementPaymentContext, debtPaymentDebtId, debtPaymentContext, savingsActivityContext }: Props) {
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
   const isEdit = !!transaction;
 
-  const [txType, setTxType] = useState<TransactionType>(statementPaymentContext ? "expense" : (transaction?.transaction_type as TransactionType) ?? "expense");
+  const [txType, setTxType] = useState<TransactionType>(savingsActivityContext ? "transfer" : statementPaymentContext ? "expense" : (transaction?.transaction_type as TransactionType) ?? "expense");
   const [statementPayment, setStatementPayment] = useState<CreditCardStatement | null>(null);
   const [existingStatementPayment, setExistingStatementPayment] = useState<CreditCardPayment | null>(null);
   const [isDebtPayment, setIsDebtPayment] = useState(Boolean(debtPaymentDebtId || debtPaymentContext));
   const [debtPaymentId, setDebtPaymentId] = useState(debtPaymentDebtId ?? debtPaymentContext?.debtAccountId ?? "");
+  const [debtPrincipal, setDebtPrincipal] = useState("");
+  const [debtInterestOrFees, setDebtInterestOrFees] = useState("0");
   const [activeDebts, setActiveDebts] = useState<DebtAccount[]>([]);
   const isStatementPayment = Boolean(statementPaymentContext);
 
@@ -127,6 +130,14 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const debt = activeDebts.find((item) => item.id === debtPaymentDebtId);
     if (debt) setDescription(`Payment to ${debt.name}`);
   }, [activeDebts, debtPaymentDebtId]);
+
+  useEffect(() => {
+    if (!debtPaymentContext) return;
+    import("../../local-db/repositories/debtPayments").then(({ listAllDebtPayments }) => listAllDebtPayments(userId)).then((payments) => {
+      const payment = payments.find((item) => item.id === debtPaymentContext.paymentId);
+      if (payment) { setDebtPrincipal(String(payment.principal_centavos / 100)); setDebtInterestOrFees(String(payment.interest_centavos / 100)); }
+    }).catch(() => {});
+  }, [debtPaymentContext, userId]);
 
   useEffect(() => {
     if (!statementPaymentContext) return;
@@ -417,7 +428,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       setFormError("Select a destination account");
       return;
     }
-    if (txType === "transfer") {
+    if (txType === "transfer" && !savingsActivityContext) {
       if (!sourceAccountId) {
         setFormError("Select a source account");
         return;
@@ -433,6 +444,12 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     }
     if (isDebtPayment && !debtPaymentId) {
       setFormError("Select a debt before continuing");
+      return;
+    }
+    const principalCentavos = isDebtPayment ? parseMoney(debtPrincipal || amount) : 0;
+    const interestCentavos = isDebtPayment ? parseMoney(debtInterestOrFees) : 0;
+    if (isDebtPayment && (principalCentavos < 0 || interestCentavos < 0 || principalCentavos + interestCentavos > centavos)) {
+      setFormError("Some payment details are not valid. Check the highlighted fields and try again.");
       return;
     }
     if (selectedSourceIsCreditCard() && postingDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(postingDate.trim())) {
@@ -497,7 +514,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined,
         });
        } else if (isEdit && debtPaymentContext) {
-         await updateTransactionDebtPayment(userId, deviceId, debtPaymentContext.paymentId, { amount_centavos: centavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
+          await updateTransactionDebtPayment(userId, deviceId, debtPaymentContext.paymentId, { amount_centavos: centavos, principal_centavos: principalCentavos, interest_centavos: interestCentavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
        } else if (isEdit) {
         savePhase = "updateTransaction";
         console.log("[DEBUG-TX-SAVE] calling updateTransaction");
@@ -538,7 +555,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               notes: notes.trim() || undefined,
             });
           } else if (isDebtPayment && txType === "expense") {
-            await createTransactionDebtPayment(userId, deviceId, { debt_account_id: debtPaymentId, amount_centavos: centavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
+             await createTransactionDebtPayment(userId, deviceId, { debt_account_id: debtPaymentId, amount_centavos: centavos, principal_centavos: principalCentavos, interest_centavos: interestCentavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
           } else if (txType === "expense") {
             savePhase = "createExpense";
            console.log("[DEBUG-TX-SAVE] calling createExpense");
@@ -563,6 +580,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           counterparty_name: description.trim() || undefined,
           notes: notes.trim() || undefined,
         });
+      } else if (savingsActivityContext) {
+        const accountId = savingsActivityContext.kind === "contribution" ? sourceAccountId : destAccountId;
+        if (!accountId) {
+          setFormError(`Select the ${savingsActivityContext.kind === "contribution" ? "source" : "destination"} account`);
+          return;
+        }
+        await createSavingsGoalTransfer(userId, deviceId, { savings_goal_id: savingsActivityContext.savingsGoalId, kind: savingsActivityContext.kind, account_id: accountId, amount_centavos: centavos, transaction_date: dateStr, notes: notes.trim() || undefined });
       } else {
         const desc = description.trim();
         const note = notes.trim();
@@ -891,7 +915,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
         {showCategoryPicker ? renderCategoryPickerPage() : (
           <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 18 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-             {!isEdit && !isStatementPayment ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+             {!isEdit && !isStatementPayment && !savingsActivityContext ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+             {savingsActivityContext ? <View style={{ borderRadius: 14, backgroundColor: palette.card, padding: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>{savingsActivityContext.kind === "contribution" ? "Savings contribution" : "Savings withdrawal"}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>This transfer is linked to the selected savings goal.</Text></View> : null}
              {isStatementPayment ? <View style={{ borderRadius: 14, backgroundColor: palette.card, padding: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>Credit-card statement payment</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>{statementPayment ? `Statement due ${statementPayment.due_date} · Balance ${formatCurrency(statementPayment.statement_balance_centavos)}` : "Checking the selected statement..."}</Text></View> : null}
 
             <View style={{ alignItems: "center", paddingTop: 6, paddingBottom: 2 }}>
@@ -1049,7 +1074,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               </>
              ) : null}
 
-             {txType === "expense" && !isStatementPayment && !selectedSourceIsCreditCard() ? <View><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: isDebtPayment, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => { setIsDebtPayment((current) => !current); setDebtPaymentId(""); }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Record as a debt payment</Text></Pressable><Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>Choose this when this expense pays down one of your debts.</Text>{isDebtPayment ? <View style={{ gap: 6, marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Select the debt this payment applies to</Text>{activeDebts.length === 0 ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>No active debts are available. Add a debt before recording a debt payment.</Text> : activeDebts.map((debt) => <Pressable key={debt.id} accessibilityRole="radio" accessibilityState={{ selected: debtPaymentId === debt.id, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => setDebtPaymentId(debt.id)} style={{ padding: 10, borderWidth: 1, borderColor: debtPaymentId === debt.id ? palette.brand : palette.line, borderRadius: 10 }}><Text style={{ color: palette.ink }}>{debt.name} · {formatCurrency(debt.currentBalanceCentavos)}</Text></Pressable>)}</View> : null}</View> : null}
+              {txType === "expense" && !isStatementPayment && !selectedSourceIsCreditCard() ? <View><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: isDebtPayment, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => { setIsDebtPayment((current) => !current); setDebtPaymentId(""); setDebtPrincipal(""); setDebtInterestOrFees("0"); }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Record as a debt payment</Text></Pressable><Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>Choose this when this expense pays down one of your debts.</Text>{isDebtPayment ? <View style={{ gap: 8, marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Select the debt this payment applies to</Text>{activeDebts.length === 0 ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>No active debts are available. Add a debt before recording a debt payment.</Text> : activeDebts.map((debt) => <Pressable key={debt.id} accessibilityRole="radio" accessibilityState={{ selected: debtPaymentId === debt.id, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => setDebtPaymentId(debt.id)} style={{ padding: 10, borderWidth: 1, borderColor: debtPaymentId === debt.id ? palette.brand : palette.line, borderRadius: 10 }}><Text style={{ color: palette.ink }}>{debt.name} · {formatCurrency(debt.currentBalanceCentavos)}</Text></Pressable>)}<TextInput accessibilityLabel="Principal amount" value={debtPrincipal} onChangeText={setDebtPrincipal} placeholder="Enter principal amount" keyboardType="decimal-pad" placeholderTextColor={palette.mut} style={{ borderRadius: 12, borderWidth: 1, borderColor: palette.line, padding: 12, color: palette.ink }} /><TextInput accessibilityLabel="Interest or fee amount" value={debtInterestOrFees} onChangeText={setDebtInterestOrFees} placeholder="Enter interest or fee amount" keyboardType="decimal-pad" placeholderTextColor={palette.mut} style={{ borderRadius: 12, borderWidth: 1, borderColor: palette.line, padding: 12, color: palette.ink }} /><Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut }}>Principal reduces the debt balance. Principal plus interest or fees cannot exceed the payment amount.</Text></View> : null}</View> : null}
 
             {needsCategory ? (
               <View>

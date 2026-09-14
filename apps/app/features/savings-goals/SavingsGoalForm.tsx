@@ -22,6 +22,9 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
   const [targetDate, setTargetDate] = useState(goal?.targetDate ?? "");
   const [priority, setPriority] = useState<SavingsGoalPriority>(goal?.priority ?? "high");
   const [baseline, setBaseline] = useState<number | null>(goal?.emergencyFundBaselineCentavos ?? null);
+  const [autoSave, setAutoSave] = useState(goal ? fromCentavos(goal.autoSaveAmountCentavos) : "0");
+  const [interestRate, setInterestRate] = useState(goal?.interestRateBps != null ? String(goal.interestRateBps / 100) : "");
+  const [notes, setNotes] = useState(goal?.notes ?? "");
   const [saving, setSaving] = useState(false); const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,13 +39,13 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
   }
 
   async function save() {
-    const targetAmountCentavos = toCentavos(target); const startingAmountCentavos = toCentavos(starting);
-    if (!name.trim() || !Number.isSafeInteger(targetAmountCentavos) || targetAmountCentavos <= 0 || !Number.isSafeInteger(startingAmountCentavos) || startingAmountCentavos < 0) {
+    const targetAmountCentavos = toCentavos(target); const startingAmountCentavos = toCentavos(starting); const autoSaveAmountCentavos = toCentavos(autoSave); const interestRateBps = interestRate.trim() ? Math.round(Number(interestRate) * 100) : null;
+    if (!name.trim() || !targetDate || !Number.isSafeInteger(targetAmountCentavos) || targetAmountCentavos <= 0 || !Number.isSafeInteger(startingAmountCentavos) || startingAmountCentavos < 0 || !Number.isSafeInteger(autoSaveAmountCentavos) || autoSaveAmountCentavos < 0 || (interestRateBps != null && (!Number.isSafeInteger(interestRateBps) || interestRateBps < 0))) {
       setMessage("Check the highlighted fields and try again."); return;
     }
     setSaving(true); setMessage(null);
     try {
-      const input = { name, goalType, targetAmountCentavos, startingAmountCentavos, targetDate: targetDate || null, priority, emergencyFundBaselineCentavos: goalType === "emergency_fund" ? baseline : null };
+      const input = { name, goalType, goalCategory: goalType, targetAmountCentavos, startingAmountCentavos, targetDate, priority, emergencyFundBaselineCentavos: goalType === "emergency_fund" ? baseline : null, autoSaveAmountCentavos, interestRateBps, notes };
       const result = goal ? await updateSavingsGoal(userId, deviceId, goal.id, input) : await createSavingsGoal(userId, deviceId, input);
       onSaved(result.goal);
     } catch {
@@ -59,7 +62,10 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
       <Field label="Goal name" value={name} onChangeText={setName} placeholder={SAVINGS_GOAL_PLACEHOLDERS.name} invalid={invalid && !name.trim()} />
       <Field label="Target amount" value={target} onChangeText={setTarget} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(target)) || toCentavos(target) <= 0)} />
       <Field label="Starting amount" value={starting} onChangeText={setStarting} placeholder={SAVINGS_GOAL_PLACEHOLDERS.startingAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(starting)) || toCentavos(starting) < 0)} />
-      <Field label="Target date (optional)" value={targetDate} onChangeText={setTargetDate} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetDate} />
+       <Field label="Target date" value={targetDate} onChangeText={setTargetDate} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetDate} invalid={invalid && !targetDate} />
+       <Field label="Auto-save amount" value={autoSave} onChangeText={setAutoSave} placeholder="0.00" numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(autoSave)) || toCentavos(autoSave) < 0)} />
+       <Field label="Interest rate (%)" value={interestRate} onChangeText={setInterestRate} placeholder="Optional" numeric invalid={invalid && interestRate.trim() !== "" && (!Number.isFinite(Number(interestRate)) || Number(interestRate) < 0)} />
+       <Field label="Notes" value={notes} onChangeText={setNotes} placeholder="Optional" />
       <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Priority</Text><View style={{ flexDirection: "row", gap: 7 }}>{SAVINGS_GOAL_PRIORITIES.map((value) => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`Select ${SAVINGS_GOAL_PRIORITY_LABELS[value]} priority`} accessibilityState={{ selected: value === priority }} onPress={() => setPriority(value)} style={{ backgroundColor: value === priority ? P.brand : P.white, borderColor: value === priority ? P.brand : P.line, borderRadius: 9, borderWidth: 1, flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center" }}><Text style={{ color: value === priority ? P.white : P.ink, fontFamily: "Manrope", fontSize: 11, fontWeight: "700" }}>{SAVINGS_GOAL_PRIORITY_LABELS[value]}</Text></Pressable>)}</View></View>
       {message ? <Text accessibilityLiveRegion="polite" style={{ color: P.error, fontFamily: "Manrope", fontSize: 12 }}>{message}</Text> : null}
       <View style={{ flexDirection: "row", gap: 10 }}><Pressable accessibilityRole="button" accessibilityLabel={goal ? "Save savings goal changes" : "Save savings goal"} disabled={saving} onPress={() => { save().catch(() => {}); }} style={{ backgroundColor: P.brand, borderRadius: 10, flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", opacity: saving ? 0.6 : 1 }}>{saving ? <ActivityIndicator color={P.white} /> : <Text style={{ color: P.white, fontFamily: "Manrope", fontWeight: "700" }}>{goal ? "Save changes" : "Save goal"}</Text>}</Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={onCancel} style={{ borderColor: P.line, borderRadius: 10, borderWidth: 1, flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center" }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontWeight: "700" }}>Cancel</Text></Pressable></View>

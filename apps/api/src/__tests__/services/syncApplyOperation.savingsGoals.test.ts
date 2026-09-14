@@ -12,6 +12,14 @@ describe("savings-goal sync validation", () => {
     await expect(prepareOperation({} as never, "user-1", createOperation)).resolves.toMatchObject({ payload: createOperation.payload });
   });
 
+  it("rejects malformed savings activity payloads before database access", async () => {
+    await expect(prepareOperation({} as never, "user-1", {
+      ...createOperation,
+      entity: "savings_goal_activities",
+      payload: { savings_goal_id: "goal-1", transaction_id: "transaction-1", activity_kind: "invalid", amount_centavos: 100, activity_date: "2026-01-01" },
+    })).rejects.toThrow("savings activity kind is invalid");
+  });
+
   it("rejects invalid types and unknown fields", async () => {
     await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, goal_type: "investment" } })).rejects.toThrow("goal_type is invalid");
     await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, arbitrary_field: "nope" } })).rejects.toThrow("arbitrary_field is not syncable");
