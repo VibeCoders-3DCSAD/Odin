@@ -1,12 +1,9 @@
-import type { DebtAccount, DebtRepaymentForecast, PaymentFrequency } from "../../local-db/repositories/debtAccounts";
+import type { DebtAccount, DebtPaymentSchedule, DebtRepaymentForecast, PaymentFrequency } from "../../local-db/repositories/debtAccounts";
 import { getPhilippineToday } from "./debtTrendRange";
 
 export const PAYMENT_INTERVAL_DAYS: Partial<Record<PaymentFrequency, number>> = {
   weekly: 7,
   biweekly: 14,
-  semi_monthly: 15,
-  monthly: 30,
-  quarterly: 91,
 };
 
 function addDays(date: string, days: number) {
@@ -25,11 +22,29 @@ function addMonths(date: string, months: number) {
   return value.toISOString().slice(0, 10);
 }
 
-function addPaymentPeriod(date: string, frequency: PaymentFrequency) {
+function dateAtDay(year: number, month: number, day: number) {
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
+}
+
+export function addPaymentPeriod(date: string, frequency: PaymentFrequency, schedule: DebtPaymentSchedule = {}) {
   if (frequency === "monthly") return addMonths(date, 1);
   if (frequency === "quarterly") return addMonths(date, 3);
+  if (frequency === "semi_monthly") {
+    const days = [...(schedule.semiMonthlyDays ?? [1, 15])].sort((left, right) => left - right);
+    const current = new Date(`${date}T00:00:00Z`);
+    const candidates = days.map((day) => dateAtDay(current.getUTCFullYear(), current.getUTCMonth(), day));
+    return candidates.find((candidate) => candidate > date) ?? dateAtDay(current.getUTCFullYear(), current.getUTCMonth() + 1, days[0]!);
+  }
+  const customIntervalDays = schedule.customIntervalDays;
+  if (frequency === "custom") return typeof customIntervalDays === "number" && Number.isSafeInteger(customIntervalDays) && customIntervalDays > 0 ? addDays(date, customIntervalDays) : null;
   const days = PAYMENT_INTERVAL_DAYS[frequency];
   return days ? addDays(date, days) : null;
+}
+
+function hasPaymentSchedule(frequency: PaymentFrequency, schedule: DebtPaymentSchedule = {}) {
+  const customIntervalDays = schedule.customIntervalDays;
+  return frequency !== "custom" || (typeof customIntervalDays === "number" && Number.isSafeInteger(customIntervalDays) && customIntervalDays > 0);
 }
 
 function forecastInterestCentavos(
@@ -63,16 +78,16 @@ function scheduleCanReachZero(
   return annualContributions > annualInterest;
 }
 
-export function getDebtRepaymentForecast(debt: Pick<DebtAccount, "currentBalanceCentavos" | "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "targetPayoffDate" | "status">): DebtRepaymentForecast {
-  const intervalDays = PAYMENT_INTERVAL_DAYS[debt.paymentFrequency];
-  if (!debt.targetPayoffDate || !debt.nextDueDate || !intervalDays || debt.minimumPaymentCentavos <= 0) {
+export function getDebtRepaymentForecast(debt: Omit<Pick<DebtAccount, "currentBalanceCentavos" | "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "paymentSchedule" | "targetPayoffDate" | "status">, "paymentSchedule"> & { paymentSchedule?: DebtPaymentSchedule }): DebtRepaymentForecast {
+  if (!debt.targetPayoffDate || !debt.nextDueDate || !hasPaymentSchedule(debt.paymentFrequency, debt.paymentSchedule) || debt.minimumPaymentCentavos <= 0) {
     return { status: "not_in_schedule", estimatedPayoffDate: null };
   }
 
   const paymentsRemaining = Math.ceil(debt.currentBalanceCentavos / debt.minimumPaymentCentavos);
-  const estimatedPayoffDate = addDays(debt.nextDueDate, Math.max(0, paymentsRemaining - 1) * intervalDays);
-  const timeToTargetDays = Math.floor((Date.parse(`${debt.targetPayoffDate}T00:00:00Z`) - Date.parse(`${debt.nextDueDate}T00:00:00Z`)) / 86_400_000);
-  const paymentsToTarget = timeToTargetDays < 0 ? 0 : Math.floor(timeToTargetDays / intervalDays) + 1;
+  let estimatedPayoffDate = debt.nextDueDate;
+  for (let payment = 1; payment < paymentsRemaining; payment += 1) estimatedPayoffDate = addPaymentPeriod(estimatedPayoffDate, debt.paymentFrequency, debt.paymentSchedule) ?? "";
+  let paymentsToTarget = 0;
+  for (let date = debt.nextDueDate; date && date <= debt.targetPayoffDate; date = addPaymentPeriod(date, debt.paymentFrequency, debt.paymentSchedule) ?? "") paymentsToTarget += 1;
   const requiredPaymentCentavos = paymentsToTarget > 0 ? Math.ceil(debt.currentBalanceCentavos / paymentsToTarget) : Number.POSITIVE_INFINITY;
   const status = debt.minimumPaymentCentavos > requiredPaymentCentavos ? "advanced" : debt.minimumPaymentCentavos === requiredPaymentCentavos ? "on_track" : "underpaid";
 
@@ -90,17 +105,17 @@ export type DebtForecast = {
   status: DebtForecastStatus;
 };
 
-type ForecastDebt = Pick<DebtAccount, "originalBalanceCentavos" | "currentBalanceCentavos" | "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "targetPayoffDate" | "status" | "annualInterestRateBps" | "interestMethod" | "interestPeriod" | "typeSpecific">;
+type ForecastDebt = Omit<Pick<DebtAccount, "originalBalanceCentavos" | "currentBalanceCentavos" | "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "paymentSchedule" | "targetPayoffDate" | "status" | "annualInterestRateBps" | "interestMethod" | "interestPeriod" | "typeSpecific">, "paymentSchedule"> & { paymentSchedule?: DebtPaymentSchedule };
 
 export function getProjectedContributionCentavos(debt: Pick<DebtAccount, "minimumPaymentCentavos">, recordedPayments: ScheduledDebtPayment[]) {
   return Math.max(debt.minimumPaymentCentavos, ...recordedPayments.map((payment) => payment.amountCentavos));
 }
 
-export function getProjectedContributionForDate(debt: Pick<DebtAccount, "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency">, date: string, asOf: string, recordedPayments: ScheduledDebtPayment[]) {
-  if (!debt.nextDueDate || !PAYMENT_INTERVAL_DAYS[debt.paymentFrequency] || date < asOf) return null;
+export function getProjectedContributionForDate(debt: Omit<Pick<DebtAccount, "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "paymentSchedule">, "paymentSchedule"> & { paymentSchedule?: DebtPaymentSchedule }, date: string, asOf: string, recordedPayments: ScheduledDebtPayment[]) {
+  if (!debt.nextDueDate || !hasPaymentSchedule(debt.paymentFrequency, debt.paymentSchedule) || date < asOf) return null;
   let paymentDate = debt.nextDueDate;
-  while (paymentDate < asOf) paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency) ?? "";
-  while (paymentDate && paymentDate < date) paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency) ?? "";
+  while (paymentDate < asOf) paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency, debt.paymentSchedule) ?? "";
+  while (paymentDate && paymentDate < date) paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency, debt.paymentSchedule) ?? "";
   return paymentDate === date ? getProjectedContributionCentavos(debt, recordedPayments) : null;
 }
 
@@ -108,15 +123,15 @@ export function buildDebtBalanceForecast(
   debt: ForecastDebt,
   asOf = getPhilippineToday(),
   recordedPayments: ScheduledDebtPayment[] = [],
+  projectedContributionCentavos = getProjectedContributionCentavos(debt, recordedPayments),
 ): DebtBalanceForecastPoint[] {
-  const intervalDays = PAYMENT_INTERVAL_DAYS[debt.paymentFrequency];
   const historicalPayments = recordedPayments.filter((payment) => payment.paymentDate <= asOf).sort((left, right) => left.paymentDate.localeCompare(right.paymentDate));
   let historicalBalanceCentavos = debt.currentBalanceCentavos + historicalPayments.reduce((sum, payment) => sum + payment.amountCentavos, 0);
   let paymentDate = debt.nextDueDate ?? "";
   const historicalEvents: Array<{ date: string; paymentCentavos: number; missed?: boolean }> = historicalPayments.filter((payment) => payment.paymentDate < asOf).map((payment) => ({ date: payment.paymentDate, paymentCentavos: payment.amountCentavos }));
   while (paymentDate && paymentDate < asOf) {
     if (!historicalPayments.some((payment) => payment.paymentDate === paymentDate)) historicalEvents.push({ date: paymentDate, paymentCentavos: 0, missed: true });
-    paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency) ?? "";
+    paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency, debt.paymentSchedule) ?? "";
   }
   historicalEvents.sort((left, right) => left.date.localeCompare(right.date));
   const points = historicalEvents.map((event) => {
@@ -126,9 +141,9 @@ export function buildDebtBalanceForecast(
       : { date: event.date, balanceCentavos: historicalBalanceCentavos };
   });
   points.push({ date: asOf, balanceCentavos: Math.max(0, debt.currentBalanceCentavos) });
-  if (debt.status === "paid_off" || debt.currentBalanceCentavos === 0 || !paymentDate || !intervalDays || debt.minimumPaymentCentavos <= 0) return points;
+  if (debt.status === "paid_off" || debt.currentBalanceCentavos === 0 || !paymentDate || !hasPaymentSchedule(debt.paymentFrequency, debt.paymentSchedule) || debt.minimumPaymentCentavos <= 0) return points;
 
-  const projectedPaymentCentavos = getProjectedContributionCentavos(debt, recordedPayments);
+  const projectedPaymentCentavos = Math.max(getProjectedContributionCentavos(debt, recordedPayments), projectedContributionCentavos);
   let interestDate = debt.typeSpecific.startDate ?? "";
   while (interestDate && interestDate <= asOf) interestDate = addInterestPeriod(interestDate, debt) ?? "";
   const canReachZero = scheduleCanReachZero(debt, debt.paymentFrequency, projectedPaymentCentavos);
@@ -147,15 +162,15 @@ export function buildDebtBalanceForecast(
     points.push({ date: paymentDate, balanceCentavos: nextBalanceCentavos });
     balanceCentavos = nextBalanceCentavos;
     if (interestDate === paymentDate) interestDate = addInterestPeriod(interestDate, debt) ?? "";
-    paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency) ?? paymentDate;
+    paymentDate = addPaymentPeriod(paymentDate, debt.paymentFrequency, debt.paymentSchedule) ?? paymentDate;
   }
   return points;
 }
 
-export function buildDebtForecast(debt: ForecastDebt, asOf = getPhilippineToday(), recordedPayments: ScheduledDebtPayment[] = []): DebtForecast {
-  const points = buildDebtBalanceForecast(debt, asOf, recordedPayments);
+export function buildDebtForecast(debt: ForecastDebt, asOf = getPhilippineToday(), recordedPayments: ScheduledDebtPayment[] = [], projectedContributionCentavos?: number): DebtForecast {
+  const points = buildDebtBalanceForecast(debt, asOf, recordedPayments, projectedContributionCentavos);
   const projectedPayoffDate = points.at(-1)?.balanceCentavos === 0 ? points.at(-1)?.date ?? null : null;
-  const scheduled = Boolean(debt.nextDueDate && PAYMENT_INTERVAL_DAYS[debt.paymentFrequency] && debt.minimumPaymentCentavos > 0);
+  const scheduled = Boolean(debt.nextDueDate && hasPaymentSchedule(debt.paymentFrequency, debt.paymentSchedule) && debt.minimumPaymentCentavos > 0);
   const status: DebtForecastStatus = debt.status === "paid_off" || debt.currentBalanceCentavos === 0
     ? "paid_off"
     : !scheduled
@@ -165,19 +180,18 @@ export function buildDebtForecast(debt: ForecastDebt, asOf = getPhilippineToday(
         : projectedPayoffDate < debt.targetPayoffDate
           ? "ahead"
           : "on_track";
-  return { points, projectedContributionCentavos: getProjectedContributionCentavos(debt, recordedPayments), projectedPayoffDate, status };
+  return { points, projectedContributionCentavos: Math.max(getProjectedContributionCentavos(debt, recordedPayments), projectedContributionCentavos ?? 0), projectedPayoffDate, status };
 }
 
 export function getDebtPaymentProgress(
-  debt: Pick<DebtAccount, "currentBalanceCentavos" | "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "status">,
+  debt: Omit<Pick<DebtAccount, "currentBalanceCentavos" | "minimumPaymentCentavos" | "nextDueDate" | "paymentFrequency" | "paymentSchedule" | "status">, "paymentSchedule"> & { paymentSchedule?: DebtPaymentSchedule },
   payments: ScheduledDebtPayment[],
   asOf = getPhilippineToday(),
 ): DebtAccount["progress"] {
   if (debt.status === "paid_off" || debt.currentBalanceCentavos === 0) return "finished";
-  const interval = PAYMENT_INTERVAL_DAYS[debt.paymentFrequency];
-  if (!debt.nextDueDate || !interval || debt.minimumPaymentCentavos <= 0) return "no_payments";
+  if (!debt.nextDueDate || !hasPaymentSchedule(debt.paymentFrequency, debt.paymentSchedule) || debt.minimumPaymentCentavos <= 0) return "no_payments";
   let dueCount = 0;
-  for (let date = debt.nextDueDate; date <= asOf; date = addDays(date, interval)) dueCount += 1;
+  for (let date = debt.nextDueDate; date <= asOf; date = addPaymentPeriod(date, debt.paymentFrequency, debt.paymentSchedule) ?? "") dueCount += 1;
   if (dueCount === 0) return payments.length > 0 ? "ahead" : "on_schedule";
   const paid = payments.filter((payment) => payment.paymentDate <= asOf).reduce((sum, payment) => sum + payment.amountCentavos, 0);
   const expected = dueCount * debt.minimumPaymentCentavos;

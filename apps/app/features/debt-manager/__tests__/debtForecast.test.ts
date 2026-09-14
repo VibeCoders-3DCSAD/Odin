@@ -1,4 +1,23 @@
-import { buildDebtBalanceForecast, buildDebtForecast } from "../debtForecast";
+import { addPaymentPeriod, buildDebtBalanceForecast, buildDebtForecast, getDebtPaymentProgress, getDebtRepaymentForecast } from "../debtForecast";
+
+describe("debt payment schedules", () => {
+  it("uses calendar periods for monthly and quarterly schedules", () => {
+    expect(addPaymentPeriod("2026-01-31", "monthly")).toBe("2026-02-28");
+    expect(addPaymentPeriod("2026-11-30", "quarterly")).toBe("2027-02-28");
+  });
+
+  it("uses configured semi-monthly dates and custom intervals", () => {
+    expect(addPaymentPeriod("2026-01-20", "semi_monthly", { semiMonthlyDays: [5, 20] })).toBe("2026-02-05");
+    expect(addPaymentPeriod("2026-01-05", "semi_monthly", { semiMonthlyDays: [5, 20] })).toBe("2026-01-20");
+    expect(addPaymentPeriod("2026-01-05", "custom", { customIntervalDays: 10 })).toBe("2026-01-15");
+  });
+
+  it("keeps summary payoff and progress on the same calendar schedule as the balance forecast", () => {
+    const debt = { currentBalanceCentavos: 30000, minimumPaymentCentavos: 10000, nextDueDate: "2026-01-31", paymentFrequency: "monthly" as const, targetPayoffDate: "2026-03-31", status: "active" as const, paymentSchedule: {} };
+    expect(getDebtRepaymentForecast(debt)).toEqual({ status: "on_track", estimatedPayoffDate: "2026-03-28" });
+    expect(getDebtPaymentProgress(debt, [], "2026-02-28")).toBe("behind");
+  });
+});
 
 describe("buildDebtBalanceForecast", () => {
   it("projects scheduled payments from the next future due date until payoff", () => {

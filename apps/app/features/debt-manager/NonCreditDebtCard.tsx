@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { archiveDebtAccount, markDebtAccountDeleted, type DebtAccount } from "../../local-db/repositories/debtAccounts";
+import { archiveDebtAccount, markDebtAccountDeleted, restoreDebtAccount, type DebtAccount } from "../../local-db/repositories/debtAccounts";
 import { deleteTransactionDebtPayment, listDebtPayments, type DebtPayment } from "../../local-db/repositories/debtPayments";
 import { getDebtPaymentProgress, getDebtRepaymentForecast } from "./debtForecast";
 
@@ -34,9 +34,10 @@ export default function NonCreditDebtCard({ userId, deviceId, debt, onEdit, onRe
   function loadPayments() { listDebtPayments(userId, debt.id).then(setPayments).catch(() => setPayments([])); }
   useEffect(() => { setShowAllPayments(false); loadPayments(); }, [debt.id, userId]);
 
-  async function changeDebt(action: "archive" | "delete") {
+  async function changeDebt(action: "archive" | "delete" | "restore") {
     try {
       if (action === "archive") await archiveDebtAccount(userId, deviceId, debt.id);
+      else if (action === "restore") await restoreDebtAccount(userId, deviceId, debt.id);
       else await markDebtAccountDeleted(userId, deviceId, debt.id);
       onChanged();
     } catch { setMessage("Your debt changes could not be completed. Review the debt details and try again."); }
@@ -68,7 +69,7 @@ export default function NonCreditDebtCard({ userId, deviceId, debt, onEdit, onRe
       </View>)}
       {payments !== null && payments.length > PAYMENT_LIMIT ? <Pressable accessibilityRole="button" accessibilityLabel={`Show ${showAllPayments ? "fewer" : "all"} payments for ${debt.name}`} onPress={() => setShowAllPayments((current) => !current)} style={{ alignSelf: "flex-start" }}><Text style={{ fontFamily: "Manrope", fontSize: 12, fontWeight: "800", color: P.brand }}>{showAllPayments ? "Show fewer payments" : `Load ${payments.length - PAYMENT_LIMIT} more payment${payments.length - PAYMENT_LIMIT === 1 ? "" : "s"}`}</Text></Pressable> : null}
       {message ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.danger }}>{message}</Text> : null}
-       {!deleted ? <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12, gap: 9 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.ink }}>Debt actions</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>{!finished ? <Pressable accessibilityRole="button" accessibilityLabel={`Record payment for ${debt.name}`} onPress={() => onRecordPayment(debt.id)}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.brand }}>Record payment</Text></Pressable> : null}{!finished ? <Pressable accessibilityRole="button" onPress={() => onEdit(debt)}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.brand }}>Edit debt</Text></Pressable> : null}{confirming === "archive" ? <Pressable accessibilityRole="button" onPress={() => changeDebt("archive")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.danger }}>Confirm archive</Text></Pressable> : <Pressable accessibilityRole="button" onPress={() => setConfirming("archive")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.muted }}>Archive debt</Text></Pressable>}{confirming === "delete" ? <Pressable accessibilityRole="button" onPress={() => changeDebt("delete")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.danger }}>Confirm delete</Text></Pressable> : <Pressable accessibilityRole="button" onPress={() => setConfirming("delete")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.danger }}>Delete debt</Text></Pressable>}</View></View> : null}
+       {!deleted ? <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12, gap: 9 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.ink }}>Debt actions</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>{debt.status === "archived" ? <Pressable accessibilityRole="button" accessibilityLabel={`Restore ${debt.name} to active planning`} onPress={() => changeDebt("restore")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.brand }}>Restore to active planning</Text></Pressable> : <>{!finished ? <Pressable accessibilityRole="button" accessibilityLabel={`Record payment for ${debt.name}`} onPress={() => onRecordPayment(debt.id)}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.brand }}>Record payment</Text></Pressable> : null}{!finished ? <Pressable accessibilityRole="button" onPress={() => onEdit(debt)}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.brand }}>Edit debt</Text></Pressable> : null}{confirming === "archive" ? <Pressable accessibilityRole="button" onPress={() => changeDebt("archive")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.danger }}>Confirm archive</Text></Pressable> : <Pressable accessibilityRole="button" onPress={() => setConfirming("archive")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.muted }}>Archive debt</Text></Pressable>}</>}{confirming === "delete" ? <Pressable accessibilityRole="button" onPress={() => changeDebt("delete")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.danger }}>Confirm delete</Text></Pressable> : <Pressable accessibilityRole="button" onPress={() => setConfirming("delete")}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.danger }}>Delete debt</Text></Pressable>}</View></View> : null}
     </View>
   </View>;
 }

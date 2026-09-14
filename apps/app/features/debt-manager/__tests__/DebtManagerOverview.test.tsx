@@ -11,6 +11,9 @@ const mockListCreditCardStatements = jest.fn();
 const mockListCreditCardPayments = jest.fn();
 const mockListCreditCardInstallments = jest.fn();
 const mockListCreditCardStrategies = jest.fn();
+const mockGetCurrentBudgetDraft = jest.fn();
+const mockGetDebtStrategy = jest.fn();
+const mockListDebtPriorities = jest.fn();
 
 jest.mock("../../../local-db/repositories/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
@@ -37,6 +40,13 @@ jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({
 jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
   listCreditCardStrategies: (...args: unknown[]) => mockListCreditCardStrategies(...args),
 }));
+jest.mock("../../../local-db/repositories/budgets", () => ({
+  getCurrentBudgetDraft: (...args: unknown[]) => mockGetCurrentBudgetDraft(...args),
+}));
+jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({
+  getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args),
+  listDebtPriorities: (...args: unknown[]) => mockListDebtPriorities(...args),
+}));
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -58,9 +68,12 @@ beforeEach(() => {
   mockListCreditCardStatements.mockResolvedValue([]);
   mockListCreditCardInstallments.mockResolvedValue([]);
   mockListCreditCardStrategies.mockResolvedValue([]);
+  mockGetCurrentBudgetDraft.mockResolvedValue(null);
+  mockGetDebtStrategy.mockResolvedValue("avalanche");
+  mockListDebtPriorities.mockResolvedValue([]);
 });
 
-it("shows debt paid, progress, and recorded payment trend alongside the total debt trend", async () => {
+  it("shows debt paid, progress, and recorded payment trend alongside the total debt trend", async () => {
   const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
 
   await waitFor(() => {
@@ -76,5 +89,11 @@ it("shows debt paid, progress, and recorded payment trend alongside the total de
     expect(view.getByText("Visa")).toBeTruthy();
     expect(view.getByLabelText("2026-09-10, Loan, payment made PHP 3.00")).toBeTruthy();
     expect(view.getByText("Total debt trend")).toBeTruthy();
+    });
   });
-});
+
+  it("shows the selected strategy without a debt budget", async () => {
+    const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
+
+    await waitFor(() => expect(view.getByText("Avalanche repayment plan")).toBeTruthy());
+  });

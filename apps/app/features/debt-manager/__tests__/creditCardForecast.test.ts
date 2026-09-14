@@ -38,6 +38,23 @@ describe("buildCreditCardForecast", () => {
     ]));
   });
 
+  it("uses the issuer amount as the current balance when legacy reconciliation history is incomplete", () => {
+    const forecast = buildCreditCardForecast({
+      cycles: [{ id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-09-01", cutoff_date: "2026-09-30", statement_date: null, version: 1, deleted: false, created_at: "2026-09-01T00:00:00.000Z", updated_at: "2026-09-01T00:00:00.000Z" }],
+      transactions: [{ transaction_id: "purchase-1", account_id: "card-1", cycle_id: "cycle-1", purchase_type: "regular", installment_id: null, transaction_date: "2026-09-02", merchant_name: null, amount_centavos: 4_500_000 }],
+      statements: [], strategy: undefined, payments: [], installments: [],
+      creditLimitCentavos: 6_000_000, availableCreditCentavos: 6_000_000, billingCycleDays: null,
+      reconciledAvailableCreditCentavos: 6_000_000, preReconciliationAvailableCreditCentavos: null,
+      availableCreditReconciledAt: "2026-09-14T08:00:00.000Z", asOfDate: "2026-09-14",
+    });
+
+    expect(forecast.points.at(-1)).toEqual(expect.objectContaining({
+      cycleId: "issuer-reconciliation",
+      date: "2026-09-14",
+      availableCreditCentavos: 6_000_000,
+    }));
+  });
+
   it("uses the recorded billing-cycle length when the card configuration is missing it", () => {
     const baseInput = {
       cycles: [{ id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-08-05", cutoff_date: "2026-09-04", statement_date: "2026-09-04", version: 1, deleted: false, created_at: "2026-08-05T00:00:00.000Z", updated_at: "2026-09-04T00:00:00.000Z" }],
@@ -100,10 +117,10 @@ describe("buildCreditCardForecast", () => {
 
   it.each([
     ["pay_in_full", null, null, [1_250_000, 1_000_000, 750_000]],
-    ["pay_minimum", null, null, [5_600_000, 5_200_000, 4_800_000]],
+    ["pay_minimum", null, null, [5_850_000, 5_700_000, 5_550_000]],
     ["percentage_of_statement", null, 5_000, [3_500_000, 1_000_000, 750_000]],
     ["custom_payment", 1_500_000, null, [4_250_000, 2_500_000, 750_000]],
-  ] as const)("adds only the current month's amortization to the %s target", (strategyName, customAmountCentavos, percentageBps, expectedBalances) => {
+  ] as const)("models the current month's amortization for the %s strategy", (strategyName, customAmountCentavos, percentageBps, expectedBalances) => {
     const forecast = buildCreditCardForecast({
       cycles: [{
         id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-08-05", cutoff_date: "2026-09-04", statement_date: null,

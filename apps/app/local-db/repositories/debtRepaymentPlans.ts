@@ -37,8 +37,9 @@ export async function saveDebtPriorities(userId: string, deviceId: string, debtA
   await db.withTransactionAsync(async () => {
     const active = await db.getAllAsync<{ id: string }>(`SELECT id FROM debt_accounts WHERE user_id = ? AND id IN (${debtAccountIds.map(() => "?").join(",") || "NULL"}) AND status = 'active' AND deleted = 0`, userId, ...debtAccountIds);
     if (active.length !== debtAccountIds.length) throw new LocalDbError("VALIDATION_ERROR", "Priorities must reference active debts.");
+    const current = await db.getFirstAsync<{ version: number | null }>("SELECT MAX(version) AS version FROM user_debt_priorities WHERE user_id = ?", userId);
     await db.runAsync("UPDATE user_debt_priorities SET deleted = 1, updated_at = ?, version = version + 1 WHERE user_id = ? AND deleted = 0", timestamp, userId);
     for (const [index, debtAccountId] of debtAccountIds.entries()) await db.runAsync("INSERT INTO user_debt_priorities (id, user_id, debt_account_id, priority_rank, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 0, ?, ?)", randomUUID(), userId, debtAccountId, index + 1, timestamp, timestamp);
-    await enqueueOperation(db, { userId, deviceId, entity: "user_debt_priorities", recordId: userId, operationType: "update", baseVersion: null, changedFields: ["priorities"], payload: { priorities: debtAccountIds }, failureMessage: "Your debt priorities could not be saved." });
+    await enqueueOperation(db, { userId, deviceId, entity: "user_debt_priorities", recordId: userId, operationType: "update", baseVersion: current?.version ?? null, changedFields: ["priorities"], payload: { priorities: debtAccountIds }, failureMessage: "Your debt priorities could not be saved." });
   });
 }

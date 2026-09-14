@@ -30,7 +30,7 @@ export function DebtForecastTable({ points, milestoneDate }: Props) {
       const milestone = point.date === milestoneDate;
       return <View key={point.id} accessibilityLabel={`${point.date}, ${point.isForecast ? "forecast" : "actual"} balance ${formatPeso(point.balanceCentavos)}${milestone ? ", debt-free milestone" : ""}`} style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: milestone ? "#E8F5ED" : P.card }}>
         <View style={{ minWidth: 56, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, backgroundColor: point.isForecast ? "#E6EFFC" : "#E7E7E2" }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9.5, color: point.isForecast ? "#2563EB" : P.muted }}>{point.isForecast ? "Forecast" : "Actual"}</Text></View>
-        <Text style={{ flex: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>{milestone ? "Debt-free milestone" : point.date}</Text>
+        <Text style={{ flex: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>{milestone ? `Debt-free milestone · ${point.date}` : point.date}</Text>
         <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11.5, color: P.ink }}>{formatPeso(point.balanceCentavos)}</Text>
       </View>;
     })}

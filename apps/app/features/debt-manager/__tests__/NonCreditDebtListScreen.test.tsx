@@ -5,14 +5,16 @@ import NonCreditDebtListScreen from "../NonCreditDebtListScreen";
 const mockListDebtAccounts = jest.fn();
 const mockGetDebtStrategy = jest.fn();
 const mockSaveDebtStrategy = jest.fn();
+const mockListDebtPriorities = jest.fn();
+const mockSaveDebtPriorities = jest.fn();
 
 jest.mock("../../../local-db/repositories/debtAccounts", () => ({ listDebtAccounts: (...args: unknown[]) => mockListDebtAccounts(...args) }));
-jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({ getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args), saveDebtStrategy: (...args: unknown[]) => mockSaveDebtStrategy(...args) }));
+jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({ getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args), saveDebtStrategy: (...args: unknown[]) => mockSaveDebtStrategy(...args), listDebtPriorities: (...args: unknown[]) => mockListDebtPriorities(...args), saveDebtPriorities: (...args: unknown[]) => mockSaveDebtPriorities(...args) }));
 
 const debt = { id: "debt-1", name: "Car loan", lenderName: "Bank A", type: "auto_loan", status: "active", progress: "no_payments", originalBalanceCentavos: 500000, currentBalanceCentavos: 450000, annualInterestRateBps: 650, minimumPaymentCentavos: 15000, paymentFrequency: "monthly", nextDueDate: "2026-10-01", maturityDate: null, targetPayoffDate: null, interestPeriod: "annual", interestMethod: "diminishing_balance", notes: null, typeSpecific: { startDate: "2026-01-01", feesCentavos: 0, penaltyInfo: null, termMonths: null }, hasPaymentHistory: false, archivedAt: null, paidOffAt: null, version: 1 };
 
 describe("NonCreditDebtListScreen", () => {
-  beforeEach(() => { jest.clearAllMocks(); mockListDebtAccounts.mockResolvedValue([debt]); mockGetDebtStrategy.mockResolvedValue("avalanche"); mockSaveDebtStrategy.mockResolvedValue(undefined); });
+  beforeEach(() => { jest.clearAllMocks(); mockListDebtAccounts.mockResolvedValue([debt]); mockGetDebtStrategy.mockResolvedValue("avalanche"); mockSaveDebtStrategy.mockResolvedValue(undefined); mockListDebtPriorities.mockResolvedValue([]); mockSaveDebtPriorities.mockResolvedValue(undefined); });
 
   it("shows filters, the global strategy, and selectable debts", async () => {
     const onOpenDebt = jest.fn();
@@ -38,5 +40,12 @@ describe("NonCreditDebtListScreen", () => {
     await view.findByText("Snowball");
     fireEvent.press(view.getByText("Snowball"));
     await waitFor(() => expect(mockSaveDebtStrategy).toHaveBeenCalledWith("user-1", "device-1", "snowball"));
+  });
+
+  it("persists a debt priority for surplus allocation", async () => {
+    const view = render(<NonCreditDebtListScreen userId="user-1" deviceId="device-1" onBack={jest.fn()} onOpenDebt={jest.fn()} />);
+    await view.findByText("Car loan");
+    fireEvent.press(view.getByLabelText("Prioritize Car loan"));
+    await waitFor(() => expect(mockSaveDebtPriorities).toHaveBeenCalledWith("user-1", "device-1", ["debt-1"]));
   });
 });

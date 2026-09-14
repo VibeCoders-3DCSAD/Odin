@@ -16,6 +16,10 @@ import { buildDebtForecast } from "./debtForecast";
 import { buildDebtManagerSummary, type DebtManagerSummary } from "./debtManagerSummary";
 import { getPhilippineToday } from "./debtTrendRange";
 import { combineDebtBalanceSeries } from "./globalDebtForecast";
+import { getCurrentBudgetDraft, type Budget } from "../../local-db/repositories/budgets";
+import { getDebtStrategy, listDebtPriorities, type DebtPriority, type DebtStrategy } from "../../local-db/repositories/debtRepaymentPlans";
+import { allocateDebtRepayments, type DebtRepaymentAllocation } from "./debtRepaymentAllocation";
+import { getCreditCardPaymentRequirementCentavos } from "./creditCardPaymentRequirement";
 
 type Props = { userId: string; onOpenCreditCards: () => void; onOpenNonCreditDebts: () => void };
 
@@ -30,11 +34,16 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
   const [strategies, setStrategies] = useState<CreditCardStrategy[]>([]);
   const [trendDebts, setTrendDebts] = useState<DebtAccount[]>([]);
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
-  const overview = useMemo<{ globalTrend: GlobalDebtPoint[]; summary: DebtManagerSummary }>(() => {
+  const [debtBudget, setDebtBudget] = useState<Budget | null>(null);
+  const [debtStrategy, setDebtStrategy] = useState<DebtStrategy>("avalanche");
+  const [debtPriorities, setDebtPriorities] = useState<DebtPriority[]>([]);
+  const overview = useMemo<{ globalTrend: GlobalDebtPoint[]; summary: DebtManagerSummary; allocation: DebtRepaymentAllocation; creditCardRequirementCentavos: number }>(() => {
     const activeCards = cards ?? [];
     const asOfDate = getPhilippineToday();
     const cardForecasts = activeCards.map((card) => ({ card, forecast: buildCreditCardForecast({ cycles: cycles.filter((cycle) => cycle.account_id === card.id), transactions: transactions.filter((transaction) => transaction.account_id === card.id), statements, strategy: strategies.find((strategy) => strategy.accountId === card.id), payments, installments: installments.filter((installment) => installment.account_id === card.id), availableCreditCentavos: card.creditCardDetails?.availableCreditCentavos ?? 0, creditLimitCentavos: card.creditCardDetails?.creditLimitCentavos ?? 0, billingCycleDays: card.creditCardDetails?.billingCycleDays ?? null, reconciledAvailableCreditCentavos: card.creditCardDetails?.reconciledAvailableCreditCentavos, preReconciliationAvailableCreditCentavos: card.creditCardDetails?.preReconciliationAvailableCreditCentavos, availableCreditReconciledAt: card.creditCardDetails?.availableCreditReconciledAt, asOfDate }) }));
-    const debtForecasts = trendDebts.map((debt) => ({ debt, forecast: buildDebtForecast(debt, asOfDate, debtPayments.filter((payment) => payment.debt_account_id === debt.id).map((payment) => ({ paymentDate: payment.payment_date, amountCentavos: payment.amount_centavos }))) }));
+    const creditCardRequirementCentavos = getCreditCardPaymentRequirementCentavos({ cards: activeCards, cycles, statements, payments, strategies, asOfDate });
+    const allocation = allocateDebtRepayments({ debts: trendDebts, debtBudgetCentavos: Math.max(0, (debtBudget?.debtBudgetAmountMinor ?? 0) - creditCardRequirementCentavos), strategy: debtStrategy, priorities: debtPriorities });
+    const debtForecasts = trendDebts.map((debt) => ({ debt, forecast: buildDebtForecast(debt, asOfDate, debtPayments.filter((payment) => payment.debt_account_id === debt.id).map((payment) => ({ paymentDate: payment.payment_date, amountCentavos: payment.amount_centavos })), allocation.allocations.get(debt.id)) }));
     const cardSeries = cardForecasts.map(({ card, forecast }) => ({ points: forecast.points.map((point) => ({ date: point.date, balanceCentavos: Math.max(0, (card.creditCardDetails?.creditLimitCentavos ?? 0) - point.availableCreditCentavos) })) }));
     const debtSeries = debtForecasts.map(({ forecast }) => ({ points: forecast.points }));
     const globalTrend = combineDebtBalanceSeries([...cardSeries, ...debtSeries]).map((point) => ({ date: point.date, debtCentavos: point.balanceCentavos }));
@@ -44,10 +53,10 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
     const accountNameById = new Map(activeCards.map((card) => [card.id, card.name]));
     const accountIdByCycleId = new Map(cycles.map((cycle) => [cycle.id, cycle.account_id]));
     const recordedPayments = [...debtPayments.map((payment) => ({ paymentDate: payment.payment_date, debtName: debtNameById.get(payment.debt_account_id) ?? "Debt", amountCentavos: payment.amount_centavos })), ...payments.map((payment) => ({ paymentDate: payment.payment_date, debtName: accountNameById.get(accountIdByCycleId.get(payment.cycle_id) ?? "") ?? "Credit card", amountCentavos: payment.amount_centavos }))];
-    return { globalTrend, summary: buildDebtManagerSummary([...cardSummaryItems, ...debtSummaryItems], recordedPayments, asOfDate) };
-  }, [cards, cycles, debtPayments, installments, payments, strategies, statements, transactions, trendDebts]);
+    return { globalTrend, summary: buildDebtManagerSummary([...cardSummaryItems, ...debtSummaryItems], recordedPayments, asOfDate), allocation, creditCardRequirementCentavos };
+  }, [cards, cycles, debtBudget, debtPayments, debtPriorities, debtStrategy, installments, payments, strategies, statements, transactions, trendDebts]);
 
-  async function load() { const [accounts, activeDebts, finishedDebts, cycleRows, transactionRows, statementRows, paymentRows, installmentRows, strategyRows, allDebtPayments] = await Promise.all([listFinancialAccounts(userId), listDebtAccounts(userId, "active"), listDebtAccounts(userId, "finished"), listCreditCardCycles(userId), listCreditCardCycleTransactions(userId), listCreditCardStatements(userId), listCreditCardPayments(userId), listCreditCardInstallments(userId), listCreditCardStrategies(userId), listAllDebtPayments(userId)]); setCards(accounts.filter((account) => account.kind === "credit_card" && account.status === "active")); setTrendDebts([...activeDebts, ...finishedDebts]); setDebtPayments(allDebtPayments); setCycles(cycleRows); setTransactions(transactionRows); setStatements(statementRows); setPayments(paymentRows); setInstallments(installmentRows); setStrategies(strategyRows); }
+  async function load() { const [accounts, activeDebts, finishedDebts, cycleRows, transactionRows, statementRows, paymentRows, installmentRows, strategyRows, allDebtPayments, budget, strategy, priorities] = await Promise.all([listFinancialAccounts(userId), listDebtAccounts(userId, "active"), listDebtAccounts(userId, "finished"), listCreditCardCycles(userId), listCreditCardCycleTransactions(userId), listCreditCardStatements(userId), listCreditCardPayments(userId), listCreditCardInstallments(userId), listCreditCardStrategies(userId), listAllDebtPayments(userId), getCurrentBudgetDraft(userId, getPhilippineToday()), getDebtStrategy(userId), listDebtPriorities(userId)]); setCards(accounts.filter((account) => account.kind === "credit_card" && account.status === "active")); setTrendDebts([...activeDebts, ...finishedDebts]); setDebtPayments(allDebtPayments); setCycles(cycleRows); setTransactions(transactionRows); setStatements(statementRows); setPayments(paymentRows); setInstallments(installmentRows); setStrategies(strategyRows); setDebtBudget(budget); setDebtStrategy(strategy); setDebtPriorities(priorities); }
   useEffect(() => { load().catch(() => { setCards([]); }); }, [userId]);
 
   if (cards === null) return <ActivityIndicator color={P.brand} />;
@@ -56,6 +65,7 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>Debt Manager</Text>
     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>Review your total debt and payment commitments</Text>
     <DebtOverviewSummary summary={overview.summary} />
+    <View style={{ backgroundColor: P.shell, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 3, marginTop: 14, padding: 14 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 14, fontWeight: "800" }}>{debtStrategy === "snowball" ? "Snowball" : "Avalanche"} repayment plan</Text>{debtBudget ? <><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Credit-card statement targets: PHP {(overview.creditCardRequirementCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Required non-credit payments: PHP {(overview.allocation.requiredPaymentCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{overview.allocation.shortfallCentavos > 0 ? `Debt budget shortfall: PHP ${(overview.allocation.shortfallCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : `Strategy surplus: PHP ${(overview.allocation.surplusCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}</Text></> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Add a debt budget to calculate allocation and surplus.</Text>}</View>
     <DebtPaymentTrend points={overview.summary.paymentTrend} />
     <GlobalDebtTrend points={overview.globalTrend} />
     <Pressable accessibilityRole="button" accessibilityLabel="Open Credit Cards" onPress={onOpenCreditCards} style={{ marginTop: 16, borderWidth: 1, borderColor: P.line, borderRadius: 16, padding: 16, backgroundColor: P.shell }}>

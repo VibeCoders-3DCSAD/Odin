@@ -35,10 +35,10 @@ function statusBackground(status: DebtForecastStatus): string {
   return "#E6EFFC";
 }
 
-export default function NonCreditDebtForecastSection({ debt, payments }: { debt: DebtAccount; payments: DebtPayment[] }) {
+export default function NonCreditDebtForecastSection({ debt, payments, projectedContributionCentavos }: { debt: DebtAccount; payments: DebtPayment[]; projectedContributionCentavos?: number }) {
   const [width, setWidth] = useState(0);
   const [range, setRange] = useState<DebtTrendRange>("year");
-  const forecast = buildDebtForecast(debt, undefined, payments.map((payment) => ({ paymentDate: payment.payment_date, amountCentavos: payment.amount_centavos })));
+  const forecast = buildDebtForecast(debt, undefined, payments.map((payment) => ({ paymentDate: payment.payment_date, amountCentavos: payment.amount_centavos })), projectedContributionCentavos);
   const { points } = forecast;
   const today = getPhilippineToday();
   const payoffDate = debt.status === "paid_off" ? debt.paidOffAt?.slice(0, 10) : forecast.projectedPayoffDate ?? undefined;

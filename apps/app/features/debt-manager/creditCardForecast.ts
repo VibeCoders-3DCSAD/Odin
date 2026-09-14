@@ -70,6 +70,14 @@ function paymentTargetForNode(balanceCentavos: number, minimumDueCentavos: numbe
 
 function paymentComponentsForNode(regularBalanceCentavos: number, amortizationCentavos: number, minimumDueCentavos: number, strategy?: CreditCardStrategy, percentagePaymentCentavos?: number) {
   if (!strategy) return { regularPaymentCentavos: 0, amortizationPaymentCentavos: amortizationCentavos };
+  if (strategy.strategy === "pay_minimum") {
+    const totalPaymentCentavos = Math.min(regularBalanceCentavos + amortizationCentavos, minimumDueCentavos);
+    const amortizationPaymentCentavos = Math.min(amortizationCentavos, totalPaymentCentavos);
+    return {
+      regularPaymentCentavos: Math.min(regularBalanceCentavos, totalPaymentCentavos - amortizationPaymentCentavos),
+      amortizationPaymentCentavos,
+    };
+  }
   return {
     regularPaymentCentavos: paymentTargetForNode(regularBalanceCentavos, minimumDueCentavos, strategy, percentagePaymentCentavos),
     amortizationPaymentCentavos: amortizationCentavos,
@@ -84,7 +92,10 @@ function buildAnchoredForecast(
 ): CreditCardForecast {
   const anchor = input.availableCreditReconciledAt!;
   const anchorAvailable = input.reconciledAvailableCreditCentavos!;
-  const preAnchorAvailable = input.preReconciliationAvailableCreditCentavos!;
+  // Older reconciliations can lack the historical baseline. The issuer's
+  // reported current amount remains authoritative even when history cannot
+  // be reconstructed exactly.
+  const preAnchorAvailable = input.preReconciliationAvailableCreditCentavos ?? anchorAvailable;
   const events = [
     ...cardTransactions.map((transaction) => ({ timestamp: transaction.forecast_recorded_at ?? transaction.transaction_date, date: transaction.transaction_date, delta: -transaction.amount_centavos })),
     ...cardPayments.map((payment) => ({ timestamp: payment.forecast_recorded_at ?? payment.payment_date, date: payment.payment_date, delta: payment.amount_centavos })),
@@ -183,7 +194,7 @@ function* calculateCreditCardForecast(input: CreditCardForecastInput): Generator
     if (statementIds.has(payments[index]!.statement_id)) cardPayments.push(payments[index]!);
     if (index % YIELD_INTERVAL === 0) yield;
   }
-  if (input.reconciledAvailableCreditCentavos != null && input.preReconciliationAvailableCreditCentavos != null && input.availableCreditReconciledAt) {
+  if (input.reconciledAvailableCreditCentavos != null && input.availableCreditReconciledAt) {
     return buildAnchoredForecast(input, cardTransactions, cardPayments, cardStatements);
   }
   const movementByDate = new Map<string, number>();

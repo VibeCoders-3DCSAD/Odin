@@ -13,21 +13,21 @@ describe("getDebtRepaymentForecast", () => {
   it("marks a payment above the target requirement as advanced", () => {
     expect(getDebtRepaymentForecast({ ...debt, minimumPaymentCentavos: 12_000 })).toEqual({
       status: "advanced",
-      estimatedPayoffDate: "2027-05-29",
+      estimatedPayoffDate: "2027-06-01",
     });
   });
 
   it("marks the payment needed by the target date as on track", () => {
     expect(getDebtRepaymentForecast(debt)).toEqual({
       status: "on_track",
-      estimatedPayoffDate: "2027-06-28",
+      estimatedPayoffDate: "2027-07-01",
     });
   });
 
   it("marks an insufficient payment as underpaid", () => {
     expect(getDebtRepaymentForecast({ ...debt, minimumPaymentCentavos: 9_000 })).toEqual({
       status: "underpaid",
-      estimatedPayoffDate: "2027-08-27",
+      estimatedPayoffDate: "2027-09-01",
     });
   });
 

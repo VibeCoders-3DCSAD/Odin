@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { listDebtAccounts, type DebtAccount, type DebtListVisibility } from "../../local-db/repositories/debtAccounts";
-import { getDebtStrategy, saveDebtStrategy, type DebtStrategy } from "../../local-db/repositories/debtRepaymentPlans";
+import { getDebtStrategy, listDebtPriorities, saveDebtPriorities, saveDebtStrategy, type DebtPriority, type DebtStrategy } from "../../local-db/repositories/debtRepaymentPlans";
 import NonCreditDebtForm from "./NonCreditDebtForm";
 import { getDebtTypeLabel } from "./debtTypes";
 
@@ -15,9 +15,22 @@ export default function NonCreditDebtListScreen({ userId, deviceId, onBack, onOp
   const [visibility, setVisibility] = useState<DebtListVisibility>("active");
   const [strategy, setStrategy] = useState<DebtStrategy>("avalanche");
   const [savingStrategy, setSavingStrategy] = useState(false);
+  const [priorities, setPriorities] = useState<DebtPriority[]>([]);
+  const [savingPriorities, setSavingPriorities] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DebtAccount | null | undefined>(undefined);
 
-  function load() { return Promise.all([listDebtAccounts(userId, visibility), getDebtStrategy(userId)]).then(([nextDebts, nextStrategy]) => { setDebts(nextDebts); setStrategy(nextStrategy); }); }
+  function load() { return Promise.all([listDebtAccounts(userId, visibility), getDebtStrategy(userId), listDebtPriorities(userId)]).then(([nextDebts, nextStrategy, nextPriorities]) => { setDebts(nextDebts); setStrategy(nextStrategy); setPriorities(nextPriorities); }); }
+  async function togglePriority(debtId: string) {
+    setSavingPriorities(true);
+    try {
+      const priorityIds = priorities.map((priority) => priority.debtAccountId);
+      const next = priorityIds.includes(debtId) ? priorityIds.filter((id) => id !== debtId) : [...priorityIds, debtId];
+      await saveDebtPriorities(userId, deviceId, next);
+      setPriorities(next.map((debtAccountId, index) => ({ debtAccountId, priorityRank: index + 1 })));
+    } finally {
+      setSavingPriorities(false);
+    }
+  }
   useEffect(() => { load().catch(() => setDebts([])); }, [userId, visibility]);
 
   if (editingDebt !== undefined) return <NonCreditDebtForm userId={userId} deviceId={deviceId} debt={editingDebt} onCancel={() => setEditingDebt(undefined)} onSaved={() => { setEditingDebt(undefined); load().catch(() => {}); }} />;
@@ -34,6 +47,6 @@ export default function NonCreditDebtListScreen({ userId, deviceId, onBack, onOp
     </View>
     <Pressable accessibilityRole="button" accessibilityLabel="Add non-credit-card debt" onPress={() => setEditingDebt(null)} style={{ marginTop: 16, backgroundColor: P.brand, borderRadius: 14, padding: 12 }}><Text style={{ color: "white", fontWeight: "800" }}>Add debt</Text></Pressable>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 }}>{FILTERS.map(({ value, label }) => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`Show ${value} debts`} onPress={() => setVisibility(value)} style={{ borderWidth: 1, borderColor: visibility === value ? P.brand : P.line, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: visibility === value ? P.shell : "transparent" }}><Text style={{ color: P.ink, fontWeight: "700" }}>{label}</Text></Pressable>)}</View>
-    <View style={{ marginTop: 18, gap: 10 }}>{debts.length === 0 ? <Text style={{ fontFamily: "Manrope", color: P.muted }}>No {visibility === "finished" ? "finished" : visibility} debts are recorded yet.</Text> : debts.map((debt) => <Pressable key={debt.id} accessibilityRole="button" accessibilityLabel={`Open ${debt.name}`} onPress={() => onOpenDebt(debt.id)} style={{ borderWidth: 1, borderColor: P.line, borderRadius: 16, padding: 14, backgroundColor: P.shell }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>{debt.name}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 3 }}>{getDebtTypeLabel(debt.type)} | {debt.lenderName ?? "No lender listed"}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 8 }}>Remaining: PHP {(debt.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</Text></Pressable>)}</View>
+    <View style={{ marginTop: 18, gap: 10 }}>{debts.length === 0 ? <Text style={{ fontFamily: "Manrope", color: P.muted }}>No {visibility === "finished" ? "finished" : visibility} debts are recorded yet.</Text> : debts.map((debt) => { const priority = priorities.find((item) => item.debtAccountId === debt.id); return <View key={debt.id} style={{ borderWidth: 1, borderColor: P.line, borderRadius: 16, padding: 14, backgroundColor: P.shell }}><Pressable accessibilityRole="button" accessibilityLabel={`Open ${debt.name}`} onPress={() => onOpenDebt(debt.id)}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>{debt.name}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 3 }}>{getDebtTypeLabel(debt.type)} | {debt.lenderName ?? "No lender listed"}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 8 }}>Remaining: PHP {(debt.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</Text></Pressable>{visibility === "active" ? <Pressable accessibilityRole="button" accessibilityLabel={priority ? `Remove priority from ${debt.name}` : `Prioritize ${debt.name}`} disabled={savingPriorities} onPress={() => { togglePriority(debt.id).catch(() => {}); }} style={{ marginTop: 10 }}><Text style={{ color: P.brand, fontFamily: "Manrope", fontWeight: "700", fontSize: 12 }}>{priority ? `Priority ${priority.priorityRank} · Remove` : "Prioritize for surplus"}</Text></Pressable> : null}</View>; })}</View>
   </View>;
 }
