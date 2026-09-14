@@ -16,6 +16,7 @@ export type CreditCardPayment = {
   transaction_id: string;
   amount_centavos: number;
   payment_date: string;
+  forecast_recorded_at?: string | null;
   source_account_id: string;
   notes: string | null;
   issuer_recognized: boolean;
@@ -31,8 +32,8 @@ type PaymentRow = Omit<CreditCardPayment, "issuer_recognized" | "deleted"> & { i
 export type StatementPaymentContext = { statementId: string; cycleId: string };
 
 export type CreateStatementPaymentInput = StatementPaymentContext & Pick<CreateExpenseInput,
-  "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name" | "notes"
->;
+  "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name"
+> & { notes?: string | null };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -135,7 +136,7 @@ export async function createStatementPayment(
       subcategory_id: input.subcategory_id,
       transaction_date: input.transaction_date,
       merchant_name: input.merchant_name,
-      notes: input.notes,
+      notes: input.notes ?? undefined,
       client_mutation_id: clientMutationId,
     });
     const paymentPayload = {
@@ -144,17 +145,18 @@ export async function createStatementPayment(
       transaction_id: transaction.id,
       amount_centavos: input.amount_centavos,
       payment_date: input.transaction_date,
+      forecast_recorded_at: ts,
       source_account_id: input.source_account_id,
       notes: input.notes ?? null,
       client_mutation_id: clientMutationId,
     };
     await db.runAsync(
       `INSERT INTO credit_card_payments
-        (id, user_id, cycle_id, statement_id, transaction_id, amount_centavos, payment_date,
+         (id, user_id, cycle_id, statement_id, transaction_id, amount_centavos, payment_date, forecast_recorded_at,
          source_account_id, notes, issuer_recognized, client_mutation_id, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, 0, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, 0, ?, ?)`,
       id, userId, input.cycleId, input.statementId, transaction.id, input.amount_centavos,
-      input.transaction_date, input.source_account_id, input.notes ?? null, clientMutationId, ts, ts,
+       input.transaction_date, ts, input.source_account_id, input.notes ?? null, clientMutationId, ts, ts,
     );
     await db.runAsync(
       `UPDATE credit_card_details

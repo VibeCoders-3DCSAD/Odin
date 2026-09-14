@@ -16,12 +16,13 @@ it("preserves transaction_id when preparing a credit-card relationship", async (
     record_id: "transaction-1",
     operation_type: "create",
     base_version: null,
-    changed_fields: ["transaction_id", "account_id", "cycle_id", "purchase_type"],
+    changed_fields: ["transaction_id", "account_id", "cycle_id", "purchase_type", "forecast_recorded_at"],
     payload: {
       transaction_id: "transaction-1",
       account_id: "card-1",
       cycle_id: "cycle-1",
       purchase_type: "regular",
+      forecast_recorded_at: "2026-09-10T12:00:00.000Z",
     },
   });
 
@@ -30,6 +31,7 @@ it("preserves transaction_id when preparing a credit-card relationship", async (
     account_id: "card-1",
     cycle_id: "cycle-1",
     purchase_type: "regular",
+    forecast_recorded_at: "2026-09-10T12:00:00.000Z",
   });
 });
 
@@ -99,4 +101,15 @@ it("prepares every editable credit-card detail field for updates", async () => {
     billing_cycle_days: 30,
     alert_threshold_percent: 80,
   });
+});
+
+it("accepts issuer-reconciled available credit updates", async () => {
+  const prepared = await prepareOperation(createSupabaseStub(), "user-1", {
+    operation_id: "operation-reconcile-credit", entity: "credit_card_details", record_id: "card-1",
+    operation_type: "update", base_version: 1,
+    changed_fields: ["available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at"],
+    payload: { available_credit_centavos: 50_000, reconciled_available_credit_centavos: 50_000, pre_reconciliation_available_credit_centavos: 60_000, available_credit_reconciled_at: "2026-09-10T12:00:00.000Z" },
+  });
+
+  expect(prepared.payload).toEqual({ available_credit_centavos: 50_000, reconciled_available_credit_centavos: 50_000, pre_reconciliation_available_credit_centavos: 60_000, available_credit_reconciled_at: "2026-09-10T12:00:00.000Z" });
 });

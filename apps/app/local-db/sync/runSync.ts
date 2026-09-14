@@ -320,14 +320,14 @@ async function repairLegacyDerivedUpdates(
 
     const payload = JSON.parse(row.payload) as Record<string, unknown>;
     const changedFields = JSON.parse(row.changed_fields) as string[];
-    const blockedFields = row.entity === "financial_accounts" ? ["kind"] : ["available_credit_centavos"];
+    const blockedFields = row.entity === "financial_accounts" ? ["kind"] : [];
     const repairedFields = changedFields.filter((field) => !blockedFields.includes(field));
     for (const field of blockedFields) delete payload[field];
 
     if (repairedFields.length === 0) {
       await db.runAsync(
         "UPDATE sync_queue SET status = 'discarded', discarded_at = CURRENT_TIMESTAMP, last_error = ? WHERE operation_id = ?",
-        "Discarded derived or immutable fields from a legacy sync operation.",
+          "Discarded immutable fields from a legacy sync operation.",
         row.operation_id,
       );
       continue;
@@ -423,12 +423,15 @@ async function repairCreditCardDetailSyncRows(
       issuer: string | null;
       credit_limit_centavos: number;
       available_credit_centavos: number | null;
+      reconciled_available_credit_centavos: number | null;
+      pre_reconciliation_available_credit_centavos: number | null;
+      available_credit_reconciled_at: string | null;
       cutoff_day: number;
       statement_day: number | null;
       notes: string | null;
       billing_cycle_days: number | null;
       alert_threshold_percent: number | null;
-    }>("SELECT account_id, issuer, credit_limit_centavos, available_credit_centavos, cutoff_day, statement_day, notes, billing_cycle_days, alert_threshold_percent FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0", row.record_id, userId);
+    }>("SELECT account_id, issuer, credit_limit_centavos, available_credit_centavos, reconciled_available_credit_centavos, pre_reconciliation_available_credit_centavos, available_credit_reconciled_at, cutoff_day, statement_day, notes, billing_cycle_days, alert_threshold_percent FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0", row.record_id, userId);
     if (!details) continue;
 
     const queued = await db.getFirstAsync<{ operation_id: string }>(
@@ -444,6 +447,9 @@ async function repairCreditCardDetailSyncRows(
       issuer: details.issuer,
       credit_limit_centavos: details.credit_limit_centavos,
       available_credit_centavos: details.available_credit_centavos,
+      reconciled_available_credit_centavos: details.reconciled_available_credit_centavos,
+      pre_reconciliation_available_credit_centavos: details.pre_reconciliation_available_credit_centavos,
+      available_credit_reconciled_at: details.available_credit_reconciled_at,
       cutoff_day: details.cutoff_day,
       statement_day: details.statement_day,
       notes: details.notes,

@@ -17,6 +17,7 @@ import CreditCardForecastSection from "./CreditCardForecastSection";
 import { listCreditCardStrategies, type CreditCardStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
 import { listCreditCardSettlements, type CreditCardSettlement } from "../../local-db/repositories/creditCardSettlements";
 import CreditCardRepaymentStrategy from "./CreditCardRepaymentStrategy";
+import CreditCardAvailableCreditReconciliation from "./CreditCardAvailableCreditReconciliation";
 import { getPhilippineToday } from "./debtTrendRange";
 import { useCreditCardForecast } from "./hooks/useCreditCardForecast";
 
@@ -118,6 +119,9 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
     availableCreditCentavos: selectedAccount.creditCardDetails?.availableCreditCentavos ?? 0,
     creditLimitCentavos: selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0,
     billingCycleDays: selectedAccount.creditCardDetails?.billingCycleDays ?? null,
+    reconciledAvailableCreditCentavos: selectedAccount.creditCardDetails?.reconciledAvailableCreditCentavos,
+    preReconciliationAvailableCreditCentavos: selectedAccount.creditCardDetails?.preReconciliationAvailableCreditCentavos,
+    availableCreditReconciledAt: selectedAccount.creditCardDetails?.availableCreditReconciledAt,
     asOfDate: today,
   } : null);
 
@@ -166,6 +170,9 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
   const latestStatement = statements
     .filter((statement) => statement.authoritative && !statement.deleted && statement.statement_date <= today && cycles.find((cycle) => cycle.id === statement.cycle_id)?.account_id === accountId)
     .sort((left, right) => right.statement_date.localeCompare(left.statement_date))[0];
+  const creditLimitCentavos = selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0;
+  const availableCreditCentavos = selectedAccount.creditCardDetails?.availableCreditCentavos ?? 0;
+  const currentDebtCentavos = Math.max(0, creditLimitCentavos - availableCreditCentavos);
 
   return (
     <View>
@@ -177,7 +184,9 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
         <View style={{ flexShrink: 1 }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>{selectedAccount.name}</Text>
           <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>Billing cycles and statement activity</Text>
-          <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 7 }}>Credit limit: {formatPeso(selectedAccount.creditCardDetails?.creditLimitCentavos)} | Available credit: {formatPeso(selectedAccount.creditCardDetails?.availableCreditCentavos)}</Text>
+           <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 7 }}>Credit limit: {formatPeso(creditLimitCentavos)} | Available credit: {formatPeso(availableCreditCentavos)}</Text>
+           <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 3 }}>Current card debt: {formatPeso(currentDebtCentavos)}</Text>
+            <CreditCardAvailableCreditReconciliation userId={userId} deviceId={deviceId} accountId={selectedAccount.id} creditLimitCentavos={creditLimitCentavos} onSaved={load} />
         </View>
       </View>
       {stale ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, backgroundColor: P.card, padding: 10, borderRadius: 10, marginBottom: 12 }}>Credit-card information may be out of date. Refresh or reconcile it with the latest issuer records.</Text> : null}
@@ -194,7 +203,7 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
         </View>
        ) : null}
        <CreditCardRepaymentStrategy key={accountId} userId={userId} deviceId={deviceId} accountId={accountId} statement={latestStatement} strategy={strategy} onPreviewChange={setPreviewStrategy} onSaved={async () => { await load(); setPreviewStrategy(null); }} />
-       <CreditCardForecastSection forecast={forecast.forecast} isLoading={forecast.isLoading} creditLimitCentavos={selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0} />
+        <CreditCardForecastSection forecast={forecast.forecast} isLoading={forecast.isLoading} creditLimitCentavos={selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0} reconciliationAt={selectedAccount.creditCardDetails?.availableCreditReconciledAt} />
        <CreditCardCollections
         userId={userId}
         deviceId={deviceId}

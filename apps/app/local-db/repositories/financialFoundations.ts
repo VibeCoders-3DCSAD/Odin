@@ -30,6 +30,9 @@ type FinancialAccountRow = {
   last_synced_at: string | null;
   cc_credit_limit_centavos: number | null;
   cc_available_credit_centavos: number | null;
+  cc_reconciled_available_credit_centavos: number | null;
+  cc_pre_reconciliation_available_credit_centavos: number | null;
+  cc_available_credit_reconciled_at: string | null;
   cc_issuer: string | null;
   cc_notes: string | null;
   cc_billing_cycle_days: number | null;
@@ -47,6 +50,9 @@ type CreditCardDetailsSyncRow = {
   issuer: string | null;
   credit_limit_centavos: number;
   available_credit_centavos: number | null;
+  reconciled_available_credit_centavos: number | null;
+  pre_reconciliation_available_credit_centavos: number | null;
+  available_credit_reconciled_at: string | null;
   cutoff_day: number;
   statement_day: number | null;
   notes: string | null;
@@ -146,6 +152,9 @@ export type FinancialAccount = {
 export type CreditCardDetails = {
   creditLimitCentavos: number;
   availableCreditCentavos: number | null;
+  reconciledAvailableCreditCentavos: number | null;
+  preReconciliationAvailableCreditCentavos: number | null;
+  availableCreditReconciledAt: string | null;
   issuer: string | null;
   notes: string | null;
   billingCycleDays: number | null;
@@ -355,6 +364,9 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
         ? {
             creditLimitCentavos: row.cc_credit_limit_centavos,
             availableCreditCentavos: row.cc_available_credit_centavos,
+            reconciledAvailableCreditCentavos: row.cc_reconciled_available_credit_centavos,
+            preReconciliationAvailableCreditCentavos: row.cc_pre_reconciliation_available_credit_centavos,
+            availableCreditReconciledAt: row.cc_available_credit_reconciled_at,
             issuer: row.cc_issuer,
             notes: row.cc_notes,
             billingCycleDays: row.cc_billing_cycle_days,
@@ -629,7 +641,11 @@ async function enqueueCreditCardDetailsOperation(
       : {
           account_id: accountId,
           issuer: row.issuer,
-          credit_limit_centavos: row.credit_limit_centavos,
+           credit_limit_centavos: row.credit_limit_centavos,
+           available_credit_centavos: row.available_credit_centavos,
+           reconciled_available_credit_centavos: row.reconciled_available_credit_centavos,
+           pre_reconciliation_available_credit_centavos: row.pre_reconciliation_available_credit_centavos,
+           available_credit_reconciled_at: row.available_credit_reconciled_at,
           cutoff_day: row.cutoff_day,
         statement_day: row.statement_day,
         notes: row.notes,
@@ -710,7 +726,10 @@ export async function listFinancialAccounts(userId: string): Promise<FinancialAc
   const db = await getDb();
   const rows = await db.getAllAsync<FinancialAccountRow>(
     `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
-             cc.available_credit_centavos AS cc_available_credit_centavos,
+              cc.available_credit_centavos AS cc_available_credit_centavos,
+              cc.reconciled_available_credit_centavos AS cc_reconciled_available_credit_centavos,
+              cc.pre_reconciliation_available_credit_centavos AS cc_pre_reconciliation_available_credit_centavos,
+              cc.available_credit_reconciled_at AS cc_available_credit_reconciled_at,
              cc.issuer AS cc_issuer,
              cc.notes AS cc_notes,
              cc.billing_cycle_days AS cc_billing_cycle_days,
@@ -739,7 +758,10 @@ export async function getFinancialAccount(
   const db = await getDb();
   const row = await db.getFirstAsync<FinancialAccountRow>(
     `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
-             cc.available_credit_centavos AS cc_available_credit_centavos,
+              cc.available_credit_centavos AS cc_available_credit_centavos,
+              cc.reconciled_available_credit_centavos AS cc_reconciled_available_credit_centavos,
+              cc.pre_reconciliation_available_credit_centavos AS cc_pre_reconciliation_available_credit_centavos,
+              cc.available_credit_reconciled_at AS cc_available_credit_reconciled_at,
              cc.issuer AS cc_issuer,
              cc.notes AS cc_notes,
              cc.billing_cycle_days AS cc_billing_cycle_days,
@@ -969,6 +991,55 @@ export async function updateFinancialAccount(
   });
 
   return result!;
+}
+
+export async function reconcileCreditCardAvailableCredit(
+  userId: string,
+  deviceId: string,
+  accountId: string,
+  availableCreditCentavos: number,
+): Promise<void> {
+  if (!Number.isSafeInteger(availableCreditCentavos) || availableCreditCentavos < 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "Enter a valid available credit amount.");
+  }
+
+  const db = await getDb();
+  const timestamp = now();
+  await db.withTransactionAsync(async () => {
+    const details = await db.getFirstAsync<{ credit_limit_centavos: number; available_credit_centavos: number | null; version: number }>(
+      "SELECT credit_limit_centavos, available_credit_centavos, version FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0",
+      accountId,
+      userId,
+    );
+    if (!details) throw new LocalDbError("NOT_FOUND", "Credit-card details not found.");
+    if (availableCreditCentavos > details.credit_limit_centavos) {
+      throw new LocalDbError("VALIDATION_ERROR", "Available credit cannot exceed the credit limit.");
+    }
+
+    await db.runAsync(
+      `UPDATE credit_card_details SET available_credit_centavos = ?, reconciled_available_credit_centavos = ?,
+         pre_reconciliation_available_credit_centavos = COALESCE(available_credit_centavos, credit_limit_centavos),
+         available_credit_reconciled_at = ?, version = version + 1, updated_at = ?
+       WHERE account_id = ? AND user_id = ? AND deleted = 0`,
+      availableCreditCentavos,
+      availableCreditCentavos,
+      timestamp,
+      timestamp,
+      accountId,
+      userId,
+    );
+    await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "credit_card_details",
+      recordId: accountId,
+      operationType: "update",
+      baseVersion: details.version,
+      changedFields: ["available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at"],
+      payload: { available_credit_centavos: availableCreditCentavos, reconciled_available_credit_centavos: availableCreditCentavos, pre_reconciliation_available_credit_centavos: details.available_credit_centavos ?? details.credit_limit_centavos, available_credit_reconciled_at: timestamp },
+      failureMessage: "Your issuer-reported available credit could not be reconciled.",
+    });
+  });
 }
 
 export async function deleteFinancialAccount(

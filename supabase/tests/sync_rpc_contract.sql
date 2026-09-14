@@ -58,6 +58,11 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'a canonical sync RPC is not executable by authenticated';
   END IF;
+
+  IF pg_get_functiondef('public.apply_sync_operation(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
+     LIKE '%transaction would overdraw a financial account%' THEN
+    RAISE EXCEPTION 'transaction sync must allow recovery from a historical overdraft';
+  END IF;
 END;
 $$;
 

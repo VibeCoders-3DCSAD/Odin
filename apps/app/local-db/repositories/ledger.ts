@@ -642,15 +642,16 @@ export async function createExpenseInTransaction(
     const purchaseType = installment ? "installment" : "regular";
     await db.runAsync(
       `INSERT INTO credit_card_transactions
-        (transaction_id, user_id, account_id, cycle_id, purchase_type, installment_id,
+         (transaction_id, user_id, account_id, cycle_id, purchase_type, installment_id, forecast_recorded_at,
          client_mutation_id, applied_credit_centavos, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, 0, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 0, ?, ?)`,
       id,
       userId,
       input.source_account_id,
       cycle.id,
       purchaseType,
-      installment?.installment.id ?? null,
+       installment?.installment.id ?? null,
+       ts,
       input.client_mutation_id ?? id,
       ts,
       ts,
@@ -674,13 +675,14 @@ export async function createExpenseInTransaction(
       recordId: id,
       operationType: "create",
       baseVersion: null,
-      changedFields: ["transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id"],
+      changedFields: ["transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "forecast_recorded_at", "client_mutation_id"],
       payload: {
         transaction_id: id,
         account_id: input.source_account_id,
         cycle_id: cycle.id,
         purchase_type: purchaseType,
         installment_id: installment?.installment.id ?? null,
+        forecast_recorded_at: ts,
         client_mutation_id: input.client_mutation_id ?? id,
       },
       failureMessage: "This credit-card transaction could not be recorded.",

@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import DebtManagerScreen from "../DebtManagerScreen";
 
 const mockListFinancialAccounts = jest.fn();
+const mockReconcileCreditCardAvailableCredit = jest.fn();
 const mockEnsureCurrentCreditCardCycles = jest.fn();
 const mockListCreditCardCycles = jest.fn();
 const mockListCreditCardCycleTransactions = jest.fn();
@@ -12,6 +13,8 @@ const mockCreateCreditCardStatement = jest.fn();
 const mockListCreditCardInstallments = jest.fn();
 const mockListCreditCardPayments = jest.fn();
 const mockListCreditCardStrategies = jest.fn();
+const mockRequestCreditCardSettlement = jest.fn();
+const mockRecognizeCreditCardSettlement = jest.fn();
 type ForecastSectionProps = {
   forecast: { points: Array<{ cycleId: string; targetCentavos: number }> } | null;
   isLoading: boolean;
@@ -21,6 +24,7 @@ const mockDatePickerRef: { props: { onChange: (event: { type: string }, date?: D
 
 jest.mock("../../../local-db/repositories/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
+  reconcileCreditCardAvailableCredit: (...args: unknown[]) => mockReconcileCreditCardAvailableCredit(...args),
 }));
 
 jest.mock("../../../local-db/repositories/creditCardCycles", () => ({
@@ -61,6 +65,8 @@ jest.mock("../CreditCardForecastSection", () => {
 
 jest.mock("../../../local-db/repositories/creditCardSettlements", () => ({
   listCreditCardSettlements: jest.fn().mockResolvedValue([]),
+  requestCreditCardSettlement: (...args: unknown[]) => mockRequestCreditCardSettlement(...args),
+  recognizeCreditCardSettlement: (...args: unknown[]) => mockRecognizeCreditCardSettlement(...args),
 }));
 
 jest.mock("@react-native-community/datetimepicker", () => ({
@@ -83,6 +89,9 @@ beforeEach(() => {
   mockCreditCardForecastSection.mockClear();
   mockCreateCreditCardStatement.mockResolvedValue({});
   mockDatePickerRef.props = null;
+  mockReconcileCreditCardAvailableCredit.mockResolvedValue(undefined);
+  mockRequestCreditCardSettlement.mockResolvedValue("settlement-1");
+  mockRecognizeCreditCardSettlement.mockResolvedValue(undefined);
   jest.restoreAllMocks();
 });
 
@@ -324,6 +333,40 @@ it("previews repayment strategy changes before saving", async () => {
     const props = mockCreditCardForecastSection.mock.calls.at(-1)?.[0];
     expect(props?.forecast?.points.find((point) => point.cycleId.startsWith("forecast"))?.targetCentavos).toBe(1_000_000);
   });
+});
+
+it("requires confirmation before reconciling issuer available credit", async () => {
+  mockListFinancialAccounts.mockResolvedValue([{
+    id: "card-1", name: "Visa", kind: "credit_card", status: "active", currentBalanceCentavos: 0, openingBalanceCentavos: 0,
+    includeInDashboardBalance: false, institutionName: null, openedOn: null, archivedAt: null, sortOrder: 0,
+    creditCardDetails: { creditLimitCentavos: 1_000_000, availableCreditCentavos: 750_000, issuer: "Bank", notes: null, billingCycleDays: 30, cutoffDay: 15, statementDay: null, alertThresholdPercent: null },
+  }]);
+  mockListCreditCardCycles.mockResolvedValue([{ id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-08-16", cutoff_date: "2026-09-15", statement_date: "2026-09-16", version: 1, deleted: false, created_at: "2026-08-16T00:00:00.000Z", updated_at: "2026-09-16T00:00:00.000Z" }]);
+  mockListCreditCardStatements.mockResolvedValue([{ id: "statement-1", user_id: "user-1", cycle_id: "cycle-1", statement_date: "2026-09-16", due_date: "2099-09-30", statement_balance_centavos: 250_000, minimum_due_centavos: 50_000, finance_charge_centavos: 0, authoritative: true, version: 1, deleted: false, created_at: "2026-09-16T00:00:00.000Z", updated_at: "2026-09-16T00:00:00.000Z" }]);
+
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
+  await waitFor(() => expect(view.getByLabelText("Reconcile issuer available credit")).toBeTruthy());
+  fireEvent.press(view.getByLabelText("Reconcile issuer available credit"));
+  fireEvent.changeText(view.getByLabelText("Issuer available credit"), "8000");
+  fireEvent.press(view.getByLabelText("Continue available credit reconciliation"));
+  expect(mockReconcileCreditCardAvailableCredit).not.toHaveBeenCalled();
+  fireEvent.press(view.getByLabelText("Confirm available credit reconciliation"));
+  await waitFor(() => expect(mockReconcileCreditCardAvailableCredit).toHaveBeenCalledWith("user-1", "device-1", "card-1", 800_000));
+});
+
+it("records issuer-reported principal and recognition for early settlement", async () => {
+  mockListFinancialAccounts.mockResolvedValue([{ id: "card-1", name: "Visa", kind: "credit_card", status: "active", creditCardDetails: null }]);
+  mockListCreditCardInstallments.mockResolvedValue([{ id: "installment-1", account_id: "card-1", description: "Laptop", original_principal_centavos: 100_000, remaining_principal_centavos: 60_000, term_months: 12, remaining_months: 6, monthly_amortization_centavos: 10_000, interest_type: "zero_interest", interest_rate_bps: 0, settlement_status: "active" }]);
+
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
+  await waitFor(() => expect(view.getByLabelText("Record early settlement for Laptop")).toBeTruthy());
+  fireEvent.press(view.getByLabelText("Record early settlement for Laptop"));
+  fireEvent.changeText(view.getByLabelText("Early settlement amount"), "5500");
+  fireEvent.changeText(view.getByLabelText("Early settlement remaining principal"), "6000");
+  fireEvent.press(view.getByLabelText("Save early settlement"));
+  await waitFor(() => expect(mockRequestCreditCardSettlement).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ installmentId: "installment-1", remainingPrincipalCentavos: 600_000, settlementAmountCentavos: 550_000, preterminationFeeCentavos: 0 })));
+  await waitFor(() => expect(mockRequestCreditCardSettlement).toHaveBeenCalled());
+  expect(mockRecognizeCreditCardSettlement).not.toHaveBeenCalled();
 });
 
 it("keeps transactions from a prior billing cycle visible", async () => {

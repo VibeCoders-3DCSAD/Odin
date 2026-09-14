@@ -423,8 +423,8 @@ describe("financial account inserts", () => {
 
     expect(result.operation).toBeDefined();
     expect(mockEnqueueOperation).toHaveBeenCalledTimes(2);
-    expect(mockEnqueueOperation.mock.calls[1][1].changedFields).not.toContain("kind");
-    expect(mockEnqueueOperation.mock.calls[1][1].payload).not.toHaveProperty("kind");
+    expect(mockEnqueueOperation.mock.calls[1]![1].changedFields).not.toContain("kind");
+    expect(mockEnqueueOperation.mock.calls[1]![1].payload).not.toHaveProperty("kind");
   });
 
   test("reconciles available credit when editing credit-card details", async () => {
@@ -456,6 +456,50 @@ describe("financial account inserts", () => {
     const normalizedSql = String(upsert?.[0]).replace(/\s+/g, " ");
     expect(normalizedSql).toContain("available_credit_centavos = excluded.available_credit_centavos");
     expect(upsert?.[4]).toBe(3000000);
+  });
+});
+
+describe("issuer available-credit reconciliation", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockInitDatabase.mockReset();
+    mockEnqueueOperation.mockReset();
+    mockEnqueueOperation.mockResolvedValue({ operation_id: "sync-1" });
+  });
+
+  test("rejects negative and over-limit available credit", async () => {
+    const db = createDbMock(jest.fn(async () => ({ credit_limit_centavos: 100_000, version: 3 })));
+    mockInitDatabase.mockResolvedValue(db);
+    const { reconcileCreditCardAvailableCredit } = await import("../financialFoundations");
+
+    await expect(reconcileCreditCardAvailableCredit("user-1", "device-1", "card-1", -1)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(reconcileCreditCardAvailableCredit("user-1", "device-1", "card-1", 100_001)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "Available credit cannot exceed the credit limit.",
+    });
+    expect(db.runAsync).not.toHaveBeenCalled();
+    expect(mockEnqueueOperation).not.toHaveBeenCalled();
+  });
+
+  test("persists and queues an available-credit-only reconciliation", async () => {
+    const db = createDbMock(jest.fn(async () => ({ credit_limit_centavos: 100_000, version: 3 })));
+    mockInitDatabase.mockResolvedValue(db);
+    const { reconcileCreditCardAvailableCredit } = await import("../financialFoundations");
+
+    await reconcileCreditCardAvailableCredit("user-1", "device-1", "card-1", 80_000);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.stringContaining("reconciled_available_credit_centavos = ?"),
+      80_000, 80_000,
+      expect.any(String),
+      expect.any(String),
+      "card-1",
+      "user-1",
+    );
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      changedFields: ["available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at"],
+      payload: expect.objectContaining({ available_credit_centavos: 80_000, reconciled_available_credit_centavos: 80_000, pre_reconciliation_available_credit_centavos: 100_000, available_credit_reconciled_at: expect.any(String) }),
+    }));
   });
 });
 

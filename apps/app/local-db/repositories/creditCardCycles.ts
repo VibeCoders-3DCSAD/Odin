@@ -32,6 +32,7 @@ export type CreditCardCycleTransaction = {
   transaction_date: string;
   merchant_name: string | null;
   amount_centavos: number;
+  forecast_recorded_at?: string;
 };
 
 type CycleRow = Omit<CreditCardCycle, "deleted"> & { deleted: number };
@@ -134,7 +135,7 @@ export async function listCreditCardCycleTransactions(
   const sql = `WITH scheduled_installments AS (
         SELECT cct.transaction_id, cct.account_id, target_cycle.id AS cycle_id,
           cct.purchase_type, cct.installment_id, t.transaction_date, t.merchant_name,
-          i.monthly_amortization_centavos AS amount_centavos, t.created_at
+          i.monthly_amortization_centavos AS amount_centavos, COALESCE(cct.forecast_recorded_at, t.created_at) AS forecast_recorded_at, t.created_at
         FROM credit_card_transactions cct
         JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id AND t.deleted = 0
         JOIN credit_card_installments i ON i.id = cct.installment_id AND i.user_id = cct.user_id AND i.deleted = 0
@@ -152,13 +153,13 @@ export async function listCreditCardCycleTransactions(
                   AND ordinal_cycle.cycle_start_date <= target_cycle.cycle_start_date) <= i.term_months
       ), cycle_purchases AS (
         SELECT cct.transaction_id, cct.account_id, cct.cycle_id, cct.purchase_type, cct.installment_id,
-          t.transaction_date, t.merchant_name, t.amount_centavos, t.created_at
+          t.transaction_date, t.merchant_name, t.amount_centavos, COALESCE(cct.forecast_recorded_at, t.created_at) AS forecast_recorded_at, t.created_at
         FROM credit_card_transactions cct
         JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id AND t.deleted = 0
         WHERE cct.user_id = ? AND cct.deleted = 0 AND cct.purchase_type = 'regular'
         UNION ALL SELECT * FROM scheduled_installments
       )
-      SELECT transaction_id, account_id, cycle_id, purchase_type, installment_id, transaction_date, merchant_name, amount_centavos
+       SELECT transaction_id, account_id, cycle_id, purchase_type, installment_id, transaction_date, merchant_name, amount_centavos, forecast_recorded_at
       FROM cycle_purchases
       WHERE (? IS NULL OR cycle_id = ?)
       ORDER BY transaction_date DESC, created_at DESC`;
