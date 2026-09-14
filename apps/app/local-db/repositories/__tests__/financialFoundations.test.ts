@@ -396,6 +396,7 @@ describe("financial account inserts", () => {
     const columns = sql.match(/\(([^)]+)\)\s*VALUES/)?.[1]?.split(",").length;
     const values = sql.match(/VALUES\s*\(([^)]+)\)/)?.[1]?.split(",").length;
     expect(values).toBe(columns);
+    expect(mockEnqueueOperation.mock.calls[1]![1].payload).not.toHaveProperty("available_credit_centavos");
   });
 
   test("does not queue an unchanged account kind during a credit-card edit", async () => {

@@ -7,8 +7,9 @@ import {
   SYNCED_TABLES,
 } from "./pullConvergence";
 import { syncQueueEligibleStatusesClause, syncQueueOrderByClause } from "./queueOrder";
-import { markSyncConflict } from "./syncConflict";
+import { markSyncConflict, rebaseLegacyDebtPriorityConflict } from "./syncConflict";
 import { repairCreditCardPaymentCreateRows } from "./repairCreditCardPaymentCreates";
+import { repairCreditCardDetailCreateRows } from "./repairCreditCardDetailCreates";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
@@ -153,6 +154,7 @@ async function pushQueue(
   userId: string,
   deviceId: string,
   accessToken: string,
+  retryLegacyDebtPriority = true,
 ): Promise<{ pushed: number; errors: number }> {
   const rows = await db.getAllAsync<QueueRow>(
     `SELECT * FROM sync_queue
@@ -173,6 +175,7 @@ async function pushQueue(
 
   await repairIncomeSourceSyncRows(db, repairedRows);
   await repairCreditCardDetailSyncRows(db, userId, deviceId, repairedRows);
+  await repairCreditCardDetailCreateRows(db, repairedRows);
   await repairCreditCardTransactionSyncRows(db, repairedRows);
   await repairCreditCardPaymentCreateRows(db, userId, repairedRows);
 
@@ -211,6 +214,8 @@ async function pushQueue(
 
   let pushed = 0;
   let errors = 0;
+  let rebasedLegacyDebtPriority = false;
+  const rowsByOperationId = new Map(repairedRows.map((row) => [row.operation_id, row]));
 
   for (const result of results) {
     if (result.status === "applied" || result.status === "duplicate") {
@@ -220,6 +225,10 @@ async function pushQueue(
       );
       pushed++;
     } else if (result.status === "conflict") {
+      if (await rebaseLegacyDebtPriorityConflict(db, rowsByOperationId.get(result.operation_id), result)) {
+        rebasedLegacyDebtPriority = true;
+        continue;
+      }
       await markSyncConflict(db, result);
       errors++;
     } else {
@@ -231,6 +240,10 @@ async function pushQueue(
       );
       errors++;
     }
+  }
+
+  if (rebasedLegacyDebtPriority && retryLegacyDebtPriority) {
+    return pushQueue(db, userId, deviceId, accessToken, false);
   }
 
   return { pushed, errors };
@@ -446,10 +459,6 @@ async function repairCreditCardDetailSyncRows(
       account_id: details.account_id,
       issuer: details.issuer,
       credit_limit_centavos: details.credit_limit_centavos,
-      available_credit_centavos: details.available_credit_centavos,
-      reconciled_available_credit_centavos: details.reconciled_available_credit_centavos,
-      pre_reconciliation_available_credit_centavos: details.pre_reconciliation_available_credit_centavos,
-      available_credit_reconciled_at: details.available_credit_reconciled_at,
       cutoff_day: details.cutoff_day,
       statement_day: details.statement_day,
       notes: details.notes,

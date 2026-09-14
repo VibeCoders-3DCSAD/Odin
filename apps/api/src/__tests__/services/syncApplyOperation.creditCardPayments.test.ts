@@ -31,7 +31,7 @@ it("prepares a transaction-linked credit-card payment", async () => {
     payload: {
       cycle_id: "cycle-1", statement_id: "statement-1", transaction_id: "transaction-1",
       amount_centavos: 10000, payment_date: "2026-02-20", source_account_id: "source-1",
-      client_mutation_id: "mutation-1",
+      client_mutation_id: "mutation-1", forecast_recorded_at: "2026-02-20T00:00:00.000Z",
     },
   });
   expect(prepared.payload).toMatchObject({ issuer_recognized: false, amount_centavos: 10000 });
@@ -42,7 +42,7 @@ it("rejects a non-positive credit-card payment", async () => {
     ...paymentOperation,
     payload: {
       cycle_id: "cycle-1", statement_id: "statement-1", transaction_id: "transaction-1",
-      amount_centavos: 0, payment_date: "2026-02-20", source_account_id: "source-1", client_mutation_id: "mutation-1",
+      amount_centavos: 0, payment_date: "2026-02-20", source_account_id: "source-1", client_mutation_id: "mutation-1", forecast_recorded_at: "2026-02-20T00:00:00.000Z",
     },
   })).rejects.toThrow("amount_centavos must be a positive integer");
 });
