@@ -7,6 +7,7 @@ export type SyncableEntity =
   | "subcategories"
   | "category_groups"
   | "financial_accounts"
+  | "savings_account_details"
   | "income_sources"
   | "financial_obligations"
   | "transactions"

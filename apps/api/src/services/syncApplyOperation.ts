@@ -16,6 +16,7 @@ const SYNCED_ENTITIES = new Set([
   "categories",
   "subcategories",
   "financial_accounts",
+  "savings_account_details",
   "transactions",
   "income_sources",
   "financial_obligations",
@@ -124,6 +125,12 @@ const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
   "opened_on",
   "archived_at",
   "sort_order",
+]);
+
+const SAVINGS_ACCOUNT_DETAIL_FIELDS = new Set([
+  "account_type", "interest_rate_bps", "minimum_balance_centavos",
+  "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible",
+  "principal_centavos", "maturity_date", "term_months", "early_withdrawal_rule",
 ]);
 
 const CREDIT_CARD_CYCLE_CREATE_FIELDS = new Set([
@@ -345,7 +352,7 @@ export async function prepareOperation(
     case "create":
       return {
         ...op,
-        payload: await validateCreatePayload(supabase, userId, op.entity, op.payload),
+        payload: await validateCreatePayload(supabase, userId, op.entity, op.payload, op.record_id),
       };
     case "update":
       return {
@@ -377,6 +384,7 @@ async function validateCreatePayload(
   userId: string,
   entity: string,
   payload: Record<string, unknown>,
+  recordId?: string,
 ): Promise<Record<string, unknown>> {
   if (entity === "categories" || entity === "subcategories" || entity === "transactions") {
     return validateTaxonomyCreatePayload(supabase, userId, entity, payload);
@@ -397,6 +405,10 @@ async function validateCreatePayload(
     optionalString(sanitized, "opened_on");
     optionalNumber(sanitized, "sort_order");
     return Promise.resolve(sanitized);
+  }
+
+  if (entity === "savings_account_details") {
+    return validateSavingsAccountDetailsPayload(supabase, userId, payload, true, recordId);
   }
 
   if (entity === "credit_card_cycles") {
@@ -1097,6 +1109,8 @@ async function validateUpdatePayload(
     allowedFields = SUBCATEGORY_UPDATE_FIELDS;
   } else if (entity === "financial_accounts") {
     allowedFields = FINANCIAL_ACCOUNT_UPDATE_FIELDS;
+  } else if (entity === "savings_account_details") {
+    return validateSavingsAccountDetailsPayload(supabase, userId, payload, false, recordId);
   } else if (entity === "credit_card_cycles") {
     allowedFields = CREDIT_CARD_CYCLE_FIELDS;
   } else if (entity === "credit_card_statements") {
@@ -1815,6 +1829,42 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
   if (sanitized.notes !== undefined && sanitized.notes !== null && (typeof sanitized.notes !== "string" || sanitized.notes.length > 1_000)) throw new Error("notes must be 1000 characters or fewer");
   if (sanitized.emergency_fund_target_method !== undefined && !["fixed_amount", "essential_expense_coverage"].includes(sanitized.emergency_fund_target_method as string)) throw new Error("emergency_fund_target_method is invalid");
   if (sanitized.essential_expense_coverage_months !== undefined && sanitized.essential_expense_coverage_months !== null) requireNumberInRange(sanitized, "essential_expense_coverage_months", 3, 6);
+  return sanitized;
+}
+
+async function validateSavingsAccountDetailsPayload(
+  supabase: SupabaseClient,
+  userId: string,
+  payload: Record<string, unknown>,
+  creating: boolean,
+  accountId: string | undefined,
+): Promise<Record<string, unknown>> {
+  assertOnlyAllowed(payload, SAVINGS_ACCOUNT_DETAIL_FIELDS);
+  const sanitized = sanitizePayload(payload, SAVINGS_ACCOUNT_DETAIL_FIELDS);
+  if (creating && sanitized.account_type === undefined) throw new Error("account_type is required");
+  if (sanitized.account_type !== undefined && !["personal_savings", "high_yield_savings", "time_deposit"].includes(sanitized.account_type as string)) throw new Error("savings account type is invalid");
+  for (const field of ["interest_rate_bps", "minimum_balance_centavos", "base_interest_rate_bps", "effective_interest_rate_bps"]) {
+    if (sanitized[field] !== undefined && sanitized[field] !== null && (!Number.isSafeInteger(sanitized[field]) || (sanitized[field] as number) < 0)) throw new Error(`${field} must be a non-negative whole number`);
+  }
+  if (sanitized.principal_centavos !== undefined && sanitized.principal_centavos !== null) requirePositiveInteger(sanitized, "principal_centavos");
+  if (sanitized.maturity_date !== undefined && sanitized.maturity_date !== null) requireDateString(sanitized, "maturity_date");
+  if (sanitized.term_months !== undefined && sanitized.term_months !== null) requirePositiveInteger(sanitized, "term_months");
+  for (const field of ["interest_conditions", "early_withdrawal_rule"]) {
+    if (sanitized[field] !== undefined && sanitized[field] !== null && (typeof sanitized[field] !== "string" || (sanitized[field] as string).trim().length === 0 || (sanitized[field] as string).length > 1_000)) throw new Error(`${field} must be a non-empty string of 1000 characters or fewer`);
+  }
+  if (sanitized.higher_rate_eligible !== undefined && typeof sanitized.higher_rate_eligible !== "boolean") throw new Error("higher_rate_eligible must be a boolean");
+  if (creating) {
+    if (sanitized.account_type === "personal_savings" && (sanitized.interest_rate_bps == null || sanitized.minimum_balance_centavos == null)) throw new Error("Personal Savings requires an interest rate and minimum balance");
+    if (sanitized.account_type === "high_yield_savings" && (sanitized.base_interest_rate_bps == null || sanitized.effective_interest_rate_bps == null || sanitized.interest_conditions == null || typeof sanitized.higher_rate_eligible !== "boolean")) throw new Error("HYSA requires base and effective interest rates, requirements, and an eligibility choice");
+    if (sanitized.account_type === "high_yield_savings" && (sanitized.effective_interest_rate_bps as number) < (sanitized.base_interest_rate_bps as number)) throw new Error("HYSA effective interest rate cannot be lower than the base rate");
+    if (sanitized.account_type === "time_deposit" && (sanitized.principal_centavos == null || sanitized.interest_rate_bps == null || sanitized.maturity_date == null || sanitized.term_months == null || sanitized.early_withdrawal_rule == null)) throw new Error("Time Deposit requires principal, interest rate, maturity date, term, and an early-withdrawal rule");
+  }
+  if (accountId) {
+    const { data: account, error } = await supabase.from("financial_accounts").select("id, opened_on").eq("id", accountId).eq("user_id", userId).eq("kind", "savings").eq("deleted", false).maybeSingle();
+    if (error) throw new Error(`savings account validation failed: ${error.message}`);
+    if (!account) throw new Error("savings account details require an owned savings account");
+    if (creating && sanitized.account_type === "time_deposit" && account.opened_on && (sanitized.maturity_date as string) <= account.opened_on) throw new Error("Time Deposit maturity date must be after its start date");
+  }
   return sanitized;
 }
 

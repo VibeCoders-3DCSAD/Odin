@@ -40,6 +40,7 @@ const SYNCED_TABLES = [
   "categories",
   "subcategories",
   "financial_accounts",
+  "savings_account_details",
   "transactions",
   "transaction_line_items",
   "income_sources",
@@ -76,6 +77,7 @@ const PULL_IDENTITY_COLUMNS: Record<string, string> = {
   credit_card_transactions: "transaction_id",
   debt_strategy_preferences: "user_id",
   credit_card_statement_strategies: "statement_id",
+  savings_account_details: "account_id",
 };
 
 export async function pushOperations(
@@ -195,7 +197,8 @@ export async function pullChanges(
     if (table === "category_groups") {
       // category_groups has no user_id column — system-wide data
     } else if (
-      table === "financial_accounts" ||
+       table === "financial_accounts" ||
+       table === "savings_account_details" ||
       table === "transactions" ||
       table === "transaction_line_items" ||
       table === "income_sources" ||

@@ -13,6 +13,7 @@ export const SYNCED_TABLES = [
   "categories",
   "subcategories",
   "financial_accounts",
+  "savings_account_details",
   "credit_card_details",
   "credit_card_repayment_preferences",
   "transactions",
@@ -67,6 +68,12 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "include_in_dashboard_balance", "institution_name", "opened_on",
     "archived_at", "deleted_at", "sort_order", "metadata", "version",
     "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  savings_account_details: new Set([
+    "account_id", "user_id", "account_type", "interest_rate_bps", "minimum_balance_centavos",
+    "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible", "principal_centavos",
+    "maturity_date", "term_months", "early_withdrawal_rule", "version", "deleted", "created_at",
+    "updated_at", "last_synced_at",
   ]),
   credit_card_details: new Set([
     "account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
@@ -192,6 +199,7 @@ const PULL_IDENTITY_COLUMNS: Record<string, string> = {
   credit_card_transactions: "transaction_id",
   debt_strategy_preferences: "user_id",
   credit_card_statement_strategies: "statement_id",
+  savings_account_details: "account_id",
 };
 
 export function normalizePullRow(
@@ -346,7 +354,7 @@ export async function applyPullRow(
         now,
         ...identityParams,
       );
-    } else if (table === "credit_card_cycles" || table === "credit_card_details" || table === "credit_card_payments" || table === "debt_payments") {
+    } else if (table === "credit_card_cycles" || table === "credit_card_details" || table === "credit_card_payments" || table === "debt_payments" || table === "savings_account_details") {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, version = ?,
           updated_at = ? WHERE ${identityWhere}`,
