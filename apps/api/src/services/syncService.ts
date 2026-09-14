@@ -67,6 +67,7 @@ const SYNCED_TABLES = [
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
   "savings_goals",
+  "savings_goal_activities",
 ] as const;
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {

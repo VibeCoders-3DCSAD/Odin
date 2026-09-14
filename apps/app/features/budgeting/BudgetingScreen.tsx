@@ -6,6 +6,8 @@ import { createBudgetDraft, deleteBudgetDraft, getBudgetDraftTracking, listBudge
 import CategorySelector from "../../components/CategorySelector";
 import { calculateBudgetSpentAmount, calculateProvisionalPercentage } from "./constant";
 import { getCategory, getSubcategory } from "../../local-db/repositories/taxonomy";
+import { getRequiredDebtTotalForPeriod } from "../debt-manager/requiredDebtTotalQueries";
+import type { RequiredDebtTotalForPeriod } from "../debt-manager/requiredDebtTotalQueries";
 
 type Props = {
   userId: string;
@@ -71,6 +73,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
+  const [debtBudgetAmount, setDebtBudgetAmount] = useState("");
   const [allocationRows, setAllocationRows] = useState<AllocationRow[]>([emptyAllocationRow]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -79,6 +82,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
   const [categoryPickerRowId, setCategoryPickerRowId] = useState<string | null>(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [requiredDebtTotal, setRequiredDebtTotal] = useState<RequiredDebtTotalForPeriod | null>(null);
 
   const loadDrafts = useCallback(async () => {
     setLoading(true);
@@ -127,6 +131,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     setPeriodStart(draft.periodStart);
     setPeriodEnd(draft.periodEnd);
     setTotalAmount((draft.totalAmountMinor / 100).toFixed(2));
+    setDebtBudgetAmount((draft.debtBudgetAmountMinor / 100).toFixed(2));
     setAllocationRows(draft.allocations.map((allocation) => ({
       id: allocation.id,
       categoryId: allocation.categoryId,
@@ -145,6 +150,22 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
       setPeriodEnd(derivedPeriodEnd(periodKind, periodStart));
     }
   }, [periodKind, periodStart]);
+
+  useEffect(() => {
+    if (!periodStart || !periodEnd) {
+      setRequiredDebtTotal(null);
+      return;
+    }
+    let cancelled = false;
+    void getRequiredDebtTotalForPeriod(userId, periodStart, periodEnd)
+      .then((result) => {
+        if (!cancelled) setRequiredDebtTotal(result);
+      })
+      .catch(() => {
+        if (!cancelled) setRequiredDebtTotal(null);
+      });
+    return () => { cancelled = true; };
+  }, [periodEnd, periodStart, userId]);
 
   if (categoryPickerRowId) {
     const selectedRow = allocationRows.find((row) => row.id === categoryPickerRowId);
@@ -178,6 +199,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
         periodStart,
         periodEnd,
         totalAmountMinor: parsePesoToCentavos(totalAmount),
+        debtBudgetAmountMinor: parsePesoToCentavos(debtBudgetAmount),
         allocations: allocationRows
           .filter((row) => row.categoryId || row.subcategoryId)
           .map((row) => ({ categoryId: row.categoryId, subcategoryId: row.subcategoryId, amountMinor: parsePesoToCentavos(row.amount) })),
@@ -251,7 +273,8 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                setPeriodKind("MONTHLY");
                setPeriodStart("");
                setPeriodEnd("");
-               setTotalAmount("");
+                setTotalAmount("");
+                setDebtBudgetAmount("");
                setCreateError(null);
                setSyncError(null);
                setShowCreate(true);
@@ -280,7 +303,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                 <Pressable onPress={() => setDatePicker("start")} accessibilityRole="button" accessibilityLabel="Choose start date" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, justifyContent: "center", backgroundColor: formPalette.card }}><Text style={{ fontFamily: "Manrope", fontSize: 14, color: periodStart ? formPalette.ink : formPalette.mut }}>{periodStart || "Choose a date"}</Text></Pressable>
               </View>
               {periodKind === "WEEKLY" || periodKind === "MONTHLY" ? (
-                <View>
+               <View>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: formPalette.ink2, marginTop: 4, marginBottom: 6 }}>END DATE</Text>
                   <View style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, justifyContent: "center", backgroundColor: formPalette.card }}>
                     <Text style={{ fontFamily: "Manrope", fontSize: 14, color: periodEnd ? formPalette.ink : formPalette.mut }}>{periodEnd || "Choose a start date first"}</Text>
@@ -295,8 +318,36 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
               <View>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: formPalette.ink2, marginTop: 4, marginBottom: 6 }}>TOTAL BUDGET <Text style={{ color: formPalette.error }}>*</Text></Text>
                 <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginBottom: 6 }}>Enter peso amount.</Text>
-               <TextInput value={totalAmount} onChangeText={setTotalAmount} placeholder="e.g. 10.53" placeholderTextColor={formPalette.mut} accessibilityLabel="Total budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
-              </View>
+                <TextInput value={totalAmount} onChangeText={setTotalAmount} placeholder="e.g. 10.53" placeholderTextColor={formPalette.mut} accessibilityLabel="Total budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
+               </View>
+               <View>
+                 <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: formPalette.ink2, marginTop: 12, marginBottom: 6 }}>DEBT PAYMENT BUDGET</Text>
+                  <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginBottom: 6 }}>Reserve the amount available for credit-card and debt payments.</Text>
+                  <TextInput value={debtBudgetAmount} onChangeText={setDebtBudgetAmount} placeholder="e.g. 10.53" placeholderTextColor={formPalette.mut} accessibilityLabel="Debt payment budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
+                  {requiredDebtTotal ? (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut }}>Required debt payments: {formatPeso(requiredDebtTotal.totalRequiredCentavos)}</Text>
+                      {requiredDebtTotal.obligations.map((obligation, index) => (
+                        <View key={`${obligation.kind}-${obligation.accountId}-${index}`} style={{ marginTop: 7, paddingTop: 7, borderTopWidth: index === 0 ? 0 : 1, borderTopColor: formPalette.line }}>
+                          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                            <Text style={{ flex: 1, fontFamily: "Manrope", fontSize: 11, fontWeight: "600", color: formPalette.ink }}>
+                              {requiredDebtTotal.accountNames[obligation.accountId] ?? "Debt payment"}{obligation.isEstimated ? " (estimated)" : ""}
+                            </Text>
+                            <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: "700", color: formPalette.ink }}>{formatPeso(obligation.remainingRequiredCentavos)}</Text>
+                          </View>
+                          <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: formPalette.mut, marginTop: 2 }}>
+                            Due {obligation.scheduledDueDates.join(", ")}
+                          </Text>
+                        </View>
+                      ))}
+                      {parsePesoToCentavos(debtBudgetAmount) < requiredDebtTotal.totalRequiredCentavos ? (
+                        <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.error, marginTop: 4 }}>
+                          Debt payment deficit: {formatPeso(requiredDebtTotal.totalRequiredCentavos - parsePesoToCentavos(debtBudgetAmount))}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", marginTop: 14 }}>Manual allocations</Text>
               {allocationRows.map((row, index) => (
                 <View key={row.id} style={{ marginTop: 12 }}>

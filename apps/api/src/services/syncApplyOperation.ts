@@ -41,6 +41,7 @@ const SYNCED_ENTITIES = new Set([
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
   "savings_goals",
+  "savings_goal_activities",
 ]);
 
 const ALERT_PREFERENCE_CREATE_FIELDS = new Set(["category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until"]);
@@ -298,11 +299,11 @@ const RECURRING_OCCURRENCE_FIELDS = new Set([
 
 const BUDGET_CREATE_FIELDS = new Set([
   "status", "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
-  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning",
+  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning", "debtBudgetAmountMinor",
 ]);
 
 const BUDGET_UPDATE_FIELDS = new Set([
-  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
+  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debtBudgetAmountMinor",
 ]);
 
 const CREDIT_CARD_INSTALLMENT_CREATE_FIELDS = new Set([
@@ -323,7 +324,8 @@ const DEBT_PRIORITY_FIELDS = new Set(["priorities"]);
 const CREDIT_CARD_SETTLEMENT_FIELDS = new Set(["installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status"]);
 const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy", "custom_amount_centavos", "percentage_bps"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
-const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos"]);
+const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months"]);
+const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes"]);
 const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
 const SAVINGS_GOAL_PRIORITIES = ["low", "medium", "high"];
 
@@ -534,6 +536,21 @@ async function validateCreatePayload(
   }
   if (entity === "savings_goals") {
     return validateSavingsGoalPayload(payload, true);
+  }
+  if (entity === "savings_goal_activities") {
+    assertOnlyAllowed(payload, SAVINGS_GOAL_ACTIVITY_FIELDS);
+    const sanitized = sanitizePayload(payload, SAVINGS_GOAL_ACTIVITY_FIELDS);
+    for (const field of ["savings_goal_id", "transaction_id", "activity_kind", "activity_date"]) requireString(sanitized, field);
+    requirePositiveInteger(sanitized, "amount_centavos");
+    if (sanitized.activity_kind !== "contribution" && sanitized.activity_kind !== "withdrawal") throw new Error("savings activity kind is invalid");
+    optionalString(sanitized, "notes");
+    const { data: goal, error: goalError } = await supabase.from("savings_goals").select("id, status").eq("id", sanitized.savings_goal_id as string).eq("user_id", userId).eq("deleted", false).maybeSingle();
+    if (goalError) throw new Error(`savings goal validation failed: ${goalError.message}`);
+    if (!goal || goal.status !== "active") throw new Error("savings activity requires an active owned savings goal");
+    const { data: transaction, error: transactionError } = await supabase.from("transactions").select("id, transaction_type").eq("id", sanitized.transaction_id as string).eq("user_id", userId).eq("deleted", false).maybeSingle();
+    if (transactionError) throw new Error(`savings transaction validation failed: ${transactionError.message}`);
+    if (!transaction || transaction.transaction_type !== "transfer") throw new Error("savings activity requires an owned transfer transaction");
+    return sanitized;
   }
   if (entity === "debt_strategy_preferences") {
     assertOnlyAllowed(payload, DEBT_STRATEGY_FIELDS); const sanitized = sanitizePayload(payload, DEBT_STRATEGY_FIELDS);
@@ -1031,6 +1048,9 @@ async function validateBudgetPayload(
   if (payload.periodKind === "CUSTOM" && periodDays > 366) throw new Error("CUSTOM budgets cannot exceed 366 days");
   if (payload.budget_period_days !== periodDays) throw new Error("budget_period_days must match the inclusive date range");
   requirePositiveInteger(payload, "totalAmountMinor");
+  if (!Number.isSafeInteger(payload.debtBudgetAmountMinor) || (payload.debtBudgetAmountMinor as number) < 0) {
+    throw new Error("debtBudgetAmountMinor must be a non-negative safe integer");
+  }
   const overlapQuery = supabase
     .from("budgets")
     .select("id")
@@ -1057,7 +1077,9 @@ async function validateBudgetPayload(
     requirePositiveInteger(value, "amountMinor");
     allocated += value.amountMinor as number;
   }
-  if (allocated > (payload.totalAmountMinor as number)) throw new Error("allocations cannot exceed the budget total");
+  if (allocated + (payload.debtBudgetAmountMinor as number) > (payload.totalAmountMinor as number)) {
+    throw new Error("allocations and debt budget cannot exceed the budget total");
+  }
   return payload;
 }
 
@@ -1649,6 +1671,19 @@ function requireString(payload: Record<string, unknown>, field: string): void {
   if (!payload[field] || typeof payload[field] !== "string") throw new Error(`${field} is required`);
 }
 
+async function verifyDebtPresetReferences(supabase: SupabaseClient, userId: string, payload: Record<string, unknown>): Promise<void> {
+  const preset = payload.preset_data as Record<string, unknown>;
+  if (!preset) return;
+  const salary = preset.salaryLoan as Record<string, unknown> | undefined;
+  const business = preset.businessLoan as Record<string, unknown> | undefined;
+  const sourceId = salary?.linkedIncomeSourceId ?? business?.linkedBusinessOrIncomeSourceId;
+  if (!sourceId) return;
+  if (typeof sourceId !== "string") throw new Error("linked income source must be a string");
+  const { data, error } = await supabase.from("income_sources").select("id").eq("id", sourceId).eq("user_id", userId).eq("deleted", false).maybeSingle();
+  if (error) throw new Error(`income source validation failed: ${error.message}`);
+  if (!data) throw new Error("linked income source is not accessible");
+}
+
 const VALID_BUDGET_PERIOD_KINDS = ["WEEKLY", "MONTHLY", "CUSTOM", "INCOME_CYCLE"];
 
 function requireDateString(payload: Record<string, unknown>, field: string): void {
@@ -1769,13 +1804,17 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
   }
   if (sanitized.name !== undefined && (typeof sanitized.name !== "string" || !sanitized.name.trim())) throw new Error("name must be a non-empty string");
   if (sanitized.goal_type !== undefined && !SAVINGS_GOAL_TYPES.includes(sanitized.goal_type as string)) throw new Error("goal_type is invalid");
+  if (sanitized.goal_category !== undefined && !SAVINGS_GOAL_TYPES.includes(sanitized.goal_category as string)) throw new Error("goal_category is invalid");
   if (sanitized.priority !== undefined && !SAVINGS_GOAL_PRIORITIES.includes(sanitized.priority as string)) throw new Error("priority is invalid");
   if (sanitized.target_amount_centavos !== undefined) requirePositiveInteger(sanitized, "target_amount_centavos");
-  for (const field of ["starting_amount_centavos", "emergency_fund_baseline_centavos"]) {
+  for (const field of ["starting_amount_centavos", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "interest_rate_bps"]) {
     const value = sanitized[field];
     if (value !== undefined && value !== null && (!Number.isSafeInteger(value) || (value as number) < 0)) throw new Error(`${field} must be a non-negative whole number`);
   }
   if (sanitized.target_date !== undefined && sanitized.target_date !== null) requireDateString(sanitized, "target_date");
+  if (sanitized.notes !== undefined && sanitized.notes !== null && (typeof sanitized.notes !== "string" || sanitized.notes.length > 1_000)) throw new Error("notes must be 1000 characters or fewer");
+  if (sanitized.emergency_fund_target_method !== undefined && !["fixed_amount", "essential_expense_coverage"].includes(sanitized.emergency_fund_target_method as string)) throw new Error("emergency_fund_target_method is invalid");
+  if (sanitized.essential_expense_coverage_months !== undefined && sanitized.essential_expense_coverage_months !== null) requireNumberInRange(sanitized, "essential_expense_coverage_months", 3, 6);
   return sanitized;
 }
 

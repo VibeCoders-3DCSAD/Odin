@@ -16,6 +16,7 @@ export type SyncableEntity =
   | "recurring_transaction_occurrences"
   | "budgets"
   | "savings_goals"
+  | "savings_goal_activities"
   | "alert_notification_preferences"
   | "anomaly_whitelist_rules"
   | "alert_suppression_rules"

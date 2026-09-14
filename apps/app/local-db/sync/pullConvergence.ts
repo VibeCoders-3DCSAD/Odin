@@ -40,6 +40,7 @@ export const SYNCED_TABLES = [
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
   "savings_goals",
+  "savings_goal_activities",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -136,7 +137,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   budgets: new Set([
     "id", "user_id", "status", "allocation_method", "period_kind", "period_start", "period_end",
-    "budget_period_days", "total_amount_minor", "surplus_handling", "deficit_handling",
+    "budget_period_days", "total_amount_minor", "debt_budget_amount_minor", "surplus_handling", "deficit_handling",
     "allow_deficit_planning", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   budget_allocations: new Set([
@@ -181,7 +182,8 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   alert_notification_preferences: new Set(["id", "user_id", "category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until", "version", "deleted", "updated_at"]),
   anomaly_whitelist_rules: new Set(["id", "user_id", "merchant_name", "subcategory_id", "base_amount_centavos", "tolerance_bps", "allow_any_amount", "status", "notes", "version", "deleted", "updated_at"]),
   alert_suppression_rules: new Set(["id", "user_id", "category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata", "version", "deleted", "updated_at"]),
-  savings_goals: new Set(["id", "user_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  savings_goals: new Set(["id", "user_id", "name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "archived_at", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  savings_goal_activities: new Set(["id", "user_id", "savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -223,6 +225,8 @@ export function normalizePullRow(
       normalized[col] = "MANUAL";
     } else if (table === "budgets" && col === "total_amount_minor") {
       normalized[col] = row.total_amount_centavos;
+    } else if (table === "budgets" && col === "debt_budget_amount_minor") {
+      normalized[col] = row.debt_budget_amount_centavos ?? 0;
     } else if (table === "budgets" && col === "surplus_handling") {
       normalized[col] = "LEAVE_UNALLOCATED";
     } else if (table === "budgets" && col === "deficit_handling") {
