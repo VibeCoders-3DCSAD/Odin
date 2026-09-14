@@ -42,6 +42,7 @@ type FinancialAccountRow = {
   cc_repayment_strategy: CreditCardRepaymentStrategy | null;
   cc_repayment_custom_amount_centavos: number | null;
   cc_repayment_percentage_bps: number | null;
+  sa_account_type?: "personal_savings" | "high_yield_savings" | "time_deposit" | null;
 };
 
 type CreditCardDetailsSyncRow = {
@@ -146,6 +147,7 @@ export type FinancialAccount = {
   openedOn: string | null;
   archivedAt: string | null;
   sortOrder: number;
+  savingsAccountType?: "personal_savings" | "high_yield_savings" | "time_deposit" | null;
   creditCardDetails: CreditCardDetails | null;
 };
 
@@ -359,6 +361,7 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
     openedOn: row.opened_on,
     archivedAt: row.archived_at,
     sortOrder: row.sort_order,
+    savingsAccountType: row.sa_account_type ?? null,
     creditCardDetails:
       row.kind === "credit_card" && row.cc_credit_limit_centavos != null
         ? {
@@ -739,13 +742,16 @@ export async function listFinancialAccounts(userId: string): Promise<FinancialAc
              cc.statement_day AS cc_statement_day,
              cc.alert_threshold_percent AS cc_alert_threshold_percent,
               preference.strategy AS cc_repayment_strategy,
-              preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
-              preference.percentage_bps AS cc_repayment_percentage_bps
+               preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+                preference.percentage_bps AS cc_repayment_percentage_bps,
+               sa.account_type AS sa_account_type
       FROM financial_accounts fa
       LEFT JOIN credit_card_details cc
         ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
-      LEFT JOIN credit_card_repayment_preferences preference
+       LEFT JOIN credit_card_repayment_preferences preference
         ON preference.account_id = fa.id AND preference.user_id = fa.user_id AND preference.deleted = 0
+       LEFT JOIN savings_account_details sa
+        ON sa.account_id = fa.id AND sa.user_id = fa.user_id AND sa.deleted = 0
      WHERE fa.user_id = ? AND fa.deleted = 0
      ORDER BY fa.sort_order`,
     userId,
@@ -771,13 +777,16 @@ export async function getFinancialAccount(
              cc.statement_day AS cc_statement_day,
              cc.alert_threshold_percent AS cc_alert_threshold_percent,
               preference.strategy AS cc_repayment_strategy,
-              preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
-              preference.percentage_bps AS cc_repayment_percentage_bps
+               preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+                preference.percentage_bps AS cc_repayment_percentage_bps,
+               sa.account_type AS sa_account_type
       FROM financial_accounts fa
       LEFT JOIN credit_card_details cc
         ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
-      LEFT JOIN credit_card_repayment_preferences preference
+       LEFT JOIN credit_card_repayment_preferences preference
         ON preference.account_id = fa.id AND preference.user_id = fa.user_id AND preference.deleted = 0
+       LEFT JOIN savings_account_details sa
+        ON sa.account_id = fa.id AND sa.user_id = fa.user_id AND sa.deleted = 0
      WHERE fa.user_id = ? AND fa.id = ? AND fa.deleted = 0`,
     userId,
     id,
@@ -1080,6 +1089,32 @@ export async function deleteFinancialAccount(
     );
     if (existing.kind === "credit_card") {
       await enqueueCreditCardDetailsOperation(db, userId, deviceId, id, "delete", null);
+    }
+    if (existing.kind === "savings") {
+      const savingsDetails = await db.getFirstAsync<{ version: number }>(
+        "SELECT version FROM savings_account_details WHERE account_id = ? AND user_id = ? AND deleted = 0",
+        id,
+        userId,
+      );
+      if (savingsDetails) {
+        await db.runAsync(
+          "UPDATE savings_account_details SET deleted = 1, updated_at = ?, version = version + 1 WHERE account_id = ? AND user_id = ?",
+          ts,
+          id,
+          userId,
+        );
+        await enqueueOperation(db, {
+          userId,
+          deviceId,
+          entity: "savings_account_details",
+          recordId: id,
+          operationType: "delete",
+          baseVersion: savingsDetails.version,
+          changedFields: [],
+          payload: {},
+          failureMessage: "This savings-account information could not be synchronized.",
+        });
+      }
     }
 
     const operation = await enqueueOperation(db, {
