@@ -170,6 +170,7 @@
   - [8.1 Savings Overview](#81-savings-overview)
   - [8.2 Savings Account and Goal Management](#82-savings-account-and-goal-management)
   - [8.3 Savings Account Creation Form](#83-savings-account-creation-form)
+  - [8.3.1 Savings Account Type Inputs and Handling](#831-savings-account-type-inputs-and-handling)
   - [8.4 Savings Account Form Placeholders](#84-savings-account-form-placeholders)
   - [8.5 Savings Selectors](#85-savings-selectors)
   - [8.6 Savings Contributions and Withdrawals](#86-savings-contributions-and-withdrawals)
@@ -1787,8 +1788,8 @@ Debt Manager's Record payment action opens Transaction Management with the selec
 ### 8.1 Savings Overview
 
 - View total savings
-- View savings accounts by type: Regular Savings / High-Yield Savings / Goal
-  Savings / Time Deposit
+- View savings accounts by type: Personal Savings / HYSA / Goal Savings / Time
+  Deposit
 - View total savings target and overall savings progress for Goal Savings accounts
 - View active and completed Goal Savings accounts
 - View upcoming goal dates
@@ -1800,11 +1801,11 @@ Debt Manager's Record payment action opens Transaction Management with the selec
 
 - View the list of Savings Accounts
 - Create, view, edit, archive, and delete a Savings Account with confirmation
-- Select one Savings Account type: Regular Savings / High-Yield Savings / Goal
-  Savings / Time Deposit
+- Select one Savings Account type: Personal Savings / HYSA / Goal Savings / Time
+  Deposit
 - Categorize a Goal Savings account
-- Set a target, target date, auto-save amount, and priority for a Goal Savings
-  account
+- Set a target, target date, contribution schedule, and priority for a Goal
+  Savings account
 - Treat a Goal Savings account as its own holding account; it is not linked to
   a separate financial account
 - Mark a Goal Savings account as achieved when its balance reaches its target
@@ -1812,13 +1813,15 @@ Debt Manager's Record payment action opens Transaction Management with the selec
 ### 8.3 Savings Account Creation Form
 
 - Account name
-- Savings account type: Regular Savings / High-Yield Savings / Goal Savings /
+- Savings account type: Personal Savings / HYSA / Goal Savings /
   Time Deposit
-- Opening balance
-- Regular Savings: interest rate and minimum balance
-- High-Yield Savings: base interest rate, effective interest rate, and interest
-  conditions
-- Goal Savings: category, target amount, target date, auto-save amount,
+- Current balance
+- Institution
+- Opening date
+- Personal Savings: interest rate and minimum balance
+- HYSA: base and boosted interest rates, interest calculation basis, interest
+  credit frequency, and optional yield conditions
+- Goal Savings: category, target amount, target date, contribution schedule,
   interest rate, and priority
 - Goal Savings: Emergency Fund is a category or purpose, not a Savings Account
   type and not a debt
@@ -1839,20 +1842,114 @@ essential expenses. The user may override the suggested target. A change to the
 essential-expense baseline refreshes the suggestion but does not silently replace
 a user-approved target.
 
+### 8.3.1 Savings Account Type Inputs and Handling
+
+The Savings account type is a required single-select control. Selecting a type
+shows only that type's applicable inputs and preserves shared values. Before a
+type change clears fields that do not apply to the newly selected type, require
+confirmation and explain that those type-specific values will be removed. The
+selected type determines the account's form fields, validation, displayed
+details, and calculation rules.
+
+All Savings Accounts use these shared inputs:
+
+| Input | Control | Required | Handling |
+| --- | --- | --- | --- |
+| Account name | Single-line text input | Yes | Trim surrounding whitespace and use it as the account's display name. |
+| Savings account type | Single-select segmented control or picker | Yes | Show the selected type's inputs and apply its rules below. |
+| Current balance | Currency amount input | Yes | On creation, store as the account's starting balance. After creation, show the calculated current balance after contributions, withdrawals, and credited interest. |
+| Institution | Single-line text input | No | Store as reference information only; it does not affect calculations. |
+| Opening date | Date picker | No, except for Time Deposit | Store as the account opening date. For Time Deposit, use it as the start date. |
+| Notes | Multi-line text input | No | Store as reference information only; it does not affect calculations. |
+
+Personal Savings inputs:
+
+| Input | Control | Required | Handling |
+| --- | --- | --- | --- |
+| Interest rate | Percentage amount input | Yes | Use as the annual rate for projected and credited interest. A value of `0` means the account earns no interest. |
+| Minimum balance | Currency amount input | Yes | Store as the bank's minimum-balance reference. Show it in account details and warn when the current balance falls below it; do not block a withdrawal solely because it would go below the minimum. |
+
+HYSA inputs:
+
+| Input | Control | Required | Handling |
+| --- | --- | --- | --- |
+| Current balance | Shared currency amount input | Yes | Use the account's current balance as the starting amount for interest accrual and to evaluate balance-based yield conditions. |
+| Base interest rate | Percentage amount input | Yes | Use as the annual rate when the account does not qualify for a boosted or promotional rate. |
+| Boosted interest rate | Percentage amount input | No | Use as the annual rate when the account qualifies for configured yield conditions. If omitted, the account has no conditional boosted rate. |
+| Interest calculation basis | Single-select picker | Yes | Select Daily Ending Balance, Average Daily Balance, or Monthly Average Balance. Use the selected basis to determine the balance on which interest accrues. |
+| Interest credit frequency | Single-select picker | Yes | Select Monthly, Quarterly, or At Maturity. Credit projected interest to the balance only at the selected interval. |
+| Are bank requirements met? | Boolean: Yes / No | Required when any yield condition or boosted rate is configured | Represent whether all configured requirements for the advertised or boosted rate are currently satisfied. Derive the value when Odin has the required balance and transaction data; otherwise let the user confirm it and identify the value as manually confirmed. Yes applies the boosted rate and No applies the base rate; No does not stop the account from earning interest. |
+| Effective interest rate | Read-only calculated percentage | Yes | Display the currently applicable annual rate: promotional rate when active; otherwise the applicable tier or boosted rate when bank requirements are met; otherwise the base rate. |
+| Minimum balance | Currency amount input | No | Treat as the minimum balance required for the boosted rate. Derive a failed requirement when the current balance is below it. |
+| Maximum eligible balance | Currency amount input | No | Limit the balance that can earn the boosted or promotional rate. Apply the base rate to the amount above the limit. |
+| Balance tiers | Repeatable rows: minimum balance, maximum balance, annual rate | No | Use the rate from the tier containing the applicable balance. Tiers replace the single boosted rate for the covered balance range. |
+| Required deposit | Currency amount input with frequency picker | No | Compare recorded qualifying deposits in the qualification period when that data is available. If Odin cannot identify qualifying deposits, include this condition in the manual confirmation instead. |
+| Required spending / transactions | Numeric count input with period picker | No | Compare recorded qualifying transactions in the qualification period when that data is available. If Odin cannot identify qualifying transactions, include this condition in the manual confirmation instead. |
+| Direct deposit requirement | Optional currency threshold input | No | Compare recorded deposits explicitly identified as direct deposits in the qualification period when that data is available. Otherwise include this condition in the manual confirmation instead. |
+| Qualification period | Single-select picker | No | Select the period in which optional yield conditions must be met: Monthly, Quarterly, or a custom bank-defined period. |
+| Promotional / bonus rate | Percentage amount input with start and end date pickers | No | During the inclusive promotional period, apply this rate before the base or boosted rate. Outside that period, use the otherwise applicable base, boosted, or tier rate. |
+
+Goal Savings inputs:
+
+| Input | Control | Required | Handling |
+| --- | --- | --- | --- |
+| Category | Single-select picker | Yes | Classify the goal for display and allocation. Emergency Fund is a category, not an account type. |
+| Target amount | Currency amount input | Yes | Use as the goal completion threshold and to calculate remaining amount and progress. |
+| Target date | Date picker | Yes | Use to calculate the required contribution and projected completion status. |
+| Planned contribution amount | Currency amount input | Yes | Use as the planned contribution for each scheduled occurrence. It does not create a transaction without explicit user confirmation. |
+| Contribution frequency | Shared frequency selector | Yes | Select Weekly, Biweekly, Semi-Monthly, Monthly, Quarterly, Yearly, or Custom. Use the same frequency selector used for recurring financial schedules. |
+| First or next contribution date | Date picker | Yes | Anchor the contribution schedule and determine the scheduled occurrences before the target date. |
+| Interest rate | Percentage amount input | No | When provided, use as the annual rate for projected and credited interest; otherwise project no interest. |
+| Priority | Single-select picker | Yes | Use for savings allocation after Emergency Fund priority. |
+| Target method | Single-select picker | Emergency Fund only | For Emergency Fund, select Fixed Amount or Essential-Expense Coverage. Fixed Amount uses the entered target. |
+| Essential-expense coverage period | Single-select picker: 3 / 4 / 5 / 6 months | Essential-Expense Coverage only | Multiply the selected period by current monthly essential expenses to suggest a target. Do not replace a user-approved target without confirmation. |
+
+Time Deposit inputs:
+
+| Input | Control | Required | Handling |
+| --- | --- | --- | --- |
+| Principal | Currency amount input | Yes | Store as the deposited principal and opening balance. Do not allow a different opening-balance value for a Time Deposit. |
+| Interest rate | Percentage amount input | Yes | Use as the annual rate for maturity and interest projections. |
+| Start date | Date picker | Yes | Start the deposit term and interest projection. Use the shared opening date as this value. |
+| Maturity date | Date picker | Yes | End the deposit term and interest projection; it must be after the start date. |
+| Term | Numeric duration input with unit selector | Yes | Store the agreed term and use it to cross-check the maturity date against the start date. |
+| Early-withdrawal rule | Multi-line text input | Yes | Store the bank's restriction or penalty terms for reference. Show this rule and require confirmation before an early withdrawal; do not infer a monetary penalty from free text. |
+
 ### 8.4 Savings Account Form Placeholders
 
 - Account name: `Enter account name`
 - Savings account type: `Select savings account type`
-- Opening balance: `Enter opening balance`
-- Regular Savings interest rate: `Enter interest rate`
-- Regular Savings minimum balance: `Enter minimum balance`
-- High-Yield Savings base interest rate: `Enter base interest rate`
-- High-Yield Savings effective interest rate: `Enter effective interest rate`
-- High-Yield Savings interest conditions: `Describe interest conditions`
+- Current balance: `Enter current balance`
+- Institution: `Enter institution name`
+- Opening date: `Select opening date`
+- Personal Savings interest rate: `Enter interest rate`
+- Personal Savings minimum balance: `Enter minimum balance`
+- HYSA base interest rate: `Enter base interest rate`
+- HYSA boosted interest rate: `Enter boosted interest rate`
+- HYSA interest calculation basis: `Select calculation basis`
+- HYSA interest credit frequency: `Select credit frequency`
+- HYSA bank requirements met: `Select Yes or No`
+- HYSA effective interest rate: `Calculated from current eligibility`
+- HYSA minimum balance: `Enter minimum qualifying balance`
+- HYSA maximum eligible balance: `Enter maximum eligible balance`
+- HYSA balance-tier minimum: `Enter tier minimum balance`
+- HYSA balance-tier maximum: `Enter tier maximum balance`
+- HYSA balance-tier rate: `Enter tier interest rate`
+- HYSA required deposit: `Enter required deposit amount`
+- HYSA required deposit frequency: `Select deposit frequency`
+- HYSA required transactions: `Enter required transaction count`
+- HYSA required transaction period: `Select transaction period`
+- HYSA direct deposit requirement: `Enter minimum direct deposit`
+- HYSA qualification period: `Select qualification period`
+- HYSA promotional rate: `Enter promotional rate`
+- HYSA promotional period start: `Select promotion start date`
+- HYSA promotional period end: `Select promotion end date`
 - Goal Savings category: `Select savings category`
 - Goal Savings target amount: `Enter target amount`
 - Goal Savings target date: `Select target date`
-- Goal Savings auto-save amount: `Enter auto-save amount`
+- Goal Savings planned contribution amount: `Enter contribution amount`
+- Goal Savings contribution frequency: `Select contribution frequency`
+- Goal Savings first or next contribution date: `Select contribution date`
 - Goal Savings interest rate: `Enter interest rate`
 - Priority: `Select goal priority`
 - Target method: `Select target method`
@@ -1870,10 +1967,18 @@ a user-approved target.
 - Savings account type selector
 - Goal Savings category selector
 - Goal priority selector
+- Goal Savings contribution frequency selector: Weekly / Biweekly / Semi-Monthly / Monthly / Quarterly / Yearly / Custom
 - Goal Savings account selector for contributions, withdrawals, and transaction
   links
 - Savings activity selector: Contribution / Withdrawal
 - Savings allocation strategy selector
+- HYSA interest calculation-basis selector: Daily Ending Balance / Average Daily
+  Balance / Monthly Average Balance
+- HYSA interest credit-frequency selector: Monthly / Quarterly / At Maturity
+- HYSA bank-requirements-met selector: Yes / No
+- HYSA required-deposit frequency selector
+- HYSA required-transaction period selector
+- HYSA qualification-period selector: Monthly / Quarterly / Custom
 - Target method selector
 - Essential-expense coverage-period selector
 - Date-range selector for contribution history
@@ -1927,19 +2032,37 @@ transactions do not create or link to savings activities automatically.
   empty
 - Require an account name, Savings Account type, and valid non-negative
   balance
-  balance
-- Require a valid non-negative interest rate and minimum balance for Regular
+- Require a valid non-negative interest rate and minimum balance for Personal
   Savings
-- Require valid non-negative base and effective interest rates and interest
-  conditions for High-Yield Savings
+- Require a valid non-negative HYSA base interest rate, interest calculation
+  basis, and interest credit frequency
+- Require a valid non-negative HYSA boosted interest rate when provided
+- Require an explicit HYSA bank-requirements-met choice when a boosted rate or
+  yield condition is configured and Odin cannot derive eligibility from the
+  configured conditions
+- Require valid non-negative HYSA minimum balance, maximum eligible balance,
+  deposit amount, and direct-deposit threshold when provided
+- Require a positive HYSA required-transaction count when provided
+- Require each HYSA balance tier to have a valid lower bound, upper bound, and
+  non-negative rate; the lower bound cannot exceed the upper bound and tiers
+  cannot overlap
+- Require the HYSA maximum eligible balance to be greater than or equal to the
+  minimum balance when both are provided
+- Require a valid HYSA promotional rate and start and end dates when a
+  promotional period is configured; the end date must be on or after the start
+  date
 - Require a Goal Savings category, positive target amount, non-negative
-  auto-save amount, and target date
+  planned contribution amount, contribution frequency, first or next
+  contribution date, and target date
+- Require the first or next contribution date to be on or before the target
+  date
 - Require a valid non-negative interest rate for Goal Savings when provided
 - Require a target method and coverage period from 3 to 6 months when an
   Emergency Fund uses Essential-Expense Coverage
 - Require a positive principal, valid non-negative interest rate, start date,
   maturity date, term, and early-withdrawal rule for Time Deposit
 - Require the Time Deposit maturity date to be after its start date
+- Require the Time Deposit maturity date to agree with its start date and term
 - Require a Savings Account before recording a contribution or withdrawal
 - Require all contribution and withdrawal transaction inputs through
   Transaction Management
@@ -1952,13 +2075,37 @@ transactions do not create or link to savings activities automatically.
 
 ### 8.10 Savings Calculations
 
+- Personal Savings uses its interest rate for interest projections and credited
+  interest.
+- HYSA interest accrues using its selected calculation basis and credits to the
+  account at its selected credit frequency.
+- Derive HYSA bank-requirements-met as Yes only when every configured condition
+  with available data is satisfied and no configured condition is known to fail.
+  When one or more configured conditions cannot be evaluated, use the user's
+  explicit Yes or No confirmation and identify the eligibility as manually
+  confirmed.
+- For a HYSA without an active promotion, use its base rate when bank requirements
+  are not met. When requirements are met, use the applicable balance-tier rate;
+  if no tier applies, use the boosted rate; if no boosted rate is configured,
+  use the base rate.
+- When a HYSA has a maximum eligible balance, apply the selected boosted or tier
+  rate only up to that amount and the base rate to the remaining balance.
+- During an active HYSA promotional period, use the promotional rate before any
+  base, boosted, or tier rate.
+- Time Deposit uses its principal, interest rate, start date, maturity date, and
+  term for maturity and interest projections.
 - A Goal Savings balance reflects its initial balance plus active contributions
   and credited interest, less active withdrawals
 - Remaining goal amount is the target amount less the Goal Savings balance
 - Progress percentage is Goal Savings balance compared with target amount
-- Required contribution is the remaining goal amount distributed across the
-  remaining contribution periods
-- Current-cycle shortfall is the required contribution less contributions made during the cycle
+- Required contribution for a Goal Savings account is the remaining goal amount
+  distributed across its remaining scheduled contribution occurrences through
+  the target date
+- The total minimum savings contribution requirement for the current budget
+  cycle is the sum of required scheduled contributions due in that cycle across
+  active Goal Savings accounts
+- Current-cycle shortfall is each Goal Savings account's required scheduled
+  contribution less contributions made during that cycle
 - Progress cannot be negative and cannot exceed 100% in the primary progress display
 - Remaining goal amount cannot be negative
 - An amount that exceeds a goal's required contribution remains available as
@@ -1983,6 +2130,8 @@ transactions do not create or link to savings activities automatically.
 - Allocate the Budgeting Module's Savings Envelope across Goal Savings accounts
 - Allocate savings surplus across eligible Goal Savings accounts
 - Prioritize each Goal Savings account's required contribution
+- View the total minimum savings contribution requirement for the current
+  budget cycle
 - Use the global strategy to resolve surplus allocation
 - View allocation results for the current budget cycle
 - View the reason for each allocation
@@ -2002,6 +2151,11 @@ amount.
 - Emergency Fund Goal Savings accounts take priority until their selected essential-expense
   coverage target is met
 - Required contributions are allocated before surplus
+- The required contribution amount for each active Goal Savings account comes
+  from its contribution schedule and target date
+- The total minimum savings contribution requirement is the sum of active Goal
+  Savings accounts' required scheduled contributions due in the current budget
+  cycle
 - When the envelope cannot cover all required contributions, fund Emergency
   Fund Goal Savings accounts first, then apply the selected strategy
 - Apply Emergency Fund priority and the selected strategy to all savings
@@ -2031,10 +2185,14 @@ handled by Budgeting before it reaches this allocation step.
 
 - Goal Savings target, balance, and current progress
 - Goal Savings target date
+- Goal Savings planned contribution amount, contribution frequency, and first
+  or next contribution date
 - Contribution history
 - Withdrawal history
 - Scheduled recurring contribution transactions
-- Savings Account interest rates and High-Yield Savings interest conditions
+- Savings Account interest rates, HYSA current balance, calculation basis,
+  credit frequency, eligibility status, yield conditions, balance tiers, and
+  promotional period
 - Time Deposit principal, start date, maturity date, term, and early-withdrawal
   rule
 - Current-cycle Savings Envelope
