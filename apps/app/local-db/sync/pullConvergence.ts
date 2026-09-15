@@ -147,7 +147,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   budgets: new Set([
     "id", "user_id", "status", "allocation_method", "period_kind", "period_start", "period_end",
-    "budget_period_days", "total_amount_minor", "debt_budget_amount_minor", "surplus_handling", "deficit_handling",
+    "budget_period_days", "total_amount_minor", "debt_budget_amount_minor", "savings_budget_amount_minor", "surplus_handling", "deficit_handling",
     "allow_deficit_planning", "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   budget_allocations: new Set([
@@ -241,6 +241,8 @@ export function normalizePullRow(
       normalized[col] = row.total_amount_centavos;
     } else if (table === "budgets" && col === "debt_budget_amount_minor") {
       normalized[col] = row.debt_budget_amount_centavos ?? 0;
+    } else if (table === "budgets" && col === "savings_budget_amount_minor") {
+      normalized[col] = row.savings_budget_amount_centavos ?? 0;
     } else if (table === "budgets" && col === "surplus_handling") {
       normalized[col] = "LEAVE_UNALLOCATED";
     } else if (table === "budgets" && col === "deficit_handling") {

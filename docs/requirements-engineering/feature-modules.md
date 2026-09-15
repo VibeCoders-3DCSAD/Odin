@@ -2100,12 +2100,14 @@ transactions do not create or link to savings activities automatically.
   and credited interest, less active withdrawals
 - Remaining goal amount is the target amount less the Goal Savings balance
 - Progress percentage is Goal Savings balance compared with target amount
-- Required contribution for a Goal Savings account is the remaining goal amount
-  distributed across its remaining scheduled contribution occurrences through
-  the target date
+- Required contribution for a Goal Savings account at each scheduled occurrence
+  is the greater of its planned contribution amount and the remaining goal amount
+  distributed across its remaining scheduled contribution occurrences through the
+  target date, capped by the remaining goal amount
 - The total minimum savings contribution requirement for the current budget
   cycle is the sum of required scheduled contributions due in that cycle across
-  active Goal Savings accounts
+  active Goal Savings accounts and active Personal Savings or HYSA accounts with
+  configured contribution plans
 - Current-cycle shortfall is each Goal Savings account's required scheduled
   contribution less contributions made during that cycle
 - Progress cannot be negative and cannot exceed 100% in the primary progress display
@@ -2133,7 +2135,7 @@ transactions do not create or link to savings activities automatically.
 - Allocate savings surplus across eligible Goal Savings accounts
 - Prioritize each Goal Savings account's required contribution
 - View the total minimum savings contribution requirement for the current
-  budget cycle
+  budget cycle across Goal Savings and configured Personal Savings or HYSA plans
 - Use the global strategy to resolve surplus allocation
 - View allocation results for the current budget cycle
 - View the reason for each allocation
@@ -2156,8 +2158,8 @@ amount.
 - The required contribution amount for each active Goal Savings account comes
   from its contribution schedule and target date
 - The total minimum savings contribution requirement is the sum of active Goal
-  Savings accounts' required scheduled contributions due in the current budget
-  cycle
+  Savings accounts' required scheduled contributions plus configured Personal
+  Savings and HYSA contributions due in the current budget cycle
 - When the envelope cannot cover all required contributions, fund Emergency
   Fund Goal Savings accounts first, then apply the selected strategy
 - Apply Emergency Fund priority and the selected strategy to all savings

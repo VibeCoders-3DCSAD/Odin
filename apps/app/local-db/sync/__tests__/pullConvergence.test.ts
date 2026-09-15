@@ -23,15 +23,16 @@ describe("credit-card cycle pull convergence", () => {
 });
 
 describe("budget pull convergence", () => {
-  it("maps the remote centavo debt amount into the local minor-unit field", () => {
+  it("maps remote envelope centavo amounts into local minor-unit fields", () => {
     const row = normalizePullRow("budgets", {
       id: "budget-1", user_id: "user-1", status: "draft", period_kind: "monthly",
       period_start: "2026-04-01", period_end: "2026-04-30", budget_period_days: 30,
-      total_amount_centavos: 10_000, debt_budget_amount_centavos: 2_500,
+      total_amount_centavos: 10_000, debt_budget_amount_centavos: 2_500, savings_budget_amount_centavos: 1_500,
       version: 1, deleted: false, updated_at: "2026-04-01T00:00:00.000Z",
     }, "user-1");
 
     expect(row.debt_budget_amount_minor).toBe(2_500);
+    expect(row.savings_budget_amount_minor).toBe(1_500);
   });
 });
 

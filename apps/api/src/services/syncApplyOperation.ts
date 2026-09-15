@@ -314,11 +314,11 @@ const RECURRING_OCCURRENCE_FIELDS = new Set([
 
 const BUDGET_CREATE_FIELDS = new Set([
   "status", "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
-  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning", "debtBudgetAmountMinor",
+  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning", "debtBudgetAmountMinor", "savingsBudgetAmountMinor",
 ]);
 
 const BUDGET_UPDATE_FIELDS = new Set([
-  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debtBudgetAmountMinor",
+  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debtBudgetAmountMinor", "savingsBudgetAmountMinor",
 ]);
 
 const CREDIT_CARD_INSTALLMENT_CREATE_FIELDS = new Set([
@@ -1072,6 +1072,9 @@ async function validateBudgetPayload(
   if (!Number.isSafeInteger(payload.debtBudgetAmountMinor) || (payload.debtBudgetAmountMinor as number) < 0) {
     throw new Error("debtBudgetAmountMinor must be a non-negative safe integer");
   }
+  if (!Number.isSafeInteger(payload.savingsBudgetAmountMinor) || (payload.savingsBudgetAmountMinor as number) < 0) {
+    throw new Error("savingsBudgetAmountMinor must be a non-negative safe integer");
+  }
   const overlapQuery = supabase
     .from("budgets")
     .select("id")
@@ -1098,8 +1101,8 @@ async function validateBudgetPayload(
     requirePositiveInteger(value, "amountMinor");
     allocated += value.amountMinor as number;
   }
-  if (allocated + (payload.debtBudgetAmountMinor as number) > (payload.totalAmountMinor as number)) {
-    throw new Error("allocations and debt budget cannot exceed the budget total");
+  if (allocated + (payload.debtBudgetAmountMinor as number) + (payload.savingsBudgetAmountMinor as number) > (payload.totalAmountMinor as number)) {
+    throw new Error("allocations, debt budget, and savings budget cannot exceed the budget total");
   }
   return payload;
 }

@@ -32,7 +32,8 @@ export type ScheduledSavingsGoal = SavingsContributionSchedule & {
 };
 
 export type RequiredSavingsContribution = {
-  goalId: string;
+  savingsId: string;
+  source: "goal" | "savings_account";
   scheduledDates: string[];
   minimumPerOccurrenceCentavos: number;
   configuredMinimumCentavos: number;
@@ -43,6 +44,10 @@ export type RequiredSavingsContribution = {
 export type RequiredSavingsContributionTotal = {
   totalRequiredCentavos: number;
   contributions: RequiredSavingsContribution[];
+};
+
+export type ScheduledSavingsAccount = SavingsContributionSchedule & {
+  id: string;
 };
 
 function isIsoDate(value: string): boolean {
@@ -132,7 +137,9 @@ function validatePeriod(periodStart: string, periodEnd: string): void {
 export function getMinimumContributionPerOccurrence(goal: ScheduledSavingsGoal, asOfDate: string): number | null {
   if (!isIsoDate(asOfDate) || goal.status !== "active" || goal.isAchieved || goal.remainingAmountCentavos <= 0 || !goal.targetDate) return null;
   const dates = scheduledDates(goal, asOfDate, goal.targetDate);
-  return dates.length ? Math.ceil(goal.remainingAmountCentavos / dates.length) : null;
+  if (!dates.length) return null;
+  const targetDateMinimumCentavos = Math.ceil(goal.remainingAmountCentavos / dates.length);
+  return Math.max(goal.plannedContributionAmountCentavos, targetDateMinimumCentavos);
 }
 
 export function getRequiredSavingsContributions(
@@ -154,7 +161,32 @@ export function getRequiredSavingsContributions(
       .filter((activity) => activity.kind === "contribution" && activity.activityDate >= periodStart && activity.activityDate <= periodEnd)
       .reduce((total, activity) => total + activity.amountCentavos, 0);
     const remainingRequiredCentavos = Math.max(0, configuredMinimumCentavos - recordedContributionCentavos);
-    return [{ goalId: goal.id, scheduledDates: scheduledDatesInPeriod, minimumPerOccurrenceCentavos, configuredMinimumCentavos, recordedContributionCentavos, remainingRequiredCentavos }];
+    return [{ savingsId: goal.id, source: "goal" as const, scheduledDates: scheduledDatesInPeriod, minimumPerOccurrenceCentavos, configuredMinimumCentavos, recordedContributionCentavos, remainingRequiredCentavos }];
+  });
+  return { totalRequiredCentavos: contributions.reduce((total, contribution) => total + contribution.remainingRequiredCentavos, 0), contributions };
+}
+
+export function getRequiredSavingsAccountContributions(
+  periodStart: string,
+  periodEnd: string,
+  accounts: ScheduledSavingsAccount[],
+): RequiredSavingsContributionTotal {
+  validatePeriod(periodStart, periodEnd);
+  const contributions = accounts.flatMap((account) => {
+    const scheduleError = validateContributionSchedule(account);
+    if (scheduleError || account.plannedContributionAmountCentavos <= 0) return [];
+    const scheduledDatesInPeriod = scheduledDates(account, periodStart, periodEnd);
+    if (!scheduledDatesInPeriod.length) return [];
+    const configuredMinimumCentavos = account.plannedContributionAmountCentavos * scheduledDatesInPeriod.length;
+    return [{
+      savingsId: account.id,
+      source: "savings_account" as const,
+      scheduledDates: scheduledDatesInPeriod,
+      minimumPerOccurrenceCentavos: account.plannedContributionAmountCentavos,
+      configuredMinimumCentavos,
+      recordedContributionCentavos: 0,
+      remainingRequiredCentavos: configuredMinimumCentavos,
+    }];
   });
   return { totalRequiredCentavos: contributions.reduce((total, contribution) => total + contribution.remainingRequiredCentavos, 0), contributions };
 }

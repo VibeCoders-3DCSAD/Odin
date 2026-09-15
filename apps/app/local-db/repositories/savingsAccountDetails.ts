@@ -54,6 +54,13 @@ export type SavingsAccountDetails = {
 
 export type SavingsAccountDetailsInput = Omit<SavingsAccountDetails, "accountId" | "version">;
 
+export type ScheduledSavingsAccount = Pick<SavingsAccountDetails,
+  "accountId" | "plannedContributionAmountCentavos" | "contributionFrequency" |
+  "contributionIntervalCount" | "contributionDayOfMonth" |
+  "contributionSecondDayOfMonth" | "contributionDayOfWeek" |
+  "customIntervalDays" | "nextContributionDate"
+> & { name: string };
+
 export function getApplicableSavingsInterestRateBps(details: Pick<SavingsAccountDetails, "accountType" | "interestRateBps" | "baseInterestRateBps" | "effectiveInterestRateBps" | "higherRateEligible">): number | null {
   if (details.accountType === "high_yield_savings") {
     return details.higherRateEligible ? details.effectiveInterestRateBps : details.baseInterestRateBps;
@@ -171,6 +178,28 @@ export async function getSavingsAccountDetails(userId: string, accountId: string
   const db = await getDb();
   const row = await db.getFirstAsync<Row>("SELECT account_id, account_type, interest_rate_bps, minimum_balance_centavos, base_interest_rate_bps, effective_interest_rate_bps, interest_conditions, higher_rate_eligible, boosted_interest_rate_bps, interest_calculation_basis, interest_credit_frequency, maximum_eligible_balance_centavos, balance_tiers_json, required_deposit_centavos, required_deposit_frequency, required_transaction_count, required_transaction_period, direct_deposit_threshold_centavos, qualification_period, promotional_interest_rate_bps, promotion_start_date, promotion_end_date, principal_centavos, maturity_date, term_months, early_withdrawal_rule, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, contribution_day_of_week, custom_interval_days, next_contribution_date, version FROM savings_account_details WHERE user_id = ? AND account_id = ? AND deleted = 0", userId, accountId);
   return row ? map(row) : null;
+}
+
+export async function listScheduledSavingsAccounts(userId: string): Promise<ScheduledSavingsAccount[]> {
+  const db = await getDb();
+  return db.getAllAsync<ScheduledSavingsAccount>(
+    `SELECT sad.account_id AS accountId, fa.name,
+      sad.planned_contribution_amount_centavos AS plannedContributionAmountCentavos,
+      sad.contribution_frequency AS contributionFrequency,
+      sad.contribution_interval_count AS contributionIntervalCount,
+      sad.contribution_day_of_month AS contributionDayOfMonth,
+      sad.contribution_second_day_of_month AS contributionSecondDayOfMonth,
+      sad.contribution_day_of_week AS contributionDayOfWeek,
+      sad.custom_interval_days AS customIntervalDays,
+      sad.next_contribution_date AS nextContributionDate
+     FROM savings_account_details sad
+     JOIN financial_accounts fa ON fa.id = sad.account_id AND fa.user_id = sad.user_id
+     WHERE sad.user_id = ? AND sad.deleted = 0
+       AND sad.account_type IN ('personal_savings', 'high_yield_savings')
+       AND fa.kind = 'savings' AND fa.status = 'active' AND fa.deleted = 0
+     ORDER BY fa.name COLLATE NOCASE ASC`,
+    userId,
+  );
 }
 
 export async function upsertSavingsAccountDetails(userId: string, deviceId: string, accountId: string, input: SavingsAccountDetailsInput): Promise<{ details: SavingsAccountDetails; operation: SyncOperation }> {
