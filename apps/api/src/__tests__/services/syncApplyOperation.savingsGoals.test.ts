@@ -35,4 +35,11 @@ describe("savings-goal sync validation", () => {
       ...createOperation, operation_type: "update", base_version: 1, changed_fields: ["target_amount_centavos"], payload: { target_amount_centavos: 200_00 },
     })).resolves.toMatchObject({ payload: { target_amount_centavos: 200_00 } });
   });
+
+  it("accepts archive and restore lifecycle updates", async () => {
+    await expect(prepareOperation({} as never, "user-1", {
+      ...createOperation, operation_type: "update", base_version: 1,
+      changed_fields: ["status", "archived_at"], payload: { status: "archived", archived_at: "2026-09-15T00:00:00.000Z" },
+    })).resolves.toMatchObject({ payload: { status: "archived", archived_at: "2026-09-15T00:00:00.000Z" } });
+  });
 });

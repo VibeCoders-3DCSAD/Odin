@@ -6,7 +6,7 @@ import { randomUUID } from "../uuid";
 import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
 import { createCreditCardInstallmentInTransaction, type CreateCreditCardInstallmentInput } from "./creditCardInstallments";
 import { validateIsoDate } from "./creditCardCycleDates";
-import { createSavingsGoalActivityInTransaction } from "./savingsGoalActivities";
+import { createSavingsGoalActivityInTransaction, deleteSavingsGoalActivityForTransactionInTransaction, updateSavingsGoalActivityForTransactionInTransaction } from "./savingsGoalActivities";
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
@@ -40,6 +40,16 @@ type TransactionRow = {
   last_synced_at: string | null;
 };
 
+type TransactionListRow = {
+  id: string;
+  name: string;
+  category_label: string | null;
+  financial_account_name: string | null;
+  amount_centavos: number;
+  transaction_date: string;
+  transaction_type: string;
+};
+
 export type Transaction = {
   id: string;
   transaction_type: string;
@@ -58,6 +68,8 @@ export type Transaction = {
   notes: string | null;
   client_mutation_id: string | null;
 };
+
+export type TransactionListItem = TransactionListRow;
 
 export type CreateIncomeInput = {
   amount_centavos: number;
@@ -476,35 +488,46 @@ function buildTransactionInsert(
 export async function listTransactions(
   userId: string,
   filters?: TransactionFilters,
-): Promise<Transaction[]> {
+): Promise<TransactionListItem[]> {
   const db = await getDb();
-  const parts: string[] = ["SELECT * FROM transactions WHERE user_id = ? AND deleted = 0"];
+  const parts: string[] = [`SELECT
+    t.id,
+    COALESCE(NULLIF(t.merchant_name, ''), NULLIF(t.counterparty_name, ''), NULLIF(t.notes, ''), s.label, 'Transaction') AS name,
+    s.label AS category_label,
+    a.name AS financial_account_name,
+    t.amount_centavos,
+    t.transaction_date,
+    t.transaction_type
+    FROM transactions t
+    LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0 AND (s.user_id = t.user_id OR s.is_system = 1)
+    LEFT JOIN financial_accounts a ON a.id = CASE WHEN t.transaction_type = 'income' THEN t.destination_account_id ELSE t.source_account_id END AND a.user_id = t.user_id AND a.deleted = 0
+    WHERE t.user_id = ? AND t.deleted = 0`];
   const params: SQLite.SQLiteBindValue[] = [userId];
 
   if (filters?.transaction_type) {
     if (!(VALID_TYPES as readonly string[]).includes(filters.transaction_type)) {
       throw new LocalDbError("VALIDATION_ERROR", `transaction_type must be one of: ${VALID_TYPES.join(", ")}`);
     }
-    parts.push("AND transaction_type = ?");
+    parts.push("AND t.transaction_type = ?");
     params.push(filters.transaction_type);
   }
   if (filters?.status) {
     if (!(VALID_STATUSES as readonly string[]).includes(filters.status)) {
       throw new LocalDbError("VALIDATION_ERROR", `status must be one of: ${VALID_STATUSES.join(", ")}`);
     }
-    parts.push("AND status = ?");
+    parts.push("AND t.status = ?");
     params.push(filters.status);
   }
   if (filters?.from_date) {
-    parts.push("AND transaction_date >= ?");
+    parts.push("AND t.transaction_date >= ?");
     params.push(filters.from_date);
   }
   if (filters?.to_date) {
-    parts.push("AND transaction_date <= ?");
+    parts.push("AND t.transaction_date <= ?");
     params.push(filters.to_date);
   }
   if (filters?.search) {
-    parts.push("AND (merchant_name LIKE ? OR counterparty_name LIKE ? OR notes LIKE ? OR EXISTS (SELECT 1 FROM transaction_line_items tli WHERE tli.transaction_id = transactions.id AND tli.user_id = transactions.user_id AND tli.deleted = 0 AND tli.item_label LIKE ?))");
+    parts.push("AND (t.merchant_name LIKE ? OR t.counterparty_name LIKE ? OR t.notes LIKE ? OR EXISTS (SELECT 1 FROM transaction_line_items tli WHERE tli.transaction_id = t.id AND tli.user_id = t.user_id AND tli.deleted = 0 AND tli.item_label LIKE ?))");
     const term = `%${filters.search}%`;
     params.push(term, term, term, term);
   }
@@ -516,7 +539,8 @@ export async function listTransactions(
     ? filters.sort_dir
     : "desc";
 
-  parts.push(`ORDER BY ${sortBy} ${sortDir}`);
+  // rowid is implicit in the existing date index and keeps offset pages stable.
+  parts.push(`ORDER BY t.${sortBy} ${sortDir}, t.created_at ${sortDir}, t.rowid ${sortDir}`);
   const requestedLimit = filters?.limit;
   const requestedOffset = filters?.offset;
   const limit = requestedLimit != null && Number.isFinite(requestedLimit)
@@ -528,8 +552,7 @@ export async function listTransactions(
   // Expo SQLite on device rejects bound parameters in LIMIT/OFFSET.
   parts.push(`LIMIT ${limit} OFFSET ${offset}`);
 
-  const rows = await db.getAllAsync<TransactionRow>(parts.join(" "), ...params);
-  return rows.map(mapTransaction);
+  return db.getAllAsync<TransactionListRow>(parts.join(" "), ...params);
 }
 
 export async function getTransaction(
@@ -948,6 +971,12 @@ export async function updateTransaction(
       await db.runAsync(sql, ...params);
     }
 
+    await updateSavingsGoalActivityForTransactionInTransaction(db, userId, deviceId, id, {
+      amountCentavos: newAmount,
+      activityDate: input.transaction_date ?? current.transaction_date,
+      notes: input.notes ?? current.notes,
+    });
+
     if (cardPurchase && updatedCycleId !== cardPurchase.cycle_id) {
       await db.runAsync(
         `UPDATE credit_card_transactions SET cycle_id = ?, version = version + 1, updated_at = ?
@@ -1077,6 +1106,8 @@ export async function deleteTransaction(
       userId,
       id,
     );
+
+    await deleteSavingsGoalActivityForTransactionInTransaction(db, userId, deviceId, id);
 
     const operation = await enqueueOperation(db, {
       userId,

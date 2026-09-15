@@ -36,6 +36,28 @@ export async function createSavingsGoalActivityInTransaction(db: SQLite.SQLiteDa
   return { activity: { id, savingsGoalId: input.savingsGoalId, transactionId: input.transactionId, kind: input.kind, amountCentavos: input.amountCentavos, activityDate: input.activityDate, notes: input.notes ?? null, version: 1 }, operation };
 }
 
+export async function updateSavingsGoalActivityForTransactionInTransaction(db: SQLite.SQLiteDatabase, userId: string, deviceId: string, transactionId: string, input: { amountCentavos: number; activityDate: string; notes: string | null }): Promise<void> {
+  const activity = await db.getFirstAsync<Row>("SELECT id, savings_goal_id, transaction_id, activity_kind, amount_centavos, activity_date, notes, version FROM savings_goal_activities WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, transactionId);
+  if (!activity) return;
+  const changedFields = [
+    ...(activity.amount_centavos === input.amountCentavos ? [] : ["amount_centavos"]),
+    ...(activity.activity_date === input.activityDate ? [] : ["activity_date"]),
+    ...(activity.notes === input.notes ? [] : ["notes"]),
+  ];
+  if (!changedFields.length) return;
+  const ts = new Date().toISOString();
+  await db.runAsync("UPDATE savings_goal_activities SET amount_centavos = ?, activity_date = ?, notes = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", input.amountCentavos, input.activityDate, input.notes, ts, activity.id, userId);
+  await enqueueOperation(db, { userId, deviceId, entity: "savings_goal_activities", recordId: activity.id, operationType: "update", baseVersion: activity.version, changedFields, payload: Object.fromEntries(changedFields.map((field) => [field, field === "amount_centavos" ? input.amountCentavos : field === "activity_date" ? input.activityDate : input.notes])), failureMessage: "This savings activity could not be updated." });
+}
+
+export async function deleteSavingsGoalActivityForTransactionInTransaction(db: SQLite.SQLiteDatabase, userId: string, deviceId: string, transactionId: string): Promise<void> {
+  const activity = await db.getFirstAsync<Row>("SELECT id, savings_goal_id, transaction_id, activity_kind, amount_centavos, activity_date, notes, version FROM savings_goal_activities WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, transactionId);
+  if (!activity) return;
+  const ts = new Date().toISOString();
+  await db.runAsync("UPDATE savings_goal_activities SET deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", ts, activity.id, userId);
+  await enqueueOperation(db, { userId, deviceId, entity: "savings_goal_activities", recordId: activity.id, operationType: "delete", baseVersion: activity.version, changedFields: [], payload: {}, failureMessage: "This savings activity could not be deleted." });
+}
+
 export async function deleteSavingsGoalActivity(userId: string, deviceId: string, id: string): Promise<void> {
   const db = await getDb(); const ts = new Date().toISOString();
   await db.withTransactionAsync(async () => {

@@ -51,6 +51,10 @@ describe("savings account detail validation", () => {
     expect(validateSavingsAccountDetails(details({ accountType: "time_deposit", principalCentavos: 100_000_00, maturityDate: "2027-01-01", termMonths: 12, earlyWithdrawalRule: "Early withdrawal may reduce earned interest" }))).toMatchObject({ accountType: "time_deposit" });
   });
 
+  it("keeps Goal Savings as its own holding record", () => {
+    expect(() => validateSavingsAccountDetails(details({ accountType: "goal_savings" }))).toThrow("Savings goals screen");
+  });
+
   it("uses the effective HYSA rate only when eligibility is confirmed", () => {
     const hysa = details({ accountType: "high_yield_savings", baseInterestRateBps: 300, effectiveInterestRateBps: 450, interestConditions: "Maintain the required balance", higherRateEligible: true });
     expect(getApplicableSavingsInterestRateBps(hysa)).toBe(450);

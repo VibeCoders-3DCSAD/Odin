@@ -605,7 +605,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                           {SAVINGS_ACCOUNT_TYPES.map((type) => (
                             <Pressable key={type} onPress={() => setSavingsType(type)} accessibilityRole="radio" accessibilityLabel={`Select ${type.replaceAll("_", " ")}`} accessibilityState={{ checked: savingsType === type }} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: savingsType === type ? P.brand : P.card }}>
-                              <Text style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: "600", color: savingsType === type ? P.white : P.ink2 }}>{type === "personal_savings" ? "Personal Savings" : type === "high_yield_savings" ? "HYSA" : "Time Deposit"}</Text>
+                              <Text style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: "600", color: savingsType === type ? P.white : P.ink2 }}>{type === "personal_savings" ? "Personal Savings" : type === "high_yield_savings" ? "HYSA" : type === "goal_savings" ? "Goal Savings" : "Time Deposit"}</Text>
                             </Pressable>
                           ))}
                         </View>

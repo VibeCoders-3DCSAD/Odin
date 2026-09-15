@@ -35,7 +35,7 @@ type PullCursors = Record<string, TableCursor>;
 const CLIENT_SYNC_FAILURE_REASON = "Sync operation rejected";
 const EDIT_HISTORY_FAILURE_REASON = "sync_operation_rejected";
 
-const SYNCED_TABLES = [
+export const SYNCED_TABLES = [
   "category_groups",
   "categories",
   "subcategories",
@@ -225,7 +225,8 @@ export async function pullChanges(
             || table === "alert_notification_preferences"
             || table === "anomaly_whitelist_rules"
              || table === "alert_suppression_rules"
-             || table === "savings_goals"
+              || table === "savings_goals"
+              || table === "savings_goal_activities"
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);

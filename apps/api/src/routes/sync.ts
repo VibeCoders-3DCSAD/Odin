@@ -7,13 +7,10 @@ import {
   pullChanges,
   registerDevice,
   isDeviceActive,
+  SYNCED_TABLES,
 } from "../services/syncService.js";
 
-const SYNCED_CURSOR_TABLES = new Set([
-  "category_groups", "categories", "subcategories", "financial_accounts", "transactions", "transaction_line_items",
-  "income_sources", "financial_obligations", "transaction_templates", "transaction_drafts", "recurring_transaction_templates",
-  "recurring_transaction_occurrences", "budgets", "budget_allocations", "credit_card_details", "credit_card_repayment_preferences", "credit_card_cycles", "credit_card_installments", "credit_card_transactions", "credit_card_statements", "credit_card_payments", "debt_accounts", "debt_payments", "alert_notification_preferences", "anomaly_whitelist_rules", "alert_suppression_rules",
-]);
+const SYNCED_CURSOR_TABLES = new Set<string>(SYNCED_TABLES);
 const MAX_PUSH_OPERATIONS = 100;
 const MAX_ID_LENGTH = 128;
 const MAX_CHANGED_FIELDS = 50;
@@ -38,13 +35,13 @@ function isPushOperation(value: unknown): boolean {
     && !!operation.payload && typeof operation.payload === "object" && !Array.isArray(operation.payload) && isBoundedPayload(operation.payload as Record<string, unknown>);
 }
 
-function isCursorMap(value: unknown): value is Record<string, { ts: string; id: string }> {
+export function isCursorMap(value: unknown): value is Record<string, { ts: string; id: string }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return Object.entries(value as Record<string, unknown>).every(([table, cursor]) => {
     if (!SYNCED_CURSOR_TABLES.has(table) || !cursor || typeof cursor !== "object") return false;
     const item = cursor as Record<string, unknown>;
     return typeof item.ts === "string" && !Number.isNaN(Date.parse(item.ts))
-      && typeof item.id === "string" && /^[0-9a-f-]{8,}$/i.test(item.id);
+      && typeof item.id === "string" && (item.id === "" || /^[0-9a-f-]{8,}$/i.test(item.id));
   });
 }
 

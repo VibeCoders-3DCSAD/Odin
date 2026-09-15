@@ -167,16 +167,16 @@ function inputFromRow(row: SavingsGoalRow): CreateSavingsGoalInput {
   return { name: row.name, goalType: row.goal_type as SavingsGoalType, goalCategory: (row.goal_category ?? row.goal_type) as SavingsGoalCategory, targetAmountCentavos: row.target_amount_centavos, startingAmountCentavos: row.starting_amount_centavos, targetDate: row.target_date, priority: row.priority as SavingsGoalPriority, emergencyFundBaselineCentavos: row.emergency_fund_baseline_centavos, autoSaveAmountCentavos: row.auto_save_amount_centavos, plannedContributionAmountCentavos: row.planned_contribution_amount_centavos, contributionFrequency: row.contribution_frequency, contributionIntervalCount: row.contribution_interval_count, contributionDayOfMonth: row.contribution_day_of_month, contributionSecondDayOfMonth: row.contribution_second_day_of_month, contributionDayOfWeek: row.contribution_day_of_week, customIntervalDays: row.custom_interval_days, nextContributionDate: row.next_contribution_date, interestRateBps: row.interest_rate_bps, notes: row.notes, emergencyFundTargetMethod: row.emergency_fund_target_method as EmergencyFundTargetMethod, essentialExpenseCoverageMonths: row.essential_expense_coverage_months };
 }
 
-export async function listSavingsGoals(userId: string): Promise<SavingsGoal[]> {
+export async function listSavingsGoals(userId: string, status: Extract<SavingsGoalStatus, "active" | "archived"> = "active"): Promise<SavingsGoal[]> {
   const db = await getDb();
-  const rows = await db.getAllAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND deleted = 0 AND status = 'active' ORDER BY updated_at DESC, name COLLATE NOCASE ASC", userId);
+  const rows = await db.getAllAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND deleted = 0 AND status = ? ORDER BY updated_at DESC, name COLLATE NOCASE ASC", userId, status);
   const activities = await listSavingsGoalActivitiesByGoal(userId, rows.map((row) => row.id));
   return rows.map((row) => ({ ...mapGoal(row), ...calculateSavingsGoalProgress(row.starting_amount_centavos, row.target_amount_centavos, activities.get(row.id) ?? []) }));
 }
 
 export async function getSavingsGoal(userId: string, id: string): Promise<SavingsGoal | null> {
   const db = await getDb();
-  const row = await db.getFirstAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND id = ? AND deleted = 0 AND status = 'active'", userId, id);
+  const row = await db.getFirstAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND id = ? AND deleted = 0 AND status IN ('active', 'archived')", userId, id);
   if (!row) return null;
   const activities = await listSavingsGoalActivitiesByGoal(userId, [id]);
   return { ...mapGoal(row), ...calculateSavingsGoalProgress(row.starting_amount_centavos, row.target_amount_centavos, activities.get(id) ?? []) };
@@ -222,6 +222,29 @@ export async function deleteSavingsGoal(userId: string, deviceId: string, id: st
     const current = await readOwned(db, userId, id); const ts = now();
     await db.runAsync("UPDATE savings_goals SET status = 'deleted', deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", ts, id, userId);
     result = { operation: await enqueueOperation(db, { userId, deviceId, entity: "savings_goals", recordId: id, operationType: "delete", baseVersion: current.version, changedFields: [], payload: {}, failureMessage: `This savings goal \"${current.name}\" could not be deleted.` }) };
+  });
+  return result;
+}
+
+export async function archiveSavingsGoal(userId: string, deviceId: string, id: string): Promise<{ goal: SavingsGoal; operation: SyncOperation }> {
+  return setSavingsGoalStatus(userId, deviceId, id, "archived");
+}
+
+export async function restoreSavingsGoal(userId: string, deviceId: string, id: string): Promise<{ goal: SavingsGoal; operation: SyncOperation }> {
+  return setSavingsGoalStatus(userId, deviceId, id, "active");
+}
+
+async function setSavingsGoalStatus(userId: string, deviceId: string, id: string, status: "active" | "archived"): Promise<{ goal: SavingsGoal; operation: SyncOperation }> {
+  const db = await getDb(); let result!: { goal: SavingsGoal; operation: SyncOperation };
+  await db.withTransactionAsync(async () => {
+    const current = await readOwned(db, userId, id);
+    if (current.status === status) {
+      throw new LocalDbError("VALIDATION_ERROR", `Savings goal is already ${status}.`);
+    }
+    const ts = now(); const archivedAt = status === "archived" ? ts : null;
+    await db.runAsync("UPDATE savings_goals SET status = ?, archived_at = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", status, archivedAt, ts, id, userId);
+    const operation = await enqueueOperation(db, { userId, deviceId, entity: "savings_goals", recordId: id, operationType: "update", baseVersion: current.version, changedFields: ["status", "archived_at"], payload: { status, archived_at: archivedAt }, failureMessage: `This savings goal \"${current.name}\" could not be ${status === "archived" ? "archived" : "restored"}.` });
+    result = { goal: await readResult(db, userId, id), operation };
   });
   return result;
 }

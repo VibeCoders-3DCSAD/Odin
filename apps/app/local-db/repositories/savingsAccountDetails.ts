@@ -4,7 +4,9 @@ import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { validateContributionSchedule, type GoalContributionFrequency } from "../../features/savings-goals/contributionSchedule";
 
-export const SAVINGS_ACCOUNT_TYPES = ["personal_savings", "high_yield_savings", "time_deposit"] as const;
+// Goal Savings is persisted in savings_goals because it owns its balance directly,
+// rather than wrapping a financial_accounts record.
+export const SAVINGS_ACCOUNT_TYPES = ["personal_savings", "high_yield_savings", "goal_savings", "time_deposit"] as const;
 export type SavingsAccountType = typeof SAVINGS_ACCOUNT_TYPES[number];
 export const HYSA_INTEREST_CALCULATION_BASES = ["daily_ending_balance", "average_daily_balance", "monthly_average_balance"] as const;
 export const HYSA_INTEREST_CREDIT_FREQUENCIES = ["monthly", "quarterly", "at_maturity"] as const;
@@ -124,6 +126,7 @@ function assertNonNegative(value: number | null | undefined, field: string) {
 
 export function validateSavingsAccountDetails(input: SavingsAccountDetailsInput): SavingsAccountDetailsInput {
   if (!SAVINGS_ACCOUNT_TYPES.includes(input.accountType)) throw new LocalDbError("VALIDATION_ERROR", "Savings account type is invalid");
+  if (input.accountType === "goal_savings") throw new LocalDbError("VALIDATION_ERROR", "Create Goal Savings from the Savings goals screen.");
   for (const [value, field] of [[input.interestRateBps, "interest rate"], [input.minimumBalanceCentavos, "minimum balance"], [input.baseInterestRateBps, "base interest rate"], [input.effectiveInterestRateBps, "effective interest rate"], [input.boostedInterestRateBps, "boosted interest rate"], [input.maximumEligibleBalanceCentavos, "maximum eligible balance"], [input.requiredDepositCentavos, "required deposit"], [input.directDepositThresholdCentavos, "direct deposit threshold"], [input.promotionalInterestRateBps, "promotional interest rate"]] as const) assertNonNegative(value, field);
   if (input.accountType === "personal_savings" && (input.interestRateBps === null || input.minimumBalanceCentavos === null)) throw new LocalDbError("VALIDATION_ERROR", "Personal Savings requires an interest rate and minimum balance");
   if (input.accountType === "high_yield_savings") {
