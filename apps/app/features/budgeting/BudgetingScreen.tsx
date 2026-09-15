@@ -8,6 +8,8 @@ import { calculateBudgetSpentAmount, calculateProvisionalPercentage } from "./co
 import { getCategory, getSubcategory } from "../../local-db/repositories/taxonomy";
 import { getRequiredDebtTotalForPeriod } from "../debt-manager/requiredDebtTotalQueries";
 import type { RequiredDebtTotalForPeriod } from "../debt-manager/requiredDebtTotalQueries";
+import { getRequiredSavingsContributionsForPeriod } from "../savings-goals/requiredSavingsContributionQueries";
+import type { RequiredSavingsContributionTotal } from "../savings-goals/contributionSchedule";
 
 type Props = {
   userId: string;
@@ -83,6 +85,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [requiredDebtTotal, setRequiredDebtTotal] = useState<RequiredDebtTotalForPeriod | null>(null);
+  const [requiredSavingsTotal, setRequiredSavingsTotal] = useState<RequiredSavingsContributionTotal | null>(null);
 
   const loadDrafts = useCallback(async () => {
     setLoading(true);
@@ -154,6 +157,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
   useEffect(() => {
     if (!periodStart || !periodEnd) {
       setRequiredDebtTotal(null);
+      setRequiredSavingsTotal(null);
       return;
     }
     let cancelled = false;
@@ -163,6 +167,13 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
       })
       .catch(() => {
         if (!cancelled) setRequiredDebtTotal(null);
+      });
+    void getRequiredSavingsContributionsForPeriod(userId, periodStart, periodEnd)
+      .then((result) => {
+        if (!cancelled) setRequiredSavingsTotal(result);
+      })
+      .catch(() => {
+        if (!cancelled) setRequiredSavingsTotal(null);
       });
     return () => { cancelled = true; };
   }, [periodEnd, periodStart, userId]);
@@ -324,7 +335,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: formPalette.ink2, marginTop: 12, marginBottom: 6 }}>DEBT PAYMENT BUDGET</Text>
                   <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginBottom: 6 }}>Reserve the amount available for credit-card and debt payments.</Text>
                   <TextInput value={debtBudgetAmount} onChangeText={setDebtBudgetAmount} placeholder="e.g. 10.53" placeholderTextColor={formPalette.mut} accessibilityLabel="Debt payment budget in pesos" keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
-                  {requiredDebtTotal ? (
+                   {requiredDebtTotal ? (
                     <View style={{ marginTop: 8 }}>
                       <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut }}>Required debt payments: {formatPeso(requiredDebtTotal.totalRequiredCentavos)}</Text>
                       {requiredDebtTotal.obligations.map((obligation, index) => (
@@ -344,8 +355,18 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                         <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.error, marginTop: 4 }}>
                           Debt payment deficit: {formatPeso(requiredDebtTotal.totalRequiredCentavos - parsePesoToCentavos(debtBudgetAmount))}
                         </Text>
-                      ) : null}
-                    </View>
+                   ) : null}
+                   {requiredSavingsTotal ? (
+                     <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: formPalette.line }}>
+                       <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut }}>Minimum scheduled savings contributions: {formatPeso(requiredSavingsTotal.totalRequiredCentavos)}</Text>
+                       {requiredSavingsTotal.contributions.map((contribution) => (
+                         <Text key={contribution.goalId} style={{ fontFamily: "Manrope", fontSize: 10.5, color: formPalette.mut, marginTop: 3 }}>
+                           Due {contribution.scheduledDates.join(", ")} · {formatPeso(contribution.remainingRequiredCentavos)} remaining
+                         </Text>
+                       ))}
+                     </View>
+                   ) : null}
+                 </View>
                   ) : null}
                 </View>
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", marginTop: 14 }}>Manual allocations</Text>
