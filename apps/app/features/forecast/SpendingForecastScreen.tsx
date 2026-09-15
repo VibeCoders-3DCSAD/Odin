@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { ArrowLeft, Sparkle } from "phosphor-react-native";
 import { getSnapshot, upsertSnapshot } from "../../local-db/repositories/dashboardSnapshots";
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
-import { listForecastTransactions } from "../../local-db/repositories/forecastTransactions";
+import { getForecastHistoryStartDate, listForecastTransactions } from "../../local-db/repositories/forecastTransactions";
 import { getForecastContent } from "../dashboard/dashboardSnapshotContent";
 import { ForecastPanel } from "../dashboard/components/ForecastPanel";
 import { requestForecast } from "./api";
@@ -41,7 +41,7 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack }: 
     setRefreshing(true);
     setError(null);
     try {
-      const historicalTransactions = await listForecastTransactions(userId);
+      const historicalTransactions = await listForecastTransactions(userId, { fromDate: getForecastHistoryStartDate() });
       if (historicalTransactions.length === 0) {
         setError("Record a posted income or expense before requesting a forecast.");
         return;

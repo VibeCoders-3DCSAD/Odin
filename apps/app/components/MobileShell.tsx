@@ -262,6 +262,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const syncInFlight = useRef(false);
   const lastAutoSyncAt = useRef(0);
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transactionLoadMoreRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -496,7 +497,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     const reconnected = online && !wasOnline.current;
     const autoSyncDue = Date.now() - lastAutoSyncAt.current >= AUTO_SYNC_MS;
 
-    if (online && (retryable > 0 || syncPending) && (reconnected || autoSyncDue)) {
+    if (online && (syncPending || (retryable > 0 && (reconnected || autoSyncDue)))) {
       await syncNow(false);
     }
 
@@ -800,7 +801,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "transactions") {
-      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} />;
+      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} />;
     }
 
     if (currentPage === "recurring-transactions") {
@@ -844,11 +845,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "budgeting") {
-      return <BudgetingScreen userId={userId} deviceId={deviceId} onSyncRequested={handleSync} />;
+      return <BudgetingScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onSyncRequested={handleSync} />;
     }
 
     if (currentPage === "savings-goals") {
-      return <SavingsGoalsScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onRecordActivity={(savingsGoalId, kind) => { setSavingsActivityContext({ savingsGoalId, kind }); setTransactionToEdit(null); setStatementPaymentContext(null); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }} />;
+      return <SavingsGoalsScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onRecordActivity={(savingsGoalId, kind) => { setSavingsActivityContext({ savingsGoalId, kind }); setTransactionToEdit(null); setStatementPaymentContext(null); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }} onOpenTransaction={(transactionId) => { getTransaction(userId, transactionId).then((transaction) => { if (!transaction) return; setSavingsActivityContext(null); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }).catch(() => {}); }} />;
     }
 
     if (currentPage === "dashboard") {
@@ -941,6 +942,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           className="flex-1"
           contentContainerClassName="px-5 pb-24"
           keyboardShouldPersistTaps="handled"
+          onScroll={({ nativeEvent }) => {
+            const distanceFromBottom = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
+            if (currentPage === "transactions" && distanceFromBottom < 200) transactionLoadMoreRef.current?.();
+          }}
+          scrollEventThrottle={16}
         >
           {renderPage()}
         </ScrollView>

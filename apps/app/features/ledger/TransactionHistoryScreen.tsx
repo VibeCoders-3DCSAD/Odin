@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -9,10 +9,8 @@ import {
   View,
 } from "react-native";
 import { Funnel } from "phosphor-react-native";
-import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
-import { listTransactions, deleteTransaction, type TransactionFilters } from "../../local-db/repositories/ledger";
+import { listTransactions, getTransaction, deleteTransaction, type TransactionFilters, type TransactionListItem } from "../../local-db/repositories/ledger";
 import { getCreditCardPurchaseMetadataForTransaction } from "../../local-db/repositories/creditCardInstallments";
-import { listSubcategories } from "../../local-db/repositories/taxonomy";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import KebabTooltip from "../../components/KebabTooltip";
@@ -51,13 +49,18 @@ type Props = {
   deviceId: string;
   accessToken: string;
   onNewTransaction: () => void;
+  onLoadMoreChange?: (loadMore: (() => void) | null) => void;
 };
 
-export default function TransactionHistoryScreen({ userId, deviceId, accessToken, onNewTransaction }: Props) {
+const PAGE_SIZE = 50;
+
+export default function TransactionHistoryScreen({ userId, deviceId, accessToken, onNewTransaction, onLoadMoreChange }: Props) {
   const { showToast } = useToast();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<TransactionListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<string>("transaction_date");
@@ -68,59 +71,101 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
   const [deleteBlockedTarget, setDeleteBlockedTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [accountMap, setAccountMap] = useState<Record<string, string>>({});
-  const [subcategoryMap, setSubcategoryMap] = useState<Record<string, string>>({});
+  const requestId = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const nextOffsetRef = useRef(0);
 
-  useEffect(() => {
-    async function loadMaps() {
-      const [accts, subs] = await Promise.all([
-        listFinancialAccounts(userId),
-        listSubcategories(userId),
-      ]);
-      const amap: Record<string, string> = {};
-      for (const a of accts) amap[a.id] = a.name;
-      const smap: Record<string, string> = {};
-      for (const s of subs) smap[s.id] = s.label;
-      setAccountMap(amap);
-      setSubcategoryMap(smap);
+  function getFilters(offset: number): TransactionFilters {
+    const filters: TransactionFilters = {
+      sort_by: sortBy,
+      sort_dir: sortDir,
+      limit: PAGE_SIZE,
+      offset,
+    };
+    if (typeFilter !== "all") filters.transaction_type = typeFilter;
+    if (search.trim()) filters.search = search.trim();
+    if (dateRange === "week") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      filters.from_date = d.toISOString().split("T")[0]!;
+    } else if (dateRange === "month") {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 1);
+      filters.from_date = d.toISOString().split("T")[0]!;
+    } else if (dateRange === "year") {
+      const d = new Date();
+      d.setFullYear(d.getFullYear() - 1);
+      filters.from_date = d.toISOString().split("T")[0]!;
     }
-    loadMaps().catch(() => {});
-  }, [userId]);
+    return filters;
+  }
 
   async function load() {
+    const currentRequestId = requestId.current + 1;
+    requestId.current = currentRequestId;
     setLoading(true);
+    setHasMore(false);
+    nextOffsetRef.current = 0;
     try {
-      const filters: TransactionFilters = {
-        sort_by: sortBy,
-        sort_dir: sortDir,
-      };
-      if (typeFilter !== "all") filters.transaction_type = typeFilter;
-      if (search.trim()) filters.search = search.trim();
-      if (dateRange === "week") {
-        const d = new Date();
-        d.setDate(d.getDate() - 7);
-        filters.from_date = d.toISOString().split("T")[0]!;
-      } else if (dateRange === "month") {
-        const d = new Date();
-        d.setMonth(d.getMonth() - 1);
-        filters.from_date = d.toISOString().split("T")[0]!;
-      } else if (dateRange === "year") {
-        const d = new Date();
-        d.setFullYear(d.getFullYear() - 1);
-        filters.from_date = d.toISOString().split("T")[0]!;
-      }
-      const rows = await listTransactions(userId, filters);
+      const rows = await listTransactions(userId, getFilters(0));
+      if (requestId.current !== currentRequestId) return;
       setTransactions(rows);
+      setHasMore(rows.length === PAGE_SIZE);
+      nextOffsetRef.current = rows.length;
     } catch {
+      if (requestId.current !== currentRequestId) return;
       setTransactions([]);
     } finally {
-      setLoading(false);
+      if (requestId.current === currentRequestId) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
   }, [typeFilter, sortBy, sortDir, dateRange]);
+
+  function loadMore() {
+    if (loading || !hasMore || loadingMoreRef.current) return;
+    const currentRequestId = requestId.current;
+    const offset = nextOffsetRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    listTransactions(userId, getFilters(offset))
+      .then((rows) => {
+        if (requestId.current !== currentRequestId) return;
+        nextOffsetRef.current = offset + rows.length;
+        setTransactions((current) => [...current, ...rows]);
+        setHasMore(rows.length === PAGE_SIZE);
+      })
+      .catch(() => {})
+      .finally(() => {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      });
+  }
+
+  useEffect(() => {
+    onLoadMoreChange?.(loadMore);
+    return () => onLoadMoreChange?.(null);
+  }, [onLoadMoreChange, loadMore]);
+
+  async function editTransaction(transactionId: string) {
+    const transaction = await getTransaction(userId, transactionId);
+    if (!transaction) {
+      showToast("Transaction not found", "danger");
+      return;
+    }
+    setEditTarget(transaction);
+  }
+
+  async function selectDeleteTarget(transactionId: string) {
+    const transaction = await getTransaction(userId, transactionId);
+    if (!transaction) {
+      showToast("Transaction not found", "danger");
+      return;
+    }
+    await requestDelete(transaction);
+  }
 
   async function requestDelete(transaction: Transaction) {
     if (transaction.transaction_type === "expense" && transaction.source_account_id) {
@@ -168,30 +213,16 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
   }
 
-  function getLabel(tx: Transaction): string {
-    if (tx.merchant_name) return tx.merchant_name;
-    if (tx.counterparty_name) return tx.counterparty_name;
-    if (tx.notes) return tx.notes;
-    const subcat = tx.subcategory_id ? subcategoryMap[tx.subcategory_id] : undefined;
-    if (subcat) return subcat;
-    return "Transaction";
-  }
-
-  function getAccountLabel(tx: Transaction): string {
-    const id = tx.transaction_type === "income" ? tx.destination_account_id : tx.source_account_id;
-    return id ? accountMap[id] ?? "" : "";
-  }
-
-  const typePrefix = (tx: Transaction) =>
+  const typePrefix = (tx: TransactionListItem) =>
     tx.transaction_type === "expense" ? "-" : tx.transaction_type === "income" ? "+" : "";
 
-  const amountColor = (tx: Transaction) =>
+  const amountColor = (tx: TransactionListItem) =>
     tx.transaction_type === "expense" ? palette.error
       : tx.transaction_type === "income" ? palette.success
       : "#1565C0";
 
   const grouped = useMemo(() => {
-    const groups: { date: string; items: Transaction[] }[] = [];
+    const groups: { date: string; items: TransactionListItem[] }[] = [];
     for (const tx of transactions) {
       const dateLabel = formatDate(tx.transaction_date);
       const last = groups[groups.length - 1];
@@ -306,7 +337,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         </View>
       ) : (
         grouped.map((group) => (
-          <View key={group.date}>
+          <View key={`${group.date}-${group.items[0]!.id}`}>
             <Text style={{
               fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: palette.mut,
               letterSpacing: 0.4, marginTop: 12, marginBottom: 7,
@@ -332,10 +363,10 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }} numberOfLines={1}>
-                    {getLabel(tx)}
+                    {tx.name}
                   </Text>
                   <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut }} numberOfLines={1}>
-                    {[tx.subcategory_id ? subcategoryMap[tx.subcategory_id] : "", getAccountLabel(tx)].filter(Boolean).join(" · ") || "Uncategorized"}
+                    {[tx.category_label, tx.financial_account_name].filter(Boolean).join(" · ") || "Uncategorized"}
                   </Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
@@ -346,12 +377,13 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                     {typePrefix(tx)}P{formatAmount(tx.amount_centavos)}
                   </Text>
                 </View>
-                <KebabTooltip onEdit={() => setEditTarget(tx)} onDelete={() => { requestDelete(tx).catch(() => setDeleteBlockedTarget(tx)); }} />
+                <KebabTooltip onEdit={() => { editTransaction(tx.id).catch(() => showToast("Could not open transaction", "danger")); }} onDelete={() => { selectDeleteTarget(tx.id).catch(() => showToast("Could not open transaction", "danger")); }} />
               </View>
             ))}
           </View>
         ))
       )}
+      {loadingMore ? <ActivityIndicator color={palette.brand} style={{ marginVertical: 16 }} /> : null}
 
       {/* Filter bottom drawer */}
       <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>

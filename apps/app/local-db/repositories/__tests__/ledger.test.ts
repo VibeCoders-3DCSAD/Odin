@@ -169,3 +169,35 @@ describe("credit-card expense inserts", () => {
     }));
   });
 });
+
+describe("transaction list pagination", () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockInitDatabase.mockReset();
+  });
+
+  test("returns only list fields with joined display labels", async () => {
+    const db = { getAllAsync: jest.fn(async () => []) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { listTransactions } = await import("../ledger");
+    await listTransactions("user-1", { limit: 50, offset: 100, sort_by: "transaction_date", sort_dir: "desc" });
+
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("COALESCE(NULLIF(t.merchant_name, ''), NULLIF(t.counterparty_name, ''), NULLIF(t.notes, ''), s.label, 'Transaction') AS name"),
+      "user-1",
+    );
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("LEFT JOIN subcategories s"),
+      "user-1",
+    );
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("LEFT JOIN financial_accounts a"),
+      "user-1",
+    );
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("ORDER BY t.transaction_date desc, t.created_at desc, t.rowid desc LIMIT 50 OFFSET 100"),
+      "user-1",
+    );
+  });
+});

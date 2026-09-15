@@ -4,7 +4,7 @@ import type { DashboardSummary, DailyTrend } from "../../../local-db/repositorie
 import { getAllSnapshots, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
 import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboardSnapshots";
 import { requestForecast } from "../../forecast/api";
-import { listForecastTransactions } from "../../../local-db/repositories/forecastTransactions";
+import { getForecastHistoryStartDate, listForecastTransactions } from "../../../local-db/repositories/forecastTransactions";
 import { runSync } from "../../../local-db/sync/runSync";
 
 const EMPTY_SUMMARY: DashboardSummary = {
@@ -45,7 +45,7 @@ export async function refreshDashboardData(userId: string, deviceId: string, acc
     const result = await runSync(userId, deviceId, accessToken);
     if (!result.successful) return false;
     try {
-      const historicalTransactions = await listForecastTransactions(userId);
+      const historicalTransactions = await listForecastTransactions(userId, { fromDate: getForecastHistoryStartDate() });
       if (historicalTransactions.length > 0) {
         const forecast = await requestForecast(accessToken, {
           historicalTransactions,

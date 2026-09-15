@@ -29,23 +29,35 @@ function description(row: ForecastTransactionRow): string | undefined {
   return value?.trim().slice(0, MAX_DESCRIPTION_LENGTH) || undefined;
 }
 
-export async function listForecastTransactions(userId: string): Promise<ForecastTransaction[]> {
+type ListForecastTransactionsOptions = {
+  fromDate?: string;
+};
+
+export function getForecastHistoryStartDate(now = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12, 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+export async function listForecastTransactions(userId: string, { fromDate }: ListForecastTransactionsOptions = {}): Promise<ForecastTransaction[]> {
   const db = await getDb();
+  const fromDateClause = fromDate ? " AND t.transaction_date >= ?" : "";
   const rows = await db.getAllAsync<ForecastTransactionRow>(
-    `SELECT t.id, t.transaction_date, t.amount_centavos, t.transaction_type,
-            t.merchant_name, t.counterparty_name, t.notes,
+    `SELECT MIN(t.id) AS id, t.transaction_date, SUM(t.amount_centavos) AS amount_centavos, t.transaction_type, MAX(t.created_at) AS created_at,
+            MIN(t.merchant_name) AS merchant_name, MIN(t.counterparty_name) AS counterparty_name, MIN(t.notes) AS notes,
             COALESCE(g.label, 'Other') AS category_group_label
        FROM transactions t
        LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
        LEFT JOIN categories c ON c.id = s.category_id AND c.deleted = 0
        LEFT JOIN category_groups g ON g.id = c.category_group_id AND g.deleted = 0
-      WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'
-        AND t.transaction_type IN ('income', 'expense')
-      ORDER BY t.transaction_date ASC, t.created_at ASC
-      LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
-    userId,
+        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'${fromDateClause}
+          AND t.transaction_type IN ('income', 'expense')
+       GROUP BY t.transaction_date, t.transaction_type, COALESCE(g.label, 'Other')
+        ORDER BY t.transaction_date DESC, t.created_at DESC
+       LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
+    ...(fromDate ? [userId, fromDate] : [userId]),
   );
-  return rows.flatMap((row) => {
+  return rows.reverse().flatMap((row) => {
     if (!Number.isInteger(row.amount_centavos) || row.amount_centavos <= 0) return [];
     const conciseDescription = description(row);
     return [{

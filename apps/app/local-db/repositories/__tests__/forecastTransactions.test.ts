@@ -15,6 +15,18 @@ describe("listForecastTransactions", () => {
     expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'"), "user-1");
     expect(getAllAsync.mock.calls[0]![0]).toContain("t.transaction_type IN ('income', 'expense')");
     expect(getAllAsync.mock.calls[0]![0]).toContain("category_groups g");
+    expect(getAllAsync.mock.calls[0]![0]).toContain("SUM(t.amount_centavos)");
+    expect(getAllAsync.mock.calls[0]![0]).toContain("GROUP BY t.transaction_date, t.transaction_type");
+    expect(getAllAsync.mock.calls[0]![0]).toContain("ORDER BY t.transaction_date DESC");
+  });
+
+  it("bounds history from the requested date", async () => {
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([]);
+    mockInitDatabase.mockResolvedValue({ getAllAsync });
+    const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
+    _resetDbCacheForTesting();
+    await listForecastTransactions("user-1", { fromDate: "2025-09-15" });
+    expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("t.transaction_date >= ?"), "user-1", "2025-09-15");
   });
 
   it("does not send malformed or zero-value local rows", async () => {
@@ -23,5 +35,11 @@ describe("listForecastTransactions", () => {
     const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
     _resetDbCacheForTesting();
     await expect(listForecastTransactions("user-1")).resolves.toEqual([]);
+  });
+
+  it("uses the previous twelve calendar months plus the current month", async () => {
+    const { getForecastHistoryStartDate } = await import("../forecastTransactions");
+
+    expect(getForecastHistoryStartDate(new Date("2026-09-15T12:00:00Z"))).toBe("2025-09-01");
   });
 });
