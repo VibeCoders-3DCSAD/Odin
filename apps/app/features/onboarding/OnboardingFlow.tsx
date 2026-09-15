@@ -234,6 +234,18 @@ export default function OnboardingFlow({
       if (missingStep) setFieldErrors({ [missingStep.questionKey]: "This answer is required." });
       return;
     }
+    const monthlyIncome = answersRef.current.monthly_income;
+    const incomePattern = answersRef.current.income_pattern;
+    if (
+      typeof monthlyIncome === "string"
+      && typeof incomePattern === "string"
+      && ((monthlyIncome === "0" && incomePattern !== "no_current_income")
+        || (monthlyIncome !== "0" && incomePattern === "no_current_income"))
+    ) {
+      setStepIndex(STEPS.findIndex((step) => step.questionKey === "income_pattern"));
+      setFieldErrors({ income_pattern: "Your income amount and income pattern need to match." });
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
