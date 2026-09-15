@@ -3,8 +3,8 @@ import { prepareOperation } from "../../services/syncApplyOperation.js";
 const createOperation = {
   operation_id: "operation-1", entity: "savings_goals", record_id: "goal-1",
   operation_type: "create" as const, base_version: null,
-  changed_fields: ["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "priority"],
-  payload: { name: "Emergency Fund", goal_type: "emergency_fund", target_amount_centavos: 100_00, starting_amount_centavos: 0, priority: "high" },
+  changed_fields: ["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "planned_contribution_amount_centavos", "contribution_frequency", "next_contribution_date"],
+  payload: { name: "Emergency Fund", goal_type: "emergency_fund", target_amount_centavos: 100_00, starting_amount_centavos: 0, target_date: "2026-12-31", priority: "high", planned_contribution_amount_centavos: 1_000, contribution_frequency: "monthly", next_contribution_date: "2026-04-30" },
 };
 
 describe("savings-goal sync validation", () => {
@@ -23,6 +23,11 @@ describe("savings-goal sync validation", () => {
   it("rejects invalid types and unknown fields", async () => {
     await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, goal_type: "investment" } })).rejects.toThrow("goal_type is invalid");
     await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, arbitrary_field: "nope" } })).rejects.toThrow("arbitrary_field is not syncable");
+  });
+
+  it("rejects invalid contribution schedules", async () => {
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: "daily" } })).rejects.toThrow("contribution_frequency is invalid");
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, next_contribution_date: "2027-01-01" } })).rejects.toThrow("next_contribution_date must be on or before target_date");
   });
 
   it("accepts changed fields only for an update", async () => {

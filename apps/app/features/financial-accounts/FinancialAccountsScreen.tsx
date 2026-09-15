@@ -35,7 +35,10 @@ import {
 } from "../../local-db/repositories/financialFoundations";
 import KebabTooltip from "../../components/KebabTooltip";
 import AvailableBalanceCard from "../../components/AvailableBalanceCard";
-import { getSavingsAccountDetails, SAVINGS_ACCOUNT_TYPES, type SavingsAccountDetailsInput, type SavingsAccountType, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
+import { getSavingsAccountDetails, SAVINGS_ACCOUNT_TYPES, type HysaBalanceTier, type HysaInterestCalculationBasis, type HysaInterestCreditFrequency, type HysaQualificationPeriod, type SavingsAccountDetailsInput, type SavingsAccountType, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
+import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
+import { GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "../savings-goals/contributionSchedule";
+import HysaAccountFormSheet from "./HysaAccountFormSheet";
 
 const P = {
   shell: "#fcf8f0",
@@ -50,6 +53,8 @@ const P = {
   card: "#F1F0EB",
   white: "#FFFFFF",
 };
+
+const inputStyle = { height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card } as const;
 
 const ACCOUNT_KINDS: readonly FinancialAccountKind[] = [
   "cash", "bank", "e_wallet", "savings", "credit_card", "other",
@@ -289,17 +294,61 @@ function AccountTile({ account, negative, tileBg, amountColor, iconColor, onEdit
 
 type FieldErrors = Partial<Record<"name" | "openingBalance" | "creditLimit" | "billingCycle" | "cutoffDay" | "threshold", string>>;
 
-function FormField({ label, required, error, hint, children }: { label: string; required?: boolean; error?: string; hint?: string; children: React.ReactNode }) {
+function InfoButton({ label, text }: { label: string; text: string }) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <>
+      <Pressable accessibilityRole="button" accessibilityLabel={`More information about ${label}`} onPress={() => setVisible(true)} hitSlop={8} style={{ marginLeft: 6 }}>
+        <Question size={16} color={P.brand} weight="bold" />
+      </Pressable>
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
+        <Pressable onPress={() => setVisible(false)} style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.45)" }}>
+          <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 360, borderRadius: 16, padding: 20, backgroundColor: P.white }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: P.ink }}>{label}</Text>
+            <Text style={{ marginTop: 10, fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.ink2 }}>{text}</Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+function FormField({ label, required, error, hint, info, children }: { label: string; required?: boolean; error?: string; hint?: string; info?: string; children: React.ReactNode }) {
   return (
     <View>
-      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-        {label} {required ? <Text style={{ color: P.error }}>*</Text> : null}
-      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, flexShrink: 1 }}>
+          {label} {required ? <Text style={{ color: P.error }}>*</Text> : null}
+        </Text>
+        {info ? <InfoButton label={label} text={info} /> : null}
+      </View>
       {hint ? <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginBottom: 6 }}>{hint}</Text> : null}
       {children}
       {error ? (
         <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.error, marginTop: 4 }}>{error}</Text>
       ) : null}
+    </View>
+  );
+}
+
+function HysaPeriodSelector({ value, onChange }: { value: HysaQualificationPeriod; onChange: (value: HysaQualificationPeriod) => void }) {
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {(["monthly", "quarterly", "custom"] as const).map((period) => (
+        <Pressable
+          key={period}
+          onPress={() => onChange(period)}
+          accessibilityRole="radio"
+          accessibilityLabel={period}
+          accessibilityState={{ checked: value === period }}
+          style={{ borderRadius: 10, backgroundColor: value === period ? P.brand : P.card, paddingHorizontal: 12, paddingVertical: 10 }}
+        >
+          <Text style={{ color: value === period ? P.white : P.ink2, fontFamily: "Manrope", fontSize: 12, fontWeight: "600" }}>
+            {period[0]!.toUpperCase() + period.slice(1)}
+          </Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -332,11 +381,32 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
   const [effectiveInterestRate, setEffectiveInterestRate] = useState("");
   const [interestConditions, setInterestConditions] = useState("");
   const [higherRateEligible, setHigherRateEligible] = useState<boolean | null>(null);
+  const [boostedInterestRate, setBoostedInterestRate] = useState("");
+  const [interestCalculationBasis, setInterestCalculationBasis] = useState<HysaInterestCalculationBasis>("daily_ending_balance");
+  const [interestCreditFrequency, setInterestCreditFrequency] = useState<HysaInterestCreditFrequency>("monthly");
+  const [maximumEligibleBalance, setMaximumEligibleBalance] = useState("");
+  const [balanceTiers, setBalanceTiers] = useState<HysaBalanceTier[]>([]);
+  const [requiredDeposit, setRequiredDeposit] = useState("");
+  const [requiredDepositFrequency, setRequiredDepositFrequency] = useState<HysaQualificationPeriod>("monthly");
+  const [requiredTransactionCount, setRequiredTransactionCount] = useState("");
+  const [requiredTransactionPeriod, setRequiredTransactionPeriod] = useState<HysaQualificationPeriod>("monthly");
+  const [directDepositThreshold, setDirectDepositThreshold] = useState("");
+  const [qualificationPeriod, setQualificationPeriod] = useState<HysaQualificationPeriod>("monthly");
+  const [promotionalInterestRate, setPromotionalInterestRate] = useState("");
+  const [promotionStartDate, setPromotionStartDate] = useState("");
+  const [promotionEndDate, setPromotionEndDate] = useState("");
   const [principal, setPrincipal] = useState("");
   const [maturityDate, setMaturityDate] = useState("");
   const [termMonths, setTermMonths] = useState("");
   const [earlyWithdrawalRule, setEarlyWithdrawalRule] = useState("");
-  const [datePicker, setDatePicker] = useState<"opening" | null>(null);
+  const [plannedContribution, setPlannedContribution] = useState("");
+  const [contributionFrequency, setContributionFrequency] = useState<GoalContributionFrequency>("monthly");
+  const [nextContributionDate, setNextContributionDate] = useState("");
+  const [contributionDay, setContributionDay] = useState("");
+  const [contributionSecondDay, setContributionSecondDay] = useState("");
+  const [contributionDayOfWeek, setContributionDayOfWeek] = useState<number | null>(null);
+  const [customIntervalDays, setCustomIntervalDays] = useState("");
+  const [datePicker, setDatePicker] = useState<"opening" | "contribution" | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -361,20 +431,28 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
           setMinimumBalance(details.minimumBalanceCentavos == null ? "" : String(details.minimumBalanceCentavos / 100));
           setBaseInterestRate(details.baseInterestRateBps == null ? "" : String(details.baseInterestRateBps / 100));
           setEffectiveInterestRate(details.effectiveInterestRateBps == null ? "" : String(details.effectiveInterestRateBps / 100));
-          setInterestConditions(details.interestConditions ?? ""); setHigherRateEligible(details.higherRateEligible); setPrincipal(details.principalCentavos == null ? "" : String(details.principalCentavos / 100));
-          setMaturityDate(details.maturityDate ?? ""); setTermMonths(details.termMonths == null ? "" : String(details.termMonths)); setEarlyWithdrawalRule(details.earlyWithdrawalRule ?? "");
+           setInterestConditions(details.interestConditions ?? ""); setHigherRateEligible(details.higherRateEligible); setPrincipal(details.principalCentavos == null ? "" : String(details.principalCentavos / 100));
+           setBoostedInterestRate(details.boostedInterestRateBps == null ? "" : String(details.boostedInterestRateBps / 100)); setInterestCalculationBasis(details.interestCalculationBasis ?? "daily_ending_balance"); setInterestCreditFrequency(details.interestCreditFrequency ?? "monthly"); setMaximumEligibleBalance(details.maximumEligibleBalanceCentavos == null ? "" : String(details.maximumEligibleBalanceCentavos / 100)); setBalanceTiers(details.balanceTiers ?? []); setRequiredDeposit(details.requiredDepositCentavos == null ? "" : String(details.requiredDepositCentavos / 100)); setRequiredDepositFrequency(details.requiredDepositFrequency ?? "monthly"); setRequiredTransactionCount(details.requiredTransactionCount == null ? "" : String(details.requiredTransactionCount)); setRequiredTransactionPeriod(details.requiredTransactionPeriod ?? "monthly"); setDirectDepositThreshold(details.directDepositThresholdCentavos == null ? "" : String(details.directDepositThresholdCentavos / 100)); setQualificationPeriod(details.qualificationPeriod ?? "monthly"); setPromotionalInterestRate(details.promotionalInterestRateBps == null ? "" : String(details.promotionalInterestRateBps / 100)); setPromotionStartDate(details.promotionStartDate ?? ""); setPromotionEndDate(details.promotionEndDate ?? "");
+           setMaturityDate(details.maturityDate ?? ""); setTermMonths(details.termMonths == null ? "" : String(details.termMonths)); setEarlyWithdrawalRule(details.earlyWithdrawalRule ?? "");
+           setPlannedContribution(details.plannedContributionAmountCentavos == null ? "" : String(details.plannedContributionAmountCentavos / 100)); setContributionFrequency(details.contributionFrequency ?? "monthly"); setNextContributionDate(details.nextContributionDate ?? ""); setContributionDay(details.contributionDayOfMonth == null ? "" : String(details.contributionDayOfMonth)); setContributionSecondDay(details.contributionSecondDayOfMonth == null ? "" : String(details.contributionSecondDayOfMonth)); setContributionDayOfWeek(details.contributionDayOfWeek); setCustomIntervalDays(details.customIntervalDays == null ? "" : String(details.customIntervalDays));
         }).catch(() => setFormError("Savings account details could not be loaded."));
       }
     } else {
       setName(""); setKind("bank"); setOpeningBalance(""); setInstitutionName("");
       setOpenedOn(null);
       setCreditLimit(""); setBillingCycle(""); setCutoffDay(""); setThreshold("");
-      setSavingsType("personal_savings"); setInterestRate(""); setMinimumBalance(""); setBaseInterestRate(""); setEffectiveInterestRate(""); setInterestConditions(""); setHigherRateEligible(null); setPrincipal(""); setMaturityDate(""); setTermMonths(""); setEarlyWithdrawalRule("");
+        setSavingsType("personal_savings"); setInterestRate(""); setMinimumBalance(""); setBaseInterestRate(""); setEffectiveInterestRate(""); setInterestConditions(""); setHigherRateEligible(null); setPrincipal(""); setMaturityDate(""); setTermMonths(""); setEarlyWithdrawalRule("");
+       setBoostedInterestRate(""); setInterestCalculationBasis("daily_ending_balance"); setInterestCreditFrequency("monthly"); setMaximumEligibleBalance(""); setBalanceTiers([]); setRequiredDeposit(""); setRequiredDepositFrequency("monthly"); setRequiredTransactionCount(""); setRequiredTransactionPeriod("monthly"); setDirectDepositThreshold(""); setQualificationPeriod("monthly"); setPromotionalInterestRate(""); setPromotionStartDate(""); setPromotionEndDate("");
+       setPlannedContribution(""); setContributionFrequency("monthly"); setNextContributionDate(""); setContributionDay(""); setContributionSecondDay(""); setContributionDayOfWeek(null); setCustomIntervalDays("");
     }
     setDatePicker(null);
     setFieldErrors({});
     setFormError(null);
   }, [editing]);
+
+  if (kind === "savings" && savingsType === "high_yield_savings") {
+    return <HysaAccountFormSheet userId={userId} visible={visible} editing={editing} onClose={onClose} onSubmit={async (input, details) => onSubmit(input, details)} />;
+  }
 
   const clearFieldError = (key: keyof FieldErrors) => {
     setFieldErrors((prev) => {
@@ -385,8 +463,9 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
     });
   };
 
-  const applyDate = (which: "opening", date: Date) => {
+  const applyDate = (which: "opening" | "contribution", date: Date) => {
     if (which === "opening") setOpenedOn(formatDate(date));
+    else setNextContributionDate(formatDate(date));
   };
 
   const closeSheet = () => {
@@ -444,9 +523,10 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
     let savingsDetails: SavingsAccountDetailsInput | null = null;
     if (kind === "savings") {
       const interestRateBps = asRateBps(interestRate); const minimumBalanceCentavos = asCentavos(minimumBalance);
-      const baseInterestRateBps = asRateBps(baseInterestRate); const effectiveInterestRateBps = asRateBps(effectiveInterestRate);
+       const baseInterestRateBps = asRateBps(baseInterestRate); const effectiveInterestRateBps = asRateBps(effectiveInterestRate);
+       const boostedInterestRateBps = asRateBps(boostedInterestRate); const maximumEligibleBalanceCentavos = asCentavos(maximumEligibleBalance); const requiredDepositCentavos = asCentavos(requiredDeposit); const directDepositThresholdCentavos = asCentavos(directDepositThreshold); const promotionalInterestRateBps = asRateBps(promotionalInterestRate); const parsedRequiredTransactionCount = requiredTransactionCount.trim() ? Number(requiredTransactionCount) : null;
       const principalCentavos = asCentavos(principal); const parsedTermMonths = termMonths.trim() ? Number(termMonths) : null;
-      savingsDetails = { accountType: savingsType, interestRateBps, minimumBalanceCentavos, baseInterestRateBps, effectiveInterestRateBps, interestConditions: interestConditions.trim() || null, higherRateEligible, principalCentavos, maturityDate: maturityDate.trim() || null, termMonths: parsedTermMonths, earlyWithdrawalRule: earlyWithdrawalRule.trim() || null };
+        savingsDetails = { accountType: savingsType, interestRateBps, minimumBalanceCentavos, baseInterestRateBps, effectiveInterestRateBps, interestConditions: interestConditions.trim() || null, higherRateEligible, boostedInterestRateBps, interestCalculationBasis: savingsType === "high_yield_savings" ? interestCalculationBasis : null, interestCreditFrequency: savingsType === "high_yield_savings" ? interestCreditFrequency : null, maximumEligibleBalanceCentavos, balanceTiers: balanceTiers.length ? balanceTiers : null, requiredDepositCentavos, requiredDepositFrequency: requiredDepositCentavos === null ? null : requiredDepositFrequency, requiredTransactionCount: parsedRequiredTransactionCount, requiredTransactionPeriod: parsedRequiredTransactionCount === null ? null : requiredTransactionPeriod, directDepositThresholdCentavos, qualificationPeriod: savingsType === "high_yield_savings" && (requiredDepositCentavos !== null || parsedRequiredTransactionCount !== null || directDepositThresholdCentavos !== null) ? qualificationPeriod : null, promotionalInterestRateBps, promotionStartDate: promotionalInterestRateBps === null ? null : promotionStartDate.trim() || null, promotionEndDate: promotionalInterestRateBps === null ? null : promotionEndDate.trim() || null, principalCentavos, maturityDate: maturityDate.trim() || null, termMonths: parsedTermMonths, earlyWithdrawalRule: earlyWithdrawalRule.trim() || null, plannedContributionAmountCentavos: savingsType === "time_deposit" ? null : asCentavos(plannedContribution), contributionFrequency: savingsType === "time_deposit" ? null : contributionFrequency, contributionIntervalCount: savingsType === "time_deposit" ? null : 1, contributionDayOfMonth: savingsType === "time_deposit" || !contributionDay.trim() ? null : Number(contributionDay), contributionSecondDayOfMonth: savingsType === "time_deposit" || !contributionSecondDay.trim() ? null : Number(contributionSecondDay), contributionDayOfWeek: savingsType === "time_deposit" ? null : contributionDayOfWeek, customIntervalDays: savingsType === "time_deposit" || !customIntervalDays.trim() ? null : Number(customIntervalDays), nextContributionDate: savingsType === "time_deposit" ? null : nextContributionDate.trim() || null };
       if ([interestRateBps, minimumBalanceCentavos, baseInterestRateBps, effectiveInterestRateBps, principalCentavos].some((value) => value !== null && (!Number.isSafeInteger(value) || value < 0))) setFormError("Savings amounts and rates must be valid non-negative values.");
     }
 
@@ -519,7 +599,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                     </View>
                   </FormField>
 
-                  {kind === "savings" ? (
+                   {kind === "savings" ? (
                     <>
                       <FormField label="SAVINGS ACCOUNT TYPE" required>
                         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -534,11 +614,12 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                       {(savingsType === "personal_savings" || savingsType === "time_deposit") ? <FormField label="INTEREST RATE (%)" required><TextInput value={interestRate} onChangeText={setInterestRate} placeholder="Enter interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}
                       {savingsType === "personal_savings" ? <FormField label="MINIMUM BALANCE (₱)" required><TextInput value={minimumBalance} onChangeText={setMinimumBalance} placeholder="Enter minimum balance" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}
                       {savingsType === "high_yield_savings" ? <><FormField label="BASE INTEREST RATE (%)" required><TextInput value={baseInterestRate} onChangeText={setBaseInterestRate} placeholder="Enter base interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="EFFECTIVE INTEREST RATE (%)" required><TextInput value={effectiveInterestRate} onChangeText={setEffectiveInterestRate} placeholder="Enter effective interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="REQUIREMENTS TO EARN THIS RATE" hint="These bank rules are saved for reference only." required><TextInput value={interestConditions} onChangeText={setInterestConditions} placeholder="Describe the bank's requirements" placeholderTextColor={P.muted} multiline style={{ minHeight: 70, borderRadius: 12, borderWidth: 1, borderColor: P.line, padding: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="ARE THE REQUIREMENTS CURRENTLY MET?" required><View style={{ flexDirection: "row", gap: 8 }}>{[true, false].map((value) => <Pressable key={String(value)} onPress={() => setHigherRateEligible(value)} accessibilityRole="radio" accessibilityLabel={value ? "Requirements met" : "Requirements not met"} accessibilityState={{ checked: higherRateEligible === value }} style={{ flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: higherRateEligible === value ? P.brand : P.card }}><Text style={{ fontFamily: "Manrope", fontWeight: "600", color: higherRateEligible === value ? P.white : P.ink2 }}>{value ? "Yes" : "No"}</Text></Pressable>)}</View></FormField></> : null}
-                      {savingsType === "time_deposit" ? <><FormField label="PRINCIPAL (₱)" required><TextInput value={principal} onChangeText={setPrincipal} placeholder="Enter principal amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="MATURITY DATE" required><TextInput value={maturityDate} onChangeText={setMaturityDate} placeholder="YYYY-MM-DD" placeholderTextColor={P.muted} style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="TERM (MONTHS)" required><TextInput value={termMonths} onChangeText={setTermMonths} placeholder="Enter deposit term" placeholderTextColor={P.muted} keyboardType="number-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="EARLY-WITHDRAWAL RULE" required><TextInput value={earlyWithdrawalRule} onChangeText={setEarlyWithdrawalRule} placeholder="Describe early-withdrawal rule" placeholderTextColor={P.muted} multiline style={{ minHeight: 70, borderRadius: 12, borderWidth: 1, borderColor: P.line, padding: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField></> : null}
+                       {savingsType !== "time_deposit" ? <><FormField label="PLANNED CONTRIBUTION (₱)" required><TextInput value={plannedContribution} onChangeText={setPlannedContribution} placeholder="Enter contribution amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="NEXT CONTRIBUTION DATE" required><DateField placeholder="Select contribution date" value={nextContributionDate || null} onPress={() => setDatePicker("contribution")} /></FormField><RecurringScheduleFields frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={{ frequency: contributionFrequency, intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, secondDayOfWeek: null, monthOfYear: null, estimatedIntervalDays: "" } satisfies RecurringScheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); }} frequencyLabel="CONTRIBUTION FREQUENCY" />{contributionFrequency === "custom" ? <FormField label="CUSTOM INTERVAL DAYS" required><TextInput value={customIntervalDays} onChangeText={setCustomIntervalDays} placeholder="e.g. 45" placeholderTextColor={P.muted} keyboardType="number-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}</> : null}
+                       {savingsType === "time_deposit" ? <><FormField label="PRINCIPAL (₱)" required><TextInput value={principal} onChangeText={setPrincipal} placeholder="Enter principal amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="MATURITY DATE" required><TextInput value={maturityDate} onChangeText={setMaturityDate} placeholder="YYYY-MM-DD" placeholderTextColor={P.muted} style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="TERM (MONTHS)" required><TextInput value={termMonths} onChangeText={setTermMonths} placeholder="Enter deposit term" placeholderTextColor={P.muted} keyboardType="number-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="EARLY-WITHDRAWAL RULE" required><TextInput value={earlyWithdrawalRule} onChangeText={setEarlyWithdrawalRule} placeholder="Describe early-withdrawal rule" placeholderTextColor={P.muted} multiline style={{ minHeight: 70, borderRadius: 12, borderWidth: 1, borderColor: P.line, padding: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField></> : null}
                     </>
                   ) : null}
 
-                  <FormField label={kind === "credit_card" ? "OUTSTANDING BALANCE (₱) (OPTIONAL)" : "OPENING BALANCE (₱)"} error={fieldErrors.openingBalance}>
+                  <FormField label={kind === "credit_card" ? "OUTSTANDING BALANCE (₱) (OPTIONAL)" : "OPENING BALANCE (₱)"} required={kind !== "credit_card"} error={fieldErrors.openingBalance}>
                     <TextInput
                       value={openingBalance}
                       onChangeText={(t) => { setOpeningBalance(t); clearFieldError("openingBalance"); }}
@@ -562,6 +643,26 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                   <FormField label="OPENING DATE (OPTIONAL)">
                     <DateField placeholder="Select opening date" value={openedOn} onPress={() => setDatePicker("opening")} />
                   </FormField>
+
+                  {kind === "savings" && savingsType === "high_yield_savings" ? (
+                    <>
+                      <FormField label="BOOSTED INTEREST RATE (%) (OPTIONAL)"><TextInput value={boostedInterestRate} onChangeText={setBoostedInterestRate} placeholder="Enter boosted interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /></FormField>
+                      <FormField label="HOW DOES YOUR BANK CALCULATE INTEREST?" required info="Daily Ending Balance uses each day's ending balance. Average Daily Balance averages daily balances during the bank's interest period. Monthly Average Balance uses one average balance for each month. Not sure? Check the account disclosure, a statement, or ask your bank."><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>{(["daily_ending_balance", "average_daily_balance", "monthly_average_balance"] as const).map((basis) => <Pressable key={basis} onPress={() => setInterestCalculationBasis(basis)} accessibilityRole="radio" accessibilityLabel={basis.replaceAll("_", " ")} accessibilityState={{ checked: interestCalculationBasis === basis }} style={{ borderRadius: 10, backgroundColor: interestCalculationBasis === basis ? P.brand : P.card, paddingHorizontal: 12, paddingVertical: 10 }}><Text style={{ color: interestCalculationBasis === basis ? P.white : P.ink2, fontFamily: "Manrope", fontSize: 12, fontWeight: "600" }}>{basis === "daily_ending_balance" ? "Every day (Daily Ending Balance)" : basis === "average_daily_balance" ? "Average balance (Average Daily Balance)" : "Monthly average (Monthly Average Balance)"}</Text></Pressable>)}</View></FormField>
+                      <FormField label="WHEN DOES YOUR BANK ADD INTEREST TO YOUR BALANCE?" required info="This is when earned interest becomes part of your balance. It is separate from how the bank calculates interest. Monthly adds earned interest at month-end, quarterly adds it every three months, and at maturity adds it when the account matures."><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>{(["monthly", "quarterly", "at_maturity"] as const).map((frequency) => <Pressable key={frequency} onPress={() => setInterestCreditFrequency(frequency)} accessibilityRole="radio" accessibilityLabel={frequency.replaceAll("_", " ")} accessibilityState={{ checked: interestCreditFrequency === frequency }} style={{ borderRadius: 10, backgroundColor: interestCreditFrequency === frequency ? P.brand : P.card, paddingHorizontal: 12, paddingVertical: 10 }}><Text style={{ color: interestCreditFrequency === frequency ? P.white : P.ink2, fontFamily: "Manrope", fontSize: 12, fontWeight: "600" }}>{frequency === "monthly" ? "Every month (Monthly)" : frequency === "quarterly" ? "Every 3 months (Quarterly)" : "At maturity"}</Text></Pressable>)}</View></FormField>
+                      <FormField label="MINIMUM QUALIFYING BALANCE (₱) (OPTIONAL)"><TextInput value={minimumBalance} onChangeText={setMinimumBalance} placeholder="Enter minimum qualifying balance" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /></FormField>
+                      <FormField label="MAXIMUM ELIGIBLE BALANCE (₱) (OPTIONAL)"><TextInput value={maximumEligibleBalance} onChangeText={setMaximumEligibleBalance} placeholder="Enter maximum eligible balance" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /></FormField>
+                      <FormField label="REQUIRED DEPOSIT (₱) (OPTIONAL)"><TextInput value={requiredDeposit} onChangeText={setRequiredDeposit} placeholder="Enter required deposit amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /></FormField>
+                      <FormField label="REQUIRED DEPOSIT FREQUENCY (OPTIONAL)"><HysaPeriodSelector value={requiredDepositFrequency} onChange={setRequiredDepositFrequency} /></FormField>
+                      <FormField label="REQUIRED TRANSACTION COUNT (OPTIONAL)"><TextInput value={requiredTransactionCount} onChangeText={setRequiredTransactionCount} placeholder="Enter required transaction count" placeholderTextColor={P.muted} keyboardType="number-pad" style={inputStyle} /></FormField>
+                      <FormField label="REQUIRED TRANSACTION PERIOD (OPTIONAL)"><HysaPeriodSelector value={requiredTransactionPeriod} onChange={setRequiredTransactionPeriod} /></FormField>
+                      <FormField label="DIRECT DEPOSIT THRESHOLD (₱) (OPTIONAL)"><TextInput value={directDepositThreshold} onChangeText={setDirectDepositThreshold} placeholder="Enter minimum direct deposit" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /></FormField>
+                      <FormField label="QUALIFICATION PERIOD (OPTIONAL)"><HysaPeriodSelector value={qualificationPeriod} onChange={setQualificationPeriod} /></FormField>
+                      <FormField label="PROMOTIONAL / BONUS RATE (%) (OPTIONAL)"><TextInput value={promotionalInterestRate} onChangeText={setPromotionalInterestRate} placeholder="Enter promotional rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /></FormField>
+                      <FormField label="PROMOTION START DATE (OPTIONAL)"><TextInput value={promotionStartDate} onChangeText={setPromotionStartDate} placeholder="YYYY-MM-DD" placeholderTextColor={P.muted} style={inputStyle} /></FormField>
+                      <FormField label="PROMOTION END DATE (OPTIONAL)"><TextInput value={promotionEndDate} onChangeText={setPromotionEndDate} placeholder="YYYY-MM-DD" placeholderTextColor={P.muted} style={inputStyle} /></FormField>
+                      <FormField label="BALANCE TIERS (OPTIONAL)"><View style={{ gap: 8 }}>{balanceTiers.map((tier, index) => <View key={index} style={{ gap: 6, borderWidth: 1, borderColor: P.line, borderRadius: 10, padding: 8 }}><TextInput value={String(tier.minimumBalanceCentavos / 100)} onChangeText={(value) => { const amount = parseSafeCents(value); setBalanceTiers((tiers) => tiers.map((item, itemIndex) => itemIndex === index ? { ...item, minimumBalanceCentavos: amount ?? 0 } : item)); }} placeholder="Tier minimum balance" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /><TextInput value={String(tier.maximumBalanceCentavos / 100)} onChangeText={(value) => { const amount = parseSafeCents(value); setBalanceTiers((tiers) => tiers.map((item, itemIndex) => itemIndex === index ? { ...item, maximumBalanceCentavos: amount ?? 0 } : item)); }} placeholder="Tier maximum balance" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /><TextInput value={String(tier.interestRateBps / 100)} onChangeText={(value) => { const rate = Math.round(Number(value) * 100); setBalanceTiers((tiers) => tiers.map((item, itemIndex) => itemIndex === index ? { ...item, interestRateBps: Number.isSafeInteger(rate) ? rate : 0 } : item)); }} placeholder="Tier interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={inputStyle} /><Pressable onPress={() => setBalanceTiers((tiers) => tiers.filter((_, itemIndex) => itemIndex !== index))}><Text style={{ color: P.error, fontFamily: "Manrope", fontWeight: "700" }}>Remove tier</Text></Pressable></View>)}</View><Pressable onPress={() => setBalanceTiers((tiers) => [...tiers, { minimumBalanceCentavos: 0, maximumBalanceCentavos: 0, interestRateBps: 0 }])}><Text style={{ color: P.brand, fontFamily: "Manrope", fontWeight: "700" }}>Add balance tier</Text></Pressable></FormField>
+                    </>
+                  ) : null}
 
                   {kind === "credit_card" ? (
                     <>
@@ -618,7 +719,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
 
                   {datePicker ? (
                     <DateTimePicker
-                      value={toPickerDate(openedOn)}
+                      value={toPickerDate(datePicker === "contribution" ? nextContributionDate || null : openedOn)}
                       mode="date"
                       display={Platform.OS === "ios" ? "spinner" : "default"}
                       onChange={(event, date) => {

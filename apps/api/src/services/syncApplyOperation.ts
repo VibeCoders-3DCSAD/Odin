@@ -130,7 +130,15 @@ const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
 const SAVINGS_ACCOUNT_DETAIL_FIELDS = new Set([
   "account_type", "interest_rate_bps", "minimum_balance_centavos",
   "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible",
+  "boosted_interest_rate_bps", "interest_calculation_basis", "interest_credit_frequency",
+  "maximum_eligible_balance_centavos", "balance_tiers", "required_deposit_centavos",
+  "required_deposit_frequency", "required_transaction_count", "required_transaction_period",
+  "direct_deposit_threshold_centavos", "qualification_period", "promotional_interest_rate_bps",
+  "promotion_start_date", "promotion_end_date",
   "principal_centavos", "maturity_date", "term_months", "early_withdrawal_rule",
+  "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count",
+  "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week",
+  "custom_interval_days", "next_contribution_date",
 ]);
 
 const CREDIT_CARD_CYCLE_CREATE_FIELDS = new Set([
@@ -331,10 +339,11 @@ const DEBT_PRIORITY_FIELDS = new Set(["priorities"]);
 const CREDIT_CARD_SETTLEMENT_FIELDS = new Set(["installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status"]);
 const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy", "custom_amount_centavos", "percentage_bps"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
-const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months"]);
+const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months"]);
 const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes"]);
 const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
 const SAVINGS_GOAL_PRIORITIES = ["low", "medium", "high"];
+const SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
 
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
   "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos", "forecast_recorded_at",
@@ -1812,7 +1821,7 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
   assertOnlyAllowed(payload, SAVINGS_GOAL_FIELDS);
   const sanitized = sanitizePayload(payload, SAVINGS_GOAL_FIELDS);
   if (creating) {
-    for (const field of ["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "priority"]) {
+    for (const field of ["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "planned_contribution_amount_centavos", "contribution_frequency", "next_contribution_date"]) {
       if (!(field in sanitized)) throw new Error(`${field} is required`);
     }
   }
@@ -1821,11 +1830,20 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
   if (sanitized.goal_category !== undefined && !SAVINGS_GOAL_TYPES.includes(sanitized.goal_category as string)) throw new Error("goal_category is invalid");
   if (sanitized.priority !== undefined && !SAVINGS_GOAL_PRIORITIES.includes(sanitized.priority as string)) throw new Error("priority is invalid");
   if (sanitized.target_amount_centavos !== undefined) requirePositiveInteger(sanitized, "target_amount_centavos");
-  for (const field of ["starting_amount_centavos", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "interest_rate_bps"]) {
+  for (const field of ["starting_amount_centavos", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "interest_rate_bps", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days"]) {
     const value = sanitized[field];
     if (value !== undefined && value !== null && (!Number.isSafeInteger(value) || (value as number) < 0)) throw new Error(`${field} must be a non-negative whole number`);
   }
   if (sanitized.target_date !== undefined && sanitized.target_date !== null) requireDateString(sanitized, "target_date");
+  if (sanitized.next_contribution_date !== undefined && sanitized.next_contribution_date !== null) requireDateString(sanitized, "next_contribution_date");
+  if (sanitized.contribution_frequency !== undefined && !SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES.includes(sanitized.contribution_frequency as string)) throw new Error("contribution_frequency is invalid");
+  if (sanitized.contribution_interval_count !== undefined && sanitized.contribution_interval_count !== null) requirePositiveInteger(sanitized, "contribution_interval_count");
+  for (const field of ["contribution_day_of_month", "contribution_second_day_of_month"]) {
+    if (sanitized[field] !== undefined && sanitized[field] !== null) requireNumberInRange(sanitized, field, 1, 31);
+  }
+  if (sanitized.contribution_day_of_week !== undefined && sanitized.contribution_day_of_week !== null) requireNumberInRange(sanitized, "contribution_day_of_week", 0, 6);
+  if (sanitized.custom_interval_days !== undefined && sanitized.custom_interval_days !== null) requirePositiveInteger(sanitized, "custom_interval_days");
+  if (creating && (sanitized.next_contribution_date as string) > (sanitized.target_date as string)) throw new Error("next_contribution_date must be on or before target_date");
   if (sanitized.notes !== undefined && sanitized.notes !== null && (typeof sanitized.notes !== "string" || sanitized.notes.length > 1_000)) throw new Error("notes must be 1000 characters or fewer");
   if (sanitized.emergency_fund_target_method !== undefined && !["fixed_amount", "essential_expense_coverage"].includes(sanitized.emergency_fund_target_method as string)) throw new Error("emergency_fund_target_method is invalid");
   if (sanitized.essential_expense_coverage_months !== undefined && sanitized.essential_expense_coverage_months !== null) requireNumberInRange(sanitized, "essential_expense_coverage_months", 3, 6);
@@ -1843,7 +1861,7 @@ async function validateSavingsAccountDetailsPayload(
   const sanitized = sanitizePayload(payload, SAVINGS_ACCOUNT_DETAIL_FIELDS);
   if (creating && sanitized.account_type === undefined) throw new Error("account_type is required");
   if (sanitized.account_type !== undefined && !["personal_savings", "high_yield_savings", "time_deposit"].includes(sanitized.account_type as string)) throw new Error("savings account type is invalid");
-  for (const field of ["interest_rate_bps", "minimum_balance_centavos", "base_interest_rate_bps", "effective_interest_rate_bps"]) {
+  for (const field of ["interest_rate_bps", "minimum_balance_centavos", "base_interest_rate_bps", "effective_interest_rate_bps", "boosted_interest_rate_bps", "maximum_eligible_balance_centavos", "required_deposit_centavos", "direct_deposit_threshold_centavos", "promotional_interest_rate_bps", "planned_contribution_amount_centavos"]) {
     if (sanitized[field] !== undefined && sanitized[field] !== null && (!Number.isSafeInteger(sanitized[field]) || (sanitized[field] as number) < 0)) throw new Error(`${field} must be a non-negative whole number`);
   }
   if (sanitized.principal_centavos !== undefined && sanitized.principal_centavos !== null) requirePositiveInteger(sanitized, "principal_centavos");
@@ -1852,12 +1870,27 @@ async function validateSavingsAccountDetailsPayload(
   for (const field of ["interest_conditions", "early_withdrawal_rule"]) {
     if (sanitized[field] !== undefined && sanitized[field] !== null && (typeof sanitized[field] !== "string" || (sanitized[field] as string).trim().length === 0 || (sanitized[field] as string).length > 1_000)) throw new Error(`${field} must be a non-empty string of 1000 characters or fewer`);
   }
-  if (sanitized.higher_rate_eligible !== undefined && typeof sanitized.higher_rate_eligible !== "boolean") throw new Error("higher_rate_eligible must be a boolean");
+  if (sanitized.higher_rate_eligible !== undefined && sanitized.higher_rate_eligible !== null && typeof sanitized.higher_rate_eligible !== "boolean") throw new Error("higher_rate_eligible must be a boolean or null");
+  if (sanitized.interest_calculation_basis !== undefined && sanitized.interest_calculation_basis !== null && !["daily_ending_balance", "average_daily_balance", "monthly_average_balance"].includes(sanitized.interest_calculation_basis as string)) throw new Error("interest_calculation_basis is invalid");
+  if (sanitized.interest_credit_frequency !== undefined && sanitized.interest_credit_frequency !== null && !["monthly", "quarterly", "at_maturity"].includes(sanitized.interest_credit_frequency as string)) throw new Error("interest_credit_frequency is invalid");
+  for (const field of ["required_deposit_frequency", "required_transaction_period", "qualification_period"]) if (sanitized[field] !== undefined && sanitized[field] !== null && !["monthly", "quarterly", "custom"].includes(sanitized[field] as string)) throw new Error(`${field} is invalid`);
+  if (sanitized.required_transaction_count !== undefined && sanitized.required_transaction_count !== null) requirePositiveInteger(sanitized, "required_transaction_count");
+  for (const field of ["promotion_start_date", "promotion_end_date"]) if (sanitized[field] !== undefined && sanitized[field] !== null) requireDateString(sanitized, field);
+  if (sanitized.promotion_start_date != null && sanitized.promotion_end_date != null && (sanitized.promotion_end_date as string) < (sanitized.promotion_start_date as string)) throw new Error("promotion_end_date must be on or after promotion_start_date");
+  if (sanitized.balance_tiers !== undefined && sanitized.balance_tiers !== null && (!Array.isArray(sanitized.balance_tiers) || sanitized.balance_tiers.some((tier) => !tier || typeof tier !== "object"))) throw new Error("balance_tiers is invalid");
+  if (sanitized.contribution_frequency !== undefined && sanitized.contribution_frequency !== null && !SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES.includes(sanitized.contribution_frequency as string)) throw new Error("contribution_frequency is invalid");
+  if (sanitized.contribution_interval_count !== undefined && sanitized.contribution_interval_count !== null) requirePositiveInteger(sanitized, "contribution_interval_count");
+  for (const field of ["contribution_day_of_month", "contribution_second_day_of_month"]) if (sanitized[field] !== undefined && sanitized[field] !== null) requireNumberInRange(sanitized, field, 1, 31);
+  if (sanitized.contribution_day_of_week !== undefined && sanitized.contribution_day_of_week !== null) requireNumberInRange(sanitized, "contribution_day_of_week", 0, 6);
+  if (sanitized.custom_interval_days !== undefined && sanitized.custom_interval_days !== null) requirePositiveInteger(sanitized, "custom_interval_days");
+  if (sanitized.next_contribution_date !== undefined && sanitized.next_contribution_date !== null) requireDateString(sanitized, "next_contribution_date");
   if (creating) {
     if (sanitized.account_type === "personal_savings" && (sanitized.interest_rate_bps == null || sanitized.minimum_balance_centavos == null)) throw new Error("Personal Savings requires an interest rate and minimum balance");
-    if (sanitized.account_type === "high_yield_savings" && (sanitized.base_interest_rate_bps == null || sanitized.effective_interest_rate_bps == null || sanitized.interest_conditions == null || typeof sanitized.higher_rate_eligible !== "boolean")) throw new Error("HYSA requires base and effective interest rates, requirements, and an eligibility choice");
-    if (sanitized.account_type === "high_yield_savings" && (sanitized.effective_interest_rate_bps as number) < (sanitized.base_interest_rate_bps as number)) throw new Error("HYSA effective interest rate cannot be lower than the base rate");
+    if (sanitized.account_type === "high_yield_savings" && (sanitized.base_interest_rate_bps == null || sanitized.interest_calculation_basis == null || sanitized.interest_credit_frequency == null)) throw new Error("HYSA requires a base interest rate, calculation basis, and credit frequency");
     if (sanitized.account_type === "time_deposit" && (sanitized.principal_centavos == null || sanitized.interest_rate_bps == null || sanitized.maturity_date == null || sanitized.term_months == null || sanitized.early_withdrawal_rule == null)) throw new Error("Time Deposit requires principal, interest rate, maturity date, term, and an early-withdrawal rule");
+    const scheduleFields = ["planned_contribution_amount_centavos", "contribution_frequency", "next_contribution_date"];
+    const hasContributionSchedule = scheduleFields.some((field) => sanitized[field] != null);
+    if (sanitized.account_type !== "time_deposit" && hasContributionSchedule && scheduleFields.some((field) => sanitized[field] == null)) throw new Error("Savings contribution schedule is incomplete");
   }
   if (accountId) {
     const { data: account, error } = await supabase.from("financial_accounts").select("id, opened_on").eq("id", accountId).eq("user_id", userId).eq("kind", "savings").eq("deleted", false).maybeSingle();

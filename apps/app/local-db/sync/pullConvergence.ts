@@ -71,8 +71,11 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   savings_account_details: new Set([
     "account_id", "user_id", "account_type", "interest_rate_bps", "minimum_balance_centavos",
-    "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible", "principal_centavos",
-    "maturity_date", "term_months", "early_withdrawal_rule", "version", "deleted", "created_at",
+    "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible", "boosted_interest_rate_bps", "interest_calculation_basis", "interest_credit_frequency", "maximum_eligible_balance_centavos", "balance_tiers_json", "required_deposit_centavos", "required_deposit_frequency", "required_transaction_count", "required_transaction_period", "direct_deposit_threshold_centavos", "qualification_period", "promotional_interest_rate_bps", "promotion_start_date", "promotion_end_date", "principal_centavos",
+    "maturity_date", "term_months", "early_withdrawal_rule", "planned_contribution_amount_centavos",
+    "contribution_frequency", "contribution_interval_count", "contribution_day_of_month",
+    "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days",
+    "next_contribution_date", "version", "deleted", "created_at",
     "updated_at", "last_synced_at",
   ]),
   credit_card_details: new Set([
@@ -189,7 +192,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   alert_notification_preferences: new Set(["id", "user_id", "category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until", "version", "deleted", "updated_at"]),
   anomaly_whitelist_rules: new Set(["id", "user_id", "merchant_name", "subcategory_id", "base_amount_centavos", "tolerance_bps", "allow_any_amount", "status", "notes", "version", "deleted", "updated_at"]),
   alert_suppression_rules: new Set(["id", "user_id", "category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata", "version", "deleted", "updated_at"]),
-  savings_goals: new Set(["id", "user_id", "name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "archived_at", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  savings_goals: new Set(["id", "user_id", "name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "archived_at", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   savings_goal_activities: new Set(["id", "user_id", "savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
@@ -227,6 +230,9 @@ export function normalizePullRow(
     } else if (col === "metadata" || col === "preset_data" || col === "payment_schedule") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else if (table === "savings_account_details" && col === "balance_tiers_json") {
+      const tiers = row.balance_tiers;
+      normalized[col] = typeof tiers === "object" && tiers !== null ? JSON.stringify(tiers) : null;
     } else if (table === "budgets" && col === "period_kind") {
       normalized[col] = String(row[col] ?? "").toUpperCase();
     } else if (table === "budgets" && col === "allocation_method") {
