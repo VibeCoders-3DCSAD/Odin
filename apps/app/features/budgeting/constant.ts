@@ -7,3 +7,11 @@ export function calculateProvisionalPercentage(actualAmountMinor: number, alloca
 export function calculateBudgetSpentAmount(actualAmountsMinor: number[]): number {
   return actualAmountsMinor.reduce((total, amount) => total + amount, 0);
 }
+
+export function calculateBudgetAllocatedAmount(
+  categoryAmountMinor: number,
+  debtAmountMinor: number,
+  savingsAmountMinor: number,
+): number {
+  return categoryAmountMinor + debtAmountMinor + savingsAmountMinor;
+}

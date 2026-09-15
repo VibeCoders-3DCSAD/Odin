@@ -14,6 +14,7 @@ import profileRoutes from "./routes/profile.js";
 import syncRoutes from "./routes/sync.js";
 import recurringRoutes from "./routes/recurring.js";
 import forecastRoutes from "./routes/forecast.js";
+import budgetRecommendationRoutes from "./routes/budget-recommendations.js";
 import dailyFinancialReportRoutes from "./routes/daily-financial-reports.js";
 
 const app = express();
@@ -59,6 +60,7 @@ app.use("/odin/api", profileRoutes);
 app.use("/odin/api/sync", syncRoutes);
 app.use("/odin/api/recurring", recurringRoutes);
 app.use("/odin/api/forecast", forecastRoutes);
+app.use("/odin/api/budget/recommendations", budgetRecommendationRoutes);
 app.use("/odin/internal/daily-financial-reports", dailyFinancialReportRoutes);
 
 app.use((error: Error, request: Request, response: Response, _next: NextFunction) => {

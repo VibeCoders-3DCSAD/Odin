@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ArrowLeft, Plus } from "phosphor-react-native";
 import { createBudgetDraft, deleteBudgetDraft, getBudgetDraftTracking, listBudgetDrafts, updateBudgetDraft, type Budget, type BudgetTracking, type CreateBudgetInput } from "../../local-db/repositories/budgets";
 import CategorySelector from "../../components/CategorySelector";
-import { calculateBudgetSpentAmount, calculateProvisionalPercentage } from "./constant";
+import { calculateBudgetAllocatedAmount, calculateBudgetSpentAmount, calculateProvisionalPercentage } from "./constant";
 import { getCategory, getSubcategory } from "../../local-db/repositories/taxonomy";
 import { getRequiredDebtTotalForPeriod } from "../debt-manager/requiredDebtTotalQueries";
 import type { RequiredDebtTotalForPeriod } from "../debt-manager/requiredDebtTotalQueries";
 import { getRequiredSavingsContributionsForPeriod } from "../savings-goals/requiredSavingsContributionQueries";
 import type { RequiredSavingsContributionsForPeriod } from "../savings-goals/requiredSavingsContributionQueries";
+import { requestBudgetRecommendation, type BudgetRecommendation } from "./api";
+import { loadBudgetRecommendationContext } from "./recommendationContext";
 
 type Props = {
   userId: string;
   deviceId: string;
+  accessToken: string;
   onSyncRequested?: () => Promise<void>;
 };
 
@@ -62,7 +65,10 @@ function formatCompactPeso(centavos: number): string {
   return pesos >= 1000 ? `₱${(pesos / 1000).toFixed(1)}k` : formatPeso(centavos);
 }
 
-export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: Props) {
+type RecommendationAllocation = BudgetRecommendation["allocations"][number] & { id: string; label: string; amount: string };
+type RecommendationReview = Omit<BudgetRecommendation, "allocations"> & { sourceKey: string; allocations: RecommendationAllocation[] };
+
+export default function BudgetingScreen({ userId, deviceId, accessToken, onSyncRequested }: Props) {
   const [drafts, setDrafts] = useState<Budget[]>([]);
   const [selectedDraft, setSelectedDraft] = useState<BudgetTracking | null>(null);
   const [allocationLabels, setAllocationLabels] = useState<Record<string, string>>({});
@@ -87,6 +93,11 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
   const [loading, setLoading] = useState(true);
   const [requiredDebtTotal, setRequiredDebtTotal] = useState<RequiredDebtTotalForPeriod | null>(null);
   const [requiredSavingsTotal, setRequiredSavingsTotal] = useState<RequiredSavingsContributionsForPeriod | null>(null);
+  const [recommendation, setRecommendation] = useState<RecommendationReview | null>(null);
+  const [recommendationState, setRecommendationState] = useState<"idle" | "generating" | "ready" | "accepted" | "stale" | "cancelled" | "unavailable" | "error">("idle");
+  const recommendationAbort = useRef<AbortController | null>(null);
+
+  const recommendationSourceKey = JSON.stringify({ periodKind, periodStart, periodEnd, totalAmount, debtBudgetAmount, savingsBudgetAmount, allocations: allocationRows.map(({ categoryId, subcategoryId, amount }) => ({ categoryId, subcategoryId, amount })) });
 
   const loadDrafts = useCallback(async () => {
     setLoading(true);
@@ -180,6 +191,12 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     return () => { cancelled = true; };
   }, [periodEnd, periodStart, userId]);
 
+  useEffect(() => {
+    if (recommendation && recommendation.sourceKey !== recommendationSourceKey && recommendationState !== "stale") setRecommendationState("stale");
+  }, [recommendation, recommendationSourceKey, recommendationState]);
+
+  useEffect(() => () => recommendationAbort.current?.abort(), []);
+
   if (categoryPickerRowId) {
     const selectedRow = allocationRows.find((row) => row.id === categoryPickerRowId);
     return (
@@ -236,6 +253,64 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
     }
   };
 
+  const canGenerateRecommendation = Boolean(
+    periodStart && periodEnd && parsePesoToCentavos(totalAmount) > parsePesoToCentavos(debtBudgetAmount) + parsePesoToCentavos(savingsBudgetAmount)
+      && allocationRows.some((row) => row.categoryId || row.subcategoryId)
+      && requiredDebtTotal && requiredSavingsTotal
+      && parsePesoToCentavos(debtBudgetAmount) >= requiredDebtTotal.totalRequiredCentavos
+      && parsePesoToCentavos(savingsBudgetAmount) >= requiredSavingsTotal.totalRequiredCentavos,
+  );
+
+  const generateRecommendation = async () => {
+    if (!canGenerateRecommendation) return;
+    recommendationAbort.current?.abort();
+    const controller = new AbortController();
+    recommendationAbort.current = controller;
+    setRecommendationState("generating");
+    const rows = allocationRows.filter((row) => row.categoryId || row.subcategoryId);
+    try {
+      const context = await loadBudgetRecommendationContext({ userId, accessToken, signal: controller.signal });
+      if (controller.signal.aborted) throw new DOMException("aborted", "AbortError");
+      const result = await requestBudgetRecommendation(accessToken, {
+        periodKind, periodStart, periodEnd,
+        totalAmountMinor: parsePesoToCentavos(totalAmount), debtBudgetAmountMinor: parsePesoToCentavos(debtBudgetAmount), savingsBudgetAmountMinor: parsePesoToCentavos(savingsBudgetAmount),
+        allocations: rows.map((row) => ({ categoryId: row.categoryId, subcategoryId: row.subcategoryId, preferredAmountMinor: parsePesoToCentavos(row.amount) })),
+        ...context,
+      }, controller.signal);
+      if (!result.response.ok || !result.body.payload) {
+        setRecommendationState(result.response.status >= 500 ? "unavailable" : "error");
+        return;
+      }
+      setRecommendation({ ...result.body.payload, sourceKey: recommendationSourceKey, allocations: result.body.payload.allocations.map((allocation) => {
+        const row = rows.find((candidate) => candidate.categoryId === allocation.categoryId && candidate.subcategoryId === allocation.subcategoryId)!;
+        return { ...allocation, id: row.id, label: row.label, amount: (allocation.amountMinor / 100).toFixed(2) };
+      }) });
+      setRecommendationState("ready");
+    } catch (error) {
+      setRecommendationState(error instanceof Error && error.name === "AbortError" ? "cancelled" : "unavailable");
+    } finally {
+      if (recommendationAbort.current === controller) recommendationAbort.current = null;
+    }
+  };
+
+  const applyRecommendation = () => {
+    if (!recommendation || recommendationState !== "ready") return;
+    const appliedRows = recommendation.allocations
+      .filter((allocation) => parsePesoToCentavos(allocation.amount) > 0)
+      .map(({ id, categoryId, subcategoryId, label, amount }) => ({ id, categoryId, subcategoryId, label, amount }));
+    if (appliedRows.length === 0 || appliedRows.reduce((total, row) => total + parsePesoToCentavos(row.amount), 0) > recommendation.availableFundsMinor) {
+      setCreateError("Recommended category amounts must be positive and cannot exceed available category funds.");
+      return;
+    }
+    setCreateError(null);
+    setAllocationRows(appliedRows);
+    setRecommendation((current) => current ? {
+      ...current,
+      sourceKey: JSON.stringify({ periodKind, periodStart, periodEnd, totalAmount, debtBudgetAmount, savingsBudgetAmount, allocations: appliedRows.map(({ categoryId, subcategoryId, amount }) => ({ categoryId, subcategoryId, amount })) }),
+    } : current);
+    setRecommendationState("accepted");
+  };
+
   const removeDraft = (draft: Budget) => {
     Alert.alert("Delete budget?", "This budget and its allocations will be deleted.", [
       { text: "Cancel", style: "cancel" },
@@ -290,8 +365,10 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                 setTotalAmount("");
                  setDebtBudgetAmount("");
                  setSavingsBudgetAmount("");
-               setCreateError(null);
-               setSyncError(null);
+                setCreateError(null);
+                setSyncError(null);
+                setRecommendation(null);
+                setRecommendationState("idle");
                setShowCreate(true);
             }}
             style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#013220", alignItems: "center", justifyContent: "center" }}
@@ -385,7 +462,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                     </View>
                   ) : null}
                 </View>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", marginTop: 14 }}>Manual allocations</Text>
+               <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", marginTop: 14 }}>Manual allocations</Text>
               {allocationRows.map((row, index) => (
                 <View key={row.id} style={{ marginTop: 12 }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -402,9 +479,23 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                   <TextInput value={row.amount} onChangeText={(amount) => setAllocationRows((rows) => rows.map((candidate) => candidate.id === row.id ? { ...candidate, amount } : candidate))} placeholder="e.g. 5.00" placeholderTextColor={formPalette.mut} accessibilityLabel={`Allocation ${index + 1} amount in pesos`} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 14, marginTop: 8, fontFamily: "Manrope", fontSize: 14, color: formPalette.ink, backgroundColor: formPalette.card }} />
                 </View>
               ))}
-              <Pressable accessibilityRole="button" accessibilityLabel="Add allocation" onPress={() => setAllocationRows((rows) => [...rows, { ...emptyAllocationRow, id: `allocation-${Date.now()}-${rows.length}` }])} style={{ marginTop: 12 }}>
+               <Pressable accessibilityRole="button" accessibilityLabel="Add allocation" onPress={() => setAllocationRows((rows) => [...rows, { ...emptyAllocationRow, id: `allocation-${Date.now()}-${rows.length}` }])} style={{ marginTop: 12 }}>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#0E6D46" }}>+ Add allocation</Text>
-              </Pressable>
+               </Pressable>
+               <Pressable accessibilityRole="button" accessibilityLabel={recommendationState === "generating" ? "Cancel recommendation generation" : "Generate budget recommendation"} disabled={!canGenerateRecommendation && recommendationState !== "generating"} onPress={() => recommendationState === "generating" ? recommendationAbort.current?.abort() : void generateRecommendation()} style={{ backgroundColor: canGenerateRecommendation || recommendationState === "generating" ? "#0E6D46" : "#9AA39D", borderRadius: 14, padding: 14, marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#FFFFFF", textAlign: "center" }}>{recommendationState === "generating" ? "Cancel generation" : "Generate recommendation"}</Text></Pressable>
+               {!canGenerateRecommendation ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginTop: 6 }}>Set valid dates, allocations, and required debt and savings reservations to generate a recommendation.</Text> : null}
+               {recommendationState === "unavailable" ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#D46B08", marginTop: 8 }}>The optimizer is temporarily unavailable. Your manual values are unchanged.</Text> : null}
+               {recommendationState === "error" ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.error, marginTop: 8 }}>The recommendation could not be generated. Your manual values are unchanged.</Text> : null}
+               {recommendationState === "cancelled" ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.mut, marginTop: 8 }}>Recommendation generation was cancelled.</Text> : null}
+               {recommendationState === "stale" ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#D46B08", marginTop: 8 }}>This recommendation is stale because budget inputs changed. Generate a new one before applying.</Text> : null}
+               {recommendation ? <View style={{ marginTop: 12, borderRadius: 12, padding: 12, backgroundColor: "#EEFFF8" }}>
+                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: formPalette.ink }}>Recommendation review</Text>
+                 <Text style={{ fontFamily: "Manrope", fontSize: 11, color: formPalette.mut, marginTop: 4 }}>Category funds: {formatPeso(recommendation.availableFundsMinor)} · Debt: {formatPeso(recommendation.debtBudgetAmountMinor)} · Savings: {formatPeso(recommendation.savingsBudgetAmountMinor)}</Text>
+                 {recommendation.allocations.map((allocation) => <View key={allocation.id} style={{ marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontSize: 12, color: formPalette.ink }}>{allocation.label}</Text><TextInput value={allocation.amount} onChangeText={(amount) => setRecommendation((current) => current ? { ...current, allocations: current.allocations.map((candidate) => candidate.id === allocation.id ? { ...candidate, amount } : candidate) } : current)} accessibilityLabel={`Recommended ${allocation.label} amount in pesos`} keyboardType="decimal-pad" style={{ height: 42, borderRadius: 10, borderWidth: 1, borderColor: formPalette.line, paddingHorizontal: 12, marginTop: 4, fontFamily: "Manrope", color: formPalette.ink, backgroundColor: "#FFFFFF" }} /></View>)}
+                 {recommendationState === "ready" ? <Pressable accessibilityRole="button" accessibilityLabel="Apply recommendation" onPress={applyRecommendation} style={{ backgroundColor: "#013220", borderRadius: 12, padding: 12, marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#FFFFFF", textAlign: "center" }}>Apply recommendation</Text></Pressable> : null}
+                 {recommendationState === "ready" ? <Pressable accessibilityRole="button" accessibilityLabel="Cancel recommendation review" onPress={() => { setRecommendation(null); setRecommendationState("cancelled"); }} style={{ marginTop: 10 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: formPalette.mut, textAlign: "center" }}>Cancel review</Text></Pressable> : null}
+                 {recommendationState === "accepted" ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", marginTop: 8 }}>Recommendation applied to the form. Save draft offline to persist it.</Text> : null}
+               </View> : null}
               {createError ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#D9001F", marginTop: 8 }}>{createError}</Text> : null}
               {syncError ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#D46B08", marginTop: 8 }}>{syncError}</Text> : null}
               <Pressable disabled={creating} onPress={() => void saveDraft()} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#FFFFFF", textAlign: "center" }}>{creating ? "Saving..." : "Save draft offline"}</Text></Pressable>
@@ -449,7 +540,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
                   </View>
                 </View>
                  <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: "#EEFFF8" }}>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(Math.max(selectedDraft.totalAmountMinor - selectedDraft.allocatedAmountMinor, 0))} unallocated</Text>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#087A51", textAlign: "center" }}>{formatPeso(selectedDraft.unallocatedAmountMinor)} unallocated</Text>
                  </View>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: formPalette.ink, marginTop: 18 }}>Categories</Text>
                 <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 22, marginTop: 10 }}>
@@ -497,7 +588,7 @@ export default function BudgetingScreen({ userId, deviceId, onSyncRequested }: P
             <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 10, color: "#0E6D46" }}>DRAFT</Text>
           </View>
           <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#414942" }}>{draft.periodStart} to {draft.periodEnd}</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: "#1B1C1A", marginTop: 12 }}>{formatPeso(draft.allocatedAmountMinor)} allocated</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: "#1B1C1A", marginTop: 12 }}>{formatPeso(calculateBudgetAllocatedAmount(draft.allocatedAmountMinor, draft.debtBudgetAmountMinor, draft.savingsBudgetAmountMinor))} allocated</Text>
           <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F" }}>{formatPeso(draft.unallocatedAmountMinor)} unallocated</Text>
          </Pressable>
       ))}

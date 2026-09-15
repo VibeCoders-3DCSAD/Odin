@@ -6,6 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "dummy-data:financial": "tsx scripts/generate-dummy-financial-data.ts",
+    "dummy-data:reset": "tsx scripts/reset-dummy-financial-data.ts",
     "test": "RUN_INTEGRATION_TESTS=true jest --silent --runInBand",
     "test:unit": "jest --silent --runInBand --testPathIgnorePatterns=/integration/"
   },
