@@ -1868,26 +1868,27 @@ Personal Savings inputs:
 | --- | --- | --- | --- |
 | Interest rate | Percentage amount input | Yes | Use as the annual rate for projected and credited interest. A value of `0` means the account earns no interest. |
 | Minimum balance | Currency amount input | Yes | Store as the bank's minimum-balance reference. Show it in account details and warn when the current balance falls below it; do not block a withdrawal solely because it would go below the minimum. |
+| Planned contribution amount | Currency amount input | Yes | Use as the planned contribution for each scheduled occurrence. It does not create a transaction without explicit user confirmation. |
+| Contribution schedule | Shared frequency selector with next contribution date | Yes | Select Weekly, Biweekly, Semi-Monthly, Monthly, Quarterly, Yearly, or Custom. Use the schedule for balance projections only. |
 
-HYSA inputs:
+HYSA inputs are progressive: show Account Details and Interest first, then reveal only the optional rule that the user enables.
 
 | Input | Control | Required | Handling |
 | --- | --- | --- | --- |
-| Current balance | Shared currency amount input | Yes | Use the account's current balance as the starting amount for interest accrual and to evaluate balance-based yield conditions. |
-| Base interest rate | Percentage amount input | Yes | Use as the annual rate when the account does not qualify for a boosted or promotional rate. |
-| Boosted interest rate | Percentage amount input | No | Use as the annual rate when the account qualifies for configured yield conditions. If omitted, the account has no conditional boosted rate. |
-| Interest calculation basis | Single-select picker | Yes | Select Daily Ending Balance, Average Daily Balance, or Monthly Average Balance. Use the selected basis to determine the balance on which interest accrues. |
-| Interest credit frequency | Single-select picker | Yes | Select Monthly, Quarterly, or At Maturity. Credit projected interest to the balance only at the selected interval. |
-| Are bank requirements met? | Boolean: Yes / No | Required when any yield condition or boosted rate is configured | Represent whether all configured requirements for the advertised or boosted rate are currently satisfied. Derive the value when Odin has the required balance and transaction data; otherwise let the user confirm it and identify the value as manually confirmed. Yes applies the boosted rate and No applies the base rate; No does not stop the account from earning interest. |
-| Effective interest rate | Read-only calculated percentage | Yes | Display the currently applicable annual rate: promotional rate when active; otherwise the applicable tier or boosted rate when bank requirements are met; otherwise the base rate. |
-| Minimum balance | Currency amount input | No | Treat as the minimum balance required for the boosted rate. Derive a failed requirement when the current balance is below it. |
-| Maximum eligible balance | Currency amount input | No | Limit the balance that can earn the boosted or promotional rate. Apply the base rate to the amount above the limit. |
-| Balance tiers | Repeatable rows: minimum balance, maximum balance, annual rate | No | Use the rate from the tier containing the applicable balance. Tiers replace the single boosted rate for the covered balance range. |
-| Required deposit | Currency amount input with frequency picker | No | Compare recorded qualifying deposits in the qualification period when that data is available. If Odin cannot identify qualifying deposits, include this condition in the manual confirmation instead. |
-| Required spending / transactions | Numeric count input with period picker | No | Compare recorded qualifying transactions in the qualification period when that data is available. If Odin cannot identify qualifying transactions, include this condition in the manual confirmation instead. |
-| Direct deposit requirement | Optional currency threshold input | No | Compare recorded deposits explicitly identified as direct deposits in the qualification period when that data is available. Otherwise include this condition in the manual confirmation instead. |
-| Qualification period | Single-select picker | No | Select the period in which optional yield conditions must be met: Monthly, Quarterly, or a custom bank-defined period. |
-| Promotional / bonus rate | Percentage amount input with start and end date pickers | No | During the inclusive promotional period, apply this rate before the base or boosted rate. Outside that period, use the otherwise applicable base, boosted, or tier rate. |
+| Account name, bank or provider, current balance, and date opened | Shared text, currency, and date controls | Name and balance only | Store the account's display and starting-balance details. |
+| Regular interest rate | Percentage amount input | Yes | Use as the normal annual rate. Accept a number with or without a `%` suffix. |
+| Interest calculation basis | Single-select picker | Yes | Select Daily Balance, Average Daily Balance, Other, or I'm Not Sure. Preserve Other and unknown choices without assuming a calculation method. |
+| Interest credit frequency | Single-select picker | Yes | Select Daily, Monthly, Every 3 Months, Yearly, At Maturity, Other, or I'm Not Sure. |
+| Minimum balance needed and maximum eligible balance | Currency amount inputs | No | Store the applicable balance limits for the configured rate. |
+| Higher rate available? | Segmented Yes / No / I'm Not Sure control | Yes | Reveal higher-rate configuration only for Yes. Preserve an unsure answer as unknown. |
+| Higher interest rate and qualification frequency | Percentage input and selector | Required when higher rate is available | Store the annual rate and the required qualification period. |
+| Higher-rate requirements | Repeatable dynamic form | Required when higher rate is available | Add Money, Make Transactions, Spend Money, Maintain a Balance, Receive Salary or Income, or Other. Each requirement captures its amount or count and period where applicable; Other requires a description. |
+| Balance-based rates? | Segmented Yes / No / I'm Not Sure control | Yes | Reveal balance-rate configuration only for Yes. |
+| Rate application and balance ranges | Radio control and repeatable rows | Required when balance-based rates are enabled | Select Whole Balance, Tiered Balance, or I'm Not Sure. Label every range's From, Up to, and annual rate. The final range may have no upper limit; ranges cannot overlap. |
+| Limited-time offer? | Segmented Yes / No control | Yes | Reveal promotion inputs only for Yes. |
+| Promotional rate, dates, and requirements | Percentage input, date pickers, and optional requirement builder | Rate and dates required when a promotion is enabled | Require an inclusive start and end date and reuse the requirement builder when the promotion has conditions. |
+| Regular savings plan? | Toggle or segmented Yes / No control | No | Reveal contribution planning only when enabled. A disabled plan stores no schedule. |
+| Savings-plan amount, frequency, next deposit, and custom days | Currency input, selector, and date picker | Required when the plan is enabled | Use only for projections. Custom frequency requires a positive number of days. |
 
 Goal Savings inputs:
 
@@ -1898,7 +1899,7 @@ Goal Savings inputs:
 | Target date | Date picker | Yes | Use to calculate the required contribution and projected completion status. |
 | Planned contribution amount | Currency amount input | Yes | Use as the planned contribution for each scheduled occurrence. It does not create a transaction without explicit user confirmation. |
 | Contribution frequency | Shared frequency selector | Yes | Select Weekly, Biweekly, Semi-Monthly, Monthly, Quarterly, Yearly, or Custom. Use the same frequency selector used for recurring financial schedules. |
-| First or next contribution date | Date picker | Yes | Anchor the contribution schedule and determine the scheduled occurrences before the target date. |
+| Next contribution date | Date picker | Yes | Anchor the contribution schedule and determine the scheduled occurrences before the target date. |
 | Interest rate | Percentage amount input | No | When provided, use as the annual rate for projected and credited interest; otherwise project no interest. |
 | Priority | Single-select picker | Yes | Use for savings allocation after Emergency Fund priority. |
 | Target method | Single-select picker | Emergency Fund only | For Emergency Fund, select Fixed Amount or Essential-Expense Coverage. Fixed Amount uses the entered target. |
@@ -1924,24 +1925,20 @@ Time Deposit inputs:
 - Opening date: `Select opening date`
 - Personal Savings interest rate: `Enter interest rate`
 - Personal Savings minimum balance: `Enter minimum balance`
-- HYSA base interest rate: `Enter base interest rate`
-- HYSA boosted interest rate: `Enter boosted interest rate`
-- HYSA interest calculation basis: `Select calculation basis`
+- Savings planned contribution amount: `Enter contribution amount`
+- Savings contribution frequency: `Select contribution frequency`
+- Savings next contribution date: `Select contribution date`
+- HYSA regular interest rate: `3.50`
+- HYSA interest calculation basis: `Select calculation method`
 - HYSA interest credit frequency: `Select credit frequency`
-- HYSA bank requirements met: `Select Yes or No`
-- HYSA effective interest rate: `Calculated from current eligibility`
-- HYSA minimum balance: `Enter minimum qualifying balance`
-- HYSA maximum eligible balance: `Enter maximum eligible balance`
-- HYSA balance-tier minimum: `Enter tier minimum balance`
-- HYSA balance-tier maximum: `Enter tier maximum balance`
-- HYSA balance-tier rate: `Enter tier interest rate`
-- HYSA required deposit: `Enter required deposit amount`
-- HYSA required deposit frequency: `Select deposit frequency`
-- HYSA required transactions: `Enter required transaction count`
-- HYSA required transaction period: `Select transaction period`
-- HYSA direct deposit requirement: `Enter minimum direct deposit`
-- HYSA qualification period: `Select qualification period`
-- HYSA promotional rate: `Enter promotional rate`
+- HYSA higher interest rate: `5.00`
+- HYSA requirement amount: `Amount in PHP`
+- HYSA transaction requirement: `Number of transactions`
+- HYSA other requirement: `Describe what your bank requires`
+- HYSA balance range start: `0`
+- HYSA balance range end: `99,999`
+- HYSA balance range rate: `3.50`
+- HYSA promotional rate: `0.00`
 - HYSA promotional period start: `Select promotion start date`
 - HYSA promotional period end: `Select promotion end date`
 - Goal Savings category: `Select savings category`
@@ -1967,18 +1964,19 @@ Time Deposit inputs:
 - Savings account type selector
 - Goal Savings category selector
 - Goal priority selector
-- Goal Savings contribution frequency selector: Weekly / Biweekly / Semi-Monthly / Monthly / Quarterly / Yearly / Custom
+- Savings contribution frequency selector: Weekly / Biweekly / Semi-Monthly / Monthly / Quarterly / Yearly / Custom
 - Goal Savings account selector for contributions, withdrawals, and transaction
   links
 - Savings activity selector: Contribution / Withdrawal
 - Savings allocation strategy selector
-- HYSA interest calculation-basis selector: Daily Ending Balance / Average Daily
-  Balance / Monthly Average Balance
-- HYSA interest credit-frequency selector: Monthly / Quarterly / At Maturity
-- HYSA bank-requirements-met selector: Yes / No
-- HYSA required-deposit frequency selector
-- HYSA required-transaction period selector
-- HYSA qualification-period selector: Monthly / Quarterly / Custom
+- HYSA interest calculation-basis selector: Daily Balance / Average Daily Balance / Other / I'm Not Sure
+- HYSA interest credit-frequency selector: Daily / Monthly / Every 3 Months / Yearly / At Maturity / Other / I'm Not Sure
+- HYSA higher-rate availability selector: Yes / No / I'm Not Sure
+- HYSA higher-rate qualification selector: Daily / Monthly / Every 3 Months / Yearly / Custom
+- HYSA requirement-type selector: Add Money / Make Transactions / Spend Money / Maintain a Balance / Receive Salary or Income / Other
+- HYSA balance-based-rate selector: Yes / No / I'm Not Sure
+- HYSA rate-application selector: Whole Balance / Tiered Balance / I'm Not Sure
+- HYSA limited-time-offer selector: Yes / No
 - Target method selector
 - Essential-expense coverage-period selector
 - Date-range selector for contribution history
@@ -2034,18 +2032,20 @@ transactions do not create or link to savings activities automatically.
   balance
 - Require a valid non-negative interest rate and minimum balance for Personal
   Savings
+- Require a non-negative planned contribution amount, contribution frequency,
+  and next contribution date only when a Personal Savings or HYSA savings plan is enabled
 - Require a valid non-negative HYSA base interest rate, interest calculation
   basis, and interest credit frequency
-- Require a valid non-negative HYSA boosted interest rate when provided
-- Require an explicit HYSA bank-requirements-met choice when a boosted rate or
-  yield condition is configured and Odin cannot derive eligibility from the
-  configured conditions
+- Require a valid non-negative HYSA higher interest rate and at least one
+  complete requirement when a higher rate is available
+- Preserve an explicit HYSA I'm Not Sure choice as unknown; do not coerce it to
+  a Yes or No value
 - Require valid non-negative HYSA minimum balance, maximum eligible balance,
   deposit amount, and direct-deposit threshold when provided
 - Require a positive HYSA required-transaction count when provided
-- Require each HYSA balance tier to have a valid lower bound, upper bound, and
-  non-negative rate; the lower bound cannot exceed the upper bound and tiers
-  cannot overlap
+- Require each enabled HYSA balance range to have a valid lower bound and
+  non-negative rate; require an upper bound except for the final no-limit range.
+  The lower bound cannot exceed the upper bound and ranges cannot overlap
 - Require the HYSA maximum eligible balance to be greater than or equal to the
   minimum balance when both are provided
 - Require a valid HYSA promotional rate and start and end dates when a
@@ -2077,6 +2077,8 @@ transactions do not create or link to savings activities automatically.
 
 - Personal Savings uses its interest rate for interest projections and credited
   interest.
+- Personal Savings and HYSA projections include their configured scheduled
+  contributions but do not create contribution transactions automatically.
 - HYSA interest accrues using its selected calculation basis and credits to the
   account at its selected credit frequency.
 - Derive HYSA bank-requirements-met as Yes only when every configured condition
@@ -2227,6 +2229,8 @@ handled by Budgeting before it reaches this allocation step.
   Management
 - Transaction-linking state: a related transaction is being created or linked
 - Validation-failure state: Savings Account or contribution inputs are invalid
+- HYSA-conditional-input state: only inputs enabled by the selected HYSA rules are visible
+- HYSA-unknown-rule state: a bank rule is explicitly unknown and is not assumed
 - Saving state: Savings Account or contribution changes are being saved
 - Active state: Goal Savings account is included in current planning and allocation
 - Behind state: Goal Savings account is below its required contribution schedule
@@ -2248,6 +2252,7 @@ handled by Budgeting before it reaches this allocation step.
 #### Validation Messages
 
 - Invalid savings inputs: `Some savings details are not valid. Check the highlighted fields and try again.`
+- Missing HYSA inputs: `Complete: {fields}.`
 
 #### Error Messages
 
