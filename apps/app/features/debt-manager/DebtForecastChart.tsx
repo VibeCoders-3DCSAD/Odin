@@ -30,12 +30,13 @@ type Props = {
   width: number;
   colorMode: "blue" | "status";
   targetDate?: string;
+  accessibilityLabel?: string;
 };
 
 export type ForecastStatus = "ahead" | "on_schedule" | "on_track" | "behind" | "paid_off" | "not_scheduled";
 export type ForecastChartPoint = { id: string; date: string; balanceCentavos: number; isForecast: boolean };
 
-export function DebtForecastChart({ points, status, today, width, colorMode, targetDate }: Props) {
+export function DebtForecastChart({ points, status, today, width, colorMode, targetDate, accessibilityLabel = "Debt trend" }: Props) {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const color = colorMode === "blue" ? "#2563EB" : trendColor(status);
   const forecastStartIndex = points.findIndex((point) => point.isForecast);
@@ -66,7 +67,7 @@ export function DebtForecastChart({ points, status, today, width, colorMode, tar
         })()
     : null;
 
-  return <View accessibilityLabel={`Debt trend with actual balance through today and forecast after today. Status: ${status.replace("_", " ")}.`} style={{ height: CHART_HEIGHT }}>
+  return <View accessibilityLabel={`${accessibilityLabel} with actual balance through today and forecast after today. Status: ${status.replace("_", " ")}.`} style={{ height: CHART_HEIGHT }}>
     <Svg width={width} height={CHART_HEIGHT}>
       {[0, maximum / 2, maximum].map((value, index) => <React.Fragment key={`grid-${index}`}>
         <Line x1={PADDING.left} x2={width - PADDING.right} y1={y(value)} y2={y(value)} stroke="#EAEAE6" strokeWidth={1} />

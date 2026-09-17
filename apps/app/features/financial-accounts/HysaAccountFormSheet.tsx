@@ -401,7 +401,8 @@ export default function HysaAccountFormSheet({
           effectiveInterestRateBps:
             higherRate === "yes" ? boostedInterestRateBps : null,
           interestConditions: conditionSummary,
-          higherRateEligible: null,
+          higherRateEligible:
+            higherRate === "yes" ? true : higherRate === "no" ? false : null,
           boostedInterestRateBps:
             higherRate === "yes" ? boostedInterestRateBps : null,
           interestCalculationBasis: basis,

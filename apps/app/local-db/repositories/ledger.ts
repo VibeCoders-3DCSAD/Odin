@@ -555,6 +555,28 @@ export async function listTransactions(
   return db.getAllAsync<TransactionListRow>(parts.join(" "), ...params);
 }
 
+export type SavingsAccountMovement = {
+  transactionId: string;
+  kind: "contribution" | "withdrawal";
+  amountCentavos: number;
+  transactionDate: string;
+};
+
+export async function listSavingsAccountMovements(userId: string, accountId: string): Promise<SavingsAccountMovement[]> {
+  const db = await getDb();
+  return db.getAllAsync<SavingsAccountMovement>(
+    `SELECT id AS transactionId,
+      CASE WHEN destination_account_id = ? THEN 'contribution' ELSE 'withdrawal' END AS kind,
+      amount_centavos AS amountCentavos, transaction_date AS transactionDate
+     FROM transactions
+     WHERE user_id = ? AND status = 'posted' AND deleted = 0
+       AND ((destination_account_id = ? AND transaction_type IN ('income', 'transfer'))
+         OR (source_account_id = ? AND transaction_type IN ('expense', 'transfer')))
+     ORDER BY transaction_date ASC, created_at ASC`,
+    accountId, userId, accountId, accountId,
+  );
+}
+
 export async function getTransaction(
   userId: string,
   id: string,

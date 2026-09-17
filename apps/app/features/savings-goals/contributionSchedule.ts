@@ -96,7 +96,7 @@ export function validateContributionSchedule(schedule: SavingsContributionSchedu
   return null;
 }
 
-function advanceSchedule(date: string, schedule: SavingsContributionSchedule): string | null {
+export function advanceContributionSchedule(date: string, schedule: SavingsContributionSchedule): string | null {
   const frequency = schedule.contributionFrequency;
   const interval = schedule.contributionIntervalCount ?? 1;
   if (frequency === "weekly") return addDays(date, 7 * interval);
@@ -122,7 +122,7 @@ function scheduledDates(schedule: SavingsContributionSchedule, from: string, thr
   let date = schedule.nextContributionDate;
   for (let index = 0; date <= through && index < 10_000; index += 1) {
     if (date >= from) dates.push(date);
-    const next = advanceSchedule(date, schedule);
+    const next = advanceContributionSchedule(date, schedule);
     if (!next || next <= date) break;
     date = next;
   }
