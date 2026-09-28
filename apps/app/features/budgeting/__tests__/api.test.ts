@@ -29,8 +29,7 @@ describe("budget recommendation API", () => {
     await expect(requestBudgetRecommendation("access-token", request, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
   });
 
-  it("converts the narrow monthly category-group forecast to centavo context", () => {
-    expect(toBudgetRecommendationForecast({ forecasts: [{ date: "2026-10-01", amountCentavos: 12_345, category: "Essentials" }], forecastHorizon: "MONTHLY", forecastLevel: "CATEGORY_GROUP", confidenceInterval: { lower80Centavos: 10_000, upper80Centavos: 14_000, lower95Centavos: 9_000, upper95Centavos: 15_000 }, modelVersion: "v1", status: "SUCCESS" })).toEqual(expect.objectContaining({ version: 1, forecasts: [{ date: "2026-10-01", amountMinor: 12_345, category: "Essentials" }] }));
-    expect(toBudgetRecommendationForecast({ forecasts: [], forecastHorizon: "WEEKLY", forecastLevel: "CATEGORY_GROUP", confidenceInterval: { lower80Centavos: 1, upper80Centavos: 1, lower95Centavos: 1, upper95Centavos: 1 }, modelVersion: "v1", status: "SUCCESS" })).toBeNull();
+  it("does not treat quarterly HFCE projections as monthly budget context", () => {
+    expect(toBudgetRecommendationForecast({ forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 12_345, userBaselineCentavos: 10_000, hfceMultiplier: 1.2, hfceForecastAmountMillionPhp: 1234, explanation: "Personalized food forecast." }], modelVersion: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" })).toBeNull();
   });
 });

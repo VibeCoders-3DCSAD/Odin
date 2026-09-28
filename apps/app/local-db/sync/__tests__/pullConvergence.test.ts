@@ -22,6 +22,15 @@ describe("credit-card cycle pull convergence", () => {
   });
 });
 
+describe("legacy taxonomy pull convergence", () => {
+  it("does not restore retired taxonomy rows", async () => {
+    const db = { getFirstAsync: jest.fn(), runAsync: jest.fn() };
+    await applyPullRow(db as never, "subcategories", { id: "legacy-1", slug: "essentials_food_groceries", version: 1, deleted: false });
+    expect(db.getFirstAsync).not.toHaveBeenCalled();
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+});
+
 describe("budget pull convergence", () => {
   it("maps remote envelope centavo amounts into local minor-unit fields", () => {
     const row = normalizePullRow("budgets", {

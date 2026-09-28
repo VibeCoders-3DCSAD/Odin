@@ -23,7 +23,7 @@ function taxonomyClient() {
 }
 
 describe("budget recommendation ML adapter", () => {
-  afterEach(() => { delete process.env.BUDGET_ML_BASE_URL; });
+  afterEach(() => { delete process.env.BUDGET_ML_BASE_URL; delete process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET; });
 
   it("validates dates, envelopes, and unique owned targets before calling ML", () => {
     expect(parseBudgetRecommendationRequest(request)).toEqual(request);
@@ -34,9 +34,11 @@ describe("budget recommendation ML adapter", () => {
 
   it("injects the authenticated user, derives ratios, and reconciles centavos", async () => {
     process.env.BUDGET_ML_BASE_URL = "http://ml.internal/";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
     const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ recommendation: { allocations: [{ category_id: "category-1", amount: 46.67 }, { category_id: "subcategory-1", amount: 23.32 }] } }) });
     const result = await getBudgetRecommendation("user-1", request, taxonomyClient(), fetcher);
     expect(fetcher).toHaveBeenCalledWith("http://ml.internal/api/v1/budget/recommend", expect.anything());
+    expect(fetcher.mock.calls[0]![1].headers).toEqual(expect.objectContaining({ "X-Odin-User-Id": "user-1", "X-Odin-History-Source": "odin_api" }));
     expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual(expect.objectContaining({ user_id: "user-1", available_funds: 70, target_ratios: { "category-1": 2 / 3, "subcategory-1": 1 / 3 } }));
     expect(JSON.parse(fetcher.mock.calls[0]![1].body)).not.toHaveProperty("transaction_history");
     expect(JSON.parse(fetcher.mock.calls[0]![1].body)).not.toHaveProperty("forecast");
@@ -46,6 +48,7 @@ describe("budget recommendation ML adapter", () => {
 
   it("forwards validated history and centavo forecast context without descriptions", async () => {
     process.env.BUDGET_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
     const context = {
       historicalTransactions: [{ transactionId: "b9df3d82-b64a-4b25-b8aa-dd36f70a42be", date: "2026-09-04", amount: 245.5, category: "Essentials", transactionType: "expense", description: "private note" }],
       forecast: {
@@ -75,6 +78,7 @@ describe("budget recommendation ML adapter", () => {
 
   it("uses equal target ratios when every preference is zero", async () => {
     process.env.BUDGET_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
     const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ recommendation: { allocations: [{ category_id: "category-1", amount: 35 }, { category_id: "subcategory-1", amount: 35 }] } }) });
     const result = await getBudgetRecommendation("user-1", { ...request, allocations: request.allocations.map((target) => ({ ...target, preferredAmountMinor: 0 })) }, taxonomyClient(), fetcher);
     expect(JSON.parse(fetcher.mock.calls[0]![1].body).target_ratios).toEqual({ "category-1": 0.5, "subcategory-1": 0.5 });

@@ -1,6 +1,6 @@
 export const anomalyConfig = {
   schedule: { cron: "0 18 * * *", timezone: "Asia/Manila", weekStartsOn: "monday" },
-  history: { lookbackMonths: 6 },
+  history: { lookbackMonths: 12 },
   scoring: { anomalousAtScore: 0.7, criticalAtScore: 0.9 },
   reports: { currentWeekCadence: "daily", pastWeekCadence: "weekly", backfillCurrentWeekDaily: true, backfillPastWeeksWeekly: true },
   idempotency: { reportKey: "user_id + report_date + cadence + model_version" },

@@ -2,7 +2,10 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import crypto from "node:crypto";
 import { getServiceRoleClient } from "../lib/supabase.js";
+import { requireAuth } from "../middleware/auth.js";
+import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { recordDailyFinancialReportFailure, retryDailyFinancialReport, type ReportCadence } from "../services/alerts/dailyReportService.js";
+import { MlAlertProvider } from "../services/alerts/mlAlertProvider.js";
 
 const router = Router();
 
@@ -61,12 +64,12 @@ router.post("/run", async (request: Request, response: Response) => {
   if (error) throw error;
 
   const results = await Promise.allSettled((users ?? []).map(async ({ user_id }) => {
-    const { data: reports, error: reportsError } = await client.from("daily_financial_reports").select("report_date, cadence").eq("user_id", user_id).eq("model_version", "disabled");
+    const { data: reports, error: reportsError } = await client.from("daily_financial_reports").select("report_date, cadence").eq("user_id", user_id).eq("model_version", new MlAlertProvider().version);
     if (reportsError) throw reportsError;
     for (const target of reportTargets(reportDate, new Set((reports ?? []).map((report) => `${report.cadence}:${report.report_date}`)))) {
       try {
         const report = await retryDailyFinancialReport(client, user_id, target.reportDate, target.cadence);
-        console.info("daily financial report completed", { user_id, report_id: report.report_id, report_date: target.reportDate, cadence: target.cadence, evaluations: report.evaluations, alerts: report.alerts, model_version: "disabled" });
+        console.info("daily financial report completed", { user_id, report_id: report.report_id, report_date: target.reportDate, cadence: target.cadence, evaluations: report.evaluations, alerts: report.alerts });
       } catch (error) {
         await recordDailyFinancialReportFailure(client, user_id, target.reportDate, target.cadence, error instanceof Error ? error.message : "report failed");
         throw error;
@@ -74,8 +77,15 @@ router.post("/run", async (request: Request, response: Response) => {
     }
   }));
   const failed = results.filter((result) => result.status === "rejected").length;
-  console.info("daily financial report scheduler completed", { report_date: reportDate, users: results.length, failed, model_version: "disabled" });
+  console.info("daily financial report scheduler completed", { report_date: reportDate, users: results.length, failed });
   response.status(200).json({ processed: results.length, failed });
 });
 
 export default router;
+
+export const financialReportRefreshRouter = Router();
+
+financialReportRefreshRouter.post("/refresh", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
+  const report = await retryDailyFinancialReport(getServiceRoleClient(), request.userId!, manilaDate(), "daily");
+  response.status(200).json({ report });
+});

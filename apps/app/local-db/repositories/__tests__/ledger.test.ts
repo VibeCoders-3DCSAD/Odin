@@ -200,4 +200,18 @@ describe("transaction list pagination", () => {
       "user-1",
     );
   });
+
+  test("filters transactions by their parent category", async () => {
+    const db = { getAllAsync: jest.fn(async () => []) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { listTransactions } = await import("../ledger");
+    await listTransactions("user-1", { category_id: "category-1" });
+
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("category_filter.category_id = ?"),
+      "user-1",
+      "category-1",
+    );
+  });
 });

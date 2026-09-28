@@ -38,8 +38,77 @@ export class AlertRepository {
     const { data, error } = await query;
     if (error) throw error;
     const rows = (data ?? []) as AlertRow[];
-    const page = rows.slice(0, limit);
+    const page = await this.enrichTransactionRelations(rows.slice(0, limit));
     return { alerts: page, nextCursor: rows.length > limit && page.length ? encodeCursor(page[page.length - 1]!) : null };
+  }
+
+  private async enrichTransactionRelations(alerts: AlertRow[]): Promise<AlertRow[]> {
+    const transactionIdFor = (alert: AlertRow): string | null => {
+      if (typeof alert.transaction_id === "string") return alert.transaction_id;
+      const related = Array.isArray(alert.alert_related_entities) ? alert.alert_related_entities as Array<Record<string, unknown>> : [];
+      const transaction = related.find((entity) => entity.entity_type === "transaction" && typeof entity.entity_id === "string");
+      return typeof transaction?.entity_id === "string" ? transaction.entity_id : null;
+    };
+    const transactionIds = alerts.map(transactionIdFor).filter((id): id is string => !!id);
+    const evaluationIds = alerts.map((alert) => alert.daily_report_evaluation_id).filter((id): id is string => typeof id === "string");
+    if (transactionIds.length === 0) return alerts;
+
+    const [{ data: transactions, error: transactionsError }, { data: evaluations, error: evaluationsError }] = await Promise.all([
+      this.client.from("transactions").select("id, amount_centavos, transaction_date, subcategory_id, source_account_id").eq("user_id", this.userId).in("id", transactionIds),
+      evaluationIds.length > 0
+        ? this.client.from("daily_financial_report_evaluations").select("id, anomaly_score, source_references").in("id", evaluationIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (transactionsError) throw transactionsError;
+    if (evaluationsError) throw evaluationsError;
+
+    const transactionRows = (transactions ?? []) as Array<{ id: string; amount_centavos: number; transaction_date: string; subcategory_id: string | null; source_account_id: string | null }>;
+    const subcategoryIds = transactionRows.map((transaction) => transaction.subcategory_id).filter((id): id is string => !!id);
+    const accountIds = transactionRows.map((transaction) => transaction.source_account_id).filter((id): id is string => !!id);
+    const [{ data: subcategories, error: subcategoriesError }, { data: accounts, error: accountsError }] = await Promise.all([
+      subcategoryIds.length > 0 ? this.client.from("subcategories").select("id, label, category_id").in("id", subcategoryIds) : Promise.resolve({ data: [], error: null }),
+      accountIds.length > 0 ? this.client.from("financial_accounts").select("id, name").eq("user_id", this.userId).in("id", accountIds) : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (subcategoriesError) throw subcategoriesError;
+    if (accountsError) throw accountsError;
+
+    const subcategoryRows = (subcategories ?? []) as Array<{ id: string; label: string; category_id: string }>;
+    const categoryIds = subcategoryRows.map((subcategory) => subcategory.category_id);
+    const { data: categories, error: categoriesError } = categoryIds.length > 0
+      ? await this.client.from("categories").select("id, label").in("id", categoryIds)
+      : { data: [], error: null };
+    if (categoriesError) throw categoriesError;
+
+    const transactionsById = new Map(transactionRows.map((transaction) => [transaction.id, transaction]));
+    const subcategoriesById = new Map(subcategoryRows.map((subcategory) => [subcategory.id, subcategory]));
+    const categoriesById = new Map(((categories ?? []) as Array<{ id: string; label: string }>).map((category) => [category.id, category]));
+    const accountsById = new Map(((accounts ?? []) as Array<{ id: string; name: string }>).map((account) => [account.id, account]));
+    const evaluationsById = new Map(((evaluations ?? []) as Array<{ id: string; anomaly_score: number | null; source_references: Record<string, unknown> }>).map((evaluation) => [evaluation.id, evaluation]));
+
+    return alerts.map((alert) => {
+      const transaction = transactionsById.get(transactionIdFor(alert) ?? "");
+      if (!transaction) return alert;
+      const subcategory = transaction.subcategory_id ? subcategoriesById.get(transaction.subcategory_id) : undefined;
+      const category = subcategory ? categoriesById.get(subcategory.category_id) : undefined;
+      const related = Array.isArray(alert.alert_related_entities) ? alert.alert_related_entities as Array<Record<string, unknown>> : [];
+      return {
+        ...alert,
+        alert_related_entities: related.map((entity) => entity.entity_type !== "transaction" || entity.entity_id !== transaction.id ? entity : {
+          ...entity,
+          label: subcategory?.label ?? category?.label ?? "Uncategorised",
+          amount_centavos: transaction.amount_centavos,
+          metadata: {
+            ...(entity.metadata as Record<string, unknown> ?? {}),
+            transaction_date: transaction.transaction_date,
+            category_label: category?.label ?? null,
+            subcategory_label: subcategory?.label ?? null,
+            financial_account_name: transaction.source_account_id ? accountsById.get(transaction.source_account_id)?.name ?? null : null,
+            usual_spending_percent: evaluationsById.get(alert.daily_report_evaluation_id as string)?.source_references.usual_spending_percent ?? null,
+            usual_spending_centavos: evaluationsById.get(alert.daily_report_evaluation_id as string)?.source_references.usual_spending_centavos ?? null,
+          },
+        }),
+      };
+    });
   }
 
   async get(alertId: string): Promise<AlertRow | null> {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import { trustedMlHeaders } from "../lib/mlInferenceGateway.js";
 
 const PERIOD_KINDS = ["WEEKLY", "MONTHLY", "CUSTOM", "INCOME_CYCLE"] as const;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -172,33 +173,36 @@ export async function getBudgetRecommendation(userId: string, request: BudgetRec
   if (!baseUrl) throw new BudgetRecommendationUpstreamError(503, "budget optimizer unavailable");
   const availableFundsMinor = request.totalAmountMinor - request.debtBudgetAmountMinor - request.savingsBudgetAmountMinor;
   const preferredTotal = request.allocations.reduce((total, allocation) => total + allocation.preferredAmountMinor, 0);
+  const body = JSON.stringify({
+    request_id: randomUUID(), user_id: userId, available_funds: availableFundsMinor / 100,
+    period: { start: request.periodStart, end: request.periodEnd }, include_reasoning: false,
+    categories: request.allocations.map((target) => ({ category_id: target.categoryId ?? target.subcategoryId, restriction_level: "FREE", floor: 0, ceiling: availableFundsMinor / 100, priority_weight: 1 })),
+    target_ratios: Object.fromEntries(request.allocations.map((target) => [target.categoryId ?? target.subcategoryId!, preferredTotal ? target.preferredAmountMinor / preferredTotal : 1 / request.allocations.length])),
+    ...(request.historicalTransactions === undefined ? {} : { transaction_history: request.historicalTransactions.map((transaction) => ({ transaction_id: transaction.transactionId, date: transaction.date, amount: transaction.amount, category: transaction.category, transaction_type: transaction.transactionType })) }),
+    ...(request.forecast === undefined ? {} : { forecast: {
+      version: request.forecast.version,
+      forecasts: request.forecast.forecasts.map((point) => ({ date: point.date, amount: point.amountMinor / 100, category: point.category })),
+      forecast_horizon: request.forecast.forecastHorizon,
+      forecast_level: request.forecast.forecastLevel,
+      confidence_interval: {
+        lower_80: request.forecast.confidenceInterval.lower80Minor / 100,
+        upper_80: request.forecast.confidenceInterval.upper80Minor / 100,
+        lower_95: request.forecast.confidenceInterval.lower95Minor / 100,
+        upper_95: request.forecast.confidenceInterval.upper95Minor / 100,
+      },
+      status: request.forecast.status,
+    } }),
+  });
+  const headers = trustedMlHeaders(userId, body);
+  if (!headers) throw new BudgetRecommendationUpstreamError(503, "budget optimizer unavailable");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8_000);
   try {
     const response = await fetcher(`${baseUrl.replace(/\/$/, "")}/api/v1/budget/recommend`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       signal: controller.signal,
-      body: JSON.stringify({
-        request_id: randomUUID(), user_id: userId, available_funds: availableFundsMinor / 100,
-        period: { start: request.periodStart, end: request.periodEnd }, include_reasoning: false,
-        categories: request.allocations.map((target) => ({ category_id: target.categoryId ?? target.subcategoryId, restriction_level: "FREE", floor: 0, ceiling: availableFundsMinor / 100, priority_weight: 1 })),
-        target_ratios: Object.fromEntries(request.allocations.map((target) => [target.categoryId ?? target.subcategoryId!, preferredTotal ? target.preferredAmountMinor / preferredTotal : 1 / request.allocations.length])),
-        ...(request.historicalTransactions === undefined ? {} : { transaction_history: request.historicalTransactions.map((transaction) => ({ transaction_id: transaction.transactionId, date: transaction.date, amount: transaction.amount, category: transaction.category, transaction_type: transaction.transactionType })) }),
-        ...(request.forecast === undefined ? {} : { forecast: {
-          version: request.forecast.version,
-          forecasts: request.forecast.forecasts.map((point) => ({ date: point.date, amount: point.amountMinor / 100, category: point.category })),
-          forecast_horizon: request.forecast.forecastHorizon,
-          forecast_level: request.forecast.forecastLevel,
-          confidence_interval: {
-            lower_80: request.forecast.confidenceInterval.lower80Minor / 100,
-            upper_80: request.forecast.confidenceInterval.upper80Minor / 100,
-            lower_95: request.forecast.confidenceInterval.lower95Minor / 100,
-            upper_95: request.forecast.confidenceInterval.upper95Minor / 100,
-          },
-          status: request.forecast.status,
-        } }),
-      }),
+      body,
     });
     if (!response.ok) throw new BudgetRecommendationUpstreamError(response.status, "budget optimizer rejected request");
     return mapMlBudgetResponse(await response.json(), request, availableFundsMinor);

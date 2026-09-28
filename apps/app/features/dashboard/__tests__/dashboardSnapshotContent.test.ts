@@ -19,13 +19,10 @@ test("normalizes dashboard snapshot content without accepting malformed values",
   });
   expect(getBudgetContent(snapshot({ status: "unknown", items: [{ label: "Food", spent: Number.NaN, budget: Infinity }] }))).toEqual({ status: "unknown", items: [] });
   expect(getBudgetContent(snapshot({ status: "warning", period_start: "2000-01-01", period_end: "2000-01-31", items: [{ label: "Food", spent: 1200, budget: 2000 }] }))).toEqual({ status: "unknown", items: [] });
-  expect(getForecastContent(snapshot({ forecasts: [{ date: "2026-10", amountCentavos: 125000, category: "Essentials" }], forecastHorizon: "MONTHLY", forecastLevel: "CATEGORY_GROUP", confidenceInterval: { lower80Centavos: 100000, upper80Centavos: 150000, lower95Centavos: 90000, upper95Centavos: 160000 }, modelVersion: "v2.4.0", status: "FALLBACK" }))).toEqual({
-    forecasts: [{ date: "2026-10", amountCentavos: 125000, category: "Essentials" }],
-    forecastHorizon: "MONTHLY",
-    forecastLevel: "CATEGORY_GROUP",
-    confidenceInterval: { lower80Centavos: 100000, upper80Centavos: 150000, lower95Centavos: 90000, upper95Centavos: 160000 },
-    modelVersion: "v2.4.0",
-    status: "FALLBACK",
+  expect(getForecastContent(snapshot({ forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 125000, userBaselineCentavos: 100000, hfceMultiplier: 1.25, hfceForecastAmountMillionPhp: 1200, explanation: "Personalized food forecast." }], modelVersion: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }))).toEqual({
+    forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 125000, userBaselineCentavos: 100000, hfceMultiplier: 1.25, hfceForecastAmountMillionPhp: 1200, explanation: "Personalized food forecast." }],
+    modelVersion: "hfce-sarima-v4-category-quarterly",
+    status: "SUCCESS",
   });
-  expect(getForecastContent(snapshot({ forecasts: [], forecastHorizon: "YEARLY", forecastLevel: "TOTAL", confidenceInterval: { lower80Centavos: 100000, upper80Centavos: 150000, lower95Centavos: 90000, upper95Centavos: 160000 }, modelVersion: "v2.4.0", status: "SUCCESS" }))).toEqual(expect.objectContaining({ forecastHorizon: "YEARLY" }));
+  expect(getForecastContent(snapshot({ forecasts: [], modelVersion: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }))).toEqual(expect.objectContaining({ forecasts: [] }));
 });

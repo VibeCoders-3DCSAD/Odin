@@ -10,17 +10,10 @@ import {
   View,
 } from "react-native";
 import {
-  ShoppingCart,
-  Bank,
-  Confetti,
-  PiggyBank,
-  CaretUp,
-  CaretDown,
   CaretRight,
   MagnifyingGlass,
   Plus,
   ArrowLeft,
-  Globe,
 } from "phosphor-react-native";
 import {
   listCategoryGroups,
@@ -71,20 +64,6 @@ const palette = {
   error: "#D9001F",
 } as const;
 
-const GROUP_ICONS: Record<string, React.ReactNode> = {
-  essentials: <ShoppingCart size={17} weight="fill" color="#fff" />,
-  obligatory: <Bank size={17} weight="fill" color="#4F57C4" />,
-  discretionary: <Confetti size={17} weight="fill" color="#BE185D" />,
-  financial_allocation: <PiggyBank size={17} weight="fill" color={palette.aqua700} />,
-};
-
-const GROUP_ICON_BG: Record<string, string> = {
-  essentials: palette.aqua600,
-  obligatory: "#E0E7FF",
-  discretionary: "#FCE7F3",
-  financial_allocation: palette.aqua50,
-};
-
 function CategoryRow({
   category,
   mutatingId,
@@ -100,7 +79,6 @@ function CategoryRow({
 }) {
   const isSystem = category.is_system;
   const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected) ?? false;
-  const hasFilipinoContext = category.is_filipino_context;
   const subCount = category.subcategories?.length ?? 0;
   const isMutating = mutatingId === category.id;
 
@@ -133,9 +111,6 @@ function CategoryRow({
                 </Text>
               </View>
             )}
-            {hasFilipinoContext && (
-              <Globe size={10} weight="fill" color={palette.sun700} />
-            )}
           </View>
           <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
             {category.description}
@@ -159,80 +134,6 @@ function CategoryRow({
   );
 }
 
-function GroupCard({
-  group,
-  mutatingId,
-  onEdit,
-  onDelete,
-  onNavigate,
-}: {
-  group: Group;
-  mutatingId: string | null;
-  onEdit: (cat: Category) => void;
-  onDelete: (cat: Category) => void;
-  onNavigate: (cat: Category) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden" }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${group.label}, ${group.categories?.length ?? 0} categories, ${expanded ? "expanded" : "collapsed"}`}
-        accessibilityState={{ expanded }}
-        onPress={() => setExpanded(!expanded)}
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 11,
-          padding: 14,
-          backgroundColor: palette.aqua50,
-        }}
-      >
-        <View
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 10,
-            backgroundColor: GROUP_ICON_BG[group.slug] || palette.aqua600,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {GROUP_ICONS[group.slug] || <ShoppingCart size={17} weight="fill" color="#fff" />}
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink }}>
-            {group.label}
-          </Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.aqua800 }}>
-            {group.categories?.length ?? 0} categories
-          </Text>
-        </View>
-        {expanded ? (
-          <CaretUp size={15} weight="bold" color={palette.aqua700} />
-        ) : (
-          <CaretDown size={15} weight="bold" color={palette.mut} />
-        )}
-      </Pressable>
-      {expanded && (
-        <View style={{ paddingHorizontal: 14, paddingTop: 6, paddingBottom: 12 }}>
-          {group.categories?.map((cat) => (
-            <CategoryRow
-              key={cat.id}
-              category={cat}
-              mutatingId={mutatingId}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
 function SubcategoryRow({
   sub,
   mutatingId,
@@ -244,8 +145,6 @@ function SubcategoryRow({
   onEdit: (s: Subcategory) => void;
   onDelete: (s: Subcategory) => void;
 }) {
-  const isSystem = sub.is_system;
-  const hasFilipinoContext = sub.is_filipino_context;
   const isProtected = sub.is_protected;
   const isMutating = mutatingId === sub.id;
 
@@ -272,9 +171,6 @@ function SubcategoryRow({
               </Text>
             </View>
           )}
-          {hasFilipinoContext && (
-            <Globe size={10} weight="fill" color={palette.sun700} />
-          )}
         </View>
         <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
           {sub.description}
@@ -283,7 +179,7 @@ function SubcategoryRow({
       <KebabTooltip
         kebabDirection="horizontal"
         tooltipLocation="bottomRight"
-        disabled={isSystem || isProtected || isMutating}
+        disabled={isMutating}
         onEdit={() => onEdit(sub)}
         onDelete={() => onDelete(sub)}
       />
@@ -379,15 +275,15 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     setCategoryFormVisible(true);
   }
 
-  function openCategoryEdit(cat: Category) {
+  function openCategoryEdit(category: Category) {
     setCategoryFormMode("edit");
-    setEditingCategory(cat);
+    setEditingCategory(category);
     setCategoryFormVisible(true);
   }
 
-  function handleCategoryDelete(cat: Category) {
+  function handleCategoryDelete(category: Category) {
     Alert.alert(
-      `Delete "${cat.label}"?`,
+      `Delete "${category.label}"?`,
       "This category will be hidden. Existing transactions using it are not affected.",
       [
         { text: "Cancel", style: "cancel" },
@@ -395,12 +291,12 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            setMutatingId(cat.id);
+            setMutatingId(category.id);
             try {
-              await deleteCategory(userId, deviceId, cat.id);
+              await deleteCategory(userId, deviceId, category.id);
               load();
-            } catch (e) {
-              Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete category");
+            } catch (error) {
+              Alert.alert("Error", error instanceof Error ? error.message : "Failed to delete category");
             } finally {
               setMutatingId(null);
             }
@@ -441,22 +337,22 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     );
   }
 
-  function handleCategoryFormSaved() {
-    setCategoryFormVisible(false);
-    setEditingCategory(undefined);
-    load();
-  }
-
   function handleSubcategoryFormSaved() {
     setSubcategoryFormVisible(false);
     setEditingSubcategory(undefined);
     load();
   }
 
-  const viewingCategory = viewingCategoryId
-    ? groups.flatMap((g) => g.categories ?? []).find((c) => c.id === viewingCategoryId)
-    : undefined;
+  function handleCategoryFormSaved() {
+    setCategoryFormVisible(false);
+    setEditingCategory(undefined);
+    load();
+  }
 
+  const categories = groups.find((group) => group.slug === "hfce_categories")?.categories ?? [];
+  const viewingCategory = viewingCategoryId
+    ? categories.find((category) => category.id === viewingCategoryId)
+    : undefined;
   const viewingSubs = viewingCategory?.subcategories ?? [];
 
   if (viewingCategoryId) {
@@ -598,21 +494,23 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#fff" }}>Retry</Text>
             </Pressable>
           </View>
-        ) : groups.length === 0 ? (
+        ) : categories.length === 0 ? (
           <View style={{ alignItems: "center", marginTop: 40 }}>
             <Text style={{ fontFamily: "Manrope", color: palette.mut }}>No categories yet</Text>
           </View>
         ) : (
-          groups.map((group) => (
-            <GroupCard
-              key={group.id}
-              group={group}
-              mutatingId={mutatingId}
-              onEdit={openCategoryEdit}
-              onDelete={handleCategoryDelete}
-              onNavigate={navigateToSubcategories}
-            />
-          ))
+          <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", paddingHorizontal: 14 }}>
+            {categories.map((category) => (
+              <CategoryRow
+                key={category.id}
+                category={category}
+                mutatingId={mutatingId}
+                onEdit={openCategoryEdit}
+                onDelete={handleCategoryDelete}
+                onNavigate={navigateToSubcategories}
+              />
+            ))}
+          </View>
         )}
       </View>
 
@@ -620,7 +518,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
         visible={categoryFormVisible}
         mode={categoryFormMode}
         category={editingCategory}
-        groups={groups.map((g) => ({ id: g.id, slug: g.slug, label: g.label }))}
+        groups={groups.map((group) => ({ id: group.id, slug: group.slug, label: group.label }))}
         userId={userId}
         deviceId={deviceId}
         onSaved={handleCategoryFormSaved}

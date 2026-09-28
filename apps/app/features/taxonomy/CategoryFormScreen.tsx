@@ -20,7 +20,6 @@ type CategoryFormScreenProps = {
     category_group_id: string;
     label: string;
     description: string;
-    is_filipino_context: boolean;
   };
   groups?: { id: string; slug: string; label: string }[];
   userId: string;
@@ -50,11 +49,12 @@ export default function CategoryFormScreen({
   onSaved, onCancel,
 }: CategoryFormScreenProps) {
   const isCreate = mode === "create";
+  const hfceGroup = groups?.find((group) => group.slug === "hfce_categories");
+  const hfceGroupId = hfceGroup?.id ?? "";
   const [label, setLabel] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState("");
-  const [isFilipinoContext, setIsFilipinoContext] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -63,11 +63,10 @@ export default function CategoryFormScreen({
       setLabel(category?.label ?? "");
       setSlug(category ? generateSlug(category.label) : "");
       setDescription(category?.description ?? "");
-      setSelectedGroupId(category?.category_group_id ?? "");
-      setIsFilipinoContext(category?.is_filipino_context ?? false);
+      setSelectedGroupId(category?.category_group_id ?? hfceGroupId);
       setFormError(null);
     }
-  }, [visible, mode, category?.id]);
+  }, [visible, mode, category?.id, hfceGroupId]);
 
   useEffect(() => {
     if (label.trim()) {
@@ -89,13 +88,11 @@ export default function CategoryFormScreen({
           slug: slug.trim() || generateSlug(label.trim()),
           label: label.trim(),
           description: description.trim(),
-          is_filipino_context: isFilipinoContext,
         });
       } else {
         await updateCategory(userId, deviceId, category!.id, {
           label: label.trim(),
           description: description.trim(),
-          is_filipino_context: isFilipinoContext,
         });
       }
       onSaved();
@@ -123,34 +120,6 @@ export default function CategoryFormScreen({
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>
                       Editing "{category.label}"
                     </Text>
-                  )}
-
-                  {isCreate && (
-                    <View>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-                        CATEGORY GROUP <Text style={{color: palette.error}}>*</Text>
-                      </Text>
-                      <View style={{ gap: 6 }}>
-                        {groups?.map((g) => (
-                          <Pressable
-                            key={g.id}
-                            onPress={() => setSelectedGroupId(g.id)}
-                            accessibilityRole="radio"
-                            accessibilityLabel={g.label}
-                            accessibilityState={{ checked: selectedGroupId === g.id }}
-                            style={{
-                              padding: 12, borderRadius: 10, borderWidth: 1,
-                              borderColor: selectedGroupId === g.id ? palette.brand : palette.line,
-                              backgroundColor: selectedGroupId === g.id ? "#EFFEF7" : "transparent",
-                            }}
-                          >
-                            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: palette.ink }}>
-                              {g.label}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </View>
                   )}
 
                   <View>
@@ -187,29 +156,6 @@ export default function CategoryFormScreen({
                         backgroundColor: palette.card, minHeight: 80, textAlignVertical: "top",
                       }}
                     />
-                  </View>
-
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <Pressable
-                      onPress={() => setIsFilipinoContext(!isFilipinoContext)}
-                      accessibilityRole="switch"
-                      accessibilityLabel="Filipino context"
-                      accessibilityState={{ checked: isFilipinoContext }}
-                      style={{
-                        width: 44, height: 26, borderRadius: 100,
-                        backgroundColor: isFilipinoContext ? palette.aqua600 : palette.line,
-                        position: "relative",
-                      }}
-                    >
-                      <View style={{
-                        position: "absolute", top: 3,
-                        [isFilipinoContext ? "right" : "left"]: 3,
-                        width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
-                      }} />
-                    </Pressable>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.ink2 }}>
-                      Filipino context (localized spending tags)
-                    </Text>
                   </View>
 
                   {formError && (

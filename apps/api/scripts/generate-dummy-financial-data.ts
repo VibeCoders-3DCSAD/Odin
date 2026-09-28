@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
+dotenv.config({ path: fileURLToPath(new URL("../.env.local", import.meta.url)), override: true });
 
 type AccountKey = "bank" | "wallet" | "savings";
 
@@ -14,6 +15,7 @@ type Account = {
 };
 
 type Transaction = {
+  id: string;
   user_id: string;
   transaction_type: "income" | "expense" | "transfer";
   status: "posted";
@@ -36,7 +38,26 @@ type Category = {
   id: string;
 };
 
-const seedMarker = "dummy-financial-data-v1";
+const seedMarker = "dummy-financial-data";
+const legacySeedMarker = "dummy-financial-data-v1";
+const requiredSubcategorySlugs = [
+  "income_salary",
+  "food_groceries",
+  "transport_public",
+  "housing_rent",
+  "housing_electricity",
+  "housing_water",
+  "housing_internet",
+  "restaurants_cafes",
+  "clothing_accessories",
+] as const;
+const budgetSubcategorySlugs = [
+  "food_groceries",
+  "transport_public",
+  "housing_electricity",
+  "housing_internet",
+  "restaurants_cafes",
+] as const;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -90,18 +111,7 @@ function amountWithNoise(basePesos: number, random: () => number, spread = 0.12)
 function buildTransactions(userId: string, endDate: string, seed: number, accounts: Account[], categories: Category[]) {
   const random = createRandom(seed);
   const categoryIdBySlug = new Map(categories.map((category) => [category.slug, category.id]));
-  const requiredSlugs = [
-    "income_salary",
-    "essentials_food_groceries",
-    "essentials_transportation_commute",
-    "essentials_electricity",
-    "essentials_water",
-    "essentials_connectivity",
-    "obligatory_housing_rent",
-    "discretionary_dining_out",
-    "discretionary_shopping",
-  ];
-  const missingSlugs = requiredSlugs.filter((slug) => !categoryIdBySlug.has(slug));
+  const missingSlugs = requiredSubcategorySlugs.filter((slug) => !categoryIdBySlug.has(slug));
   if (missingSlugs.length > 0) throw new Error(`Missing seeded subcategories: ${missingSlugs.join(", ")}`);
 
   const accountIdByKey = new Map(accounts.map((account) => [account.key, account.id]));
@@ -126,6 +136,7 @@ function buildTransactions(userId: string, endDate: string, seed: number, accoun
     destination_account_id: destination ? accountIdByKey.get(destination)! : null,
     merchant_name: merchant,
     notes,
+    id: randomUUID(),
     client_mutation_id: randomUUID(),
     metadata: { dummy_data_source: seedMarker, generated_seed: seed },
     deleted: false,
@@ -140,25 +151,25 @@ function buildTransactions(userId: string, endDate: string, seed: number, accoun
     const month = addMonths(firstMonth, offset);
     const monthlyIncome = amountWithNoise(52_000, random, 0.06);
     transactions.push(transaction(formatDate(month, 15), "income", monthlyIncome, "income_salary", null, "bank", "Northstar Services", "Monthly salary"));
-    transactions.push(transaction(formatDate(month, 2), "expense", amountWithNoise(13_500, random, 0.03), "obligatory_housing_rent", "bank", null, "Apartment rent", null));
-    transactions.push(transaction(formatDate(month, 6), "expense", amountWithNoise(2_800, random), "essentials_electricity", "bank", null, "Meralco", null));
-    transactions.push(transaction(formatDate(month, 8), "expense", amountWithNoise(550, random), "essentials_water", "bank", null, "Maynilad", null));
-    transactions.push(transaction(formatDate(month, 10), "expense", amountWithNoise(1_699, random, 0.03), "essentials_connectivity", "bank", null, "PLDT Home", null));
+    transactions.push(transaction(formatDate(month, 2), "expense", amountWithNoise(13_500, random, 0.03), "housing_rent", "bank", null, "Apartment rent", null));
+    transactions.push(transaction(formatDate(month, 6), "expense", amountWithNoise(2_800, random), "housing_electricity", "bank", null, "Meralco", null));
+    transactions.push(transaction(formatDate(month, 8), "expense", amountWithNoise(550, random), "housing_water", "bank", null, "Maynilad", null));
+    transactions.push(transaction(formatDate(month, 10), "expense", amountWithNoise(1_699, random, 0.03), "housing_internet", "bank", null, "PLDT Home", null));
     transactions.push(transaction(formatDate(month, 16), "transfer", amountWithNoise(7_000, random, 0.1), null, "bank", "savings", null, "Monthly savings allocation"));
     transactions.push(transaction(formatDate(month, 17), "transfer", amountWithNoise(26_000, random, 0.08), null, "bank", "wallet", null, "Wallet top-up"));
 
     for (const day of [3, 7, 10, 14, 18, 21, 28]) {
-      transactions.push(transaction(formatDate(month, day), "expense", amountWithNoise(2_100, random, 0.22), "essentials_food_groceries", "wallet", null, "SM Supermarket", null));
+      transactions.push(transaction(formatDate(month, day), "expense", amountWithNoise(2_100, random, 0.22), "food_groceries", "wallet", null, "SM Supermarket", null));
     }
     for (const day of [2, 5, 8, 11, 14, 17, 20, 23, 26, 28]) {
-      transactions.push(transaction(formatDate(month, day), "expense", amountWithNoise(420, random, 0.25), "essentials_transportation_commute", "wallet", null, "MRT and jeepney fares", null));
+      transactions.push(transaction(formatDate(month, day), "expense", amountWithNoise(420, random, 0.25), "transport_public", "wallet", null, "MRT and jeepney fares", null));
     }
     for (const day of [7, 12, 16, 20, 22, 26]) {
-      transactions.push(transaction(formatDate(month, day), "expense", amountWithNoise(650, random, 0.3), "discretionary_dining_out", "wallet", null, "Local cafe", null));
+      transactions.push(transaction(formatDate(month, day), "expense", amountWithNoise(650, random, 0.3), "restaurants_cafes", "wallet", null, "Local cafe", null));
     }
-    transactions.push(transaction(formatDate(month, 14), "expense", amountWithNoise(700, random, 0.25), "discretionary_shopping", "wallet", null, "Convenience store", null));
+    transactions.push(transaction(formatDate(month, 14), "expense", amountWithNoise(700, random, 0.25), "clothing_accessories", "wallet", null, "Department store", null));
     if (random() > 0.35) {
-      transactions.push(transaction(formatDate(month, 23), "expense", amountWithNoise(1_800, random, 0.35), "discretionary_shopping", "wallet", null, "Online shopping", null));
+      transactions.push(transaction(formatDate(month, 23), "expense", amountWithNoise(1_800, random, 0.35), "clothing_accessories", "wallet", null, "Online clothing shop", null));
     }
   }
 
@@ -176,6 +187,68 @@ function calculateBalances(accounts: Account[], transactions: Transaction[]) {
   return balances;
 }
 
+async function deleteRows(
+  supabase: ReturnType<typeof createClient>,
+  table: string,
+  userId: string,
+  ids: string[],
+) {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from(table).delete().eq("user_id", userId).in("id", ids);
+  if (error) throw new Error(`Could not clear dummy ${table}: ${error.message}`);
+}
+
+async function clearDummyData(supabase: ReturnType<typeof createClient>, userId: string) {
+  const [{ data: accounts, error: accountsError }, { data: budgets, error: budgetsError }, { data: goals, error: goalsError }, { data: debts, error: debtsError }] = await Promise.all([
+    supabase.from("financial_accounts").select("id").eq("user_id", userId).or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`),
+    supabase.from("budgets").select("id").eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
+    supabase.from("savings_goals").select("id").eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
+    supabase.from("debt_accounts").select("id").eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
+  ]);
+  if (accountsError) throw accountsError;
+  if (budgetsError) throw budgetsError;
+  if (goalsError) throw goalsError;
+  if (debtsError) throw debtsError;
+
+  const accountIds = (accounts ?? []).map((account) => account.id);
+  if (accountIds.length > 0) {
+    const { count, error } = await supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .or(`source_account_id.in.(${accountIds.join(",")}),destination_account_id.in.(${accountIds.join(",")})`)
+      .not("metadata->>dummy_data_source", "in", `(${seedMarker},${legacySeedMarker})`);
+    if (error) throw error;
+    if ((count ?? 0) > 0) {
+      throw new Error("Refusing to remove dummy accounts referenced by non-dummy transactions. Move those transactions first.");
+    }
+  }
+
+  await Promise.all([
+    deleteRows(supabase, "budgets", userId, (budgets ?? []).map((budget) => budget.id)),
+    deleteRows(supabase, "savings_goals", userId, (goals ?? []).map((goal) => goal.id)),
+    deleteRows(supabase, "debt_accounts", userId, (debts ?? []).map((debt) => debt.id)),
+  ]);
+  const { error: transactionsError } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("user_id", userId)
+    .or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`);
+  if (transactionsError) throw transactionsError;
+  await deleteRows(supabase, "financial_accounts", userId, accountIds);
+}
+
+function currentMonthRange(endDate: string) {
+  const current = new Date(`${endDate}T00:00:00Z`);
+  const start = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 1));
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+    days: Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1,
+  };
+}
+
 async function main() {
   const { userId, endDate, seed, dryRun } = parseArgs();
   const url = process.env.SUPABASE_URL;
@@ -183,15 +256,17 @@ async function main() {
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
 
   const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-  const [{ data: profile, error: profileError }, { data: existingRows, error: existingError }, { data: categories, error: categoryError }] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: categories, error: categoryError }] = await Promise.all([
     supabase.from("profiles").select("user_id").eq("user_id", userId).maybeSingle(),
-    supabase.from("financial_accounts").select("id").eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }).limit(1),
-    supabase.from("subcategories").select("id, slug").in("slug", ["income_salary", "essentials_food_groceries", "essentials_transportation_commute", "essentials_electricity", "essentials_water", "essentials_connectivity", "obligatory_housing_rent", "discretionary_dining_out", "discretionary_shopping"]),
+    supabase
+      .from("subcategories")
+      .select("id, slug, category_id")
+      .in("slug", requiredSubcategorySlugs)
+      .eq("is_active", true)
+      .or(`user_id.eq.${userId},user_id.is.null`),
   ]);
   if (profileError) throw profileError;
   if (!profile) throw new Error(`No profile exists for user ${userId}`);
-  if (existingError) throw existingError;
-  if (existingRows.length > 0) throw new Error("Dummy financial data already exists for this user. It is intentionally not overwritten.");
   if (categoryError) throw categoryError;
 
   const start = formatDate(addMonths(new Date(`${endDate}T00:00:00Z`), -11), 1);
@@ -206,6 +281,8 @@ async function main() {
   if ([...balances.values()].some((balance) => balance < 0)) throw new Error("Generated data would overdraw an account; change the seed or generator.");
   console.log(`Prepared ${accounts.length} accounts and ${transactions.length} transactions from ${start} through ${endDate}.`);
   if (dryRun) return;
+
+  await clearDummyData(supabase, userId);
 
   const accountRows = [
     { id: accounts[0].id, user_id: userId, name: "Demo Payroll Account", kind: "bank", opening_balance_centavos: accounts[0].openingBalanceCentavos, current_balance_centavos: balances.get(accounts[0].id), include_in_dashboard_balance: true, institution_name: "Demo Bank", opened_on: start, sort_order: 1, metadata: { dummy_data_source: seedMarker }, deleted: false, version: 1 },
@@ -227,6 +304,58 @@ async function main() {
     }
     throw transactionsError;
   }
+  const categoryBySlug = new Map((categories ?? []).map((category) => [category.slug, category]));
+  const budgetCategories = budgetSubcategorySlugs.map((slug) => categoryBySlug.get(slug));
+  if (budgetCategories.some((category) => !category)) throw new Error("Missing subcategories required for the dummy budget.");
+
+  const { start: periodStart, end: periodEnd, days: budgetPeriodDays } = currentMonthRange(endDate);
+  const referenceDate = new Date(`${endDate}T00:00:00Z`);
+  const nextMonth = addMonths(referenceDate, 1);
+  const nextContributionDate = formatDate(nextMonth, 16);
+  const budgetId = randomUUID();
+  const goalIds = { emergency: randomUUID(), laptop: randomUUID() };
+  const debtIds = { personal: randomUUID(), auto: randomUUID() };
+  const marker = { dummy_data_source: seedMarker, generated_seed: seed };
+  const { error: budgetError } = await supabase.from("budgets").insert({
+    id: budgetId, user_id: userId, status: "draft", source: "manual", period_kind: "monthly",
+    period_start: periodStart, period_end: periodEnd, budget_period_days: budgetPeriodDays,
+    total_amount_centavos: centavos(52_000), debt_budget_amount_centavos: centavos(7_500), savings_budget_amount_centavos: centavos(5_000),
+    surplus_handling: "no_action", deficit_handling: "warn_only", allow_deficit_planning: false,
+    metadata: marker, version: 1, deleted: false,
+  });
+  if (budgetError) throw budgetError;
+  const allocationAmounts = [13_000, 5_000, 3_000, 2_000, 4_500];
+  const { error: allocationsError } = await supabase.from("budget_allocations").insert(budgetCategories.map((category, index) => ({
+    id: randomUUID(), user_id: userId, budget_id: budgetId, allocation_scope: "subcategory",
+    category_id: category!.category_id, subcategory_id: category!.id, allocated_amount_centavos: centavos(allocationAmounts[index]!),
+    is_protected_snapshot: false, sort_order: index + 1, metadata: marker, version: 1, deleted: false,
+  })));
+  if (allocationsError) throw allocationsError;
+
+  const { error: goalsInsertError } = await supabase.from("savings_goals").insert([
+    { id: goalIds.emergency, user_id: userId, name: "Emergency Fund", goal_type: "emergency_fund", goal_category: "emergency_fund", target_amount_centavos: centavos(180_000), starting_amount_centavos: centavos(45_000), target_date: formatDate(addMonths(referenceDate, 9), 30), priority: "high", emergency_fund_baseline_centavos: centavos(30_000), auto_save_amount_centavos: centavos(5_000), planned_contribution_amount_centavos: centavos(5_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "essential_expense_coverage", essential_expense_coverage_months: 6, status: "active", version: 1, deleted: false, metadata: marker },
+    { id: goalIds.laptop, user_id: userId, name: "New Laptop", goal_type: "custom", goal_category: "custom", target_amount_centavos: centavos(85_000), starting_amount_centavos: centavos(12_000), target_date: formatDate(addMonths(referenceDate, 6), 31), priority: "medium", auto_save_amount_centavos: centavos(3_000), planned_contribution_amount_centavos: centavos(3_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "fixed_amount", status: "active", version: 1, deleted: false, metadata: marker },
+  ]);
+  if (goalsInsertError) throw goalsInsertError;
+  const savingsTransfers = transactions.filter((transaction) => transaction.transaction_type === "transfer" && transaction.destination_account_id === accounts[2].id).slice(-4);
+  const { error: activitiesError } = await supabase.from("savings_goal_activities").insert(savingsTransfers.map((transaction, index) => ({
+    id: randomUUID(), user_id: userId, savings_goal_id: index % 2 === 0 ? goalIds.emergency : goalIds.laptop,
+    transaction_id: transaction.id, activity_kind: "contribution", amount_centavos: index % 2 === 0 ? centavos(4_000) : centavos(2_500),
+    activity_date: transaction.transaction_date, notes: "Demo savings contribution", version: 1, deleted: false,
+  })));
+  if (activitiesError) throw activitiesError;
+
+  const { error: debtsInsertError } = await supabase.from("debt_accounts").insert([
+    { id: debtIds.personal, user_id: userId, linked_account_id: accounts[0].id, name: "Personal Loan", lender_name: "Demo Bank", preset_key: "personal_loan", status: "active", original_balance_centavos: centavos(120_000), current_balance_centavos: centavos(78_500), annual_interest_rate_bps: 1_250, minimum_payment_centavos: centavos(4_500), payment_frequency: "monthly", payment_schedule: {}, next_due_date: formatDate(nextMonth, 5), target_payoff_date: formatDate(addMonths(referenceDate, 15), 5), interest_period: "annual", interest_method: "diminishing_balance", preset_data: { startDate: formatDate(addMonths(referenceDate, -20), 5), feesCentavos: 0, penaltyInfo: null, termMonths: 36, personalLoan: { purpose: "Home improvements" } }, notes: "Demo debt with a consistent payment history", version: 1, deleted: false, metadata: marker },
+    { id: debtIds.auto, user_id: userId, linked_account_id: accounts[0].id, name: "Motorcycle Loan", lender_name: "Demo Finance", preset_key: "auto_loan", status: "active", original_balance_centavos: centavos(190_000), current_balance_centavos: centavos(142_000), annual_interest_rate_bps: 890, minimum_payment_centavos: centavos(6_800), payment_frequency: "monthly", payment_schedule: {}, next_due_date: formatDate(nextMonth, 20), target_payoff_date: formatDate(addMonths(referenceDate, 24), 20), interest_period: "annual", interest_method: "diminishing_balance", preset_data: { startDate: formatDate(addMonths(referenceDate, -13), 20), feesCentavos: 0, penaltyInfo: null, termMonths: 36, autoLoan: { vehicleDescription: "Demo commuter motorcycle", vehiclePurchasePriceCentavos: centavos(240_000), downpaymentCentavos: centavos(50_000), financedPrincipalCentavos: centavos(190_000) } }, notes: "Demo auto loan", version: 1, deleted: false, metadata: marker },
+  ]);
+  if (debtsInsertError) throw debtsInsertError;
+  const { error: paymentsError } = await supabase.from("debt_payments").insert([
+    { id: randomUUID(), debt_account_id: debtIds.personal, user_id: userId, source: "manual", payment_date: formatDate(addMonths(referenceDate, -2), 5), amount_centavos: centavos(4_500), principal_centavos: centavos(3_680), interest_centavos: centavos(820), notes: "Demo payment", version: 1, deleted: false, metadata: marker },
+    { id: randomUUID(), debt_account_id: debtIds.personal, user_id: userId, source: "manual", payment_date: formatDate(addMonths(referenceDate, -1), 5), amount_centavos: centavos(4_500), principal_centavos: centavos(3_720), interest_centavos: centavos(780), notes: "Demo payment", version: 1, deleted: false, metadata: marker },
+    { id: randomUUID(), debt_account_id: debtIds.auto, user_id: userId, source: "manual", payment_date: formatDate(addMonths(referenceDate, -1), 20), amount_centavos: centavos(6_800), principal_centavos: centavos(5_450), interest_centavos: centavos(1_350), notes: "Demo payment", version: 1, deleted: false, metadata: marker },
+  ]);
+  if (paymentsError) throw paymentsError;
   console.log(`Created dummy financial data for ${userId}.`);
 }
 

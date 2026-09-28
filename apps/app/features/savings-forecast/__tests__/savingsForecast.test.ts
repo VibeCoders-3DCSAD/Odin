@@ -12,12 +12,12 @@ const schedule = {
 };
 
 describe("buildSavingsForecast", () => {
-  it("projects scheduled contributions upward and marks a goal ahead of target", () => {
+  it("continues scheduled contributions after reaching the target", () => {
     const forecast = buildSavingsForecast({ currentBalanceCentavos: 10_000, startingBalanceCentavos: 10_000, targetAmountCentavos: 30_000, targetDate: "2026-04-01", schedule, interestRateBps: 0, asOf: "2026-01-15" });
 
     expect(forecast.status).toBe("ahead");
     expect(forecast.projectedTargetDate).toBe("2026-03-01");
-    expect(forecast.points.filter((point) => point.event === "scheduled_contribution")).toHaveLength(2);
+    expect(forecast.points.filter((point) => point.event === "scheduled_contribution").map((point) => point.balanceCentavos)).toEqual([20_000, 30_000, 40_000]);
   });
 
   it("uses the base HYSA rate until higher-rate eligibility is confirmed", () => {

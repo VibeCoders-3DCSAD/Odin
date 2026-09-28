@@ -1,5 +1,5 @@
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
-import type { ForecastHorizon, ForecastLevel, ForecastPayload } from "../forecast/types";
+import type { ForecastPayload } from "../forecast/types";
 
 type BudgetItem = { label: string; spent: number; budget: number };
 type BudgetStatus = "on_track" | "warning" | "critical" | "unknown";
@@ -49,27 +49,14 @@ export function getBudgetContent(snapshot: DashboardSnapshotWithMeta | null | un
   return typeof start !== "string" || typeof end !== "string" || (start <= today && end >= today) ? { items, status } : { items: [], status: "unknown" };
 }
 
-function isHorizon(value: unknown): value is ForecastHorizon {
-  return value === "WEEKLY" || value === "SEMI_MONTHLY" || value === "MONTHLY" || value === "YEARLY";
-}
-
-function isLevel(value: unknown): value is ForecastLevel {
-  return value === "TOTAL" || value === "CATEGORY_GROUP";
-}
-
 export function getForecastContent(snapshot: DashboardSnapshotWithMeta | null | undefined): ForecastContent | null {
   const value = payload(snapshot);
-  if (!isHorizon(value.forecastHorizon) || !isLevel(value.forecastLevel) || typeof value.modelVersion !== "string" || (value.status !== "SUCCESS" && value.status !== "FALLBACK")) return null;
-  const interval = value.confidenceInterval;
-  if (!interval || typeof interval !== "object" || Array.isArray(interval)) return null;
-  const bounds = interval as Record<string, unknown>;
-  const numbers = [bounds.lower80Centavos, bounds.upper80Centavos, bounds.lower95Centavos, bounds.upper95Centavos];
-  if (!numbers.every((number) => typeof number === "number" && Number.isFinite(number))) return null;
+  if (typeof value.modelVersion !== "string" || value.status !== "SUCCESS") return null;
   const forecasts = Array.isArray(value.forecasts) ? value.forecasts.flatMap((point) => {
     if (!point || typeof point !== "object" || Array.isArray(point)) return [];
     const row = point as Record<string, unknown>;
-    if (typeof row.date !== "string" || typeof row.amountCentavos !== "number" || !Number.isFinite(row.amountCentavos) || (row.category !== null && typeof row.category !== "string")) return [];
-    return [{ date: row.date, amountCentavos: row.amountCentavos, category: row.category ?? null }];
+    if (typeof row.category !== "string" || typeof row.month !== "string" || !/^\d{4}-\d{2}$/.test(row.month) || typeof row.quarter !== "string" || !/^\d{4}Q[1-4]$/.test(row.quarter) || typeof row.amountCentavos !== "number" || !Number.isFinite(row.amountCentavos) || typeof row.userBaselineCentavos !== "number" || !Number.isFinite(row.userBaselineCentavos) || typeof row.hfceMultiplier !== "number" || !Number.isFinite(row.hfceMultiplier) || typeof row.hfceForecastAmountMillionPhp !== "number" || !Number.isFinite(row.hfceForecastAmountMillionPhp) || typeof row.explanation !== "string") return [];
+    return [{ category: row.category, month: row.month, quarter: row.quarter, amountCentavos: row.amountCentavos, userBaselineCentavos: row.userBaselineCentavos, hfceMultiplier: row.hfceMultiplier, hfceForecastAmountMillionPhp: row.hfceForecastAmountMillionPhp, explanation: row.explanation }];
   }) : [];
-  return { forecasts, forecastHorizon: value.forecastHorizon, forecastLevel: value.forecastLevel, confidenceInterval: { lower80Centavos: bounds.lower80Centavos as number, upper80Centavos: bounds.upper80Centavos as number, lower95Centavos: bounds.lower95Centavos as number, upper95Centavos: bounds.upper95Centavos as number }, modelVersion: value.modelVersion, status: value.status };
+  return { forecasts, modelVersion: value.modelVersion, status: "SUCCESS" };
 }

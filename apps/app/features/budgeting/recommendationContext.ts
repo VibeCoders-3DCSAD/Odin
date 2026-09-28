@@ -17,8 +17,6 @@ export async function loadBudgetRecommendationContext({ userId, accessToken, sig
   try {
     const result = await requestForecast(accessToken, {
       historicalTransactions,
-      forecastHorizon: "MONTHLY",
-      forecastLevel: "CATEGORY_GROUP",
     }, signal);
     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     const forecast = result.response.ok && result.body.payload

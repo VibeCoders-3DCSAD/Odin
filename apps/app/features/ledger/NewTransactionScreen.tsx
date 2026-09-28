@@ -55,7 +55,7 @@ type Props = {
   statementPaymentContext?: StatementPaymentContext;
   debtPaymentDebtId?: string;
   debtPaymentContext?: DebtPaymentContext;
-  savingsActivityContext?: { savingsGoalId: string; kind: "contribution" | "withdrawal" };
+  savingsActivityContext?: { savingsGoalId: string; kind: "contribution" | "withdrawal"; amountCentavos?: number };
 };
 
 export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, statementPaymentContext, debtPaymentDebtId, debtPaymentContext, savingsActivityContext }: Props) {
@@ -76,7 +76,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   useEffect(() => {
     if (!isEdit) setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
   }, [txType]);
-  const [amount, setAmount] = useState(transaction ? String(transaction.amount_centavos / 100) : "");
+  const [amount, setAmount] = useState(transaction ? String(transaction.amount_centavos / 100) : savingsActivityContext?.amountCentavos ? String(savingsActivityContext.amountCentavos / 100) : "");
   const [date, setDate] = useState(transaction ? new Date(transaction.transaction_date + "T00:00:00") : new Date());
   const [postingDate, setPostingDate] = useState(transaction?.credit_card_posting_date ?? "");
   const [creditCardPurchaseType, setCreditCardPurchaseType] = useState<"regular" | "installment">("regular");

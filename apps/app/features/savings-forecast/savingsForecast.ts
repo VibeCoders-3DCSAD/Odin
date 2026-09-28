@@ -99,11 +99,9 @@ export function buildSavingsForecast(input: SavingsForecastInput): SavingsForeca
       interestStartDate = creditDate;
       creditDate = nextCreditDate(creditDate, input.details);
     }
-    if (!input.targetAmountCentavos || balance < input.targetAmountCentavos) {
-      balance += input.schedule.plannedContributionAmountCentavos;
-      points.push({ date: contributionDate, balanceCentavos: balance, event: "scheduled_contribution", isForecast: true });
-      if (input.targetAmountCentavos && balance >= input.targetAmountCentavos) projectedTargetDate = contributionDate;
-    }
+    balance += input.schedule.plannedContributionAmountCentavos;
+    points.push({ date: contributionDate, balanceCentavos: balance, event: "scheduled_contribution", isForecast: true });
+    if (input.targetAmountCentavos && projectedTargetDate === null && balance >= input.targetAmountCentavos) projectedTargetDate = contributionDate;
     contributionDate = advanceContributionSchedule(contributionDate, input.schedule) ?? "";
     if (!contributionDate) break;
   }

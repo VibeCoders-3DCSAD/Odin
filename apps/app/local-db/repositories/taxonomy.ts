@@ -53,6 +53,7 @@ type SubcategoryRow = {
   is_system: number;
   is_filipino_context: number;
   is_protected: number;
+  minimum_amount_centavos: number | null;
   sort_order: number;
   is_active: number;
   metadata: string;
@@ -97,6 +98,7 @@ export type Subcategory = {
   is_system: boolean;
   is_filipino_context: boolean;
   is_protected: boolean;
+  minimum_amount_centavos: number | null;
   sort_order: number;
   is_active: boolean;
 };
@@ -129,6 +131,7 @@ export type CreateSubcategoryInput = {
   short_label?: string | null;
   is_filipino_context?: boolean;
   is_protected?: boolean;
+  minimum_amount_centavos?: number | null;
   sort_order?: number;
 };
 
@@ -139,6 +142,7 @@ export type UpdateSubcategoryInput = {
   description?: string;
   is_filipino_context?: boolean;
   is_protected?: boolean;
+  minimum_amount_centavos?: number | null;
   is_active?: boolean;
 };
 
@@ -181,6 +185,7 @@ function mapSubcategory(row: SubcategoryRow): Subcategory {
     is_system: row.is_system === 1,
     is_filipino_context: row.is_filipino_context === 1,
     is_protected: row.is_protected === 1,
+    minimum_amount_centavos: row.minimum_amount_centavos,
     sort_order: row.sort_order,
     is_active: row.is_active === 1,
   };
@@ -504,9 +509,9 @@ export async function createSubcategory(
     await db.runAsync(
       `INSERT INTO subcategories
         (id, user_id, category_id, slug, kind, label, short_label, description,
-         is_system, is_filipino_context, is_protected, sort_order, is_active,
-         metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+          is_system, is_filipino_context, is_protected, minimum_amount_centavos, sort_order, is_active,
+          metadata, version, deleted, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
       id,
       userId,
       input.category_id ?? null,
@@ -517,6 +522,7 @@ export async function createSubcategory(
       input.description,
       boolToInt(input.is_filipino_context),
       boolToInt(input.is_protected),
+      input.minimum_amount_centavos ?? null,
       input.sort_order ?? 0,
       metadata,
       ts,

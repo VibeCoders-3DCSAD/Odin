@@ -43,6 +43,7 @@ const SYNCED_ENTITIES = new Set([
   "alert_suppression_rules",
   "savings_goals",
   "savings_goal_activities",
+  "savings_allocation_preferences",
 ]);
 
 const ALERT_PREFERENCE_CREATE_FIELDS = new Set(["category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until"]);
@@ -92,6 +93,7 @@ const SUBCATEGORY_CREATE_FIELDS = new Set([
   "description",
   "is_filipino_context",
   "is_protected",
+  "minimum_amount_centavos",
   "sort_order",
 ]);
 
@@ -102,6 +104,7 @@ const SUBCATEGORY_UPDATE_FIELDS = new Set([
   "description",
   "is_filipino_context",
   "is_protected",
+  "minimum_amount_centavos",
   "is_active",
 ]);
 
@@ -341,6 +344,7 @@ const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
 const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "status", "archived_at"]);
 const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes"]);
+const SAVINGS_ALLOCATION_PREFERENCE_FIELDS = new Set(["strategy"]);
 const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
 const SAVINGS_GOAL_PRIORITIES = ["low", "medium", "high"];
 const SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
@@ -571,6 +575,12 @@ async function validateCreatePayload(
     const { data: transaction, error: transactionError } = await supabase.from("transactions").select("id, transaction_type").eq("id", sanitized.transaction_id as string).eq("user_id", userId).eq("deleted", false).maybeSingle();
     if (transactionError) throw new Error(`savings transaction validation failed: ${transactionError.message}`);
     if (!transaction || transaction.transaction_type !== "transfer") throw new Error("savings activity requires an owned transfer transaction");
+    return sanitized;
+  }
+  if (entity === "savings_allocation_preferences") {
+    assertOnlyAllowed(payload, SAVINGS_ALLOCATION_PREFERENCE_FIELDS);
+    const sanitized = sanitizePayload(payload, SAVINGS_ALLOCATION_PREFERENCE_FIELDS);
+    if (sanitized.strategy !== "snowball" && sanitized.strategy !== "avalanche") throw new Error("strategy must be snowball or avalanche");
     return sanitized;
   }
   if (entity === "debt_strategy_preferences") {
@@ -946,6 +956,8 @@ async function validateTaxonomyCreatePayload(
     optionalString(sanitized, "short_label");
     optionalBoolean(sanitized, "is_filipino_context");
     optionalBoolean(sanitized, "is_protected");
+    optionalNumber(sanitized, "minimum_amount_centavos");
+    validateNonNegative(sanitized, ["minimum_amount_centavos"]);
     optionalNumber(sanitized, "sort_order");
 
     if (sanitized.kind === "expense") {
@@ -1143,6 +1155,8 @@ async function validateUpdatePayload(
     allowedFields = DEBT_ACCOUNT_FIELDS;
   } else if (entity === "savings_goals") {
     allowedFields = SAVINGS_GOAL_FIELDS;
+  } else if (entity === "savings_allocation_preferences") {
+    allowedFields = SAVINGS_ALLOCATION_PREFERENCE_FIELDS;
   } else if (entity === "debt_payments") {
     allowedFields = DEBT_PAYMENT_FIELDS;
   } else if (entity === "debt_strategy_preferences") {
@@ -1260,6 +1274,13 @@ async function validateUpdatePayload(
 
   if (entity === "savings_goals") {
     return validateSavingsGoalPayload(sanitized, false);
+  }
+
+  if (entity === "savings_allocation_preferences") {
+    if (sanitized.strategy !== "snowball" && sanitized.strategy !== "avalanche") {
+      throw new Error("strategy must be snowball or avalanche");
+    }
+    return sanitized;
   }
 
   if (entity === "credit_card_payments") {
@@ -1449,8 +1470,10 @@ async function validateUpdatePayload(
       continue;
     }
 
-    if (key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos") {
-      if (value !== null && typeof value !== "number") throw new Error(`${key} must be a number or null`);
+    if (key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "minimum_amount_centavos") {
+      if (value !== null && value !== undefined && (typeof value !== "number" || !Number.isInteger(value) || value < 0)) {
+        throw new Error(`${key} must be a non-negative integer or null`);
+      }
       continue;
     }
 

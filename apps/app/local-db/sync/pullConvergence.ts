@@ -3,6 +3,7 @@ import * as SQLite from "expo-sqlite";
 type PullRow = Record<string, unknown>;
 
 const TAXONOMY_TABLES = new Set(["category_groups", "categories", "subcategories"]);
+const LEGACY_TAXONOMY_GROUP_SLUGS = new Set(["essentials", "obligatory", "discretionary", "financial_allocation"]);
 export interface PullDb {
   getFirstAsync<T>(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<T | null>;
   runAsync(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<SQLite.SQLiteRunResult>;
@@ -42,6 +43,7 @@ export const SYNCED_TABLES = [
   "alert_suppression_rules",
   "savings_goals",
   "savings_goal_activities",
+  "savings_allocation_preferences",
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
@@ -58,7 +60,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   subcategories: new Set([
     "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "is_protected",
+    "description", "is_system", "is_filipino_context", "is_protected", "minimum_amount_centavos",
     "sort_order", "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
@@ -194,6 +196,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   alert_suppression_rules: new Set(["id", "user_id", "category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata", "version", "deleted", "updated_at"]),
   savings_goals: new Set(["id", "user_id", "name", "goal_type", "goal_category", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "archived_at", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   savings_goal_activities: new Set(["id", "user_id", "savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  savings_allocation_preferences: new Set(["user_id", "strategy", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -203,6 +206,7 @@ const PULL_IDENTITY_COLUMNS: Record<string, string> = {
   debt_strategy_preferences: "user_id",
   credit_card_statement_strategies: "statement_id",
   savings_account_details: "account_id",
+  savings_allocation_preferences: "user_id",
 };
 
 export function normalizePullRow(
@@ -277,6 +281,13 @@ export async function applyPullRow(
   const rowVersion = (row.version as number) ?? 1;
   const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
+
+  const taxonomySlug = typeof row.slug === "string" ? row.slug : "";
+  const isLegacyTaxonomy = table === "category_groups"
+    ? LEGACY_TAXONOMY_GROUP_SLUGS.has(taxonomySlug)
+    : TAXONOMY_TABLES.has(table)
+      && /^(essentials|obligatory|discretionary|financial)_/.test(taxonomySlug);
+  if (isLegacyTaxonomy) return;
 
   const existing = await db.getFirstAsync<{ version: number; user_id: string; statement_date?: string | null }>(
     `SELECT version, user_id${table === "credit_card_cycles" ? ", statement_date" : ""} FROM "${table}" WHERE ${identityWhere}`,

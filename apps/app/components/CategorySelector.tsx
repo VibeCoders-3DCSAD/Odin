@@ -180,7 +180,7 @@ export function CategorySelectorTree({ groups, categories, subcategories, select
         {uncategorizedSubcategories.map((sub) => renderSelectableRow({
           label: sub.label,
           selected: selection.subcategoryId === sub.id,
-          accented: sub.is_filipino_context,
+          accented: false,
           onPress: () => onSelect({ tier: "subcategory", groupId: null, categoryId: null, subcategoryId: sub.id }),
           id: sub.id,
         }))}
@@ -205,7 +205,7 @@ export function CategorySelectorTree({ groups, categories, subcategories, select
     return groupCategories.map((category) => renderSelectableRow({
       label: category.label,
       selected: selection.tier === "category" && selection.categoryId === category.id,
-      accented: category.is_filipino_context,
+      accented: false,
       onPress: () => onSelect({ tier: "category", groupId, categoryId: category.id, subcategoryId: null }),
       onCaretPress: () => setView({ level: "subcategories", groupId, categoryId: category.id }),
       id: category.id,
@@ -221,7 +221,7 @@ export function CategorySelectorTree({ groups, categories, subcategories, select
     return items.map((subcategory) => renderSelectableRow({
       label: subcategory.label,
       selected: selection.subcategoryId === subcategory.id,
-      accented: subcategory.is_filipino_context,
+      accented: false,
       onPress: () => onSelect({ tier: "subcategory", groupId, categoryId, subcategoryId: subcategory.id }),
       id: subcategory.id,
     }));

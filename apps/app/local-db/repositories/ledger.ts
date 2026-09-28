@@ -118,6 +118,7 @@ export type UpdateTransactionInput = {
 
 export type TransactionFilters = {
   transaction_type?: string;
+  category_id?: string;
   status?: string;
   from_date?: string;
   to_date?: string;
@@ -510,6 +511,10 @@ export async function listTransactions(
     }
     parts.push("AND t.transaction_type = ?");
     params.push(filters.transaction_type);
+  }
+  if (filters?.category_id) {
+    parts.push("AND EXISTS (SELECT 1 FROM subcategories category_filter WHERE category_filter.id = t.subcategory_id AND category_filter.category_id = ? AND category_filter.deleted = 0 AND (category_filter.user_id = t.user_id OR category_filter.is_system = 1))");
+    params.push(filters.category_id);
   }
   if (filters?.status) {
     if (!(VALID_STATUSES as readonly string[]).includes(filters.status)) {

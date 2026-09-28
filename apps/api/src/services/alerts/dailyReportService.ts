@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { anomalyConfig } from "./anomalyConfig.js";
+import { MlAlertProvider } from "./mlAlertProvider.js";
 
 export type ReportCadence = "daily" | "weekly";
 
@@ -17,22 +18,9 @@ export interface AnomalyModelAdapter {
   evaluate(input: { user_id: string; report_date: string; transactions: Record<string, unknown>[] }): Promise<ModelFinding[]>;
 }
 
-type Transaction = { id: string; amount_centavos: number; transaction_date: string; category_id: string | null; subcategory_id: string | null; merchant_name: string | null };
+type Transaction = { id: string; amount_centavos: number; transaction_date: string; transaction_type: "expense"; category_id: string | null; subcategory_id: string | null; merchant_name: string | null };
+type TransactionRow = Omit<Transaction, "category_id"> & { subcategories: Array<{ category_id: string }> };
 type Budget = { id: string; period_start: string; period_end: string; budget_allocations: Array<{ id: string; allocated_amount_centavos: number; category_id: string; subcategory_id: string | null }> };
-
-const disabledModel: AnomalyModelAdapter = {
-  version: "disabled",
-  async evaluate(input) {
-    return [{
-      candidate_key: `model:${input.report_date}`,
-      finding: "model_unavailable",
-      severity: null,
-      explanation: "No approved anomaly model is enabled.",
-      source_references: {},
-      anomaly_score: null,
-    }];
-  },
-};
 
 export function normalizeModelFindings(findings: ModelFinding[]): ModelFinding[] {
   return findings.map((finding) => {
@@ -56,14 +44,14 @@ export async function runDailyFinancialReport(
   userId: string,
   reportDate: string,
   cadence: ReportCadence,
-  model: AnomalyModelAdapter = disabledModel,
+  model: AnomalyModelAdapter = new MlAlertProvider(),
 ): Promise<{ report_id: string; evaluations: number; alerts: number }> {
   const periodStart = new Date(`${reportDate}T00:00:00.000Z`);
   periodStart.setUTCMonth(periodStart.getUTCMonth() - anomalyConfig.history.lookbackMonths);
   const [transactionResult, budgetResult] = await Promise.all([
     client
     .from("transactions")
-    .select("id, amount_centavos, transaction_date, category_id, subcategory_id, merchant_name")
+    .select("id, amount_centavos, transaction_date, transaction_type, subcategory_id, merchant_name, subcategories(category_id)")
     .eq("user_id", userId)
     .eq("status", "posted")
     .eq("deleted", false)
@@ -77,7 +65,10 @@ export async function runDailyFinancialReport(
   if (transactionResult.error) throw transactionResult.error;
   if (budgetResult.error) throw budgetResult.error;
 
-  const transactions = (transactionResult.data ?? []) as Transaction[];
+  const transactions = ((transactionResult.data ?? []) as TransactionRow[]).map(({ subcategories, ...transaction }) => ({
+    ...transaction,
+    category_id: subcategories[0]?.category_id ?? null,
+  }));
   const modelFindings = normalizeModelFindings(await model.evaluate({ user_id: userId, report_date: reportDate, transactions }));
   const findings = [...modelFindings, ...buildBudgetOverspendingFindings((budgetResult.data ?? []) as Budget[], transactions, reportDate)];
   const alerts = findings.filter((finding) => anomalyConfig.findings.createAlertsFor.includes(finding.finding as "unusual_transaction" | "budget_overspending")).map((finding) => ({
@@ -110,11 +101,12 @@ export async function retryDailyFinancialReport(
   userId: string,
   reportDate: string,
   cadence: ReportCadence,
+  model: AnomalyModelAdapter = new MlAlertProvider(),
 ): Promise<{ report_id: string; evaluations: number; alerts: number }> {
   let lastError: unknown;
   for (let attempt = 0; attempt < anomalyConfig.retries.maxAttempts; attempt += 1) {
     try {
-      return await runDailyFinancialReport(client, userId, reportDate, cadence);
+      return await runDailyFinancialReport(client, userId, reportDate, cadence, model);
     } catch (error) {
       lastError = error;
       const backoff = anomalyConfig.retries.backoffMs[attempt];
@@ -124,7 +116,7 @@ export async function retryDailyFinancialReport(
   throw lastError;
 }
 
-export async function recordDailyFinancialReportFailure(client: SupabaseClient, userId: string, reportDate: string, cadence: ReportCadence, reason: string): Promise<void> {
-  const { error } = await client.rpc("record_daily_financial_report_failure", { p_user_id: userId, p_report_date: reportDate, p_cadence: cadence, p_model_version: "disabled", p_failure_reason: reason.slice(0, 500) });
+export async function recordDailyFinancialReportFailure(client: SupabaseClient, userId: string, reportDate: string, cadence: ReportCadence, reason: string, modelVersion = new MlAlertProvider().version): Promise<void> {
+  const { error } = await client.rpc("record_daily_financial_report_failure", { p_user_id: userId, p_report_date: reportDate, p_cadence: cadence, p_model_version: modelVersion, p_failure_reason: reason.slice(0, 500) });
   if (error) throw error;
 }

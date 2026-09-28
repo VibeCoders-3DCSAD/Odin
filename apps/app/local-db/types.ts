@@ -18,6 +18,7 @@ export type SyncableEntity =
   | "budgets"
   | "savings_goals"
   | "savings_goal_activities"
+  | "savings_allocation_preferences"
   | "alert_notification_preferences"
   | "anomaly_whitelist_rules"
   | "alert_suppression_rules"

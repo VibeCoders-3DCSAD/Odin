@@ -2,11 +2,15 @@ export type DebtTrendRange = "month" | "year" | "payoff" | "all";
 
 export function currentDebtTrendWindow(range: DebtTrendRange, payoffDate?: string, today = new Date()): { start: string; end: string } {
   const philippineToday = getPhilippineToday(today);
-  const [year, month] = philippineToday.split("-").map(Number) as [number, number, number];
+  const [year, month, day] = philippineToday.split("-").map(Number) as [number, number, number];
   if (range === "payoff") return { start: philippineToday, end: payoffDate ?? philippineToday };
-  const start = range === "year" ? `${year}-01-01` : `${year}-${String(month).padStart(2, "0")}-01`;
-  const lastDay = range === "year" ? 31 : new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const end = range === "year" ? `${year}-12-31` : `${year}-${String(month).padStart(2, "0")}-${lastDay}`;
+  if (range === "year") {
+    const lastDayNextYear = new Date(Date.UTC(year + 1, month, 0)).getUTCDate();
+    return { start: philippineToday, end: `${year + 1}-${String(month).padStart(2, "0")}-${String(Math.min(day, lastDayNextYear)).padStart(2, "0")}` };
+  }
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const end = `${year}-${String(month).padStart(2, "0")}-${lastDay}`;
   return { start, end };
 }
 

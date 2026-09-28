@@ -7,7 +7,7 @@ import { requestForecast } from "../../forecast/api";
 import { loadBudgetRecommendationContext } from "../recommendationContext";
 
 const history = [{ transactionId: "b9df3d82-b64a-4b25-b8aa-dd36f70a42be", date: "2026-09-04", amount: 245.5, category: "Essentials", transactionType: "expense" as const, description: "do not forward" }];
-const forecast = { forecasts: [{ date: "2026-10-01", amountCentavos: 12_345, category: "Essentials" }], forecastHorizon: "MONTHLY" as const, forecastLevel: "CATEGORY_GROUP" as const, confidenceInterval: { lower80Centavos: 10_000, upper80Centavos: 14_000, lower95Centavos: 9_000, upper95Centavos: 15_000 }, modelVersion: "v1", status: "SUCCESS" as const };
+const forecast = { forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 12_345, userBaselineCentavos: 10_000, hfceMultiplier: 1.2, hfceForecastAmountMillionPhp: 1_234, explanation: "Personalized food forecast." }], modelVersion: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" as const };
 
 describe("budget recommendation context", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -15,7 +15,7 @@ describe("budget recommendation context", () => {
   it("uses posted history and a successful category-group forecast", async () => {
     (listForecastTransactions as jest.Mock).mockResolvedValue(history);
     (requestForecast as jest.Mock).mockResolvedValue({ response: { ok: true }, body: { payload: forecast } });
-    await expect(loadBudgetRecommendationContext({ userId: "user-1", accessToken: "token" })).resolves.toEqual({ historicalTransactions: [{ transactionId: history[0]!.transactionId, date: history[0]!.date, amount: history[0]!.amount, category: history[0]!.category, transactionType: "expense" }], forecast: expect.objectContaining({ version: 1 }) });
+    await expect(loadBudgetRecommendationContext({ userId: "user-1", accessToken: "token" })).resolves.toEqual({ historicalTransactions: [{ transactionId: history[0]!.transactionId, date: history[0]!.date, amount: history[0]!.amount, category: history[0]!.category, transactionType: "expense" }] });
     expect(listForecastTransactions).toHaveBeenCalledWith("user-1", expect.objectContaining({ fromDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }));
     expect(requestForecast).toHaveBeenCalledWith("token", expect.objectContaining({ historicalTransactions: [{ transactionId: history[0]!.transactionId, date: history[0]!.date, amount: history[0]!.amount, category: history[0]!.category, transactionType: "expense" }] }), undefined);
   });

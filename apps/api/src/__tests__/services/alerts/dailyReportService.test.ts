@@ -1,4 +1,4 @@
-import { buildBudgetOverspendingFindings, normalizeModelFindings } from "../../../services/alerts/dailyReportService";
+import { buildBudgetOverspendingFindings, normalizeModelFindings, runDailyFinancialReport } from "../../../services/alerts/dailyReportService";
 
 describe("daily report findings", () => {
   it("maps qualifying model scores to configured severity", () => {
@@ -10,5 +10,35 @@ describe("daily report findings", () => {
     const budgets = [{ id: "budget-1", period_start: "2026-09-01", period_end: "2026-09-30", budget_allocations: [{ id: "allocation-1", allocated_amount_centavos: 1_000, category_id: "category-1", subcategory_id: null }] }];
     const findings = buildBudgetOverspendingFindings(budgets, [{ id: "tx-1", amount_centavos: 1_250, transaction_date: "2026-09-10", category_id: "category-1", subcategory_id: null, merchant_name: null }], "2026-09-10");
     expect(findings).toMatchObject([{ finding: "budget_overspending", severity: "critical" }]);
+  });
+
+  it("gets transaction categories from the subcategory relation", async () => {
+    let transactionSelect = "";
+    let transactionStartDate = "";
+    const transactions = {
+      select: (columns: string) => { transactionSelect = columns; return transactions; },
+      eq: () => transactions,
+      gte: (_column: string, value: string) => { transactionStartDate = value; return transactions; },
+      lte: () => transactions,
+      order: () => transactions,
+      limit: async () => ({ data: [], error: null }),
+    };
+    const budgets = {
+      select: () => budgets,
+      eq: () => budgets,
+      lte: () => budgets,
+      gte: () => budgets,
+      limit: async () => ({ data: [], error: null }),
+    };
+    const client = {
+      from: (table: string) => table === "transactions" ? transactions : budgets,
+      rpc: async () => ({ data: [{ report_id: "report-1", evaluations: 0, alerts: 0 }], error: null }),
+    } as never;
+
+    await runDailyFinancialReport(client, "user-1", "2026-09-23", "daily", { version: "test", evaluate: async () => [] });
+
+    expect(transactionSelect).toContain("subcategories(category_id)");
+    expect(transactionSelect).not.toContain(", category_id,");
+    expect(transactionStartDate).toBe("2025-09-23");
   });
 });

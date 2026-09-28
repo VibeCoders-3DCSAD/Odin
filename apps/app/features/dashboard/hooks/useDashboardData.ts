@@ -49,8 +49,6 @@ export async function refreshDashboardData(userId: string, deviceId: string, acc
       if (historicalTransactions.length > 0) {
         const forecast = await requestForecast(accessToken, {
           historicalTransactions,
-          forecastHorizon: "MONTHLY",
-          forecastLevel: "TOTAL",
         });
         if (forecast.response.ok && forecast.body.payload) {
           await upsertSnapshot(userId, "forecast", forecast.body.payload);

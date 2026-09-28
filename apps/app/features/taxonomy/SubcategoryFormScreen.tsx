@@ -20,8 +20,8 @@ type SubcategoryFormScreenProps = {
     slug: string;
     label: string;
     description: string;
-    is_filipino_context: boolean;
     is_protected: boolean;
+    minimum_amount_centavos: number | null;
   };
   categoryId: string;
   categoryLabel: string;
@@ -56,7 +56,7 @@ export default function SubcategoryFormScreen({
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [isProtected, setIsProtected] = useState(false);
-  const [isFilipinoContext, setIsFilipinoContext] = useState(false);
+  const [minimumAmount, setMinimumAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -66,7 +66,7 @@ export default function SubcategoryFormScreen({
       setSlug(subcategory ? generateSlug(subcategory.label) : "");
       setDescription(subcategory?.description ?? "");
       setIsProtected(subcategory?.is_protected ?? false);
-      setIsFilipinoContext(subcategory?.is_filipino_context ?? false);
+      setMinimumAmount(subcategory?.minimum_amount_centavos != null ? (subcategory.minimum_amount_centavos / 100).toFixed(2) : "");
       setFormError(null);
     }
   }, [visible, mode, subcategory?.id]);
@@ -81,6 +81,12 @@ export default function SubcategoryFormScreen({
     setFormError(null);
     if (!label.trim()) { setFormError("Label is required"); return; }
     if (!description.trim()) { setFormError("Description is required"); return; }
+    const normalizedMinimum = minimumAmount.trim();
+    if (isProtected && !/^\d+(\.\d{1,2})?$/.test(normalizedMinimum)) {
+      setFormError("Minimum must be a valid peso amount");
+      return;
+    }
+    const minimumAmountCentavos = isProtected ? Math.round(Number(normalizedMinimum) * 100) : null;
 
     setSaving(true);
     try {
@@ -92,7 +98,7 @@ export default function SubcategoryFormScreen({
           label: label.trim(),
           description: description.trim(),
           is_protected: isProtected,
-          is_filipino_context: isFilipinoContext,
+          minimum_amount_centavos: minimumAmountCentavos,
         });
       } else {
         await updateSubcategory(userId, deviceId, subcategory!.id, {
@@ -100,7 +106,7 @@ export default function SubcategoryFormScreen({
           slug: slug.trim() || generateSlug(label.trim()),
           description: description.trim(),
           is_protected: isProtected,
-          is_filipino_context: isFilipinoContext,
+          minimum_amount_centavos: minimumAmountCentavos,
         });
       }
       onSaved();
@@ -189,32 +195,26 @@ export default function SubcategoryFormScreen({
                       }} />
                     </Pressable>
                     <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.ink2 }}>
-                      Protected (restricts spending)
+                      Protected
                     </Text>
                   </View>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <Pressable
-                      onPress={() => setIsFilipinoContext(!isFilipinoContext)}
-                      accessibilityRole="switch"
-                      accessibilityLabel="Filipino context"
-                      accessibilityState={{ checked: isFilipinoContext }}
-                      style={{
-                        width: 44, height: 26, borderRadius: 100,
-                        backgroundColor: isFilipinoContext ? palette.aqua600 : palette.line,
-                        position: "relative",
-                      }}
-                    >
-                      <View style={{
-                        position: "absolute", top: 3,
-                        [isFilipinoContext ? "right" : "left"]: 3,
-                        width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
-                      }} />
-                    </Pressable>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.ink2 }}>
-                      Filipino context (localized spending tags)
-                    </Text>
-                  </View>
+                  {isProtected && (
+                    <View>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
+                        MINIMUM (PHP) <Text style={{color: palette.error}}>*</Text>
+                      </Text>
+                      <TextInput
+                        value={minimumAmount}
+                        onChangeText={setMinimumAmount}
+                        placeholder="0.00"
+                        placeholderTextColor={palette.mut}
+                        keyboardType="decimal-pad"
+                        accessibilityLabel="Minimum amount in pesos"
+                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+                      />
+                    </View>
+                  )}
 
                   {formError && (
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error }}>{formError}</Text>

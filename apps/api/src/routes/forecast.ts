@@ -9,7 +9,7 @@ const router = Router();
 router.post("/", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   try {
     const forecastRequest = parseForecastRequest(request.body);
-    const payload = await getMlForecast(request.userId!, forecastRequest);
+    const payload = await getMlForecast(request.userId!, forecastRequest, request.supabase!);
     response.status(200).json({ payload });
   } catch (error) {
     if (error instanceof ForecastValidationError) {
@@ -23,6 +23,11 @@ router.post("/", requireAuth, async (request: AuthenticatedRequest, response: Re
       transaction_count: Array.isArray(request.body?.historicalTransactions) ? request.body.historicalTransactions.length : 0,
       http_status: status,
       error_class: error instanceof Error ? error.constructor.name : "UnknownError",
+      error_message: error instanceof Error ? error.message : "Unknown forecast failure",
+      failure_stage: error instanceof ForecastUpstreamError ? error.failureStage : "unknown",
+      cause: error instanceof Error && error.cause instanceof Error
+        ? { name: error.cause.name, message: error.cause.message }
+        : undefined,
     });
     response.status(status === 422 ? 422 : status >= 500 ? 503 : 502).json({
       error: "Service Unavailable",

@@ -4,6 +4,7 @@ import {
   INCOME_PATTERNS,
   OBLIGATION_LOADS,
 } from "./constants.js";
+import { trustedMlHeaders } from "./mlInferenceGateway.js";
 
 export type PfpQuestionnaireFailureReason = "not_configured" | "timeout" | "network_error" | "http_error" | "invalid_response";
 
@@ -34,15 +35,18 @@ export async function classifyPfpQuestionnaire(userId: string, answers: Record<s
   const baseUrl = process.env.ML_SERVICE_URL?.replace(/\/$/, "");
   const questionnaireAnswers = questionnairePayload(answers);
   if (!baseUrl || !questionnaireAnswers) return { ok: false, reason: "not_configured" };
+  const requestBody = JSON.stringify({ user_id: userId, classification_mode: "QUESTIONNAIRE", payload: { questionnaire_answers: questionnaireAnswers } });
+  const headers = trustedMlHeaders(userId, requestBody);
+  if (!headers) return { ok: false, reason: "not_configured" };
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
     const response = await fetch(`${baseUrl}/api/v1/pfp/classify`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       signal: controller.signal,
-      body: JSON.stringify({ user_id: userId, classification_mode: "QUESTIONNAIRE", payload: { questionnaire_answers: questionnaireAnswers } }),
+      body: requestBody,
     });
     if (!response.ok) return { ok: false, reason: "http_error" };
     const body: unknown = await response.json();

@@ -13,7 +13,7 @@ type ForecastTransactionRow = {
   merchant_name: string | null;
   counterparty_name: string | null;
   notes: string | null;
-  category_group_label: string | null;
+  category_slug: string | null;
 };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -43,17 +43,15 @@ export async function listForecastTransactions(userId: string, { fromDate }: Lis
   const db = await getDb();
   const fromDateClause = fromDate ? " AND t.transaction_date >= ?" : "";
   const rows = await db.getAllAsync<ForecastTransactionRow>(
-    `SELECT MIN(t.id) AS id, t.transaction_date, SUM(t.amount_centavos) AS amount_centavos, t.transaction_type, MAX(t.created_at) AS created_at,
-            MIN(t.merchant_name) AS merchant_name, MIN(t.counterparty_name) AS counterparty_name, MIN(t.notes) AS notes,
-            COALESCE(g.label, 'Other') AS category_group_label
+    `SELECT t.id, t.transaction_date, t.amount_centavos, t.transaction_type, t.created_at,
+            t.merchant_name, t.counterparty_name, t.notes,
+            COALESCE(c.slug, 'Other') AS category_slug
        FROM transactions t
        LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
        LEFT JOIN categories c ON c.id = s.category_id AND c.deleted = 0
-       LEFT JOIN category_groups g ON g.id = c.category_group_id AND g.deleted = 0
-        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'${fromDateClause}
+       WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'${fromDateClause}
           AND t.transaction_type IN ('income', 'expense')
-       GROUP BY t.transaction_date, t.transaction_type, COALESCE(g.label, 'Other')
-        ORDER BY t.transaction_date DESC, t.created_at DESC
+       ORDER BY t.transaction_date DESC, t.created_at DESC
        LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
     ...(fromDate ? [userId, fromDate] : [userId]),
   );
@@ -64,7 +62,7 @@ export async function listForecastTransactions(userId: string, { fromDate }: Lis
       transactionId: row.id,
       date: row.transaction_date,
       amount: row.amount_centavos / 100,
-      category: row.category_group_label?.trim() || "Other",
+      category: row.category_slug?.trim() || "Other",
       transactionType: row.transaction_type,
       ...(conciseDescription ? { description: conciseDescription } : {}),
     }];

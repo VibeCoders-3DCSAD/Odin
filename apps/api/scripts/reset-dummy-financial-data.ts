@@ -3,8 +3,10 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
+dotenv.config({ path: fileURLToPath(new URL("../.env.local", import.meta.url)), override: true });
 
-const seedMarker = "dummy-financial-data-v1";
+const seedMarker = "dummy-financial-data";
+const legacySeedMarker = "dummy-financial-data-v1";
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -31,30 +33,54 @@ async function main() {
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
 
   const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-  const [{ data: transactions, error: transactionsError }, { data: accounts, error: accountsError }] = await Promise.all([
-    supabase.from("transactions").select("id", { count: "exact" }).eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
-    supabase.from("financial_accounts").select("id", { count: "exact" }).eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
+  const [{ data: transactions, error: transactionsError }, { data: accounts, error: accountsError }, { data: budgets, error: budgetsError }, { data: goals, error: goalsError }, { data: debts, error: debtsError }] = await Promise.all([
+    supabase.from("transactions").select("id", { count: "exact" }).eq("user_id", userId).or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`),
+    supabase.from("financial_accounts").select("id", { count: "exact" }).eq("user_id", userId).or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`),
+    supabase.from("budgets").select("id", { count: "exact" }).eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
+    supabase.from("savings_goals").select("id", { count: "exact" }).eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
+    supabase.from("debt_accounts").select("id", { count: "exact" }).eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
   ]);
   if (transactionsError) throw transactionsError;
   if (accountsError) throw accountsError;
+  if (budgetsError) throw budgetsError;
+  if (goalsError) throw goalsError;
+  if (debtsError) throw debtsError;
 
   const transactionCount = transactions.length;
   const accountCount = accounts.length;
-  console.log(`Found ${accountCount} dummy accounts and ${transactionCount} dummy transactions for ${userId}.`);
-  if (dryRun || (accountCount === 0 && transactionCount === 0)) return;
+  const budgetIds = (budgets ?? []).map((budget) => budget.id);
+  const goalIds = (goals ?? []).map((goal) => goal.id);
+  const debtIds = (debts ?? []).map((debt) => debt.id);
+  console.log(`Found ${accountCount} dummy accounts, ${transactionCount} dummy transactions, ${budgetIds.length} budgets, ${goalIds.length} savings goals, and ${debtIds.length} debts for ${userId}.`);
+  if (dryRun || (accountCount === 0 && transactionCount === 0 && budgetIds.length === 0 && goalIds.length === 0 && debtIds.length === 0)) return;
+
+  if (goalIds.length > 0) {
+    const { error } = await supabase
+      .from("savings_goal_activities")
+      .delete()
+      .eq("user_id", userId)
+      .in("savings_goal_id", goalIds);
+    if (error) throw error;
+  }
+
+  for (const [table, ids] of [["budgets", budgetIds], ["savings_goals", goalIds], ["debt_accounts", debtIds]] as const) {
+    if (ids.length === 0) continue;
+    const { error } = await supabase.from(table).delete().eq("user_id", userId).in("id", ids);
+    if (error) throw error;
+  }
 
   const { error: deleteTransactionsError } = await supabase
     .from("transactions")
     .delete()
     .eq("user_id", userId)
-    .contains("metadata", { dummy_data_source: seedMarker });
+    .or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`);
   if (deleteTransactionsError) throw deleteTransactionsError;
 
   const { error: deleteAccountsError } = await supabase
     .from("financial_accounts")
     .delete()
     .eq("user_id", userId)
-    .contains("metadata", { dummy_data_source: seedMarker });
+    .or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`);
   if (deleteAccountsError) throw deleteAccountsError;
   console.log(`Removed dummy financial data for ${userId}.`);
 }

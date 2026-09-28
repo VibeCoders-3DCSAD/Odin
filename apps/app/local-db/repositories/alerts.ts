@@ -74,7 +74,7 @@ const UPSERT = `INSERT INTO alert_cache
   (id, user_id, category, severity, status, title, body, explanation, action_label,
    route_name, route_params_json, related_entities_json, metadata_json, allowed_actions_json, remote_revision,
    triggered_at, read_at, acknowledged_at, dismissed_at, remind_at, expires_at, cached_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     user_id = excluded.user_id, category = excluded.category, severity = excluded.severity,
     status = excluded.status, title = excluded.title, body = excluded.body,

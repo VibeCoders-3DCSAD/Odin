@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ActivityIndicator,
   Modal,
@@ -11,6 +12,7 @@ import {
 import { Funnel } from "phosphor-react-native";
 import { listTransactions, getTransaction, deleteTransaction, type TransactionFilters, type TransactionListItem } from "../../local-db/repositories/ledger";
 import { getCreditCardPurchaseMetadataForTransaction } from "../../local-db/repositories/creditCardInstallments";
+import { listCategories, type Category } from "../../local-db/repositories/taxonomy";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import KebabTooltip from "../../components/KebabTooltip";
@@ -42,7 +44,7 @@ const SORT_OPTIONS = [
 
 const FILTER_TYPES = ["all", "income", "expense", "transfer"] as const;
 
-const DATE_RANGES = ["all", "week", "month", "year"] as const;
+const DATE_RANGES = ["all", "week", "month", "year", "custom"] as const;
 
 type Props = {
   userId: string;
@@ -62,10 +64,15 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<string>("transaction_date");
   const [sortDir, setSortDir] = useState<string>("desc");
   const [dateRange, setDateRange] = useState<string>("all");
+  const [customFromDate, setCustomFromDate] = useState<string | null>(null);
+  const [customToDate, setCustomToDate] = useState<string | null>(null);
+  const [datePickerField, setDatePickerField] = useState<"from" | "to" | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [editTarget, setEditTarget] = useState<Transaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
@@ -83,6 +90,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       offset,
     };
     if (typeFilter !== "all") filters.transaction_type = typeFilter;
+    if (categoryFilter !== "all") filters.category_id = categoryFilter;
     if (search.trim()) filters.search = search.trim();
     if (dateRange === "week") {
       const d = new Date();
@@ -96,6 +104,9 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       const d = new Date();
       d.setFullYear(d.getFullYear() - 1);
       filters.from_date = d.toISOString().split("T")[0]!;
+    } else if (dateRange === "custom" && customFromDate && customToDate) {
+      filters.from_date = customFromDate;
+      filters.to_date = customToDate;
     }
     return filters;
   }
@@ -122,7 +133,15 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
 
   useEffect(() => {
     load();
-  }, [typeFilter, sortBy, sortDir, dateRange]);
+  }, [typeFilter, categoryFilter, sortBy, sortDir, dateRange, customFromDate, customToDate]);
+
+  useEffect(() => {
+    let active = true;
+    listCategories(userId)
+      .then((rows) => { if (active) setCategories(rows); })
+      .catch(() => { if (active) setCategories([]); });
+    return () => { active = false; };
+  }, [userId]);
 
   function loadMore() {
     if (loading || !hasMore || loadingMoreRef.current) return;
@@ -238,10 +257,22 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (typeFilter !== "all") count++;
-    if (dateRange !== "all") count++;
+    if (categoryFilter !== "all") count++;
+    if (dateRange !== "all" && (dateRange !== "custom" || (customFromDate && customToDate))) count++;
     if (sortBy !== "transaction_date" || sortDir !== "desc") count++;
     return count;
-  }, [typeFilter, dateRange, sortBy, sortDir]);
+  }, [typeFilter, categoryFilter, dateRange, customFromDate, customToDate, sortBy, sortDir]);
+
+  function formatIsoDate(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  function selectCustomDate(field: "from" | "to", date?: Date) {
+    setDatePickerField(null);
+    if (!date) return;
+    if (field === "from") setCustomFromDate(formatIsoDate(date));
+    else setCustomToDate(formatIsoDate(date));
+  }
 
   const filterActive = showFilters || activeFilterCount > 0;
 
@@ -430,6 +461,39 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
             </ScrollView>
 
             <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
+              Category
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
+              <Pressable
+                onPress={() => setCategoryFilter("all")}
+                style={{
+                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                  backgroundColor: categoryFilter === "all" ? palette.brand : palette.card,
+                  borderWidth: 1, borderColor: categoryFilter === "all" ? palette.brand : palette.line,
+                }}
+              >
+                <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: categoryFilter === "all" ? "#fff" : palette.ink2 }}>
+                  All categories
+                </Text>
+              </Pressable>
+              {categories.map((category) => (
+                <Pressable
+                  key={category.id}
+                  onPress={() => setCategoryFilter(category.id)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                    backgroundColor: categoryFilter === category.id ? palette.brand : palette.card,
+                    borderWidth: 1, borderColor: categoryFilter === category.id ? palette.brand : palette.line,
+                  }}
+                >
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: categoryFilter === category.id ? "#fff" : palette.ink2 }}>
+                    {category.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
               Date Range
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
@@ -448,11 +512,35 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                     fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
                     color: dateRange === r ? "#fff" : palette.ink2,
                   }}>
-                    {r === "all" ? "Any time" : r === "week" ? "This week" : r === "month" ? "This month" : "This year"}
+                    {r === "all" ? "Any time" : r === "week" ? "This week" : r === "month" ? "This month" : r === "year" ? "This year" : "Custom"}
                   </Text>
                 </Pressable>
               ))}
             </ScrollView>
+            {dateRange === "custom" ? (
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+                {(["from", "to"] as const).map((field) => {
+                  const value = field === "from" ? customFromDate : customToDate;
+                  return (
+                    <Pressable
+                      key={field}
+                      onPress={() => setDatePickerField(field)}
+                      style={{ flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.card, justifyContent: "center", paddingHorizontal: 12 }}
+                    >
+                      <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut }}>{field === "from" ? "From" : "To"}</Text>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: value ? palette.ink : palette.mut, marginTop: 2 }}>{value ?? "Select date"}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+            {datePickerField ? (
+              <DateTimePicker
+                value={new Date(`${(datePickerField === "from" ? customFromDate : customToDate) ?? formatIsoDate(new Date())}T12:00:00`)}
+                mode="date"
+                onChange={(_event, date) => selectCustomDate(datePickerField, date)}
+              />
+            ) : null}
 
             <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
               Sort By
@@ -491,7 +579,10 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               <Pressable
                 onPress={() => {
                   setTypeFilter("all");
+                  setCategoryFilter("all");
                   setDateRange("all");
+                  setCustomFromDate(null);
+                  setCustomToDate(null);
                   setSortBy("transaction_date");
                   setSortDir("desc");
                 }}
@@ -505,7 +596,17 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => setShowFilters(false)}
+                onPress={() => {
+                  if (dateRange === "custom" && (!customFromDate || !customToDate)) {
+                    showToast("Choose both a start and end date", "danger");
+                    return;
+                  }
+                  if (customFromDate && customToDate && customFromDate > customToDate) {
+                    showToast("Start date must be before end date", "danger");
+                    return;
+                  }
+                  setShowFilters(false);
+                }}
                 style={{
                   flex: 1, minHeight: 48, borderRadius: 14, backgroundColor: palette.brand,
                   alignItems: "center", justifyContent: "center",

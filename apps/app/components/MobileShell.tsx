@@ -27,7 +27,7 @@ import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen"
 import FinancialObligationsScreen from "../features/financial-obligations/FinancialObligationsScreen";
 import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../features/recurring-transactions/RecurringTransactionsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
-import SpendingForecastScreen from "../features/forecast/SpendingForecastScreen";
+import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import BudgetingScreen from "../features/budgeting/BudgetingScreen";
 import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
@@ -74,10 +74,10 @@ type Page =
   | "dashboard"
   | "transactions"
   | "history"
-  | "spending-forecast"
+  | "financial-reports"
   | "budget-advice"
   | "budgeting"
-   | "savings-goals"
+    | "savings-goals"
   | "insurance"
   | "assistant"
   | "add-transaction"
@@ -176,7 +176,7 @@ const drawerSections: DrawerSection[] = [
   {
     label: "Intelligence",
     items: [
-      { page: "spending-forecast", icon: "chart-timeline-variant", label: "Spending Forecast" },
+      { page: "financial-reports", icon: "file-chart-outline", label: "Financial Reports" },
       { page: "budget-advice", icon: "message-text-outline", label: "Budget Advice" },
     ],
   },
@@ -194,7 +194,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   transactions: { title: "Transactions", subtitle: "Your transaction history" },
   "recurring-transactions": { title: "Recurring Transactions", subtitle: "Manage recurring templates" },
   history: { title: "History", subtitle: "Past activity" },
-  "spending-forecast": { title: "Spending Forecast", subtitle: "Predictive insights" },
+  "financial-reports": { title: "Financial Reports", subtitle: "Financial outlook and alerts" },
   "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
   budgeting: { title: "Budgeting", subtitle: "Plan your money" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
@@ -224,7 +224,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
-  const [savingsActivityContext, setSavingsActivityContext] = useState<{ savingsGoalId: string; kind: "contribution" | "withdrawal" } | null>(null);
+  const [savingsActivityContext, setSavingsActivityContext] = useState<{ savingsGoalId: string; kind: "contribution" | "withdrawal"; amountCentavos?: number } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -852,15 +852,16 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       return <SavingsGoalsScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onRecordActivity={(savingsGoalId, kind) => { setSavingsActivityContext({ savingsGoalId, kind }); setTransactionToEdit(null); setStatementPaymentContext(null); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }} onOpenTransaction={(transactionId) => { getTransaction(userId, transactionId).then((transaction) => { if (!transaction) return; setSavingsActivityContext(null); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }).catch(() => {}); }} />;
     }
 
+
     if (currentPage === "dashboard") {
       return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNavigate={setCurrentPage as (page: string) => void} />;
     }
 
-    if (currentPage === "spending-forecast") {
-      return <SpendingForecastScreen userId={userId} accessToken={accessToken} onBack={() => setCurrentPage("dashboard")} />;
+    if (currentPage === "financial-reports") {
+      return <FinancialReportsScreen userId={userId} accessToken={accessToken} />;
     }
 
-    const meta = pageMeta[currentPage];
+    const meta = pageMeta[currentPage] ?? pageMeta.dashboard;
     return <ShellPlaceholderPage title={meta.title} subtitle={meta.subtitle} />;
   }
 
