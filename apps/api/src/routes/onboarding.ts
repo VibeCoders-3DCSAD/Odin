@@ -2,8 +2,7 @@ import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
-import { EMERGENCY_RUNWAYS, INCOME_PATTERNS, OBLIGATION_LOADS, ONBOARDING_ERRORS, VALID_EMPLOYMENT_CLASSIFICATIONS, VALID_METRO_MANILA_PRESENCE } from "../lib/constants.js";
-import { classifyPfpQuestionnaire } from "../lib/mlClient.js";
+import { ONBOARDING_ERRORS, VALID_EMPLOYMENT_CLASSIFICATIONS, VALID_METRO_MANILA_PRESENCE } from "../lib/constants.js";
 import { getServiceRoleClient } from "../lib/supabase.js";
 
 const router = Router();
@@ -11,7 +10,7 @@ const router = Router();
 const ONBOARDING_ANSWER_KEYS = new Set([
   "display_name", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
   "primary_employment_classification", "employment_status", "monthly_income",
-  "income_pattern", "obligation_load", "emergency_runway", "protected_categories", "has_dependents",
+  "protected_categories", "has_dependents",
 ]);
 
 const ARRAY_ANSWER_KEYS = new Set(["protected_categories"]);
@@ -21,9 +20,6 @@ const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   metro_manila_presence: VALID_METRO_MANILA_PRESENCE,
   primary_employment_classification: VALID_EMPLOYMENT_CLASSIFICATIONS,
   employment_status: ["employed_full_time", "employed_part_time", "self_employed", "unemployed", "retired", "student"],
-  income_pattern: INCOME_PATTERNS,
-  obligation_load: OBLIGATION_LOADS,
-  emergency_runway: EMERGENCY_RUNWAYS,
   protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
 };
 
@@ -310,9 +306,6 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     "primary_employment_classification",
     "employment_status",
     "monthly_income",
-    "income_pattern",
-    "obligation_load",
-    "emergency_runway",
     "protected_categories",
   ];
   const missing = requiredFields.filter((f) => {
@@ -357,31 +350,15 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     response.status(400).json({ error: "Bad Request", message: "monthly_income must be a non-negative whole number." });
     return;
   }
-  if (typeof rawAnswers.monthly_income === "string" && typeof rawAnswers.income_pattern === "string") {
-    const isZeroIncome = rawAnswers.monthly_income === "0";
-    if ((isZeroIncome && rawAnswers.income_pattern !== "no_current_income")
-      || (!isZeroIncome && rawAnswers.income_pattern === "no_current_income")) {
-      response.status(400).json({ error: "Bad Request", message: "monthly_income and income_pattern must agree about current income." });
-      return;
-    }
-  }
   if (typeof rawAnswers.primary_employment_classification === "string" && !VALID_EMPLOYMENT_CLASSIFICATIONS.includes(rawAnswers.primary_employment_classification)) {
     response.status(400).json({ error: "Bad Request", message: `Invalid primary_employment_classification. Must be one of: ${VALID_EMPLOYMENT_CLASSIFICATIONS.join(", ")}.` });
     return;
   }
 
-  const classification = await classifyPfpQuestionnaire(userId, rawAnswers);
-  if (!classification.ok) {
-    console.warn("PFP questionnaire classifier unavailable", { user_id: userId, session_id: sessionId, reason: classification.reason });
-  }
   const { data: result, error: rpcError } = await getServiceRoleClient()
-    .rpc("submit_onboarding_session_with_classification", {
+    .rpc("submit_onboarding_session_v2", {
       p_session_id: sessionId,
       p_user_id: userId,
-      p_profile_label: classification.ok ? classification.classification.prediction : null,
-      p_confidence_score: classification.ok ? classification.classification.confidence : null,
-      p_model_kind: classification.ok ? classification.classification.modelName : null,
-      p_model_version: classification.ok ? classification.classification.modelVersion : null,
     });
 
   if (rpcError) {
@@ -401,13 +378,10 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     return;
   }
 
-  const rpcResult = result as { assessment_id: string; assignment_id: string; profile_label: string } | undefined;
-
   response.status(200).json({
     payload: {
       session: { id: sessionId, status: "submitted" },
-      assessment: { id: rpcResult?.assessment_id, proposed_profile_label: rpcResult?.profile_label },
-      assignment: { id: rpcResult?.assignment_id, profile_label: rpcResult?.profile_label, confirmation_required: true },
+      classification_available: false,
     },
   });
 });

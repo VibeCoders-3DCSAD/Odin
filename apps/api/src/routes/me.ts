@@ -107,30 +107,6 @@ router.get("/", requireAuth, async (request: AuthenticatedRequest, response: Res
     payload.consents = consents ?? [];
   }
 
-  if (includeFields.has("assignment")) {
-    const { data: assignment, error: assignmentError } = await authenticatedSupabase
-      .from("financial_profile_assignments")
-      .select("profile_label, confirmed_at")
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .single();
-
-    if (assignmentError && assignmentError.code !== "PGRST116") {
-      response.status(500).json({
-        error: "Internal Server Error",
-        message: "Failed to fetch active profile assignment",
-      });
-      return;
-    }
-
-    payload.current_profile = assignment
-      ? {
-          profile_label: assignment.profile_label,
-          confirmed: assignment.confirmed_at !== null,
-        }
-      : null;
-  }
-
   response.status(200).json({
     payload,
   });

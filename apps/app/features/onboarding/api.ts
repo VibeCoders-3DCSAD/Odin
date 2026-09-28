@@ -60,8 +60,7 @@ export function submitSession(accessToken: string, sessionId: string) {
   return apiFetch<{
     payload?: {
       session: { id: string; status: string };
-      assessment: { id: string; proposed_profile_label: string };
-      assignment: { id: string; profile_label: string; confirmation_required: boolean };
+      classification_available: boolean;
     };
     error?: string;
     message?: string;

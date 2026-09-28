@@ -11,6 +11,7 @@ import { DashboardEmptyState } from "./components/DashboardEmptyState";
 import { DashboardPartialData } from "./components/DashboardPartialData";
 import { SpendingPie, TrendChart } from "./components/DashboardCharts";
 import { ForecastPanel } from "./components/ForecastPanel";
+import { FinancialHealthCard } from "./components/FinancialHealthCard";
 import { getBudgetContent, getForecastContent, getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
 import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getPreviousMonthName } from "./dashboardFormatting";
 import { useDashboardData } from "./hooks/useDashboardData";
@@ -164,6 +165,8 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
       <View style={{ flexDirection: "row", gap: 11, marginTop: 14 }}>
         <SnapshotCard title="Savings goals" stale={staleSnapshot(savingsSnap)} unavailable={savingsUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("savings-goals")} actionLabel={!savingsSnap || savingsCount === 0 ? "Create a goal" : undefined} copy={savingsText ?? (savingsUnavailable ? "Savings goal information is unavailable." : !savingsSnap || savingsCount === 0 ? "No savings goals yet. Create one when you're ready." : savingsCount === null ? "Savings goal summary is unavailable. Refresh to try again." : `${savingsCount} savings goal${savingsCount === 1 ? "" : "s"} in progress${savingsCentavos === null ? "." : ` · ${formatPeso(savingsCentavos)} saved.`}`)} />
       </View>
+
+      <FinancialHealthCard accessToken={accessToken} />
 
       {s.incomeSourceCount === 0 ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Add an income source" onPress={() => onNavigate("income-sources")} style={{ marginTop: 20, padding: 20, borderRadius: 32, backgroundColor: P.aqua50 }}>

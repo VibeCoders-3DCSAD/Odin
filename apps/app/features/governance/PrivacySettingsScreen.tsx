@@ -292,21 +292,18 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
     async function load() {
       if (userId) {
         const local = await getLocalPrivacySettings(userId);
-        const localProfile = await getLocalProfileAssignment(userId);
         if (local) {
           if (cancelled) return;
           setSettings(local);
           setLoading(false);
         }
-        if (localProfile && !cancelled) setProfile(localProfile);
       }
 
       Promise.all([
         getPrivacySettings(accessToken),
         getConsents(accessToken).catch(() => ({ body: {} })),
-        getProfileAssignment(accessToken).catch(() => null),
       ])
-        .then(async ([settingsRes, consentsRes, profileRes]) => {
+        .then(async ([settingsRes, consentsRes]) => {
           if (cancelled) return;
           if (settingsRes.body.payload) {
             const s = settingsRes.body.payload;
@@ -320,11 +317,6 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           const mePayload = consentsRes.body as { payload?: { consents?: ConsentRecord[] } };
           if (mePayload.payload?.consents) {
             setConsents(mePayload.payload.consents);
-          }
-          if (profileRes?.response.ok) {
-            const assignment = profileRes.body.payload?.assignment ?? null;
-            setProfile(assignment);
-            if (userId) cacheProfileAssignment(userId, assignment).catch(() => {});
           }
         })
         .catch((err) => {
@@ -446,7 +438,7 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
     );
   }
 
-  if (subPage === "financial-profile") {
+  if (subPage === "legacy-financial-profile") {
     const profileOptions = [
       "STABLE_FLEXIBLE_TOLERANT", "STABLE_FLEXIBLE_AT_RISK",
       "STABLE_OBLIGATED_TOLERANT", "STABLE_OBLIGATED_AT_RISK",
@@ -591,21 +583,6 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
         <NavRow icon={<User size={18} color={MUTED} />} label="Personal information" />
         <Divider />
         <NavRow icon={<LockKey size={18} color={MUTED} />} label="Change password" />
-        <Divider />
-        <NavRow
-          icon={<Brain size={18} color={MUTED} />}
-          label="Financial profile"
-          subtitle={profile ? profile.profile_label.replace(/_/g, " ") : "Manage or reassess"}
-          onPress={() => setSubPage("financial-profile")}
-        />
-        <Divider />
-        <NavRow
-          icon={<Brain size={18} color={MUTED} />}
-          label="Reassess financial profile"
-          subtitle="Complete the questionnaire again"
-          disabled={!online}
-          onPress={() => setSubPage("financial-profile")}
-        />
       </BorderedGroup>
 
       <View style={{ height: 20 }} />

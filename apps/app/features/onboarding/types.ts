@@ -138,42 +138,6 @@ export const STEPS: StepConfig[] = [
     inputSuffix: "PHP",
   },
   {
-    key: "income_pattern",
-    title: "Which best describes your income right now?",
-    kind: "card_select",
-    questionKey: "income_pattern",
-    options: [
-      { key: "no_current_income", label: "I do not currently receive income" },
-      { key: "predictable_income", label: "It is about the same each month" },
-      { key: "variable_income", label: "It changes from month to month" },
-    ],
-  },
-  {
-    key: "obligation_load",
-    title: "How much of your income goes to required monthly payments?",
-    kind: "card_select",
-    questionKey: "obligation_load",
-    options: [
-      { key: "no_income_with_obligations", label: "I have no current income, but I have required payments" },
-      { key: "no_income_without_obligations", label: "I have no current income or required payments" },
-      { key: "low", label: "A small amount" },
-      { key: "medium", label: "A moderate amount" },
-      { key: "high", label: "A large amount" },
-    ],
-  },
-  {
-    key: "emergency_runway",
-    title: "If your income stopped today, how long could your savings cover essential expenses?",
-    kind: "card_select",
-    questionKey: "emergency_runway",
-    options: [
-      { key: "less_than_1_month", label: "Less than 1 month" },
-      { key: "1_to_3_months", label: "1 to 3 months" },
-      { key: "3_to_6_months", label: "3 to 6 months" },
-      { key: "6_plus_months", label: "More than 6 months" },
-    ],
-  },
-  {
     key: "dependents_protected",
     title: "Dependents & Protected Status",
     subtitle: "Select any that apply to your household.",

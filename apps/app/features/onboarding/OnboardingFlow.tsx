@@ -20,11 +20,8 @@ import { useConnectivityStore } from "../../services/connectivity";
 import { useToast } from "../../components/Toast";
 import {
   createSession,
-  confirmProfileAssignment,
   getEligibilityProfile,
   getCurrentSession,
-  getProfileAssignment,
-  rejectProfileAssignment,
   submitSession,
   updateSession,
   updateEligibilityProfile,
@@ -49,8 +46,7 @@ type OnboardingFlowProps = {
 };
 
 type SubmitResult = {
-  assessment: { id: string; proposed_profile_label: string };
-  assignment: { id: string; profile_label: string; confirmation_required: boolean };
+  classification_available: boolean;
 };
 
 export default function OnboardingFlow({
@@ -268,17 +264,7 @@ export default function OnboardingFlow({
           primary_employment_classification: answersRef.current.primary_employment_classification,
         });
         if (!eligibility.response.ok) setSubmitError(eligibility.body.message ?? "Your research eligibility could not be saved.");
-        setSubmitResult({
-          assessment: {
-            id: body.payload.assessment.id,
-            proposed_profile_label: body.payload.assessment.proposed_profile_label,
-          },
-          assignment: {
-            id: body.payload.assignment.id,
-            profile_label: body.payload.assignment.profile_label,
-            confirmation_required: body.payload.assignment.confirmation_required,
-          },
-        });
+        setSubmitResult({ classification_available: body.payload.classification_available });
       } else {
         setSubmitError(body.message ?? "Submission failed.");
       }
@@ -1075,25 +1061,15 @@ function ResultScreen({
   error: string | null;
   onContinue: () => void;
 }) {
-  const [drivers, setDrivers] = useState<{ driver_label: string; value_text: string; explanation: string }[]>([]);
   const [eligible, setEligible] = useState<boolean | null>(null);
-  const [decision, setDecision] = useState<"accepted" | "rejected" | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [savingDecision, setSavingDecision] = useState(false);
-  const [decisionError, setDecisionError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getProfileAssignment(accessToken), getEligibilityProfile(accessToken)])
-      .then(([profile, eligibility]) => {
-        if (profile.response.ok) setDrivers(profile.body.payload?.drivers ?? []);
+    getEligibilityProfile(accessToken)
+      .then((eligibility) => {
         if (eligibility.response.ok) setEligible(eligibility.body.payload?.profile?.eligibility_confirmed_at != null);
       })
       .catch(() => {});
   }, [accessToken]);
-
-  const label = result.assignment.profile_label
-    .replace(/_/g, "-")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <ScrollView
@@ -1139,56 +1115,8 @@ function ResultScreen({
             lineHeight: 20,
           }}
         >
-          Your financial profile has been assessed.
+          Your onboarding information has been saved.
         </Text>
-
-        <View
-          style={{
-            width: "100%",
-            borderRadius: 16,
-            padding: 24,
-            backgroundColor: AQUA950,
-            marginBottom: 20,
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: "Manrope",
-              fontWeight: "600",
-              fontSize: 12,
-              color: "#41EDA4",
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              marginBottom: 8,
-            }}
-          >
-            Your Profile
-          </Text>
-          <Text
-            style={{
-              fontFamily: "Manrope",
-              fontWeight: "800",
-              fontSize: 28,
-              color: "#FFFFFF",
-              marginBottom: 12,
-            }}
-          >
-            {label}
-          </Text>
-          <Text
-            style={{
-              fontFamily: "Manrope",
-              fontWeight: "400",
-              fontSize: 13,
-              color: "#84D4AE",
-              lineHeight: 19,
-            }}
-          >
-            {drivers.length > 0
-              ? drivers.map((driver) => `${driver.driver_label}: ${driver.value_text}. ${driver.explanation}`).join("\n")
-              : "Your profile is based on the financial details you provided."}
-          </Text>
-        </View>
 
         <View
           style={{
@@ -1211,29 +1139,6 @@ function ResultScreen({
           </Text>
         </View>
 
-        {decision === null ? (
-          <View style={{ width: "100%", gap: 10, marginBottom: 20 }}>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: INK }}>Does this profile fit you?</Text>
-            <Pressable disabled={savingDecision} onPress={async () => {
-              setSavingDecision(true); setDecisionError(null);
-              const response = await confirmProfileAssignment(accessToken, result.assignment.id);
-              if (response.response.ok) setDecision("accepted"); else setDecisionError(response.body.message ?? "Couldn't accept your profile.");
-              setSavingDecision(false);
-            }} style={{ height: 48, borderRadius: 14, backgroundColor: AQUA950, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ color: "#FFFFFF", fontFamily: "Manrope", fontWeight: "700" }}>Accept profile</Text>
-            </Pressable>
-            <TextInput value={rejectReason} onChangeText={setRejectReason} placeholder="Why doesn't this fit?" placeholderTextColor={MUTED} style={{ borderWidth: 1, borderColor: LINE, borderRadius: 14, padding: 14, color: INK, fontFamily: "Manrope" }} />
-            <Pressable disabled={savingDecision || !rejectReason.trim()} onPress={async () => {
-              setSavingDecision(true); setDecisionError(null);
-              const response = await rejectProfileAssignment(accessToken, result.assignment.id, rejectReason);
-              if (response.response.ok) setDecision("rejected"); else setDecisionError(response.body.message ?? "Couldn't reject your profile.");
-              setSavingDecision(false);
-            }} style={{ height: 48, borderRadius: 14, borderWidth: 1, borderColor: LINE, alignItems: "center", justifyContent: "center", opacity: rejectReason.trim() ? 1 : 0.45 }}>
-              <Text style={{ color: INK, fontFamily: "Manrope", fontWeight: "700" }}>Reject and choose manually in Settings</Text>
-            </Pressable>
-            {decisionError ? <Text style={{ color: ERROR, fontFamily: "Manrope", fontSize: 13 }}>{decisionError}</Text> : null}
-          </View>
-        ) : null}
 
         {error ? (
           <View
@@ -1262,7 +1167,6 @@ function ResultScreen({
 
         <Pressable
           onPress={onContinue}
-          disabled={decision === null}
           accessibilityRole="button"
           accessibilityLabel="Continue to Dashboard"
           style={{
@@ -1272,7 +1176,6 @@ function ResultScreen({
             backgroundColor: AQUA950,
             justifyContent: "center",
             alignItems: "center",
-            opacity: decision === null ? 0.45 : 1,
             shadowColor: AQUA950,
             shadowOffset: { width: 0, height: 8 },
             shadowOpacity: 0.28,

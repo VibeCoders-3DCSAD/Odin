@@ -41,7 +41,7 @@ describe("GET /odin/api/me", () => {
     });
   }
 
-  it("returns 200 with profile, privacy, and current_profile", async () => {
+  it("returns 200 with profile and privacy settings", async () => {
     mockAuth();
 
     mockFrom
@@ -53,10 +53,7 @@ describe("GET /odin/api/me", () => {
         data: { personalization_enabled: true, notifications_opt_in: true },
         error: null,
       }))
-      .mockReturnValueOnce(createMockQuery({
-        data: { profile_label: "STABLE_OBLIGATED_AT_RISK", confirmed_at: "2026-06-10T00:00:00Z" },
-        error: null,
-      }));
+      ;
 
     const response = await request(app)
       .get("/odin/api/me")
@@ -72,36 +69,7 @@ describe("GET /odin/api/me", () => {
         personalization_enabled: true,
         notifications_opt_in: true,
       },
-      current_profile: {
-        profile_label: "STABLE_OBLIGATED_AT_RISK",
-        confirmed: true,
-      },
     });
-  });
-
-  it("returns 200 with null current_profile when no assignment exists", async () => {
-    mockAuth();
-
-    mockFrom
-      .mockReturnValueOnce(createMockQuery({
-        data: { display_name: "Juan", metro_manila_city: null },
-        error: null,
-      }))
-      .mockReturnValueOnce(createMockQuery({
-        data: { personalization_enabled: true, notifications_opt_in: false },
-        error: null,
-      }))
-      .mockReturnValueOnce(createMockQuery({
-        data: null,
-        error: { message: "Not found", code: "PGRST116" },
-      }));
-
-    const response = await request(app)
-      .get("/odin/api/me")
-      .set(authHeader());
-
-    expect(response.status).toBe(200);
-    expect(response.body.payload.current_profile).toBeNull();
   });
 
   it("returns 200 with default privacy settings when no privacy row exists", async () => {
@@ -255,32 +223,6 @@ describe("GET /odin/api/me", () => {
     });
   });
 
-  it("returns 500 when assignment query fails", async () => {
-    mockAuth();
-
-    mockFrom
-      .mockReturnValueOnce(createMockQuery({
-        data: { display_name: "Juan", metro_manila_city: null },
-        error: null,
-      }))
-      .mockReturnValueOnce(createMockQuery({
-        data: { personalization_enabled: true, notifications_opt_in: false },
-        error: null,
-      }))
-      .mockReturnValueOnce(createMockQuery({
-        data: null,
-        error: { message: "DB error", code: "XX000" },
-      }));
-
-    const response = await request(app)
-      .get("/odin/api/me")
-      .set(authHeader());
-
-    expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      message: expect.stringMatching(/assignment/i),
-    });
-  });
 });
 
 describe("PATCH /odin/api/me", () => {
