@@ -29,7 +29,7 @@ const P = {
 
 function describe(label: string, assessment?: RuleAssessment): { title: string; detail: string; color: string } {
   if (!assessment || assessment.status !== "SUCCESS") {
-    return { title: "Still learning", detail: "Add income and expenses for three full months to check this.", color: P.muted };
+    return { title: "Still learning", detail: "Add an income source and record expenses for three full months to check this.", color: P.muted };
   }
   if (label === "Emergency fund") {
     const months = typeof assessment.value === "number" ? `Your emergency savings could cover about ${assessment.value.toFixed(1)} months of expenses.` : "Your emergency savings coverage has been calculated.";
@@ -101,7 +101,7 @@ export function FinancialHealthCard({ accessToken }: { accessToken: string }) {
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <View>
           <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: P.ink }}>Financial health</Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.ink2, marginTop: 2 }}>A quick check-in based on what you have recorded</Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.ink2, marginTop: 2 }}>A quick check-in using your income sources and recorded expenses</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial health" onPress={refresh} disabled={refreshing}>
           {refreshing ? <ActivityIndicator color={P.aqua700} /> : <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.aqua700 }}>Update</Text>}
