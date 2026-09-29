@@ -1,8 +1,8 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 
-type CategoryGroupSpending = {
-  category_group_label: string;
+type CategorySpending = {
+  category_label: string;
   total_centavos: number;
 };
 
@@ -17,7 +17,7 @@ type DashboardSummary = {
   budgetCount: number;
   transactionCount: number;
   recentTransactions: DashboardTransaction[];
-  categoryGroupSpending: CategoryGroupSpending[];
+  categorySpending: CategorySpending[];
 };
 
 type DashboardTransaction = {
@@ -75,7 +75,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
   const currentMonth = getCurrentMonthRange();
   const today = toLocalDateStr(new Date());
 
-  const [balance, currentMonthTotals, previousMonth, accounts, incomeSources, transactions, budgets, recentTransactions, categoryGroupSpend] = await Promise.all([
+  const [balance, currentMonthTotals, previousMonth, accounts, incomeSources, transactions, budgets, recentTransactions, categorySpend] = await Promise.all([
     db.getFirstAsync<{ total: number | null }>(
       `SELECT SUM(current_balance_centavos) AS total
        FROM financial_accounts
@@ -132,15 +132,14 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
         LIMIT ${RECENT_LIMIT}`,
        userId,
      ),
-    db.getAllAsync<CategoryGroupSpending>(
-      `SELECT COALESCE(g.label, 'Other') AS category_group_label, SUM(t.amount_centavos) AS total_centavos
+    db.getAllAsync<CategorySpending>(
+      `SELECT COALESCE(c.label, 'Other') AS category_label, SUM(t.amount_centavos) AS total_centavos
        FROM transactions t
        LEFT JOIN subcategories s ON t.subcategory_id = s.id
        LEFT JOIN categories c ON s.category_id = c.id
-       LEFT JOIN category_groups g ON c.category_group_id = g.id
-       WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
-         AND t.transaction_date >= ? AND t.transaction_date <= ?
-       GROUP BY COALESCE(g.id, 'other'), COALESCE(g.label, 'Other')
+        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
+          AND t.transaction_date >= ? AND t.transaction_date <= ?
+        GROUP BY COALESCE(c.id, 'other'), COALESCE(c.label, 'Other')
        ORDER BY total_centavos DESC`,
       userId,
       currentMonth.start,
@@ -159,7 +158,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     transactionCount: transactions?.total ?? 0,
     budgetCount: budgets?.total ?? 0,
     recentTransactions: recentTransactions ?? [],
-    categoryGroupSpending: categoryGroupSpend ?? [],
+    categorySpending: categorySpend ?? [],
   };
 }
 
@@ -199,4 +198,4 @@ export function _resetDbCacheForTesting(): void {
   dbPromise = null;
 }
 
-export type { DashboardSummary, DashboardTransaction, CategoryGroupSpending, DailyTrend };
+export type { DashboardSummary, DashboardTransaction, CategorySpending, DailyTrend };

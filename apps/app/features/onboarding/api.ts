@@ -1,5 +1,5 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
-import type { OnboardingSession, ProfileAssignment, OnboardingResponse } from "./types";
+import type { OnboardingSession, ProfileAssignment } from "./types";
 
 function apiFetch<T>(
   accessToken: string,
@@ -131,16 +131,3 @@ export type ProfileDriver = {
   value_text: string;
   explanation: string;
 };
-
-export function upsertResponse(
-  accessToken: string,
-  sessionId: string,
-  questionKey: string,
-  answer: unknown,
-) {
-  return apiFetch<{ payload?: { response: OnboardingResponse }; error?: string; message?: string }>(
-    accessToken,
-    `/odin/api/onboarding/sessions/${sessionId}/responses`,
-    { method: "POST", body: { payload: { question_key: questionKey, answer } } },
-  );
-}

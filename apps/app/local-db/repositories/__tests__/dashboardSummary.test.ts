@@ -103,6 +103,17 @@ describe("getDashboardSummary", () => {
     expect(recentCall[1]).toBe("user-42");
   });
 
+  it("groups spending by the category rather than its category group", async () => {
+    mockGetFirstAsync.mockResolvedValue(null);
+    mockGetAllAsync.mockResolvedValue([]);
+
+    await getDashboardSummary("user-1");
+
+    const spendingCall = mockGetAllAsync.mock.calls[1]!;
+    expect(spendingCall[0]).toContain("COALESCE(c.label, 'Other') AS category_label");
+    expect(spendingCall[0]).not.toContain("category_groups");
+  });
+
   it("counts active budgets as present", async () => {
     mockGetFirstAsync.mockResolvedValue(null);
     mockGetAllAsync.mockResolvedValue([]);

@@ -20,11 +20,10 @@ const SYNCED_ENTITIES = new Set([
   "transactions",
   "income_sources",
   "financial_obligations",
-  "transaction_templates",
-  "transaction_drafts",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "budgets",
+  "financial_plans",
   "credit_card_details",
   "credit_card_repayment_preferences",
   "credit_card_cycles",
@@ -94,6 +93,8 @@ const SUBCATEGORY_CREATE_FIELDS = new Set([
   "is_filipino_context",
   "is_protected",
   "minimum_amount_centavos",
+  "always_in_budget",
+  "fixed_amount_centavos",
   "sort_order",
 ]);
 
@@ -105,6 +106,8 @@ const SUBCATEGORY_UPDATE_FIELDS = new Set([
   "is_filipino_context",
   "is_protected",
   "minimum_amount_centavos",
+  "always_in_budget",
+  "fixed_amount_centavos",
   "is_active",
 ]);
 
@@ -294,13 +297,6 @@ const OBLIGATION_UPDATE_FIELDS = new Set([
   "notes",
 ]);
 
-const TEMPLATE_FIELDS = new Set([
-  "transaction_type", "name", "amount_centavos", "subcategory_id",
-  "source_account_id", "destination_account_id", "merchant_name", "counterparty_name", "notes",
-]);
-
-const DRAFT_FIELDS = new Set(["client_draft_id", "payload", "captured_offline_at"]);
-
 const RECURRING_TEMPLATE_FIELDS = new Set([
   "transaction_type", "name", "amount_centavos", "frequency", "interval_count",
   "day_of_month", "second_day_of_month", "day_of_week",
@@ -322,6 +318,10 @@ const BUDGET_CREATE_FIELDS = new Set([
 
 const BUDGET_UPDATE_FIELDS = new Set([
   "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debtBudgetAmountMinor", "savingsBudgetAmountMinor",
+]);
+
+const FINANCIAL_PLAN_CREATE_FIELDS = new Set([
+  "period_start", "period_end", "status", "input_snapshot", "recommendation",
 ]);
 
 const CREDIT_CARD_INSTALLMENT_CREATE_FIELDS = new Set([
@@ -727,7 +727,7 @@ async function validateCreatePayload(
       .eq("kind", "expense")
       .eq("deleted", false)
       .eq("is_active", true)
-      .or(`user_id.is.null,user_id.eq.${userId}`)
+      .eq("user_id", userId)
       .maybeSingle();
     if (error) throw new Error(`subcategory_id validation failed: ${error.message}`);
     if (!subcategory) throw new Error("subcategory_id does not reference an accessible active expense subcategory");
@@ -754,31 +754,8 @@ async function validateCreatePayload(
     return validateBudgetPayload(supabase, userId, payload, BUDGET_CREATE_FIELDS);
   }
 
-  if (entity === "transaction_templates") {
-    assertOnlyAllowed(payload, TEMPLATE_FIELDS);
-    const sanitized = sanitizePayload(payload, TEMPLATE_FIELDS);
-    requireString(sanitized, "transaction_type");
-    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
-      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
-    }
-    requireString(sanitized, "name");
-    if (sanitized.amount_centavos != null) {
-      requirePositiveInteger(sanitized, "amount_centavos");
-    }
-    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
-    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
-    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
-    return sanitized;
-  }
-
-  if (entity === "transaction_drafts") {
-    assertOnlyAllowed(payload, DRAFT_FIELDS);
-    const sanitized = sanitizePayload(payload, DRAFT_FIELDS);
-    requireString(sanitized, "client_draft_id");
-    if (!sanitized.payload || typeof sanitized.payload !== "object") {
-      throw new Error("payload must be an object");
-    }
-    return sanitized;
+  if (entity === "financial_plans") {
+    return validateFinancialPlanPayload(supabase, userId, payload);
   }
 
   if (entity === "recurring_transaction_templates") {
@@ -957,7 +934,10 @@ async function validateTaxonomyCreatePayload(
     optionalBoolean(sanitized, "is_filipino_context");
     optionalBoolean(sanitized, "is_protected");
     optionalNumber(sanitized, "minimum_amount_centavos");
-    validateNonNegative(sanitized, ["minimum_amount_centavos"]);
+    optionalBoolean(sanitized, "always_in_budget");
+    optionalNumber(sanitized, "fixed_amount_centavos");
+    validateNonNegative(sanitized, ["minimum_amount_centavos", "fixed_amount_centavos"]);
+    validateMinMaxOrdering(sanitized, "minimum_amount_centavos", "fixed_amount_centavos");
     optionalNumber(sanitized, "sort_order");
 
     if (sanitized.kind === "expense") {
@@ -968,7 +948,7 @@ async function validateTaxonomyCreatePayload(
         .eq("id", sanitized.category_id as string)
         .eq("deleted", false)
         .eq("is_active", true)
-        .or(`user_id.is.null,user_id.eq.${userId}`)
+        .eq("user_id", userId)
         .maybeSingle();
       if (error) throw new Error(`category_id validation failed: ${error.message}`);
       if (!category) throw new Error("category_id does not reference an accessible active category");
@@ -980,31 +960,6 @@ async function validateTaxonomyCreatePayload(
     return sanitized;
   }
 
-  if (entity === "transaction_templates") {
-    assertOnlyAllowed(payload, TEMPLATE_FIELDS);
-    const sanitized = sanitizePayload(payload, TEMPLATE_FIELDS);
-    requireString(sanitized, "transaction_type");
-    if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
-      throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
-    }
-    requireString(sanitized, "name");
-    if (sanitized.amount_centavos != null) {
-      requirePositiveInteger(sanitized, "amount_centavos");
-    }
-    if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string);
-    if (sanitized.source_account_id) await verifyAccountOwnership(supabase, userId, sanitized.source_account_id as string);
-    if (sanitized.destination_account_id) await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
-    return sanitized;
-  }
-  if (entity === "transaction_drafts") {
-    assertOnlyAllowed(payload, DRAFT_FIELDS);
-    const sanitized = sanitizePayload(payload, DRAFT_FIELDS);
-    requireString(sanitized, "client_draft_id");
-    if (!sanitized.payload || typeof sanitized.payload !== "object") {
-      throw new Error("payload must be an object");
-    }
-    return sanitized;
-  }
   if (entity === "recurring_transaction_templates") {
     assertOnlyAllowed(payload, RECURRING_TEMPLATE_FIELDS);
     const sanitized = sanitizePayload(payload, RECURRING_TEMPLATE_FIELDS);
@@ -1167,10 +1122,6 @@ async function validateUpdatePayload(
     allowedFields = CREDIT_CARD_SETTLEMENT_FIELDS;
   } else if (entity === "credit_card_statement_strategies") {
     allowedFields = CREDIT_CARD_STATEMENT_STRATEGY_FIELDS;
-  } else if (entity === "transaction_templates") {
-    allowedFields = TEMPLATE_FIELDS;
-  } else if (entity === "transaction_drafts") {
-    allowedFields = DRAFT_FIELDS;
   } else if (entity === "recurring_transaction_templates") {
     if (Object.prototype.hasOwnProperty.call(payload, "transaction_type")) {
       throw new Error("transaction_type is immutable for recurring transaction templates");
@@ -1180,6 +1131,8 @@ async function validateUpdatePayload(
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
   } else if (entity === "budgets") {
     return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS, recordId);
+  } else if (entity === "financial_plans") {
+    throw new Error("accepted Financial Plans are immutable");
   } else if (entity === "alert_notification_preferences" || entity === "anomaly_whitelist_rules" || entity === "alert_suppression_rules") {
     const fields = entity === "alert_notification_preferences" ? ALERT_PREFERENCE_UPDATE_FIELDS : entity === "anomaly_whitelist_rules" ? ANOMALY_WHITELIST_UPDATE_FIELDS : ALERT_SUPPRESSION_UPDATE_FIELDS;
     assertOnlyAllowed(payload, fields);
@@ -1470,7 +1423,7 @@ async function validateUpdatePayload(
       continue;
     }
 
-    if (key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "minimum_amount_centavos") {
+    if (key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "minimum_amount_centavos" || key === "fixed_amount_centavos") {
       if (value !== null && value !== undefined && (typeof value !== "number" || !Number.isInteger(value) || value < 0)) {
         throw new Error(`${key} must be a non-negative integer or null`);
       }
@@ -1677,7 +1630,7 @@ async function validateUpdatePayload(
     }
   }
 
-  if (entity === "transaction_templates" || entity === "recurring_transaction_templates") {
+  if (entity === "recurring_transaction_templates") {
     const src = sanitized.source_account_id;
     const dst = sanitized.destination_account_id;
     const sub = sanitized.subcategory_id;
@@ -1714,6 +1667,76 @@ function assertOnlyAllowed(payload: Record<string, unknown>, allowedFields: Set<
       throw new Error(`${key} is not syncable`);
     }
   }
+}
+
+async function validateFinancialPlanPayload(
+  supabase: SupabaseClient,
+  userId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  assertOnlyAllowed(payload, FINANCIAL_PLAN_CREATE_FIELDS);
+  const sanitized = sanitizePayload(payload, FINANCIAL_PLAN_CREATE_FIELDS);
+  for (const field of ["period_start", "period_end"]) requireDateString(sanitized, field);
+  const start = sanitized.period_start as string;
+  const end = sanitized.period_end as string;
+  const expectedPeriod = nextFinancialPlanPeriod();
+  if (start !== expectedPeriod.start || end !== expectedPeriod.end) throw new Error("Financial Plans can only cover the next calendar month");
+  if (sanitized.status !== "accepted") throw new Error("only accepted Financial Plans can sync");
+  const inputSnapshot = sanitized.input_snapshot;
+  if (!inputSnapshot || typeof inputSnapshot !== "object" || Array.isArray(inputSnapshot)) throw new Error("input_snapshot must be an object");
+  for (const field of ["forecast", "restrictions", "obligations", "debtRequirements", "savingsRequirements", "classification"]) {
+    const value = (inputSnapshot as Record<string, unknown>)[field];
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value as Record<string, unknown>).length === 0) throw new Error(`input_snapshot.${field} must contain plan input data`);
+  }
+  const recommendation = sanitized.recommendation;
+  if (!recommendation || typeof recommendation !== "object" || Array.isArray(recommendation)) throw new Error("recommendation must be an object");
+  const recommendationDocument = recommendation as Record<string, unknown>;
+  for (const field of ["allocations", "debtReservations", "savingsReservations"]) {
+    if (!Array.isArray(recommendationDocument[field]) || (recommendationDocument[field] as unknown[]).length > 200) throw new Error(`recommendation.${field} must be a bounded array`);
+  }
+  for (const allocation of recommendationDocument.allocations as Record<string, unknown>[]) {
+    const categoryId = allocation.categoryId; const subcategoryId = allocation.subcategoryId;
+    if (Boolean(categoryId) === Boolean(subcategoryId)) throw new Error("each Financial Plan allocation must reference one category or subcategory");
+    if (!["FIXED", "MINIMUM", "FLEXIBLE"].includes(allocation.allocationRule as string)) throw new Error("Financial Plan allocation rule is invalid");
+    assertPlanAmount(allocation, "allocatedAmountCentavos"); assertPlanAmount(allocation, "floorAmountCentavos");
+    if ((allocation.allocatedAmountCentavos as number) < (allocation.floorAmountCentavos as number)) throw new Error("Financial Plan allocation does not meet its floor");
+    if (allocation.ceilingAmountCentavos != null) { assertPlanAmount(allocation, "ceilingAmountCentavos"); if ((allocation.ceilingAmountCentavos as number) < (allocation.allocatedAmountCentavos as number)) throw new Error("Financial Plan allocation exceeds its ceiling"); }
+  }
+  for (const reservation of recommendationDocument.debtReservations as Record<string, unknown>[]) {
+    if (Boolean(reservation.debtAccountId) === Boolean(reservation.creditCardStatementId)) throw new Error("each debt reservation must reference one debt or statement"); assertPlanAmount(reservation, "amountCentavos");
+  }
+  for (const reservation of recommendationDocument.savingsReservations as Record<string, unknown>[]) {
+    requireString(reservation, "savingsGoalId"); assertPlanAmount(reservation, "amountCentavos");
+  }
+  const allocations = recommendationDocument.allocations as Record<string, unknown>[];
+  const categoryIds = allocations.flatMap((allocation) => typeof allocation.categoryId === "string" ? [allocation.categoryId] : []);
+  const subcategoryIds = allocations.flatMap((allocation) => typeof allocation.subcategoryId === "string" ? [allocation.subcategoryId] : []);
+  await verifyBudgetReferences(supabase, userId, categoryIds, subcategoryIds);
+  const debtReservations = recommendationDocument.debtReservations as Record<string, unknown>[];
+  const debtIds = debtReservations.flatMap((reservation) => typeof reservation.debtAccountId === "string" ? [reservation.debtAccountId] : []);
+  const statementIds = debtReservations.flatMap((reservation) => typeof reservation.creditCardStatementId === "string" ? [reservation.creditCardStatementId] : []);
+  const savingsGoalIds = (recommendationDocument.savingsReservations as Record<string, unknown>[]).map((reservation) => reservation.savingsGoalId as string);
+  const [debts, statements, goals] = await Promise.all([
+    debtIds.length ? supabase.from("debt_accounts").select("id").in("id", [...new Set(debtIds)]).eq("user_id", userId).eq("deleted", false) : Promise.resolve({ data: [], error: null }),
+    statementIds.length ? supabase.from("credit_card_statements").select("id").in("id", [...new Set(statementIds)]).eq("user_id", userId).eq("deleted", false) : Promise.resolve({ data: [], error: null }),
+    savingsGoalIds.length ? supabase.from("savings_goals").select("id").in("id", [...new Set(savingsGoalIds)]).eq("user_id", userId).eq("deleted", false) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (debts.error || statements.error || goals.error) throw new Error("Financial Plan reservation validation failed");
+  if ((debts.data?.length ?? 0) !== new Set(debtIds).size || (statements.data?.length ?? 0) !== new Set(statementIds).size || (goals.data?.length ?? 0) !== new Set(savingsGoalIds).size) throw new Error("Financial Plan reservation is not accessible");
+  return sanitized;
+}
+
+function assertPlanAmount(payload: Record<string, unknown>, field: string): void {
+  if (!Number.isSafeInteger(payload[field]) || (payload[field] as number) < 0) throw new Error(`${field} must be a non-negative whole number`);
+}
+
+function nextFinancialPlanPeriod(now = new Date()): { start: string; end: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit" }).formatToParts(now);
+  const year = Number(parts.find((part) => part.type === "year")!.value);
+  const month = Number(parts.find((part) => part.type === "month")!.value);
+  const start = new Date(Date.UTC(year, month, 1));
+  const end = new Date(Date.UTC(year, month + 1, 0));
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 
 function requireString(payload: Record<string, unknown>, field: string): void {
@@ -2089,7 +2112,7 @@ async function verifyCategoryOwnership(
     .eq("id", categoryId)
     .eq("deleted", false)
     .eq("is_active", true)
-    .or(`user_id.is.null,user_id.eq.${userId}`)
+    .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(`category validation failed: ${error.message}`);
   if (!data) throw new Error("category not found or inaccessible");
@@ -2102,8 +2125,8 @@ async function verifyBudgetReferences(
   subcategoryIds: string[],
 ): Promise<void> {
   const [categories, subcategories] = await Promise.all([
-    categoryIds.length ? supabase.from("categories").select("id").in("id", [...new Set(categoryIds)]).eq("deleted", false).eq("is_active", true).or(`user_id.is.null,user_id.eq.${userId}`) : Promise.resolve({ data: [], error: null }),
-    subcategoryIds.length ? supabase.from("subcategories").select("id").in("id", [...new Set(subcategoryIds)]).eq("deleted", false).eq("is_active", true).eq("kind", "expense").or(`user_id.is.null,user_id.eq.${userId}`) : Promise.resolve({ data: [], error: null }),
+    categoryIds.length ? supabase.from("categories").select("id").in("id", [...new Set(categoryIds)]).eq("deleted", false).eq("is_active", true).eq("user_id", userId) : Promise.resolve({ data: [], error: null }),
+    subcategoryIds.length ? supabase.from("subcategories").select("id").in("id", [...new Set(subcategoryIds)]).eq("deleted", false).eq("is_active", true).eq("kind", "expense").eq("user_id", userId) : Promise.resolve({ data: [], error: null }),
   ]);
   if (categories.error) throw new Error(`category validation failed: ${categories.error.message}`);
   if (subcategories.error) throw new Error(`subcategory validation failed: ${subcategories.error.message}`);
@@ -2122,7 +2145,7 @@ async function verifySubcategoryOwnership(
     .eq("id", subcategoryId)
     .eq("deleted", false)
     .eq("is_active", true)
-    .or(`user_id.is.null,user_id.eq.${userId}`);
+    .eq("user_id", userId);
 
   if (kind) {
     query = query.eq("kind", kind);

@@ -19,13 +19,6 @@ export type ProfileAssignment = {
   explanation: string | null;
 };
 
-export type OnboardingResponse = {
-  onboarding_session_id: string;
-  question_key: string;
-  answer: unknown;
-  updated_at: string;
-};
-
 export type StepKind = "card_select" | "card_multi_select" | "dropdown" | "input" | "review" | "result";
 
 export type StepOption = {

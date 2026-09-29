@@ -54,6 +54,8 @@ type SubcategoryRow = {
   is_filipino_context: number;
   is_protected: number;
   minimum_amount_centavos: number | null;
+  always_in_budget: number;
+  fixed_amount_centavos: number | null;
   sort_order: number;
   is_active: number;
   metadata: string;
@@ -99,6 +101,8 @@ export type Subcategory = {
   is_filipino_context: boolean;
   is_protected: boolean;
   minimum_amount_centavos: number | null;
+  always_in_budget: boolean;
+  fixed_amount_centavos: number | null;
   sort_order: number;
   is_active: boolean;
 };
@@ -132,6 +136,8 @@ export type CreateSubcategoryInput = {
   is_filipino_context?: boolean;
   is_protected?: boolean;
   minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
   sort_order?: number;
 };
 
@@ -143,6 +149,8 @@ export type UpdateSubcategoryInput = {
   is_filipino_context?: boolean;
   is_protected?: boolean;
   minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
   is_active?: boolean;
 };
 
@@ -186,6 +194,8 @@ function mapSubcategory(row: SubcategoryRow): Subcategory {
     is_filipino_context: row.is_filipino_context === 1,
     is_protected: row.is_protected === 1,
     minimum_amount_centavos: row.minimum_amount_centavos,
+    always_in_budget: row.always_in_budget === 1,
+    fixed_amount_centavos: row.fixed_amount_centavos,
     sort_order: row.sort_order,
     is_active: row.is_active === 1,
   };
@@ -204,6 +214,17 @@ function boolToInt(v: boolean | undefined | null): number {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function validateBudgetAmounts(minimumAmountCentavos: number | null | undefined, fixedAmountCentavos: number | null | undefined): void {
+  for (const [field, value] of [["minimum_amount_centavos", minimumAmountCentavos], ["fixed_amount_centavos", fixedAmountCentavos]] as const) {
+    if (value !== null && value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new LocalDbError("VALIDATION_ERROR", `${field} must be a non-negative integer or null`);
+    }
+  }
+  if (minimumAmountCentavos !== null && minimumAmountCentavos !== undefined && fixedAmountCentavos !== null && fixedAmountCentavos !== undefined && fixedAmountCentavos < minimumAmountCentavos) {
+    throw new LocalDbError("VALIDATION_ERROR", "fixed_amount_centavos must be greater than or equal to minimum_amount_centavos");
+  }
 }
 
 function categoryFailureMessage(action: "created" | "updated" | "deleted", label: string): string {
@@ -229,14 +250,14 @@ export async function listCategories(
   const db = await getDb();
   if (categoryGroupId) {
     const rows = await db.getAllAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE (user_id = ? OR is_system = 1) AND deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
+      "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
       userId,
       categoryGroupId,
     );
     return rows.map(mapCategory);
   }
   const rows = await db.getAllAsync<CategoryRow>(
-    "SELECT * FROM categories WHERE (user_id = ? OR is_system = 1) AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
+    "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
     userId,
   );
   return rows.map(mapCategory);
@@ -245,7 +266,7 @@ export async function listCategories(
 export async function getCategory(userId: string, id: string): Promise<Category | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<CategoryRow>(
-    "SELECT * FROM categories WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0",
+    "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
     userId,
     id,
   );
@@ -258,7 +279,7 @@ export async function listSubcategories(
   kind?: "income" | "expense" | "transfer_adjustment",
 ): Promise<Subcategory[]> {
   const db = await getDb();
-  let sql = "SELECT * FROM subcategories WHERE (user_id = ? OR is_system = 1) AND deleted = 0 AND is_active = 1";
+  let sql = "SELECT * FROM subcategories WHERE user_id = ? AND deleted = 0 AND is_active = 1";
   const params: SQLite.SQLiteBindValue[] = [userId];
 
   if (categoryId) {
@@ -278,7 +299,7 @@ export async function listSubcategories(
 export async function getSubcategory(userId: string, id: string): Promise<Subcategory | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<SubcategoryRow>(
-    "SELECT * FROM subcategories WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0",
+    "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
     userId,
     id,
   );
@@ -486,6 +507,7 @@ export async function createSubcategory(
   if (!VALID_KINDS.includes(input.kind)) {
     throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_KINDS.join(", ")}`);
   }
+  validateBudgetAmounts(input.minimum_amount_centavos, input.fixed_amount_centavos);
 
   const db = await getDb();
   const id = randomUUID();
@@ -509,9 +531,9 @@ export async function createSubcategory(
     await db.runAsync(
       `INSERT INTO subcategories
         (id, user_id, category_id, slug, kind, label, short_label, description,
-          is_system, is_filipino_context, is_protected, minimum_amount_centavos, sort_order, is_active,
+          is_system, is_filipino_context, is_protected, minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order, is_active,
           metadata, version, deleted, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
       id,
       userId,
       input.category_id ?? null,
@@ -523,6 +545,8 @@ export async function createSubcategory(
       boolToInt(input.is_filipino_context),
       boolToInt(input.is_protected),
       input.minimum_amount_centavos ?? null,
+      boolToInt(input.always_in_budget),
+      input.fixed_amount_centavos ?? null,
       input.sort_order ?? 0,
       metadata,
       ts,
@@ -571,6 +595,10 @@ export async function updateSubcategory(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
+    validateBudgetAmounts(
+      input.minimum_amount_centavos ?? current.minimum_amount_centavos,
+      input.fixed_amount_centavos ?? current.fixed_amount_centavos,
+    );
 
     const updates: string[] = [];
     const params: SQLite.SQLiteBindValue[] = [];
@@ -580,7 +608,7 @@ export async function updateSubcategory(
       if (value === undefined) continue;
       changedFields.push(key);
 
-      if (key === "is_filipino_context" || key === "is_protected" || key === "is_active") {
+      if (key === "is_filipino_context" || key === "is_protected" || key === "always_in_budget" || key === "is_active") {
         updates.push(`${key} = ?`);
         params.push(boolToInt(value as boolean));
       } else {

@@ -152,7 +152,7 @@ export async function listCategoryBreakdown(userId: string, range: ReportRange):
   return db.getAllAsync<CategoryBreakdown>(
     `SELECT COALESCE(s.label, 'Uncategorised') AS label, SUM(t.amount_centavos) AS amountCentavos
        FROM transactions t
-       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
+       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
          AND t.transaction_date >= ? AND t.transaction_date <= ?
        GROUP BY COALESCE(s.id, 'uncategorised'), COALESCE(s.label, 'Uncategorised')
@@ -166,7 +166,7 @@ export async function getExpenseCategoryDistribution(userId: string, range: Repo
   const categories = await db.getAllAsync<CategoryBreakdown>(
     `SELECT COALESCE(s.label, 'Uncategorised') AS label, SUM(t.amount_centavos) AS amountCentavos
        FROM transactions t
-       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
+       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
          AND t.transaction_date >= ? AND t.transaction_date <= ?
        GROUP BY COALESCE(s.id, 'uncategorised'), COALESCE(s.label, 'Uncategorised')

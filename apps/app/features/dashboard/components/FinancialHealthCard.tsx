@@ -98,12 +98,12 @@ export function FinancialHealthCard({ accessToken }: { accessToken: string }) {
 
   return (
     <View style={{ marginTop: 24, padding: 20, borderRadius: 32, backgroundColor: P.aqua50 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <View>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
+        <View style={{ flex: 1, flexShrink: 1 }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: P.ink }}>Financial health</Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.ink2, marginTop: 2 }}>A quick check-in using your income sources and recorded expenses</Text>
+          <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 12, color: P.ink2, marginTop: 2 }}>A quick check-in using your income sources and recorded expenses</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial health" onPress={refresh} disabled={refreshing}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial health" onPress={refresh} disabled={refreshing} style={{ marginLeft: 12 }}>
           {refreshing ? <ActivityIndicator color={P.aqua700} /> : <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.aqua700 }}>Update</Text>}
         </Pressable>
       </View>
@@ -111,9 +111,9 @@ export function FinancialHealthCard({ accessToken }: { accessToken: string }) {
         const item = describe(label, assessment);
         return (
           <View key={label} style={{ borderTopWidth: index === 0 ? 0 : 1, borderTopColor: P.line, paddingTop: index === 0 ? 0 : 12, marginTop: index === 0 ? 0 : 12 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: P.ink }}>{label}</Text>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 13, color: item.color }}>{item.title}</Text>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+              <Text style={{ flex: 1, flexShrink: 1, fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: P.ink }}>{label}</Text>
+              <Text style={{ flex: 1, flexShrink: 1, fontFamily: "Manrope", fontWeight: "800", fontSize: 13, color: item.color, textAlign: "right" }}>{item.title}</Text>
             </View>
             <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.ink2, marginTop: 3 }}>{item.detail}</Text>
           </View>

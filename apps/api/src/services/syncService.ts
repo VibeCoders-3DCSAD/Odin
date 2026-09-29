@@ -56,15 +56,13 @@ export const SYNCED_TABLES = [
   "financial_accounts",
   "savings_account_details",
   "transactions",
-  "transaction_line_items",
   "income_sources",
   "financial_obligations",
-  "transaction_templates",
-  "transaction_drafts",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "budgets",
   "budget_allocations",
+  "financial_plans",
   "credit_card_details",
   "credit_card_repayment_preferences",
   "credit_card_cycles",
@@ -114,7 +112,9 @@ export async function pushOperations(
       const rpcName = ["alert_notification_preferences", "anomaly_whitelist_rules", "alert_suppression_rules"].includes(prepared.entity)
         ? "apply_alert_feedback_sync_operation"
         : prepared.entity === "budgets"
-        ? "apply_budget_sync_operation_v2"
+         ? "apply_budget_sync_operation_v2"
+        : prepared.entity === "financial_plans"
+          ? "apply_financial_plan_sync_operation"
         : prepared.entity === "debt_accounts" || prepared.entity === "debt_payments" || prepared.entity === "user_debt_priorities" || prepared.entity === "debt_strategy_preferences"
           ? "apply_debt_sync_operation"
           : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_repayment_preferences" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements" || prepared.entity === "credit_card_payments" || prepared.entity === "credit_card_settlements" || prepared.entity === "credit_card_statement_strategies"
@@ -219,15 +219,13 @@ export async function pullChanges(
        table === "financial_accounts" ||
        table === "savings_account_details" ||
       table === "transactions" ||
-      table === "transaction_line_items" ||
-      table === "income_sources" ||
-      table === "financial_obligations" ||
-      table === "transaction_templates" ||
-      table === "transaction_drafts" ||
+       table === "income_sources" ||
+       table === "financial_obligations" ||
       table === "recurring_transaction_templates" ||
       table === "recurring_transaction_occurrences"
       || table === "budgets"
        || table === "budget_allocations"
+        || table === "financial_plans"
         || table === "credit_card_cycles"
          || table === "credit_card_details"
          || table === "credit_card_repayment_preferences"
@@ -251,9 +249,8 @@ export async function pullChanges(
       // user-scoped only — no system rows
       query.eq("user_id", userId);
     } else {
-      // categories and subcategories: include system rows (user_id IS NULL)
-      // and user-owned rows
-      query.or(`user_id.is.null,user_id.eq.${userId}`);
+      // Categories and subcategories are provisioned per user from defaults.
+      query.eq("user_id", userId);
     }
 
     const tableCursor = cursors[table];

@@ -18,3 +18,5 @@
 - [14. Forecasting and Financial Intelligence Module](14-forecasting-and-financial-intelligence-module.md)
 - [15. Reports and Analytics Module](15-reports-and-analytics-module.md)
 - [16. Offline Sync and Recovery Module](16-offline-sync-and-recovery-module.md)
+- [17. Financial Condition Assessment Module](17-financial-condition-assessment-module.md)
+- [18. Financial Plan Management Module](18-financial-plan-management-module.md)

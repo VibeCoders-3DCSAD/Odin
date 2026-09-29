@@ -18,7 +18,7 @@ const EMPTY_SUMMARY: DashboardSummary = {
   budgetCount: 0,
   transactionCount: 0,
   recentTransactions: [],
-  categoryGroupSpending: [],
+  categorySpending: [],
 };
 
 type DashboardDataParams = { userId: string; deviceId: string; accessToken: string };

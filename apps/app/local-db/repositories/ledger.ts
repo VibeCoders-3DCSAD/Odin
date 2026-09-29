@@ -214,7 +214,7 @@ async function verifySubcategoryOwnership(
   kind?: string,
 ): Promise<void> {
   // ponytail: query subcategories inline, skip full repo import
-  let sql = "SELECT id FROM subcategories WHERE (user_id = ? OR is_system = 1) AND id = ? AND deleted = 0 AND is_active = 1";
+  let sql = "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0 AND is_active = 1";
   const params: SQLite.SQLiteBindValue[] = [userId, subcategoryId];
   if (kind) {
     sql += " AND kind = ?";
@@ -532,9 +532,9 @@ export async function listTransactions(
     params.push(filters.to_date);
   }
   if (filters?.search) {
-    parts.push("AND (t.merchant_name LIKE ? OR t.counterparty_name LIKE ? OR t.notes LIKE ? OR EXISTS (SELECT 1 FROM transaction_line_items tli WHERE tli.transaction_id = t.id AND tli.user_id = t.user_id AND tli.deleted = 0 AND tli.item_label LIKE ?))");
+    parts.push("AND (t.merchant_name LIKE ? OR t.counterparty_name LIKE ? OR t.notes LIKE ?)");
     const term = `%${filters.search}%`;
-    params.push(term, term, term, term);
+    params.push(term, term, term);
   }
 
   const sortBy = filters?.sort_by && (VALID_SORT_BY as readonly string[]).includes(filters.sort_by)

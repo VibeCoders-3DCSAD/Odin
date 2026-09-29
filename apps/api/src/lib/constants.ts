@@ -83,7 +83,6 @@ export const ONBOARDING_ERRORS = {
   session_not_in_progress: "Session is not in progress.",
   session_belongs_to_another_user: "Session does not belong to the authenticated user.",
   session_already_submitted: "Session has already been submitted.",
-  response_create_failed: "Failed to save onboarding response.",
   session_create_failed: "Failed to create onboarding session.",
   session_update_failed: "Failed to update onboarding session.",
   session_fetch_failed: "Failed to fetch onboarding sessions.",

@@ -22,6 +22,8 @@ type SubcategoryFormScreenProps = {
     description: string;
     is_protected: boolean;
     minimum_amount_centavos: number | null;
+    always_in_budget: boolean;
+    fixed_amount_centavos: number | null;
   };
   categoryId: string;
   categoryLabel: string;
@@ -56,7 +58,9 @@ export default function SubcategoryFormScreen({
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [isProtected, setIsProtected] = useState(false);
+  const [alwaysInBudget, setAlwaysInBudget] = useState(false);
   const [minimumAmount, setMinimumAmount] = useState("");
+  const [fixedAmount, setFixedAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -66,7 +70,9 @@ export default function SubcategoryFormScreen({
       setSlug(subcategory ? generateSlug(subcategory.label) : "");
       setDescription(subcategory?.description ?? "");
       setIsProtected(subcategory?.is_protected ?? false);
+      setAlwaysInBudget(subcategory?.always_in_budget ?? false);
       setMinimumAmount(subcategory?.minimum_amount_centavos != null ? (subcategory.minimum_amount_centavos / 100).toFixed(2) : "");
+      setFixedAmount(subcategory?.fixed_amount_centavos != null ? (subcategory.fixed_amount_centavos / 100).toFixed(2) : "");
       setFormError(null);
     }
   }, [visible, mode, subcategory?.id]);
@@ -82,11 +88,21 @@ export default function SubcategoryFormScreen({
     if (!label.trim()) { setFormError("Label is required"); return; }
     if (!description.trim()) { setFormError("Description is required"); return; }
     const normalizedMinimum = minimumAmount.trim();
-    if (isProtected && !/^\d+(\.\d{1,2})?$/.test(normalizedMinimum)) {
+    if ((isProtected || alwaysInBudget) && !/^\d+(\.\d{1,2})?$/.test(normalizedMinimum)) {
       setFormError("Minimum must be a valid peso amount");
       return;
     }
-    const minimumAmountCentavos = isProtected ? Math.round(Number(normalizedMinimum) * 100) : null;
+    const normalizedFixed = fixedAmount.trim();
+    if (normalizedFixed && !/^\d+(\.\d{1,2})?$/.test(normalizedFixed)) {
+      setFormError("Fixed amount must be a valid peso amount");
+      return;
+    }
+    const minimumAmountCentavos = isProtected || alwaysInBudget ? Math.round(Number(normalizedMinimum) * 100) : null;
+    const fixedAmountCentavos = normalizedFixed ? Math.round(Number(normalizedFixed) * 100) : null;
+    if (fixedAmountCentavos !== null && minimumAmountCentavos !== null && fixedAmountCentavos < minimumAmountCentavos) {
+      setFormError("Fixed amount cannot be lower than the minimum");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -99,6 +115,8 @@ export default function SubcategoryFormScreen({
           description: description.trim(),
           is_protected: isProtected,
           minimum_amount_centavos: minimumAmountCentavos,
+          always_in_budget: alwaysInBudget,
+          fixed_amount_centavos: fixedAmountCentavos,
         });
       } else {
         await updateSubcategory(userId, deviceId, subcategory!.id, {
@@ -107,6 +125,8 @@ export default function SubcategoryFormScreen({
           description: description.trim(),
           is_protected: isProtected,
           minimum_amount_centavos: minimumAmountCentavos,
+          always_in_budget: alwaysInBudget,
+          fixed_amount_centavos: fixedAmountCentavos,
         });
       }
       onSaved();
@@ -199,7 +219,30 @@ export default function SubcategoryFormScreen({
                     </Text>
                   </View>
 
-                  {isProtected && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Pressable
+                      onPress={() => setAlwaysInBudget(!alwaysInBudget)}
+                      accessibilityRole="switch"
+                      accessibilityLabel="Always include in budget"
+                      accessibilityState={{ checked: alwaysInBudget }}
+                      style={{
+                        width: 44, height: 26, borderRadius: 100,
+                        backgroundColor: alwaysInBudget ? palette.aqua600 : palette.line,
+                        position: "relative",
+                      }}
+                    >
+                      <View style={{
+                        position: "absolute", top: 3,
+                        [alwaysInBudget ? "right" : "left"]: 3,
+                        width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
+                      }} />
+                    </Pressable>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.ink2 }}>
+                      Always include in budget
+                    </Text>
+                  </View>
+
+                  {(isProtected || alwaysInBudget) && (
                     <View>
                       <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
                         MINIMUM (PHP) <Text style={{color: palette.error}}>*</Text>
@@ -211,6 +254,23 @@ export default function SubcategoryFormScreen({
                         placeholderTextColor={palette.mut}
                         keyboardType="decimal-pad"
                         accessibilityLabel="Minimum amount in pesos"
+                        style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+                      />
+                    </View>
+                  )}
+
+                  {alwaysInBudget && (
+                    <View>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
+                        FIXED AMOUNT (PHP)
+                      </Text>
+                      <TextInput
+                        value={fixedAmount}
+                        onChangeText={setFixedAmount}
+                        placeholder="Optional"
+                        placeholderTextColor={palette.mut}
+                        keyboardType="decimal-pad"
+                        accessibilityLabel="Fixed budget amount in pesos"
                         style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
                       />
                     </View>

@@ -263,7 +263,7 @@ async function main() {
       .select("id, slug, category_id")
       .in("slug", requiredSubcategorySlugs)
       .eq("is_active", true)
-      .or(`user_id.eq.${userId},user_id.is.null`),
+      .eq("user_id", userId),
   ]);
   if (profileError) throw profileError;
   if (!profile) throw new Error(`No profile exists for user ${userId}`);

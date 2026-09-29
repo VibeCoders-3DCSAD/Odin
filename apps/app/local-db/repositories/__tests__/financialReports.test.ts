@@ -79,6 +79,7 @@ describe("expense category breakdowns", () => {
       expect(sql).toContain("COALESCE(s.label, 'Uncategorised')");
       expect(sql).toContain("COALESCE(s.id, 'uncategorised')");
       expect(sql).not.toContain("COALESCE(c.label, 'Uncategorised')");
+      expect(sql).toContain("s.user_id = t.user_id");
       expect(params).toEqual(["user-1", "2026-09-01", "2026-09-30"]);
     }
   });

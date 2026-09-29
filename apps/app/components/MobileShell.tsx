@@ -29,7 +29,7 @@ import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../f
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
-import BudgetingScreen from "../features/budgeting/BudgetingScreen";
+import FinancialPlanScreen from "../features/financial-plan/FinancialPlanScreen";
 import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
 import SavingsGoalsScreen from "../features/savings-goals/SavingsGoalsScreen";
 import type { CreditCardPayment, StatementPaymentContext } from "../local-db/repositories/creditCardPayments";
@@ -167,7 +167,7 @@ const drawerSections: DrawerSection[] = [
       { page: "debt-manager", icon: "credit-card-outline", label: "Debt Manager" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
-      { page: "budgeting", icon: "phosphor-wallet", label: "Budgeting" },
+      { page: "budgeting", icon: "phosphor-wallet", label: "Financial Plan" },
       { page: "recurring-transactions", icon: "repeat", label: "Recurring Transactions", child: true },
       { page: "history", icon: "clock-outline", label: "History" },
       { page: "settings", icon: "cog-outline", label: "Settings" },
@@ -196,7 +196,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   history: { title: "History", subtitle: "Past activity" },
   "financial-reports": { title: "Financial Reports", subtitle: "Financial outlook and alerts" },
   "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
-  budgeting: { title: "Budgeting", subtitle: "Plan your money" },
+  budgeting: { title: "Financial Plan", subtitle: "Plan your money" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
@@ -845,7 +845,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "budgeting") {
-      return <BudgetingScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onSyncRequested={handleSync} />;
+      return <FinancialPlanScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onSyncRequested={handleSync} />;
     }
 
     if (currentPage === "savings-goals") {

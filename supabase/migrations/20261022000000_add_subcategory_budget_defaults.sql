@@ -1,0 +1,181 @@
+ALTER TABLE hfce_subcategory_defaults
+  ADD COLUMN IF NOT EXISTS minimum_amount_centavos bigint,
+  ADD COLUMN IF NOT EXISTS always_in_budget boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS fixed_amount_centavos bigint;
+
+ALTER TABLE subcategories
+  ADD COLUMN IF NOT EXISTS always_in_budget boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS fixed_amount_centavos bigint;
+
+ALTER TABLE subcategories
+  ADD CONSTRAINT subcategories_fixed_amount_nonnegative_chk
+  CHECK (fixed_amount_centavos IS NULL OR fixed_amount_centavos >= 0),
+  ADD CONSTRAINT subcategories_fixed_amount_minimum_chk
+  CHECK (
+    fixed_amount_centavos IS NULL
+    OR minimum_amount_centavos IS NULL
+    OR fixed_amount_centavos >= minimum_amount_centavos
+  );
+
+UPDATE subcategories
+SET always_in_budget = true
+WHERE is_protected = true
+  AND minimum_amount_centavos IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION seed_hfce_taxonomy_for_user(p_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO categories (
+    category_group_id, user_id, slug, label, short_label, description,
+    is_system, is_filipino_context, sort_order
+  )
+  SELECT
+    category_group.id, p_user_id, defaults.slug, defaults.label,
+    defaults.short_label, defaults.description, false,
+    defaults.is_filipino_context, defaults.sort_order
+  FROM hfce_category_defaults AS defaults
+  JOIN category_groups AS category_group ON category_group.slug = 'hfce_categories'
+  WHERE category_group.is_active = true
+  ON CONFLICT (user_id, slug) WHERE user_id IS NOT NULL DO NOTHING;
+
+  INSERT INTO subcategories (
+    category_id, user_id, slug, kind, label, short_label, description,
+    is_system, is_filipino_context, is_protected_default, is_protected,
+    minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order
+  )
+  SELECT
+    category.id, p_user_id, defaults.slug, defaults.kind, defaults.label,
+    defaults.short_label, defaults.description, false,
+    defaults.is_filipino_context, false, false, defaults.minimum_amount_centavos, defaults.always_in_budget,
+    defaults.fixed_amount_centavos, defaults.sort_order
+  FROM hfce_subcategory_defaults AS defaults
+  JOIN categories AS category
+    ON category.user_id = p_user_id
+   AND category.slug = defaults.category_slug
+   AND category.deleted = false
+   AND category.is_active = true
+  ON CONFLICT (user_id, slug) WHERE user_id IS NOT NULL DO NOTHING;
+
+  UPDATE subcategories AS subcategory
+  SET category_id = category.id,
+      updated_at = now(),
+      version = subcategory.version + 1
+  FROM hfce_subcategory_defaults AS defaults
+  JOIN categories AS category
+    ON category.user_id = p_user_id
+   AND category.slug = defaults.category_slug
+   AND category.deleted = false
+  WHERE subcategory.user_id = p_user_id
+    AND subcategory.slug = defaults.slug
+    AND subcategory.category_id IS DISTINCT FROM category.id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION private.apply_subcategory_budget_config_sync_operation(
+  p_operation_id uuid,
+  p_device_id text,
+  p_entity text,
+  p_record_id uuid,
+  p_operation_type text,
+  p_base_version integer,
+  p_changed_fields text[],
+  p_payload jsonb
+) RETURNS TABLE(status text, reason text, current_version integer, conflicted_fields text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, private, auth
+AS $$
+DECLARE
+  v_user_id uuid := auth.uid();
+  v_result record;
+  v_existing_result jsonb;
+  v_version integer;
+BEGIN
+  IF v_user_id IS NULL THEN RAISE EXCEPTION 'authentication required'; END IF;
+
+  SELECT result INTO v_existing_result
+  FROM applied_operations
+  WHERE operation_id = p_operation_id AND user_id = v_user_id;
+
+  IF v_existing_result ? 'subcategory_budget_config_applied'
+     OR v_existing_result ? 'minimum_amount_centavos_applied' THEN
+    RETURN QUERY SELECT
+      COALESCE(v_existing_result->>'status', 'duplicate'),
+      NULLIF(v_existing_result->>'reason', ''),
+      (v_existing_result->>'current_version')::integer,
+      NULL::text[];
+    RETURN;
+  END IF;
+
+  SELECT * INTO v_result
+  FROM private.apply_sync_operation_ledger_core(
+    p_operation_id, p_device_id, p_entity, p_record_id, p_operation_type,
+    p_base_version, p_changed_fields, p_payload
+  );
+
+  IF v_result.status <> 'applied' THEN
+    RETURN QUERY SELECT v_result.status, v_result.reason, v_result.current_version, v_result.conflicted_fields;
+    RETURN;
+  END IF;
+
+  UPDATE subcategories
+  SET minimum_amount_centavos = CASE WHEN p_payload ? 'minimum_amount_centavos' THEN NULLIF(p_payload->>'minimum_amount_centavos', '')::bigint ELSE minimum_amount_centavos END,
+      always_in_budget = CASE WHEN p_payload ? 'always_in_budget' THEN (p_payload->>'always_in_budget')::boolean ELSE always_in_budget END,
+      fixed_amount_centavos = CASE WHEN p_payload ? 'fixed_amount_centavos' THEN NULLIF(p_payload->>'fixed_amount_centavos', '')::bigint ELSE fixed_amount_centavos END,
+      version = subcategories.version + 1,
+      updated_at = now()
+  WHERE id = p_record_id
+    AND user_id = v_user_id
+  RETURNING version INTO v_version;
+
+  IF v_version IS NULL THEN RAISE EXCEPTION 'subcategory not found for budget configuration update'; END IF;
+
+  UPDATE applied_operations
+  SET result = jsonb_build_object('status', 'applied', 'current_version', v_version, 'subcategory_budget_config_applied', true)
+  WHERE operation_id = p_operation_id AND user_id = v_user_id;
+
+  RETURN QUERY SELECT 'applied'::text, NULL::text, v_version, v_result.conflicted_fields;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.apply_sync_operation(
+  p_operation_id uuid,
+  p_device_id text,
+  p_entity text,
+  p_record_id uuid,
+  p_operation_type text,
+  p_base_version integer,
+  p_changed_fields text[],
+  p_payload jsonb
+) RETURNS TABLE(status text, reason text, current_version integer, conflicted_fields text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, private, auth
+AS $$
+BEGIN
+  IF p_entity = 'subcategories'
+     AND (p_payload ? 'minimum_amount_centavos' OR p_payload ? 'always_in_budget' OR p_payload ? 'fixed_amount_centavos') THEN
+    RETURN QUERY SELECT * FROM private.apply_subcategory_budget_config_sync_operation(
+      p_operation_id, p_device_id, p_entity, p_record_id, p_operation_type,
+      p_base_version, p_changed_fields, p_payload
+    );
+    RETURN;
+  END IF;
+
+  RETURN QUERY SELECT * FROM private.apply_sync_operation_ledger_core(
+    p_operation_id, p_device_id, p_entity, p_record_id, p_operation_type,
+    p_base_version, p_changed_fields, p_payload
+  );
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.apply_sync_operation(
+  uuid, text, text, uuid, text, integer, text[], jsonb
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.apply_sync_operation(
+  uuid, text, text, uuid, text, integer, text[], jsonb
+) TO authenticated;

@@ -160,8 +160,8 @@ async function verifyTargets(supabase: SupabaseClient, userId: string, targets: 
   const categoryIds = targets.flatMap((target) => target.categoryId ? [target.categoryId] : []);
   const subcategoryIds = targets.flatMap((target) => target.subcategoryId ? [target.subcategoryId] : []);
   const [categories, subcategories] = await Promise.all([
-    categoryIds.length ? supabase.from("categories").select("id").in("id", categoryIds).eq("deleted", false).eq("is_active", true).or(`user_id.is.null,user_id.eq.${userId}`) : Promise.resolve({ data: [], error: null }),
-    subcategoryIds.length ? supabase.from("subcategories").select("id").in("id", subcategoryIds).eq("deleted", false).eq("is_active", true).eq("kind", "expense").or(`user_id.is.null,user_id.eq.${userId}`) : Promise.resolve({ data: [], error: null }),
+    categoryIds.length ? supabase.from("categories").select("id").in("id", categoryIds).eq("deleted", false).eq("is_active", true).eq("user_id", userId) : Promise.resolve({ data: [], error: null }),
+    subcategoryIds.length ? supabase.from("subcategories").select("id").in("id", subcategoryIds).eq("deleted", false).eq("is_active", true).eq("kind", "expense").eq("user_id", userId) : Promise.resolve({ data: [], error: null }),
   ]);
   if (categories.error || subcategories.error) throw new BudgetRecommendationUpstreamError(503, "taxonomy validation unavailable");
   if ((categories.data?.length ?? 0) !== categoryIds.length || (subcategories.data?.length ?? 0) !== subcategoryIds.length) throw new BudgetRecommendationValidationError("allocation target is not accessible");

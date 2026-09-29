@@ -67,18 +67,18 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
   const prevMonthName = getPreviousMonthName();
   const incomeDelta = deltaPercent(s.currentMonthIncomeCentavos, s.previousMonthIncomeCentavos);
   const expenseDelta = deltaPercent(s.currentMonthExpenseCentavos, s.previousMonthExpenseCentavos);
-  const categoryGroupExpenseTotal = s.categoryGroupSpending.reduce((sum, group) => sum + group.total_centavos, 0);
-  const visibleSpending = s.categoryGroupSpending.slice(0, 4);
-  const hiddenSpendingTotal = s.categoryGroupSpending.slice(4).reduce((sum, group) => sum + group.total_centavos, 0);
+  const categoryExpenseTotal = s.categorySpending.reduce((sum, category) => sum + category.total_centavos, 0);
+  const visibleSpending = s.categorySpending.slice(0, 4);
+  const hiddenSpendingTotal = s.categorySpending.slice(4).reduce((sum, category) => sum + category.total_centavos, 0);
   const spendingGroups = hiddenSpendingTotal > 0
-    ? [...visibleSpending, { category_group_label: "Other", total_centavos: hiddenSpendingTotal }]
+    ? [...visibleSpending, { category_label: "Other", total_centavos: hiddenSpendingTotal }]
     : visibleSpending;
 
   const isEmpty = s.accountCount === 0
     && s.currentMonthIncomeCentavos === 0
     && s.currentMonthExpenseCentavos === 0
     && s.transactionCount === 0
-    && s.categoryGroupSpending.length === 0;
+    && s.categorySpending.length === 0;
 
   if (isEmpty && !summaryUnavailable) return <DashboardEmptyState onNavigate={onNavigate} />;
 
@@ -204,29 +204,29 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 32, backgroundColor: P.card, padding: 20 }}>
         <SpendingPie
           segments={spendingGroups.map((c, i) => ({
-            label: c.category_group_label,
+            label: c.category_label,
             value: c.total_centavos,
             color: SPENDING_COLORS[i] ?? P.mut,
           }))}
-          total={categoryGroupExpenseTotal}
-          totalLabel={formatPesoCompact(categoryGroupExpenseTotal)}
+          total={categoryExpenseTotal}
+          totalLabel={formatPesoCompact(categoryExpenseTotal)}
           line={P.line}
           muted={P.mut}
         />
         <View style={{ flex: 1, gap: 10 }}>
           {spendingGroups.map((c, i) => {
-            const pct = categoryGroupExpenseTotal > 0
-              ? Math.round((c.total_centavos / categoryGroupExpenseTotal) * 100)
+            const pct = categoryExpenseTotal > 0
+              ? Math.round((c.total_centavos / categoryExpenseTotal) * 100)
               : 0;
             return (
-              <View key={c.category_group_label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View key={c.category_label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: SPENDING_COLORS[i] ?? P.mut }} />
-                <Text style={{ flex: 1, fontFamily: "Manrope", fontWeight: "500", fontSize: 12.5, color: P.ink2 }} numberOfLines={1}>{c.category_group_label}</Text>
+                <Text style={{ flex: 1, fontFamily: "Manrope", fontWeight: "500", fontSize: 12.5, color: P.ink2 }} numberOfLines={1}>{c.category_label}</Text>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12.5, color: P.ink }}>{pct}%</Text>
               </View>
             );
           })}
-          {s.categoryGroupSpending.length === 0 && (
+          {s.categorySpending.length === 0 && (
             <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.mut }}>No expenses this month</Text>
           )}
         </View>

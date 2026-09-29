@@ -204,8 +204,8 @@ async function validateAllocationReferences(db: SQLite.SQLiteDatabase, userId: s
   const categoryIds = [...new Set(allocations.map((allocation) => allocation.categoryId).filter((id): id is string => Boolean(id)))];
   const subcategoryIds = [...new Set(allocations.map((allocation) => allocation.subcategoryId).filter((id): id is string => Boolean(id)))];
   const [categoryRows, subcategoryRows] = await Promise.all([
-    categoryIds.length ? db.getAllAsync<{ id: string }>(`SELECT id FROM categories WHERE (user_id = ? OR is_system = 1) AND id IN (${categoryIds.map(() => "?").join(",")}) AND deleted = 0 AND is_active = 1`, userId, ...categoryIds) : [],
-    subcategoryIds.length ? db.getAllAsync<{ id: string }>(`SELECT id FROM subcategories WHERE (user_id = ? OR is_system = 1) AND id IN (${subcategoryIds.map(() => "?").join(",")}) AND deleted = 0 AND is_active = 1 AND kind = 'expense'`, userId, ...subcategoryIds) : [],
+    categoryIds.length ? db.getAllAsync<{ id: string }>(`SELECT id FROM categories WHERE user_id = ? AND id IN (${categoryIds.map(() => "?").join(",")}) AND deleted = 0 AND is_active = 1`, userId, ...categoryIds) : [],
+    subcategoryIds.length ? db.getAllAsync<{ id: string }>(`SELECT id FROM subcategories WHERE user_id = ? AND id IN (${subcategoryIds.map(() => "?").join(",")}) AND deleted = 0 AND is_active = 1 AND kind = 'expense'`, userId, ...subcategoryIds) : [],
   ]);
   const categories = categoryRows ?? [];
   const subcategories = subcategoryRows ?? [];

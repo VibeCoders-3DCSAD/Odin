@@ -344,13 +344,13 @@ export default function BudgetingScreen({ userId, deviceId, accessToken, onSyncR
             setAllocationRows([emptyAllocationRow]);
           }} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
             <ArrowLeft size={18} color={formPalette.ink} weight="bold" />
-            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: formPalette.mut }}>Budgeting</Text>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: formPalette.mut }}>Budget Plan</Text>
           </Pressable>
           <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: formPalette.ink }}>{selectedDraft ? "Budget" : editingDraftId ? "Edit Budget" : "Add Budget"}</Text>
         </View>
       ) : (
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>Budgeting</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>Budget Plan</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Create budget draft"

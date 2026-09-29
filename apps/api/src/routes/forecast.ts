@@ -9,7 +9,7 @@ const router = Router();
 router.post("/", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   try {
     const forecastRequest = parseForecastRequest(request.body);
-    const payload = await getMlForecast(request.userId!, forecastRequest, request.supabase!);
+    const payload = await getMlForecast(request.userId!, forecastRequest);
     response.status(200).json({ payload });
   } catch (error) {
     if (error instanceof ForecastValidationError) {

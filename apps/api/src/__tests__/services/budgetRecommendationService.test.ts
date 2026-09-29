@@ -16,9 +16,9 @@ const request = {
 
 function taxonomyClient() {
   const categoryQuery = { select: jest.fn(), in: jest.fn(), eq: jest.fn(), or: jest.fn() };
-  categoryQuery.select.mockReturnValue(categoryQuery); categoryQuery.in.mockReturnValue(categoryQuery); categoryQuery.eq.mockReturnValue(categoryQuery); categoryQuery.or.mockReturnValue({ data: [{ id: "category-1" }], error: null });
+  categoryQuery.select.mockReturnValue(categoryQuery); categoryQuery.in.mockReturnValue(categoryQuery); categoryQuery.eq.mockImplementation((column: string) => column === "user_id" ? { data: [{ id: "category-1" }], error: null } : categoryQuery); categoryQuery.or.mockReturnValue({ data: [{ id: "category-1" }], error: null });
   const subcategoryQuery = { select: jest.fn(), in: jest.fn(), eq: jest.fn(), or: jest.fn() };
-  subcategoryQuery.select.mockReturnValue(subcategoryQuery); subcategoryQuery.in.mockReturnValue(subcategoryQuery); subcategoryQuery.eq.mockReturnValue(subcategoryQuery); subcategoryQuery.or.mockReturnValue({ data: [{ id: "subcategory-1" }], error: null });
+  subcategoryQuery.select.mockReturnValue(subcategoryQuery); subcategoryQuery.in.mockReturnValue(subcategoryQuery); subcategoryQuery.eq.mockImplementation((column: string) => column === "user_id" ? { data: [{ id: "subcategory-1" }], error: null } : subcategoryQuery); subcategoryQuery.or.mockReturnValue({ data: [{ id: "subcategory-1" }], error: null });
   return { from: jest.fn((table: string) => table === "categories" ? categoryQuery : subcategoryQuery) } as never;
 }
 

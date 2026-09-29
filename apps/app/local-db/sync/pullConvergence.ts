@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 
 type PullRow = Record<string, unknown>;
 
-const TAXONOMY_TABLES = new Set(["category_groups", "categories", "subcategories"]);
+const SYSTEM_TAXONOMY_TABLES = new Set(["category_groups"]);
 const LEGACY_TAXONOMY_GROUP_SLUGS = new Set(["essentials", "obligatory", "discretionary", "financial_allocation"]);
 export interface PullDb {
   getFirstAsync<T>(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<T | null>;
@@ -18,15 +18,13 @@ export const SYNCED_TABLES = [
   "credit_card_details",
   "credit_card_repayment_preferences",
   "transactions",
-  "transaction_line_items",
-  "transaction_templates",
-  "transaction_drafts",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "income_sources",
   "financial_obligations",
   "budgets",
   "budget_allocations",
+  "financial_plans",
   "credit_card_cycles",
   "credit_card_installments",
   "credit_card_transactions",
@@ -60,7 +58,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   subcategories: new Set([
     "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "is_protected", "minimum_amount_centavos",
+    "description", "is_system", "is_filipino_context", "is_protected", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos",
     "sort_order", "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
@@ -115,23 +113,6 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "notes", "client_mutation_id", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
-  transaction_line_items: new Set([
-    "id", "transaction_id", "user_id", "subcategory_id", "item_label", "quantity",
-    "amount_centavos", "notes", "sort_order", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
-  transaction_templates: new Set([
-    "id", "user_id", "transaction_type", "status", "name",
-    "amount_centavos", "subcategory_id", "source_account_id",
-    "destination_account_id", "merchant_name", "counterparty_name",
-    "notes", "use_count", "last_used_at", "metadata",
-    "version", "deleted", "created_at", "updated_at", "last_synced_at",
-  ]),
-  transaction_drafts: new Set([
-    "id", "user_id", "client_draft_id", "status", "payload",
-    "captured_offline_at", "synced_transaction_id", "last_error",
-    "metadata", "version", "deleted", "created_at", "updated_at", "last_synced_at",
-  ]),
   recurring_transaction_templates: new Set([
     "id", "user_id", "transaction_type", "status", "name",
     "amount_centavos", "frequency", "interval_count",
@@ -155,6 +136,11 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   budget_allocations: new Set([
     "id", "user_id", "budget_id", "category_id", "subcategory_id", "allocated_amount_minor",
     "restriction_level", "version", "deleted", "created_at", "updated_at",
+  ]),
+  financial_plans: new Set([
+    "id", "user_id", "period_start", "period_end", "status",
+    "input_snapshot_json", "recommendation_json", "version", "deleted",
+    "created_at", "updated_at", "last_synced_at",
   ]),
   credit_card_cycles: new Set([
     "id", "user_id", "account_id", "cycle_start_date", "cutoff_date", "statement_date",
@@ -231,7 +217,7 @@ export function normalizePullRow(
       const isProtectedDefault = (row.is_protected_default as boolean) === true;
       const isProtected = (row.is_protected as boolean) === true;
       normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
-    } else if (col === "metadata" || col === "preset_data" || col === "payment_schedule") {
+    } else if (col === "metadata" || col === "preset_data" || col === "payment_schedule" || col.endsWith("_snapshot_json") || col === "recommendation_json") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
     } else if (table === "savings_account_details" && col === "balance_tiers_json") {
@@ -274,7 +260,7 @@ export async function applyPullRow(
   row: PullRow,
 ): Promise<void> {
   const identityColumn = PULL_IDENTITY_COLUMNS[table] ?? "id";
-  const userScoped = !TAXONOMY_TABLES.has(table);
+  const userScoped = !SYSTEM_TAXONOMY_TABLES.has(table);
   const recordId = row[identityColumn] as string;
   const identityWhere = `"${identityColumn}" = ?${userScoped ? " AND user_id = ?" : ""}`;
   const identityParams: SQLite.SQLiteBindValue[] = userScoped ? [recordId, row.user_id as string] : [recordId];
@@ -285,7 +271,7 @@ export async function applyPullRow(
   const taxonomySlug = typeof row.slug === "string" ? row.slug : "";
   const isLegacyTaxonomy = table === "category_groups"
     ? LEGACY_TAXONOMY_GROUP_SLUGS.has(taxonomySlug)
-    : TAXONOMY_TABLES.has(table)
+    : (table === "categories" || table === "subcategories")
       && /^(essentials|obligatory|discretionary|financial)_/.test(taxonomySlug);
   if (isLegacyTaxonomy) return;
 
@@ -308,19 +294,6 @@ export async function applyPullRow(
     return;
   }
 
-  // System taxonomy IDs are shared by the server, but local rows are user-scoped.
-  // Reassign a reused system row before applying the normal version check.
-  if (TAXONOMY_TABLES.has(table) && existing.user_id !== undefined && existing.user_id !== row.user_id) {
-    const columns = Object.keys(row);
-    const setClauses = columns.map((c) => `"${c}" = ?`).join(", ");
-    await db.runAsync(
-      `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
-      ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
-      recordId,
-    );
-    return;
-  }
-
   if (rowVersion <= existing.version) return;
 
   if (rowDeleted) {
@@ -330,8 +303,7 @@ export async function applyPullRow(
        table === "transactions" ||
         table === "debt_accounts" ||
         table === "savings_goals" ||
-       table === "transaction_templates" ||
-      table === "recurring_transaction_templates" ||
+       table === "recurring_transaction_templates" ||
        table === "recurring_transaction_occurrences"
     ) {
       await db.runAsync(
@@ -341,23 +313,7 @@ export async function applyPullRow(
         now,
         ...identityParams,
       );
-    } else if (table === "transaction_drafts") {
-      await db.runAsync(
-         `UPDATE "${table}" SET deleted = 1, status = 'discarded', version = ?,
-          updated_at = ? WHERE ${identityWhere}`,
-        rowVersion,
-        now,
-        ...identityParams,
-      );
-    } else if (table === "transaction_line_items") {
-      await db.runAsync(
-         `UPDATE "${table}" SET deleted = 1, version = ?,
-          updated_at = ? WHERE ${identityWhere}`,
-        rowVersion,
-        now,
-        ...identityParams,
-      );
-    } else if (table === "budgets") {
+    } else if (table === "budgets" || table === "financial_plans") {
       await db.runAsync(
          `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
           updated_at = ? WHERE ${identityWhere}`,
