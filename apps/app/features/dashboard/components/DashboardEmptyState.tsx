@@ -6,7 +6,7 @@ const actions = [
   { label: "Add account", page: "financial-accounts", copy: "Add an account to make your available balance accurate." },
   { label: "Record a transaction", page: "add-transaction", copy: "Record income or an expense to start tracking your cash flow." },
   { label: "Add an income source", page: "income-sources", copy: "Set expected income to make your monthly plan more useful." },
-  { label: "Create a budget", page: "budgeting", copy: "Set a budget to see spending health." },
+  { label: "Create a Financial Plan", page: "financial-plan", copy: "Plan next month's commitments and category allocations." },
   { label: "Create a savings goal", page: "savings-goals", copy: "No savings goals yet." },
   { label: "View forecast", page: "spending-forecast", copy: "Forecast information will appear after you record activity." },
 ];

@@ -75,7 +75,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
   const currentMonth = getCurrentMonthRange();
   const today = toLocalDateStr(new Date());
 
-  const [balance, currentMonthTotals, previousMonth, accounts, incomeSources, transactions, budgets, recentTransactions, categorySpend] = await Promise.all([
+  const [balance, currentMonthTotals, previousMonth, accounts, incomeSources, transactions, financialPlans, recentTransactions, categorySpend] = await Promise.all([
     db.getFirstAsync<{ total: number | null }>(
       `SELECT SUM(current_balance_centavos) AS total
        FROM financial_accounts
@@ -119,7 +119,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
       userId,
     ),
     db.getFirstAsync<{ total: number }>(
-      "SELECT COUNT(*) AS total FROM budgets WHERE user_id = ? AND deleted = 0 AND status IN ('draft', 'active') AND period_start <= ? AND period_end >= ?",
+      "SELECT COUNT(*) AS total FROM financial_plans WHERE user_id = ? AND deleted = 0 AND status = 'accepted' AND period_start <= ? AND period_end >= ?",
       userId,
       today,
       today,
@@ -156,7 +156,7 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
     accountCount: accounts?.total ?? 0,
     incomeSourceCount: incomeSources?.total ?? 0,
     transactionCount: transactions?.total ?? 0,
-    budgetCount: budgets?.total ?? 0,
+    budgetCount: financialPlans?.total ?? 0,
     recentTransactions: recentTransactions ?? [],
     categorySpending: categorySpend ?? [],
   };

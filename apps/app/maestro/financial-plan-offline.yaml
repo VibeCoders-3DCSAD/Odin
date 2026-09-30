@@ -1,0 +1,25 @@
+appId: com.odin.finances
+name: View accepted Financial Plan offline
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    text: "Open navigation menu"
+- tapOn:
+    text: "Financial Plan"
+- extendedWaitUntil:
+    visible: "Financial Plan"
+    timeout: 10000
+- setAirplaneMode: enabled
+- killApp
+- launchApp:
+    clearState: false
+- tapOn:
+    text: "Open navigation menu"
+- tapOn:
+    text: "Financial Plan"
+- assertVisible:
+    text: "Financial Plan"
+- assertVisible:
+    text: "Saved Financial Plan.*"
+- setAirplaneMode: disabled

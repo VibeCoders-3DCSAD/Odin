@@ -114,15 +114,15 @@ describe("getDashboardSummary", () => {
     expect(spendingCall[0]).not.toContain("category_groups");
   });
 
-  it("counts active budgets as present", async () => {
+  it("counts accepted Financial Plans as present", async () => {
     mockGetFirstAsync.mockResolvedValue(null);
     mockGetAllAsync.mockResolvedValue([]);
 
     await getDashboardSummary("user-1");
 
-    const budgetCall = mockGetFirstAsync.mock.calls.find(([sql]) => sql.includes("FROM budgets"));
-    expect(budgetCall?.[0]).toContain("status IN ('draft', 'active')");
-    expect(budgetCall?.[0]).toContain("period_start <= ? AND period_end >= ?");
-    expect(budgetCall?.slice(1)).toHaveLength(3);
+    const planCall = mockGetFirstAsync.mock.calls.find(([sql]) => sql.includes("FROM financial_plans"));
+    expect(planCall?.[0]).toContain("status = 'accepted'");
+    expect(planCall?.[0]).toContain("period_start <= ? AND period_end >= ?");
+    expect(planCall?.slice(1)).toHaveLength(3);
   });
 });

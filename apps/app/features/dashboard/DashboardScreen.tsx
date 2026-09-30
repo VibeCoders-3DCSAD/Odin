@@ -313,12 +313,12 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
       ) : (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={budgetUnavailable ? "Refresh budget health" : s.budgetCount === 0 ? "Create a budget" : "View budget details"}
-          onPress={budgetUnavailable ? refresh : () => onNavigate("budgeting")}
+          accessibilityLabel={budgetUnavailable ? "Refresh budget health" : "Open Financial Plan"}
+          onPress={budgetUnavailable ? refresh : () => onNavigate("financial-plan")}
           style={{ padding: 20, alignItems: "center", borderRadius: 32, backgroundColor: P.card }}
         >
-          <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.mut }}>{budgetUnavailable ? "Budget health is unavailable. Try refreshing." : s.budgetCount === 0 ? "Create a budget to see health" : "No spending recorded for this budget"}</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.aqua700, marginTop: 6 }}>{budgetUnavailable ? "Refresh" : s.budgetCount === 0 ? "Create budget" : "View budget"}</Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.mut }}>{budgetUnavailable ? "Budget health is unavailable. Try refreshing." : "Create your next-month Financial Plan to review commitments and category allocations."}</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.aqua700, marginTop: 6 }}>{budgetUnavailable ? "Refresh" : "Open Financial Plan"}</Text>
         </Pressable>
       )}
 

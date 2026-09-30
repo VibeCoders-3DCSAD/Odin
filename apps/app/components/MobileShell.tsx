@@ -74,10 +74,10 @@ type Page =
   | "dashboard"
   | "transactions"
   | "history"
-  | "financial-reports"
-  | "budget-advice"
-  | "budgeting"
-    | "savings-goals"
+   | "financial-reports"
+   | "financial-plan"
+   | "budget-advice"
+   | "savings-goals"
   | "insurance"
   | "assistant"
   | "add-transaction"
@@ -166,9 +166,9 @@ const drawerSections: DrawerSection[] = [
       { page: "financial-obligations", icon: "calendar-check-outline", label: "Obligations" },
       { page: "debt-manager", icon: "credit-card-outline", label: "Debt Manager" },
       { page: "categories", icon: "tag-outline", label: "Categories" },
-      { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
-      { page: "budgeting", icon: "phosphor-wallet", label: "Financial Plan" },
-      { page: "recurring-transactions", icon: "repeat", label: "Recurring Transactions", child: true },
+       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
+        { page: "financial-plan", icon: "phosphor-wallet", label: "Financial Plan" },
+       { page: "recurring-transactions", icon: "repeat", label: "Recurring Transactions", child: true },
       { page: "history", icon: "clock-outline", label: "History" },
       { page: "settings", icon: "cog-outline", label: "Settings" },
     ],
@@ -195,8 +195,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   "recurring-transactions": { title: "Recurring Transactions", subtitle: "Manage recurring templates" },
   history: { title: "History", subtitle: "Past activity" },
   "financial-reports": { title: "Financial Reports", subtitle: "Financial outlook and alerts" },
-  "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
-  budgeting: { title: "Financial Plan", subtitle: "Plan your money" },
+   "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
+    "financial-plan": { title: "Financial Plan", subtitle: "Plan next month's money" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
@@ -261,6 +261,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const wasOnline = useRef(false);
   const syncInFlight = useRef(false);
   const lastAutoSyncAt = useRef(0);
+  const lastObservedQueueCount = useRef<number | null>(null);
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transactionLoadMoreRef = useRef<(() => void) | null>(null);
 
@@ -345,6 +346,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       deviceId,
     );
     const count = row?.cnt ?? 0;
+    if (lastObservedQueueCount.current !== null && lastObservedQueueCount.current !== count) {
+      setSyncVersion((value) => value + 1);
+    }
+    lastObservedQueueCount.current = count;
     setQueueCount(count);
     return count;
   }
@@ -469,7 +474,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       await refreshQueueCount();
       setSyncPending(result.hasMore);
 
-      if (result.pulled > 0) setSyncVersion((value) => value + 1);
+      // A pushed local mutation changes the inputs of an unaccepted plan too.
+      if (result.pulled > 0 || result.pushed > 0) setSyncVersion((value) => value + 1);
 
       if (showMessage && result.errors > 0) {
         setSyncMessage(`${result.errors} item(s) could not be synced`);
@@ -844,8 +850,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       return <NonCreditDebtDetailScreen userId={userId} deviceId={deviceId} debtId={selectedDebtId} onBack={() => setCurrentPage("non-credit-card-debts")} onRecordPayment={(debtId) => { setDebtPaymentDebtId(debtId); setDebtPaymentContext(null); setStatementPaymentContext(null); setTransactionToEdit(null); setTransactionReturnPage("non-credit-card-debt-detail"); setCurrentPage("add-transaction"); }} onEditPayment={async (payment: DebtPayment) => { const transaction = await getTransaction(userId, payment.transaction_id); if (!transaction) return; setDebtPaymentDebtId(null); setDebtPaymentContext({ paymentId: payment.id, debtAccountId: payment.debt_account_id }); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("non-credit-card-debt-detail"); setCurrentPage("add-transaction"); }} />;
     }
 
-    if (currentPage === "budgeting") {
-      return <FinancialPlanScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onSyncRequested={handleSync} />;
+    if (currentPage === "financial-plan") {
+      return <FinancialPlanScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} onSyncRequested={handleSync} />;
     }
 
     if (currentPage === "savings-goals") {

@@ -18,7 +18,7 @@ function financialPlanOperation() {
     payload: {
       period_start: period.start, period_end: period.end, status: "accepted",
       input_snapshot: { forecast: { version: "v1" }, restrictions: { version: "v1" }, obligations: { items: [] }, debtRequirements: { items: [] }, savingsRequirements: { items: [] }, classification: { version: "v2" } },
-      recommendation: { allocations: [], debtReservations: [], savingsReservations: [] },
+      recommendation: { availableFundsCentavos: 0, allocations: [], debtReservations: [], savingsReservations: [] },
     },
   };
 }
@@ -42,5 +42,25 @@ describe("Financial Plan sync payload", () => {
   it("rejects updates because accepted plans are immutable", async () => {
     const operation = financialPlanOperation();
     await expect(prepareOperation({} as never, "user-1", { ...operation, operation_type: "update", base_version: 1, changed_fields: ["status"], payload: { status: "edited" } })).rejects.toThrow("accepted Financial Plans are immutable");
+  });
+
+  it("rejects allocations above the category funds", async () => {
+    const operation = financialPlanOperation();
+    const payload = { ...operation.payload, recommendation: { ...operation.payload.recommendation, availableFundsCentavos: 100, allocations: [{ subcategoryId: "subcategory-1", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 101, floorAmountCentavos: 0 }] } };
+    await expect(prepareOperation({} as never, "user-1", { ...operation, payload })).rejects.toThrow("Financial Plan allocations exceed available funds");
+  });
+
+  it("rejects duplicate allocation targets before sync", async () => {
+    const operation = financialPlanOperation();
+    const allocation = { subcategoryId: "subcategory-1", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 0, floorAmountCentavos: 0 };
+    const payload = { ...operation.payload, recommendation: { ...operation.payload.recommendation, allocations: [allocation, allocation] } };
+
+    await expect(prepareOperation({} as never, "user-1", { ...operation, payload })).rejects.toThrow("Financial Plan allocations cannot target the same category or subcategory twice");
+  });
+
+  it("rejects removed legacy budget sync operations", async () => {
+    await expect(prepareOperation({} as never, "user-1", {
+      operation_id: "operation-1", entity: "budgets", record_id: "budget-1", operation_type: "create", base_version: null, changed_fields: [], payload: {},
+    })).rejects.toThrow("entity 'budgets' is not in the sync allowlist");
   });
 });

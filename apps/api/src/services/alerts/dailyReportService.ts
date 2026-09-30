@@ -20,7 +20,7 @@ export interface AnomalyModelAdapter {
 
 type Transaction = { id: string; amount_centavos: number; transaction_date: string; transaction_type: "expense"; category_id: string | null; subcategory_id: string | null; merchant_name: string | null };
 type TransactionRow = Omit<Transaction, "category_id"> & { subcategories: Array<{ category_id: string }> };
-type Budget = { id: string; period_start: string; period_end: string; budget_allocations: Array<{ id: string; allocated_amount_centavos: number; category_id: string; subcategory_id: string | null }> };
+type FinancialPlan = { id: string; period_start: string; period_end: string; financial_plan_allocations: Array<{ id: string; allocated_amount_centavos: number; category_id: string | null; subcategory_id: string | null }> };
 
 export function normalizeModelFindings(findings: ModelFinding[]): ModelFinding[] {
   return findings.map((finding) => {
@@ -29,14 +29,29 @@ export function normalizeModelFindings(findings: ModelFinding[]): ModelFinding[]
   });
 }
 
-export function buildBudgetOverspendingFindings(budgets: Budget[], transactions: Transaction[], reportDate: string): ModelFinding[] {
-  return budgets.flatMap((budget) => (budget.budget_allocations ?? []).flatMap((allocation) => {
-    const spent = transactions.filter((transaction) => transaction.transaction_date >= budget.period_start && transaction.transaction_date <= budget.period_end && transaction.category_id === allocation.category_id && (!allocation.subcategory_id || transaction.subcategory_id === allocation.subcategory_id)).reduce((sum, transaction) => sum + transaction.amount_centavos, 0);
+export function buildFinancialPlanOverspendingFindings(plans: FinancialPlan[], transactions: Transaction[], reportDate: string): ModelFinding[] {
+  return plans.flatMap((plan) => (plan.financial_plan_allocations ?? []).flatMap((allocation) => {
+    const spent = transactions.filter((transaction) => transaction.transaction_date >= plan.period_start && transaction.transaction_date <= plan.period_end && (allocation.category_id ? transaction.category_id === allocation.category_id : transaction.subcategory_id === allocation.subcategory_id)).reduce((sum, transaction) => sum + transaction.amount_centavos, 0);
     const excess = spent - allocation.allocated_amount_centavos;
     const percent = allocation.allocated_amount_centavos === 0 ? (spent > 0 ? 100 : 0) : (excess / allocation.allocated_amount_centavos) * 100;
     if (percent < anomalyConfig.severity.budgetOverspending.warningAtPercentOverBudget) return [];
-    return [{ candidate_key: `budget:${allocation.id}:${reportDate}`, finding: "budget_overspending" as const, severity: percent >= anomalyConfig.severity.budgetOverspending.criticalAtPercentOverBudget ? "critical" : "warning", explanation: `Spending is ${Math.round(percent)}% over this budget allocation.`, source_references: { budget_id: budget.id, budget_allocation_id: allocation.id, category_id: allocation.category_id, ...(allocation.subcategory_id ? { subcategory_id: allocation.subcategory_id } : {}) }, anomaly_score: null }];
+    return [{ candidate_key: `financial-plan:${allocation.id}:${reportDate}`, finding: "budget_overspending" as const, severity: percent >= anomalyConfig.severity.budgetOverspending.criticalAtPercentOverBudget ? "critical" : "warning", explanation: `Spending is ${Math.round(percent)}% over this Financial Plan allocation.`, source_references: { financial_plan_id: plan.id, financial_plan_allocation_id: allocation.id, ...(allocation.category_id ? { category_id: allocation.category_id } : {}), ...(allocation.subcategory_id ? { subcategory_id: allocation.subcategory_id } : {}) }, anomaly_score: null }];
   }));
+}
+
+export function buildReportAlerts(findings: ModelFinding[]) {
+  return findings
+    .filter((finding) => anomalyConfig.findings.createAlertsFor.includes(finding.finding as "unusual_transaction" | "budget_overspending"))
+    .map((finding) => ({
+      category: finding.finding === "unusual_transaction" ? "anomaly_detection" : "budget_overspending",
+      severity: finding.severity,
+      title: finding.finding === "unusual_transaction" ? "Unusual spending detected" : "Budget limit exceeded",
+      body: finding.explanation ?? "A financial report found activity to review.",
+      explanation: finding.explanation,
+      duplicate_key: `${finding.finding}:${finding.candidate_key}`,
+      candidate_key: finding.candidate_key,
+      source_references: finding.source_references,
+    }));
 }
 
 export async function runDailyFinancialReport(
@@ -48,7 +63,7 @@ export async function runDailyFinancialReport(
 ): Promise<{ report_id: string; evaluations: number; alerts: number }> {
   const periodStart = new Date(`${reportDate}T00:00:00.000Z`);
   periodStart.setUTCMonth(periodStart.getUTCMonth() - anomalyConfig.history.lookbackMonths);
-  const [transactionResult, budgetResult] = await Promise.all([
+  const [transactionResult, planResult] = await Promise.all([
     client
     .from("transactions")
     .select("id, amount_centavos, transaction_date, transaction_type, subcategory_id, merchant_name, subcategories(category_id)")
@@ -60,27 +75,19 @@ export async function runDailyFinancialReport(
     .lte("transaction_date", reportDate)
     .order("transaction_date", { ascending: false })
     .limit(5_000),
-    client.from("budgets").select("id, period_start, period_end, budget_allocations(id, allocated_amount_centavos, category_id, subcategory_id)").eq("user_id", userId).eq("status", "active").eq("deleted", false).lte("period_start", reportDate).gte("period_end", reportDate).limit(20),
+    client.from("financial_plans").select("id, period_start, period_end, financial_plan_allocations(id, allocated_amount_centavos, category_id, subcategory_id)").eq("user_id", userId).eq("status", "accepted").eq("deleted", false).lte("period_start", reportDate).gte("period_end", reportDate).limit(20),
   ]);
   if (transactionResult.error) throw transactionResult.error;
-  if (budgetResult.error) throw budgetResult.error;
+  if (planResult.error) throw planResult.error;
 
   const transactions = ((transactionResult.data ?? []) as TransactionRow[]).map(({ subcategories, ...transaction }) => ({
     ...transaction,
     category_id: subcategories[0]?.category_id ?? null,
   }));
   const modelFindings = normalizeModelFindings(await model.evaluate({ user_id: userId, report_date: reportDate, transactions }));
-  const findings = [...modelFindings, ...buildBudgetOverspendingFindings((budgetResult.data ?? []) as Budget[], transactions, reportDate)];
-  const alerts = findings.filter((finding) => anomalyConfig.findings.createAlertsFor.includes(finding.finding as "unusual_transaction" | "budget_overspending")).map((finding) => ({
-    category: finding.finding === "unusual_transaction" ? "anomaly_detection" : "budget_overspending",
-    severity: finding.severity,
-    title: finding.finding === "unusual_transaction" ? "Unusual spending detected" : "Budget limit exceeded",
-    body: finding.explanation ?? "A financial report found activity to review.",
-    explanation: finding.explanation,
-    duplicate_key: `${finding.finding}:${finding.candidate_key}`,
-    candidate_key: finding.candidate_key,
-    source_references: finding.source_references,
-  }));
+  const findings = [...modelFindings, ...buildFinancialPlanOverspendingFindings((planResult.data ?? []) as FinancialPlan[], transactions, reportDate)];
+  // Findings always remain report data; only configured actionable findings become alerts.
+  const alerts = buildReportAlerts(findings);
   const { data, error: writeError } = await client.rpc("write_daily_financial_report", {
     p_user_id: userId,
     p_report_date: reportDate,

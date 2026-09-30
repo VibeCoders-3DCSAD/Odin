@@ -22,8 +22,6 @@ export const SYNCED_TABLES = [
   "recurring_transaction_occurrences",
   "income_sources",
   "financial_obligations",
-  "budgets",
-  "budget_allocations",
   "financial_plans",
   "credit_card_cycles",
   "credit_card_installments",
@@ -128,18 +126,11 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "skipped_at", "failure_reason", "metadata",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
-  budgets: new Set([
-    "id", "user_id", "status", "allocation_method", "period_kind", "period_start", "period_end",
-    "budget_period_days", "total_amount_minor", "debt_budget_amount_minor", "savings_budget_amount_minor", "surplus_handling", "deficit_handling",
-    "allow_deficit_planning", "version", "deleted", "created_at", "updated_at", "last_synced_at",
-  ]),
-  budget_allocations: new Set([
-    "id", "user_id", "budget_id", "category_id", "subcategory_id", "allocated_amount_minor",
-    "restriction_level", "version", "deleted", "created_at", "updated_at",
-  ]),
   financial_plans: new Set([
     "id", "user_id", "period_start", "period_end", "status",
-    "input_snapshot_json", "recommendation_json", "version", "deleted",
+    "forecast_month", "forecast_total_centavos", "forecast_model_version", "forecast_generated_at", "forecast_quality",
+    "classification_status", "classification_rule_set_version", "classification_assessed_at",
+    "available_funds_centavos", "required_funds_centavos", "shortfall_centavos", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
   credit_card_cycles: new Set([
@@ -223,32 +214,10 @@ export function normalizePullRow(
     } else if (table === "savings_account_details" && col === "balance_tiers_json") {
       const tiers = row.balance_tiers;
       normalized[col] = typeof tiers === "object" && tiers !== null ? JSON.stringify(tiers) : null;
-    } else if (table === "budgets" && col === "period_kind") {
-      normalized[col] = String(row[col] ?? "").toUpperCase();
-    } else if (table === "budgets" && col === "allocation_method") {
-      normalized[col] = "MANUAL";
-    } else if (table === "budgets" && col === "total_amount_minor") {
-      normalized[col] = row.total_amount_centavos;
-    } else if (table === "budgets" && col === "debt_budget_amount_minor") {
-      normalized[col] = row.debt_budget_amount_centavos ?? 0;
-    } else if (table === "budgets" && col === "savings_budget_amount_minor") {
-      normalized[col] = row.savings_budget_amount_centavos ?? 0;
-    } else if (table === "budgets" && col === "surplus_handling") {
-      normalized[col] = "LEAVE_UNALLOCATED";
-    } else if (table === "budgets" && col === "deficit_handling") {
-      normalized[col] = "BLOCK_ACTIVATION";
-    } else if (table === "budget_allocations" && col === "allocated_amount_minor") {
-      normalized[col] = row.allocated_amount_centavos;
-    } else if (table === "budget_allocations" && col === "restriction_level") {
-      normalized[col] = "OPEN";
     } else {
       const val = row[col];
       normalized[col] = typeof val === "boolean" ? (val ? 1 : 0) : val;
     }
-  }
-
-  if (table === "budget_allocations" && normalized.category_id == null && normalized.subcategory_id != null) {
-    normalized.category_id = row.category_id ?? null;
   }
 
   return normalized;
@@ -313,18 +282,10 @@ export async function applyPullRow(
         now,
         ...identityParams,
       );
-    } else if (table === "budgets" || table === "financial_plans") {
+    } else if (table === "financial_plans") {
       await db.runAsync(
          `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
           updated_at = ? WHERE ${identityWhere}`,
-        rowVersion,
-        now,
-        ...identityParams,
-      );
-    } else if (table === "budget_allocations") {
-      await db.runAsync(
-         `UPDATE "${table}" SET deleted = 1, version = ?,
-           updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
         ...identityParams,

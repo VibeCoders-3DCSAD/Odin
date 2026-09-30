@@ -100,14 +100,14 @@ export async function getAccountBalanceAt(userId: string, endDate: string): Prom
 
 export async function getBudgetActualSummary(userId: string, range: ReportRange): Promise<BudgetActualSummary> {
   const db = await getDb();
-  const budget = await db.getFirstAsync<{ total: number }>(
-    `SELECT total_amount_minor AS total FROM budgets
-      WHERE user_id = ? AND deleted = 0 AND status = 'draft'
+  const plan = await db.getFirstAsync<{ total: number }>(
+    `SELECT available_funds_centavos AS total FROM financial_plans
+      WHERE user_id = ? AND deleted = 0 AND status = 'accepted'
         AND period_start <= ? AND period_end >= ?
       ORDER BY updated_at DESC LIMIT 1`,
     userId, range.endDate, range.startDate,
   );
-  if (!budget) return null;
+  if (!plan) return null;
   const actual = await db.getFirstAsync<{ total: number | null }>(
     `SELECT SUM(amount_centavos) AS total FROM transactions
       WHERE user_id = ? AND deleted = 0 AND status = 'posted' AND transaction_type = 'expense'
@@ -115,7 +115,7 @@ export async function getBudgetActualSummary(userId: string, range: ReportRange)
     userId, ...periodPredicate(range),
   );
   const actualCentavos = actual?.total ?? 0;
-  return { plannedCentavos: budget.total, actualCentavos, varianceCentavos: budget.total - actualCentavos };
+  return { plannedCentavos: plan.total, actualCentavos, varianceCentavos: plan.total - actualCentavos };
 }
 
 export async function getSavingsSummary(userId: string): Promise<SavingsSummary> {
@@ -181,12 +181,14 @@ export async function getExpenseCategoryDistribution(userId: string, range: Repo
 export async function getAllocationSummary(userId: string, range: ReportRange): Promise<AllocationSummary> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ total: number; debt: number; savings: number; category: number | null }>(
-    `SELECT b.total_amount_minor AS total, b.debt_budget_amount_minor AS debt,
-            b.savings_budget_amount_minor AS savings, SUM(ba.allocated_amount_minor) AS category
-       FROM budgets b LEFT JOIN budget_allocations ba ON ba.budget_id = b.id AND ba.user_id = b.user_id AND ba.deleted = 0
-      WHERE b.user_id = ? AND b.deleted = 0 AND b.status = 'draft'
-        AND b.period_start <= ? AND b.period_end >= ?
-      GROUP BY b.id ORDER BY b.updated_at DESC LIMIT 1`,
+    `SELECT p.available_funds_centavos AS total,
+            (SELECT COALESCE(SUM(amount_centavos), 0) FROM financial_plan_debt_reservations WHERE plan_id = p.id) AS debt,
+            (SELECT COALESCE(SUM(amount_centavos), 0) FROM financial_plan_savings_reservations WHERE plan_id = p.id) AS savings,
+            (SELECT COALESCE(SUM(allocated_amount_centavos), 0) FROM financial_plan_allocations WHERE plan_id = p.id) AS category
+       FROM financial_plans p
+      WHERE p.user_id = ? AND p.deleted = 0 AND p.status = 'accepted'
+        AND p.period_start <= ? AND p.period_end >= ?
+      ORDER BY p.period_start DESC, p.updated_at DESC LIMIT 1`,
     userId, range.endDate, range.startDate,
   );
   if (!row) return null;

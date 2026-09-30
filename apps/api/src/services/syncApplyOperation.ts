@@ -22,7 +22,6 @@ const SYNCED_ENTITIES = new Set([
   "financial_obligations",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
-  "budgets",
   "financial_plans",
   "credit_card_details",
   "credit_card_repayment_preferences",
@@ -309,15 +308,6 @@ const RECURRING_TEMPLATE_UPDATE_FIELDS = new Set(
 
 const RECURRING_OCCURRENCE_FIELDS = new Set([
   "recurring_template_id", "scheduled_date", "generated_transaction_id",
-]);
-
-const BUDGET_CREATE_FIELDS = new Set([
-  "status", "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations",
-  "allocation_method", "surplus_handling", "deficit_handling", "allow_deficit_planning", "debtBudgetAmountMinor", "savingsBudgetAmountMinor",
-]);
-
-const BUDGET_UPDATE_FIELDS = new Set([
-  "periodKind", "periodStart", "periodEnd", "budget_period_days", "totalAmountMinor", "allocations", "debtBudgetAmountMinor", "savingsBudgetAmountMinor",
 ]);
 
 const FINANCIAL_PLAN_CREATE_FIELDS = new Set([
@@ -746,14 +736,6 @@ async function validateCreatePayload(
     return sanitized;
   }
 
-  if (entity === "budgets") {
-    assertOnlyAllowed(payload, BUDGET_CREATE_FIELDS);
-    if (payload.status !== "draft" || payload.allocation_method !== "MANUAL") {
-      throw new Error("only manual draft budgets can sync");
-    }
-    return validateBudgetPayload(supabase, userId, payload, BUDGET_CREATE_FIELDS);
-  }
-
   if (entity === "financial_plans") {
     return validateFinancialPlanPayload(supabase, userId, payload);
   }
@@ -1005,75 +987,6 @@ async function validateTaxonomyCreatePayload(
   throw new Error(`Unknown entity for create: ${entity}`);
 }
 
-async function validateBudgetPayload(
-  supabase: SupabaseClient,
-  userId: string,
-  payload: Record<string, unknown>,
-  allowedFields: Set<string>,
-  excludeId?: string,
-): Promise<Record<string, unknown>> {
-  assertOnlyAllowed(payload, allowedFields);
-  if (!VALID_BUDGET_PERIOD_KINDS.includes(payload.periodKind as string)) {
-    throw new Error("periodKind must be WEEKLY, MONTHLY, CUSTOM, or INCOME_CYCLE");
-  }
-  requireDateString(payload, "periodStart");
-  requireDateString(payload, "periodEnd");
-  const periodDays = inclusiveDays(payload.periodStart as string, payload.periodEnd as string);
-  if (periodDays <= 0) throw new Error("periodEnd must be on or after periodStart");
-  if (payload.periodKind === "WEEKLY" && periodDays !== 7) throw new Error("WEEKLY budgets must span 7 days");
-  if (payload.periodKind === "MONTHLY") {
-    const start = parseDateString(payload.periodStart as string);
-    const nextMonthDays = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 2, 0)).getUTCDate();
-    const expectedEnd = new Date(Date.UTC(
-      start.getUTCFullYear(),
-      start.getUTCMonth() + 1,
-      Math.min(start.getUTCDate(), nextMonthDays),
-    ));
-    if (payload.periodEnd !== expectedEnd.toISOString().slice(0, 10)) {
-      throw new Error("MONTHLY budgets must cover one month from the start date");
-    }
-  }
-  if (payload.periodKind === "CUSTOM" && periodDays > 366) throw new Error("CUSTOM budgets cannot exceed 366 days");
-  if (payload.budget_period_days !== periodDays) throw new Error("budget_period_days must match the inclusive date range");
-  requirePositiveInteger(payload, "totalAmountMinor");
-  if (!Number.isSafeInteger(payload.debtBudgetAmountMinor) || (payload.debtBudgetAmountMinor as number) < 0) {
-    throw new Error("debtBudgetAmountMinor must be a non-negative safe integer");
-  }
-  if (!Number.isSafeInteger(payload.savingsBudgetAmountMinor) || (payload.savingsBudgetAmountMinor as number) < 0) {
-    throw new Error("savingsBudgetAmountMinor must be a non-negative safe integer");
-  }
-  const overlapQuery = supabase
-    .from("budgets")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("deleted", false)
-    .neq("status", "deleted")
-    .limit(1);
-  if (excludeId) overlapQuery.neq("id", excludeId);
-  const { data: existingBudget, error: overlapError } = await overlapQuery.maybeSingle();
-  if (overlapError) throw new Error(`budget uniqueness validation failed: ${overlapError.message}`);
-  if (existingBudget) throw new Error("only one budget can exist at a time");
-  if (!Array.isArray(payload.allocations)) throw new Error("allocations must be an array");
-  if (payload.allocations.length > 100) throw new Error("allocations cannot contain more than 100 items");
-  const categoryIds = payload.allocations.map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).categoryId : undefined).filter((id): id is string => typeof id === "string");
-  const subcategoryIds = payload.allocations.map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).subcategoryId : undefined).filter((id): id is string => typeof id === "string");
-  await verifyBudgetReferences(supabase, userId, categoryIds, subcategoryIds);
-  let allocated = 0;
-  for (const allocation of payload.allocations) {
-    if (!allocation || typeof allocation !== "object") throw new Error("allocations must contain objects");
-    const value = allocation as Record<string, unknown>;
-    if ((!value.categoryId && !value.subcategoryId) || (value.categoryId && value.subcategoryId)) {
-      throw new Error("each allocation must reference one category or subcategory");
-    }
-    requirePositiveInteger(value, "amountMinor");
-    allocated += value.amountMinor as number;
-  }
-  if (allocated + (payload.debtBudgetAmountMinor as number) + (payload.savingsBudgetAmountMinor as number) > (payload.totalAmountMinor as number)) {
-    throw new Error("allocations, debt budget, and savings budget cannot exceed the budget total");
-  }
-  return payload;
-}
-
 async function validateUpdatePayload(
   supabase: SupabaseClient,
   userId: string,
@@ -1129,8 +1042,6 @@ async function validateUpdatePayload(
     allowedFields = RECURRING_TEMPLATE_UPDATE_FIELDS;
   } else if (entity === "recurring_transaction_occurrences") {
     allowedFields = RECURRING_OCCURRENCE_FIELDS;
-  } else if (entity === "budgets") {
-    return validateBudgetPayload(supabase, userId, payload, BUDGET_UPDATE_FIELDS, recordId);
   } else if (entity === "financial_plans") {
     throw new Error("accepted Financial Plans are immutable");
   } else if (entity === "alert_notification_preferences" || entity === "anomaly_whitelist_rules" || entity === "alert_suppression_rules") {
@@ -1701,6 +1612,11 @@ async function validateFinancialPlanPayload(
     assertPlanAmount(allocation, "allocatedAmountCentavos"); assertPlanAmount(allocation, "floorAmountCentavos");
     if ((allocation.allocatedAmountCentavos as number) < (allocation.floorAmountCentavos as number)) throw new Error("Financial Plan allocation does not meet its floor");
     if (allocation.ceilingAmountCentavos != null) { assertPlanAmount(allocation, "ceilingAmountCentavos"); if ((allocation.ceilingAmountCentavos as number) < (allocation.allocatedAmountCentavos as number)) throw new Error("Financial Plan allocation exceeds its ceiling"); }
+    if (allocation.subcategoryWeightBps != null && (!Number.isSafeInteger(allocation.subcategoryWeightBps) || (allocation.subcategoryWeightBps as number) < 0 || (allocation.subcategoryWeightBps as number) > 10_000)) throw new Error("Financial Plan subcategory weight must be between 0 and 10000 basis points");
+  }
+  assertPlanAmount(recommendationDocument, "availableFundsCentavos");
+  if ((recommendationDocument.allocations as Record<string, unknown>[]).reduce((total, allocation) => total + (allocation.allocatedAmountCentavos as number), 0) > (recommendationDocument.availableFundsCentavos as number)) {
+    throw new Error("Financial Plan allocations exceed available funds");
   }
   for (const reservation of recommendationDocument.debtReservations as Record<string, unknown>[]) {
     if (Boolean(reservation.debtAccountId) === Boolean(reservation.creditCardStatementId)) throw new Error("each debt reservation must reference one debt or statement"); assertPlanAmount(reservation, "amountCentavos");
@@ -1711,7 +1627,9 @@ async function validateFinancialPlanPayload(
   const allocations = recommendationDocument.allocations as Record<string, unknown>[];
   const categoryIds = allocations.flatMap((allocation) => typeof allocation.categoryId === "string" ? [allocation.categoryId] : []);
   const subcategoryIds = allocations.flatMap((allocation) => typeof allocation.subcategoryId === "string" ? [allocation.subcategoryId] : []);
-  await verifyBudgetReferences(supabase, userId, categoryIds, subcategoryIds);
+  const allocationTargets = allocations.map((allocation) => typeof allocation.categoryId === "string" ? `category:${allocation.categoryId}` : `subcategory:${allocation.subcategoryId}`);
+  if (new Set(allocationTargets).size !== allocationTargets.length) throw new Error("Financial Plan allocations cannot target the same category or subcategory twice");
+  await verifyFinancialPlanAllocationReferences(supabase, userId, categoryIds, subcategoryIds);
   const debtReservations = recommendationDocument.debtReservations as Record<string, unknown>[];
   const debtIds = debtReservations.flatMap((reservation) => typeof reservation.debtAccountId === "string" ? [reservation.debtAccountId] : []);
   const statementIds = debtReservations.flatMap((reservation) => typeof reservation.creditCardStatementId === "string" ? [reservation.creditCardStatementId] : []);
@@ -1756,8 +1674,6 @@ async function verifyDebtPresetReferences(supabase: SupabaseClient, userId: stri
   if (!data) throw new Error("linked income source is not accessible");
 }
 
-const VALID_BUDGET_PERIOD_KINDS = ["WEEKLY", "MONTHLY", "CUSTOM", "INCOME_CYCLE"];
-
 function requireDateString(payload: Record<string, unknown>, field: string): void {
   if (typeof payload[field] !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(payload[field] as string)) {
     throw new Error(`${field} must be a valid YYYY-MM-DD date`);
@@ -1778,10 +1694,6 @@ function parseDateString(value: string): Date {
   const date = new Date(`${value}T00:00:00.000Z`);
   if (date.toISOString().slice(0, 10) !== value) return new Date(NaN);
   return date;
-}
-
-function inclusiveDays(start: string, end: string): number {
-  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1;
 }
 
 function optionalString(payload: Record<string, unknown>, field: string): void {
@@ -2118,7 +2030,7 @@ async function verifyCategoryOwnership(
   if (!data) throw new Error("category not found or inaccessible");
 }
 
-async function verifyBudgetReferences(
+async function verifyFinancialPlanAllocationReferences(
   supabase: SupabaseClient,
   userId: string,
   categoryIds: string[],
@@ -2126,11 +2038,13 @@ async function verifyBudgetReferences(
 ): Promise<void> {
   const [categories, subcategories] = await Promise.all([
     categoryIds.length ? supabase.from("categories").select("id").in("id", [...new Set(categoryIds)]).eq("deleted", false).eq("is_active", true).eq("user_id", userId) : Promise.resolve({ data: [], error: null }),
-    subcategoryIds.length ? supabase.from("subcategories").select("id").in("id", [...new Set(subcategoryIds)]).eq("deleted", false).eq("is_active", true).eq("kind", "expense").eq("user_id", userId) : Promise.resolve({ data: [], error: null }),
+    subcategoryIds.length ? supabase.from("subcategories").select("id, category_id").in("id", [...new Set(subcategoryIds)]).eq("deleted", false).eq("is_active", true).eq("kind", "expense").eq("user_id", userId) : Promise.resolve({ data: [], error: null }),
   ]);
   if (categories.error) throw new Error(`category validation failed: ${categories.error.message}`);
   if (subcategories.error) throw new Error(`subcategory validation failed: ${subcategories.error.message}`);
-  if ((categories.data?.length ?? 0) !== new Set(categoryIds).size || (subcategories.data?.length ?? 0) !== new Set(subcategoryIds).size) throw new Error("budget allocation reference not found or inaccessible");
+  if ((categories.data?.length ?? 0) !== new Set(categoryIds).size || (subcategories.data?.length ?? 0) !== new Set(subcategoryIds).size) throw new Error("Financial Plan allocation reference is not accessible");
+  const selectedCategoryIds = new Set(categoryIds);
+  if ((subcategories.data ?? []).some((subcategory) => selectedCategoryIds.has(subcategory.category_id))) throw new Error("Financial Plan cannot allocate both a category and one of its subcategories");
 }
 
 async function verifySubcategoryOwnership(

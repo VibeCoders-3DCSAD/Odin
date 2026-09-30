@@ -11,7 +11,7 @@ const mockListCreditCardStatements = jest.fn();
 const mockListCreditCardPayments = jest.fn();
 const mockListCreditCardInstallments = jest.fn();
 const mockListCreditCardStrategies = jest.fn();
-const mockGetCurrentBudgetDraft = jest.fn();
+const mockGetAcceptedFinancialPlanForPeriod = jest.fn();
 const mockGetDebtStrategy = jest.fn();
 const mockListDebtPriorities = jest.fn();
 
@@ -40,8 +40,9 @@ jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({
 jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
   listCreditCardStrategies: (...args: unknown[]) => mockListCreditCardStrategies(...args),
 }));
-jest.mock("../../../local-db/repositories/budgets", () => ({
-  getCurrentBudgetDraft: (...args: unknown[]) => mockGetCurrentBudgetDraft(...args),
+jest.mock("../../../local-db/repositories/financialPlans", () => ({
+  getAcceptedFinancialPlanForPeriod: (...args: unknown[]) => mockGetAcceptedFinancialPlanForPeriod(...args),
+  getNextFinancialPlanPeriod: () => ({ start: "2026-10-01", end: "2026-10-31" }),
 }));
 jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({
   getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args),
@@ -68,7 +69,7 @@ beforeEach(() => {
   mockListCreditCardStatements.mockResolvedValue([]);
   mockListCreditCardInstallments.mockResolvedValue([]);
   mockListCreditCardStrategies.mockResolvedValue([]);
-  mockGetCurrentBudgetDraft.mockResolvedValue(null);
+  mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
   mockGetDebtStrategy.mockResolvedValue("avalanche");
   mockListDebtPriorities.mockResolvedValue([]);
 });

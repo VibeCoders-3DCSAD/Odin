@@ -13,7 +13,6 @@ export type SyncableEntity =
   | "transactions"
   | "recurring_transaction_templates"
   | "recurring_transaction_occurrences"
-  | "budgets"
   | "financial_plans"
   | "savings_goals"
   | "savings_goal_activities"

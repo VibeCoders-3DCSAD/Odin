@@ -60,8 +60,6 @@ export const SYNCED_TABLES = [
   "financial_obligations",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
-  "budgets",
-  "budget_allocations",
   "financial_plans",
   "credit_card_details",
   "credit_card_repayment_preferences",
@@ -111,8 +109,6 @@ export async function pushOperations(
       auditPayload = { redacted: true, fields: Object.keys(prepared.payload) };
       const rpcName = ["alert_notification_preferences", "anomaly_whitelist_rules", "alert_suppression_rules"].includes(prepared.entity)
         ? "apply_alert_feedback_sync_operation"
-        : prepared.entity === "budgets"
-         ? "apply_budget_sync_operation_v2"
         : prepared.entity === "financial_plans"
           ? "apply_financial_plan_sync_operation"
         : prepared.entity === "debt_accounts" || prepared.entity === "debt_payments" || prepared.entity === "user_debt_priorities" || prepared.entity === "debt_strategy_preferences"
@@ -223,9 +219,7 @@ export async function pullChanges(
        table === "financial_obligations" ||
       table === "recurring_transaction_templates" ||
       table === "recurring_transaction_occurrences"
-      || table === "budgets"
-       || table === "budget_allocations"
-        || table === "financial_plans"
+       || table === "financial_plans"
         || table === "credit_card_cycles"
          || table === "credit_card_details"
          || table === "credit_card_repayment_preferences"

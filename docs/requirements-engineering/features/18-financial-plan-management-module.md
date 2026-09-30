@@ -3,10 +3,13 @@
 ### 18.1 Financial Plan
 
 - Generate a user-reviewable monthly Financial Plan.
+- Generate plans only for the next calendar month.
 - Combine a Budget Plan, Savings Contribution Plan, and Debt Repayment Plan.
 - Use available income, forecast expenses, financial obligations, savings goals, debt targets, and the Financial Condition Assessment as plan inputs.
 - Keep recommendations separate from user-created plans until the user accepts them.
 - Allow the user to review, accept, edit, or reject a recommendation.
+- An accepted plan persists its immutable input snapshot locally and remains
+  viewable while offline.
 
 ### 18.2 Plan Inputs
 
@@ -18,6 +21,8 @@
 - Active debt payment requirements and target payoff dates
 - Financial Condition Assessment, including EFC, DSTI, FM, and CCB
 - Current category restriction snapshots, including fixed amounts, protected floors, and category ceilings
+- Allocation rules use `Fixed`, `Minimum`, and `Flexible`: Fixed is exact,
+  Minimum is a non-reducible floor, and Flexible has a zero floor.
 
 ### 18.3 Budget Plan
 
@@ -55,3 +60,5 @@
 - Edited state: the user modified the accepted recommendation
 - Rejected state: the user rejected the recommendation
 - Error state: the Financial Plan could not be generated
+- Infeasible state: required commitments exceed available funds; show the
+  shortfall without reducing Fixed or Minimum requirements.

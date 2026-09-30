@@ -95,7 +95,7 @@ export default function UserProfileScreen({ accessToken, alreadyExported, onExpo
               Your data
             </Text>
             <Text style={{ fontFamily: "Manrope", fontWeight: "400", fontSize: 11, color: MUTED, marginTop: 1 }}>
-              Export includes transactions, budgets, and profile
+              Export includes transactions, Financial Plans, and profile
             </Text>
           </View>
         </View>

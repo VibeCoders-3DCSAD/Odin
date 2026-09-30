@@ -4,8 +4,17 @@ CREATE TABLE IF NOT EXISTS public.financial_plans (
   period_start date NOT NULL,
   period_end date NOT NULL,
   status text NOT NULL CHECK (status = 'accepted'),
-  input_snapshot_json jsonb NOT NULL,
-  recommendation_json jsonb NOT NULL,
+  forecast_month text NOT NULL,
+  forecast_total_centavos bigint NOT NULL CHECK (forecast_total_centavos >= 0),
+  forecast_model_version text NOT NULL,
+  forecast_generated_at timestamptz NOT NULL,
+  forecast_quality text NOT NULL,
+  classification_status text,
+  classification_rule_set_version text,
+  classification_assessed_at timestamptz,
+  available_funds_centavos bigint NOT NULL CHECK (available_funds_centavos >= 0),
+  required_funds_centavos bigint,
+  shortfall_centavos bigint,
   version integer NOT NULL DEFAULT 1,
   deleted boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -20,6 +29,26 @@ CREATE INDEX IF NOT EXISTS financial_plans_user_period_idx
 ALTER TABLE public.financial_plans ENABLE ROW LEVEL SECURITY;
 CREATE POLICY financial_plans_user_select ON public.financial_plans
   FOR SELECT TO authenticated USING (user_id = auth.uid());
+
+CREATE TABLE IF NOT EXISTS public.financial_plan_forecast_points (
+  plan_id uuid NOT NULL REFERENCES public.financial_plans(id), category_key text NOT NULL,
+  amount_centavos bigint NOT NULL CHECK (amount_centavos >= 0), PRIMARY KEY (plan_id, category_key)
+);
+CREATE TABLE IF NOT EXISTS public.financial_plan_allocations (
+  id uuid PRIMARY KEY, plan_id uuid NOT NULL REFERENCES public.financial_plans(id),
+  category_id uuid REFERENCES public.categories(id), subcategory_id uuid REFERENCES public.subcategories(id),
+  allocation_rule text NOT NULL CHECK (allocation_rule IN ('FIXED', 'MINIMUM', 'FLEXIBLE')),
+  allocated_amount_centavos bigint NOT NULL CHECK (allocated_amount_centavos >= 0), floor_amount_centavos bigint NOT NULL CHECK (floor_amount_centavos >= 0),
+  ceiling_amount_centavos bigint, forecast_amount_centavos bigint, subcategory_weight_bps integer,
+  CHECK ((category_id IS NULL) <> (subcategory_id IS NULL))
+);
+CREATE TABLE IF NOT EXISTS public.financial_plan_debt_reservations (
+  id uuid PRIMARY KEY, plan_id uuid NOT NULL REFERENCES public.financial_plans(id), debt_account_id uuid REFERENCES public.debt_accounts(id), credit_card_statement_id uuid REFERENCES public.credit_card_statements(id),
+  amount_centavos bigint NOT NULL CHECK (amount_centavos >= 0), due_date date, CHECK ((debt_account_id IS NULL) <> (credit_card_statement_id IS NULL))
+);
+CREATE TABLE IF NOT EXISTS public.financial_plan_savings_reservations (
+  id uuid PRIMARY KEY, plan_id uuid NOT NULL REFERENCES public.financial_plans(id), savings_goal_id uuid NOT NULL REFERENCES public.savings_goals(id), amount_centavos bigint NOT NULL CHECK (amount_centavos >= 0), due_date date
+);
 
 CREATE OR REPLACE FUNCTION public.apply_financial_plan_sync_operation(
   p_operation_id uuid, p_device_id text, p_entity text, p_record_id uuid,
@@ -46,6 +75,7 @@ BEGIN
   IF jsonb_typeof(p_payload->'recommendation'->'allocations') <> 'array' OR jsonb_typeof(p_payload->'recommendation'->'debtReservations') <> 'array' OR jsonb_typeof(p_payload->'recommendation'->'savingsReservations') <> 'array' THEN RAISE EXCEPTION 'Financial Plan recommendation is incomplete'; END IF;
   IF jsonb_array_length(p_payload->'recommendation'->'allocations') > 200 OR jsonb_array_length(p_payload->'recommendation'->'debtReservations') > 100 OR jsonb_array_length(p_payload->'recommendation'->'savingsReservations') > 100 THEN RAISE EXCEPTION 'Financial Plan recommendation is too large'; END IF;
   IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_payload->'recommendation'->'allocations') AS a(value) WHERE jsonb_typeof(a.value) <> 'object' OR (a.value ? 'categoryId') = (a.value ? 'subcategoryId') OR COALESCE(a.value->>'allocationRule', '') NOT IN ('FIXED', 'MINIMUM', 'FLEXIBLE') OR COALESCE(a.value->>'allocatedAmountCentavos', '') !~ '^[0-9]+$' OR COALESCE(a.value->>'floorAmountCentavos', '') !~ '^[0-9]+$' OR (a.value->>'allocatedAmountCentavos')::bigint < (a.value->>'floorAmountCentavos')::bigint) THEN RAISE EXCEPTION 'Financial Plan allocation is invalid'; END IF;
+  IF COALESCE(p_payload->'recommendation'->>'availableFundsCentavos', '') !~ '^[0-9]+$' OR (SELECT COALESCE(SUM((a.value->>'allocatedAmountCentavos')::bigint), 0) FROM jsonb_array_elements(p_payload->'recommendation'->'allocations') AS a(value)) > (p_payload->'recommendation'->>'availableFundsCentavos')::bigint THEN RAISE EXCEPTION 'Financial Plan allocations exceed available funds'; END IF;
   IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_payload->'recommendation'->'debtReservations') AS r(value) WHERE jsonb_typeof(r.value) <> 'object' OR (r.value ? 'debtAccountId') = (r.value ? 'creditCardStatementId') OR COALESCE(r.value->>'amountCentavos', '') !~ '^[0-9]+$') THEN RAISE EXCEPTION 'Financial Plan debt reservation is invalid'; END IF;
   IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_payload->'recommendation'->'savingsReservations') AS r(value) WHERE jsonb_typeof(r.value) <> 'object' OR COALESCE(r.value->>'savingsGoalId', '') = '' OR COALESCE(r.value->>'amountCentavos', '') !~ '^[0-9]+$') THEN RAISE EXCEPTION 'Financial Plan savings reservation is invalid'; END IF;
   IF EXISTS (SELECT 1 FROM jsonb_to_recordset(p_payload->'recommendation'->'allocations') AS a("categoryId" uuid, "subcategoryId" uuid) LEFT JOIN categories c ON c.id = a."categoryId" AND c.user_id = v_user_id AND c.deleted = false AND c.is_active = true LEFT JOIN subcategories s ON s.id = a."subcategoryId" AND s.user_id = v_user_id AND s.deleted = false AND s.is_active = true AND s.kind = 'expense' WHERE (a."categoryId" IS NOT NULL AND c.id IS NULL) OR (a."subcategoryId" IS NOT NULL AND s.id IS NULL)) THEN RAISE EXCEPTION 'Financial Plan allocation is not accessible'; END IF;
@@ -53,8 +83,12 @@ BEGIN
   IF EXISTS (SELECT 1 FROM jsonb_to_recordset(p_payload->'recommendation'->'savingsReservations') AS r("savingsGoalId" uuid) LEFT JOIN savings_goals g ON g.id = r."savingsGoalId" AND g.user_id = v_user_id AND g.deleted = false WHERE g.id IS NULL) THEN RAISE EXCEPTION 'Financial Plan savings reservation is not accessible'; END IF;
   INSERT INTO applied_operations (operation_id, user_id, device_id, entity, record_id, operation_type, result)
   VALUES (p_operation_id, v_user_id, p_device_id, p_entity, p_record_id, p_operation_type, jsonb_build_object('status', 'pending'));
-  INSERT INTO financial_plans (id, user_id, period_start, period_end, status, input_snapshot_json, recommendation_json)
-  VALUES (p_record_id, v_user_id, (p_payload->>'period_start')::date, (p_payload->>'period_end')::date, 'accepted', p_payload->'input_snapshot', p_payload->'recommendation');
+  INSERT INTO financial_plans (id, user_id, period_start, period_end, status, forecast_month, forecast_total_centavos, forecast_model_version, forecast_generated_at, forecast_quality, classification_status, classification_rule_set_version, classification_assessed_at, available_funds_centavos, required_funds_centavos, shortfall_centavos)
+  VALUES (p_record_id, v_user_id, (p_payload->>'period_start')::date, (p_payload->>'period_end')::date, 'accepted', p_payload->'input_snapshot'->'forecast'->>'month', (p_payload->'input_snapshot'->'forecast'->>'totalAmountCentavos')::bigint, p_payload->'input_snapshot'->'forecast'->>'modelVersion', (p_payload->'input_snapshot'->'forecast'->>'generatedAt')::timestamptz, p_payload->'input_snapshot'->'forecast'->>'quality', p_payload->'input_snapshot'->'classification'->>'status', p_payload->'input_snapshot'->'classification'->>'rule_set_version', NULLIF(p_payload->'input_snapshot'->'classification'->>'assessed_at', '')::timestamptz, (p_payload->'recommendation'->>'availableFundsCentavos')::bigint, NULLIF(p_payload->'recommendation'->>'requiredFundsCentavos', '')::bigint, NULLIF(p_payload->'recommendation'->>'shortfallCentavos', '')::bigint);
+  INSERT INTO financial_plan_forecast_points (plan_id, category_key, amount_centavos) SELECT p_record_id, point->>'category', (point->>'amountCentavos')::bigint FROM jsonb_array_elements(p_payload->'input_snapshot'->'forecast'->'categoryForecasts') AS point;
+  INSERT INTO financial_plan_allocations (id, plan_id, category_id, subcategory_id, allocation_rule, allocated_amount_centavos, floor_amount_centavos, ceiling_amount_centavos, forecast_amount_centavos, subcategory_weight_bps) SELECT gen_random_uuid(), p_record_id, NULLIF(item->>'categoryId', '')::uuid, NULLIF(item->>'subcategoryId', '')::uuid, item->>'allocationRule', (item->>'allocatedAmountCentavos')::bigint, (item->>'floorAmountCentavos')::bigint, NULLIF(item->>'ceilingAmountCentavos', '')::bigint, NULLIF(item->>'forecastAmountCentavos', '')::bigint, NULLIF(item->>'subcategoryWeightBps', '')::integer FROM jsonb_array_elements(p_payload->'recommendation'->'allocations') AS item;
+  INSERT INTO financial_plan_debt_reservations (id, plan_id, debt_account_id, credit_card_statement_id, amount_centavos, due_date) SELECT gen_random_uuid(), p_record_id, NULLIF(item->>'debtAccountId', '')::uuid, NULLIF(item->>'creditCardStatementId', '')::uuid, (item->>'amountCentavos')::bigint, NULLIF(item->>'dueDate', '')::date FROM jsonb_array_elements(p_payload->'recommendation'->'debtReservations') AS item;
+  INSERT INTO financial_plan_savings_reservations (id, plan_id, savings_goal_id, amount_centavos, due_date) SELECT gen_random_uuid(), p_record_id, (item->>'savingsGoalId')::uuid, (item->>'amountCentavos')::bigint, NULLIF(item->>'dueDate', '')::date FROM jsonb_array_elements(p_payload->'recommendation'->'savingsReservations') AS item;
   UPDATE applied_operations SET result = jsonb_build_object('status', 'applied', 'current_version', 1) WHERE operation_id = p_operation_id AND user_id = v_user_id;
   RETURN QUERY SELECT 'applied'::text, NULL::text, 1, NULL::text[];
 END;

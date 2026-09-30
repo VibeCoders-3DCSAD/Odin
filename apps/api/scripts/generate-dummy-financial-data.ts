@@ -51,13 +51,6 @@ const requiredSubcategorySlugs = [
   "restaurants_cafes",
   "clothing_accessories",
 ] as const;
-const budgetSubcategorySlugs = [
-  "food_groceries",
-  "transport_public",
-  "housing_electricity",
-  "housing_internet",
-  "restaurants_cafes",
-] as const;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -199,14 +192,12 @@ async function deleteRows(
 }
 
 async function clearDummyData(supabase: ReturnType<typeof createClient>, userId: string) {
-  const [{ data: accounts, error: accountsError }, { data: budgets, error: budgetsError }, { data: goals, error: goalsError }, { data: debts, error: debtsError }] = await Promise.all([
+  const [{ data: accounts, error: accountsError }, { data: goals, error: goalsError }, { data: debts, error: debtsError }] = await Promise.all([
     supabase.from("financial_accounts").select("id").eq("user_id", userId).or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`),
-    supabase.from("budgets").select("id").eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
     supabase.from("savings_goals").select("id").eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
     supabase.from("debt_accounts").select("id").eq("user_id", userId).contains("metadata", { dummy_data_source: seedMarker }),
   ]);
   if (accountsError) throw accountsError;
-  if (budgetsError) throw budgetsError;
   if (goalsError) throw goalsError;
   if (debtsError) throw debtsError;
 
@@ -225,7 +216,6 @@ async function clearDummyData(supabase: ReturnType<typeof createClient>, userId:
   }
 
   await Promise.all([
-    deleteRows(supabase, "budgets", userId, (budgets ?? []).map((budget) => budget.id)),
     deleteRows(supabase, "savings_goals", userId, (goals ?? []).map((goal) => goal.id)),
     deleteRows(supabase, "debt_accounts", userId, (debts ?? []).map((debt) => debt.id)),
   ]);
@@ -236,17 +226,6 @@ async function clearDummyData(supabase: ReturnType<typeof createClient>, userId:
     .or(`metadata->>dummy_data_source.eq.${seedMarker},metadata->>dummy_data_source.eq.${legacySeedMarker}`);
   if (transactionsError) throw transactionsError;
   await deleteRows(supabase, "financial_accounts", userId, accountIds);
-}
-
-function currentMonthRange(endDate: string) {
-  const current = new Date(`${endDate}T00:00:00Z`);
-  const start = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 1));
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-    days: Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1,
-  };
 }
 
 async function main() {
@@ -304,34 +283,12 @@ async function main() {
     }
     throw transactionsError;
   }
-  const categoryBySlug = new Map((categories ?? []).map((category) => [category.slug, category]));
-  const budgetCategories = budgetSubcategorySlugs.map((slug) => categoryBySlug.get(slug));
-  if (budgetCategories.some((category) => !category)) throw new Error("Missing subcategories required for the dummy budget.");
-
-  const { start: periodStart, end: periodEnd, days: budgetPeriodDays } = currentMonthRange(endDate);
   const referenceDate = new Date(`${endDate}T00:00:00Z`);
   const nextMonth = addMonths(referenceDate, 1);
   const nextContributionDate = formatDate(nextMonth, 16);
-  const budgetId = randomUUID();
   const goalIds = { emergency: randomUUID(), laptop: randomUUID() };
   const debtIds = { personal: randomUUID(), auto: randomUUID() };
   const marker = { dummy_data_source: seedMarker, generated_seed: seed };
-  const { error: budgetError } = await supabase.from("budgets").insert({
-    id: budgetId, user_id: userId, status: "draft", source: "manual", period_kind: "monthly",
-    period_start: periodStart, period_end: periodEnd, budget_period_days: budgetPeriodDays,
-    total_amount_centavos: centavos(52_000), debt_budget_amount_centavos: centavos(7_500), savings_budget_amount_centavos: centavos(5_000),
-    surplus_handling: "no_action", deficit_handling: "warn_only", allow_deficit_planning: false,
-    metadata: marker, version: 1, deleted: false,
-  });
-  if (budgetError) throw budgetError;
-  const allocationAmounts = [13_000, 5_000, 3_000, 2_000, 4_500];
-  const { error: allocationsError } = await supabase.from("budget_allocations").insert(budgetCategories.map((category, index) => ({
-    id: randomUUID(), user_id: userId, budget_id: budgetId, allocation_scope: "subcategory",
-    category_id: category!.category_id, subcategory_id: category!.id, allocated_amount_centavos: centavos(allocationAmounts[index]!),
-    is_protected_snapshot: false, sort_order: index + 1, metadata: marker, version: 1, deleted: false,
-  })));
-  if (allocationsError) throw allocationsError;
-
   const { error: goalsInsertError } = await supabase.from("savings_goals").insert([
     { id: goalIds.emergency, user_id: userId, name: "Emergency Fund", goal_type: "emergency_fund", goal_category: "emergency_fund", target_amount_centavos: centavos(180_000), starting_amount_centavos: centavos(45_000), target_date: formatDate(addMonths(referenceDate, 9), 30), priority: "high", emergency_fund_baseline_centavos: centavos(30_000), auto_save_amount_centavos: centavos(5_000), planned_contribution_amount_centavos: centavos(5_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "essential_expense_coverage", essential_expense_coverage_months: 6, status: "active", version: 1, deleted: false, metadata: marker },
     { id: goalIds.laptop, user_id: userId, name: "New Laptop", goal_type: "custom", goal_category: "custom", target_amount_centavos: centavos(85_000), starting_amount_centavos: centavos(12_000), target_date: formatDate(addMonths(referenceDate, 6), 31), priority: "medium", auto_save_amount_centavos: centavos(3_000), planned_contribution_amount_centavos: centavos(3_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "fixed_amount", status: "active", version: 1, deleted: false, metadata: marker },
