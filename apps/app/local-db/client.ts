@@ -9,6 +9,7 @@ const MIGRATIONS_TABLE = `CREATE TABLE IF NOT EXISTS _migrations (
   version integer primary key,
   applied_at text not null default (datetime('now'))
 );`;
+const MIGRATION_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400] as const;
 
 let db: SQLite.SQLiteDatabase | null = null;
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -20,11 +21,20 @@ export async function getDatabase(
   if (!dbPromise) {
     dbPromise = (async () => {
       const opened = await SQLite.openDatabaseAsync("odin.db");
-      await opened.execAsync(MIGRATIONS_TABLE);
-      await runMigrations(opened, migrations);
-      db = opened;
-      return opened;
-    })();
+      try {
+        await opened.execAsync(MIGRATIONS_TABLE);
+        await runMigrations(opened, migrations);
+        db = opened;
+        return opened;
+      } catch (error) {
+        await opened.closeAsync();
+        throw error;
+      }
+    })().catch((error) => {
+      // A rejected promise must not permanently block later initialization attempts.
+      dbPromise = null;
+      throw error;
+    });
   }
   return dbPromise;
 }
@@ -40,14 +50,34 @@ async function runMigrations(
 
   for (const m of migrations.sort((a, b) => a.version - b.version)) {
     if (appliedVersions.has(m.version)) continue;
-    await db.withTransactionAsync(async () => {
-      await m.up(db);
-      await db.runAsync(
-        "INSERT INTO _migrations (version) VALUES (?)",
-        m.version,
-      );
-    });
+    await runMigrationWithRetry(db, m);
   }
+}
+
+async function runMigrationWithRetry(
+  db: SQLite.SQLiteDatabase,
+  migration: Migration,
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db.withTransactionAsync(async () => {
+        await migration.up(db);
+        await db.runAsync(
+          "INSERT INTO _migrations (version) VALUES (?)",
+          migration.version,
+        );
+      });
+      return;
+    } catch (error) {
+      const retryDelay = MIGRATION_LOCK_RETRY_DELAYS_MS[attempt];
+      if (!isDatabaseLocked(error) || retryDelay === undefined) throw error;
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+}
+
+function isDatabaseLocked(error: unknown): boolean {
+  return error instanceof Error && /database is locked/i.test(error.message);
 }
 
 export async function loadMigrations(): Promise<Migration[]> {
@@ -118,7 +148,8 @@ export async function loadMigrations(): Promise<Migration[]> {
   const { default: m065 } = await import("./migrations/065_subcategory_budget_defaults");
   const { default: m066 } = await import("./migrations/066_financial_plans");
   const { default: m067 } = await import("./migrations/067_drop_legacy_budget_tables");
-  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040, m041, m042, m043, m044, m045, m046, m047, m048, m049, m050, m051, m052, m053, m054, m055, m056, m057, m058, m059, m060, m061, m062, m063, m064, m065, m066, m067];
+  const { default: m068 } = await import("./migrations/068_financial_plan_surplus");
+  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040, m041, m042, m043, m044, m045, m046, m047, m048, m049, m050, m051, m052, m053, m054, m055, m056, m057, m058, m059, m060, m061, m062, m063, m064, m065, m066, m067, m068];
 }
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
