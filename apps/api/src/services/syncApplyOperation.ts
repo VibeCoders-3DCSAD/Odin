@@ -1602,6 +1602,9 @@ async function validateFinancialPlanPayload(
   const recommendation = sanitized.recommendation;
   if (!recommendation || typeof recommendation !== "object" || Array.isArray(recommendation)) throw new Error("recommendation must be an object");
   const recommendationDocument = recommendation as Record<string, unknown>;
+  for (const field of ["debtSurplusCentavos", "savingsSurplusCentavos"]) {
+    if (recommendationDocument[field] !== undefined) assertPlanAmount(recommendationDocument, field);
+  }
   for (const field of ["allocations", "debtReservations", "savingsReservations"]) {
     if (!Array.isArray(recommendationDocument[field]) || (recommendationDocument[field] as unknown[]).length > 200) throw new Error(`recommendation.${field} must be a bounded array`);
   }

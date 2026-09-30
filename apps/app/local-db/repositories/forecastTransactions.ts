@@ -4,6 +4,7 @@ import type { ForecastTransaction } from "../../features/forecast/types";
 
 const MAX_FORECAST_TRANSACTIONS = 500;
 const MAX_DESCRIPTION_LENGTH = 160;
+const MAX_RECOMMENDED_SUBCATEGORIES = 200;
 
 type ForecastTransactionRow = {
   id: string;
@@ -37,6 +38,27 @@ export function getForecastHistoryStartDate(now = new Date()): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12, 1))
     .toISOString()
     .slice(0, 10);
+}
+
+export function getRecentExpenseStartDate(now = new Date()): string {
+  const start = new Date(now);
+  start.setUTCMonth(start.getUTCMonth() - 6);
+  return start.toISOString().slice(0, 10);
+}
+
+export async function listRecentExpenseSubcategoryIds(userId: string, fromDate = getRecentExpenseStartDate()): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ subcategory_id: string }>(
+    `SELECT DISTINCT subcategory_id
+       FROM transactions
+      WHERE user_id = ? AND transaction_type = 'expense' AND status = 'posted' AND deleted = 0
+        AND transaction_date >= ? AND subcategory_id IS NOT NULL
+      ORDER BY subcategory_id
+      LIMIT ${MAX_RECOMMENDED_SUBCATEGORIES}`,
+    userId,
+    fromDate,
+  );
+  return rows.flatMap((row) => typeof row.subcategory_id === "string" && row.subcategory_id ? [row.subcategory_id] : []);
 }
 
 export async function listForecastTransactions(userId: string, { fromDate }: ListForecastTransactionsOptions = {}): Promise<ForecastTransaction[]> {

@@ -25,11 +25,18 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
   afterEach(() => jest.restoreAllMocks());
 
   it("requires authentication and derives inputs for the authenticated user", async () => {
-    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ periodStart: "2000-01-01" });
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries", "groceries", "transport"] });
     expect(response.status).toBe(200);
     expect(response.body.payload.status).toBe("RECOMMENDATION_READY");
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything());
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), ["groceries", "transport"]);
     expect((await request(app).post("/odin/api/financial-plans/recommendation").send({})).status).toBe(401);
+  });
+
+  it("rejects an invalid category selection", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: "groceries" });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toEqual({ error: "Unprocessable Entity", message: "Financial Plan inputs are incomplete" });
   });
 
   it("returns a safe validation response when plan inputs are incomplete", async () => {

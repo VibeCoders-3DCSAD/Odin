@@ -56,4 +56,29 @@ describe("financial plan repository", () => {
       "2026-10-31",
     );
   });
+
+  it("resolves plan references to owned display names in bounded queries", async () => {
+    const db = {
+      getAllAsync: jest.fn()
+        .mockResolvedValueOnce([{ id: "category-1", label: "Household" }])
+        .mockResolvedValueOnce([{ id: "subcategory-1", label: "Groceries" }])
+        .mockResolvedValueOnce([{ id: "debt-1", name: "Car loan" }])
+        .mockResolvedValueOnce([{ id: "goal-1", name: "Emergency fund" }])
+        .mockResolvedValueOnce([{ id: "statement-1", name: "Visa" }]),
+    };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { getFinancialPlanLabels } = await import("../financialPlans");
+    await expect(getFinancialPlanLabels("user-1", {
+      recommendation: {
+        allocations: [{ categoryId: "category-1" }, { subcategoryId: "subcategory-1" }],
+        debtReservations: [{ debtAccountId: "debt-1" }, { creditCardStatementId: "statement-1" }],
+        savingsReservations: [{ savingsGoalId: "goal-1" }],
+      },
+    })).resolves.toEqual({
+      categories: { "category-1": "Household" }, subcategories: { "subcategory-1": "Groceries" }, debtAccounts: { "debt-1": "Car loan" }, savingsGoals: { "goal-1": "Emergency fund" }, creditCardStatements: { "statement-1": "Visa statement" },
+    });
+    expect(db.getAllAsync).toHaveBeenCalledTimes(5);
+    for (const call of db.getAllAsync.mock.calls) expect(call.slice(1)).toContain("user-1");
+  });
 });

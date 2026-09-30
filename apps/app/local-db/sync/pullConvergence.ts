@@ -130,7 +130,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "id", "user_id", "period_start", "period_end", "status",
     "forecast_month", "forecast_total_centavos", "forecast_model_version", "forecast_generated_at", "forecast_quality",
     "classification_status", "classification_rule_set_version", "classification_assessed_at",
-    "available_funds_centavos", "required_funds_centavos", "shortfall_centavos", "version", "deleted",
+    "available_funds_centavos", "required_funds_centavos", "shortfall_centavos", "debt_surplus_centavos", "savings_surplus_centavos", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
   credit_card_cycles: new Set([

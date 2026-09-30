@@ -3,6 +3,7 @@ import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
+import type { FinancialPlanLabels } from "../../features/financial-plan/financialPlanPresentation";
 
 export type AllocationRule = "FIXED" | "MINIMUM" | "FLEXIBLE";
 
@@ -71,6 +72,8 @@ type FinancialPlanRow = {
   available_funds_centavos: number;
   required_funds_centavos: number | null;
   shortfall_centavos: number | null;
+  debt_surplus_centavos: number;
+  savings_surplus_centavos: number;
 };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -79,6 +82,13 @@ function now() { return new Date().toISOString(); }
 
 function assertCentavos(value: number, field: string): void {
   if (!Number.isSafeInteger(value) || value < 0) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a non-negative whole number`);
+}
+
+function optionalRecommendationCentavos(recommendation: Record<string, unknown>, field: string): number {
+  const value = recommendation[field];
+  if (value === undefined) return 0;
+  if (!Number.isSafeInteger(value) || value < 0) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a non-negative whole number`);
+  return value;
 }
 
 function assertDate(value: string, field: string): void {
@@ -154,12 +164,14 @@ export async function createFinancialPlan(userId: string, deviceId: string, inpu
   const forecast = input.inputSnapshot.forecast as { month?: unknown; totalAmountCentavos?: unknown; modelVersion?: unknown; generatedAt?: unknown; quality?: unknown; categoryForecasts?: unknown };
   const classification = input.inputSnapshot.classification as { status?: unknown; rule_set_version?: unknown; assessed_at?: unknown };
   if (typeof forecast.month !== "string" || !Number.isSafeInteger(forecast.totalAmountCentavos) || typeof forecast.modelVersion !== "string" || typeof forecast.generatedAt !== "string" || typeof forecast.quality !== "string") throw new LocalDbError("VALIDATION_ERROR", "forecast snapshot is invalid");
-  const recommendation = { ...input.recommendation, allocations: input.allocations, debtReservations: input.debtReservations, savingsReservations: input.savingsReservations };
+  const debtSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "debtSurplusCentavos");
+  const savingsSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "savingsSurplusCentavos");
+  const recommendation = { ...input.recommendation, debtSurplusCentavos, savingsSurplusCentavos, allocations: input.allocations, debtReservations: input.debtReservations, savingsReservations: input.savingsReservations };
   const payload = { period_start: input.periodStart, period_end: input.periodEnd, status: "accepted", input_snapshot: input.inputSnapshot, recommendation };
   let operation!: SyncOperation;
   await db.withTransactionAsync(async () => {
     await validateReferences(db, userId, input);
-    await db.runAsync("INSERT INTO financial_plans (id, user_id, period_start, period_end, status, forecast_month, forecast_total_centavos, forecast_model_version, forecast_generated_at, forecast_quality, classification_status, classification_rule_set_version, classification_assessed_at, available_funds_centavos, required_funds_centavos, shortfall_centavos, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, 'accepted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)", id, userId, input.periodStart, input.periodEnd, forecast.month, forecast.totalAmountCentavos, forecast.modelVersion, forecast.generatedAt, forecast.quality, typeof classification.status === "string" ? classification.status : null, typeof classification.rule_set_version === "string" ? classification.rule_set_version : null, typeof classification.assessed_at === "string" ? classification.assessed_at : null, input.recommendation.availableFundsCentavos as number, input.recommendation.requiredFundsCentavos as number ?? null, input.recommendation.shortfallCentavos as number ?? null, timestamp, timestamp);
+    await db.runAsync("INSERT INTO financial_plans (id, user_id, period_start, period_end, status, forecast_month, forecast_total_centavos, forecast_model_version, forecast_generated_at, forecast_quality, classification_status, classification_rule_set_version, classification_assessed_at, available_funds_centavos, required_funds_centavos, shortfall_centavos, debt_surplus_centavos, savings_surplus_centavos, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, 'accepted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)", id, userId, input.periodStart, input.periodEnd, forecast.month, forecast.totalAmountCentavos, forecast.modelVersion, forecast.generatedAt, forecast.quality, typeof classification.status === "string" ? classification.status : null, typeof classification.rule_set_version === "string" ? classification.rule_set_version : null, typeof classification.assessed_at === "string" ? classification.assessed_at : null, input.recommendation.availableFundsCentavos as number, input.recommendation.requiredFundsCentavos as number ?? null, input.recommendation.shortfallCentavos as number ?? null, debtSurplusCentavos, savingsSurplusCentavos, timestamp, timestamp);
     if (!Array.isArray(forecast.categoryForecasts)) throw new LocalDbError("VALIDATION_ERROR", "forecast points are invalid");
     for (const point of forecast.categoryForecasts) {
       if (!point || typeof point !== "object" || typeof (point as { category?: unknown }).category !== "string" || !Number.isSafeInteger((point as { amountCentavos?: unknown }).amountCentavos)) throw new LocalDbError("VALIDATION_ERROR", "forecast point is invalid");
@@ -183,7 +195,7 @@ async function mapPlan(db: SQLite.SQLiteDatabase, row: FinancialPlanRow): Promis
   const mappedAllocations = allocations.map((allocation) => ({ categoryId: allocation.category_id, subcategoryId: allocation.subcategory_id, allocationRule: allocation.allocation_rule, allocatedAmountCentavos: allocation.allocated_amount_centavos, floorAmountCentavos: allocation.floor_amount_centavos, ceilingAmountCentavos: allocation.ceiling_amount_centavos, forecastAmountCentavos: allocation.forecast_amount_centavos, subcategoryWeightBps: allocation.subcategory_weight_bps }));
   const mappedDebtReservations = debtReservations.map((reservation) => ({ debtAccountId: reservation.debt_account_id, creditCardStatementId: reservation.credit_card_statement_id, amountCentavos: reservation.amount_centavos, dueDate: reservation.due_date }));
   const mappedSavingsReservations = savingsReservations.map((reservation) => ({ savingsGoalId: reservation.savings_goal_id, amountCentavos: reservation.amount_centavos, dueDate: reservation.due_date }));
-  return { id: row.id, periodStart: row.period_start, periodEnd: row.period_end, inputSnapshot: { forecast: { month: row.forecast_month, totalAmountCentavos: row.forecast_total_centavos, modelVersion: row.forecast_model_version, generatedAt: row.forecast_generated_at, quality: row.forecast_quality, categoryForecasts: points.map((point) => ({ category: point.category_key, amountCentavos: point.amount_centavos })) }, restrictions: { allocations: mappedAllocations }, obligations: { reservations: [] }, debtRequirements: { reservations: mappedDebtReservations }, savingsRequirements: { reservations: mappedSavingsReservations }, classification: { status: row.classification_status, rule_set_version: row.classification_rule_set_version, assessed_at: row.classification_assessed_at } }, recommendation: { availableFundsCentavos: row.available_funds_centavos, requiredFundsCentavos: row.required_funds_centavos, shortfallCentavos: row.shortfall_centavos, allocations: mappedAllocations, debtReservations: mappedDebtReservations, savingsReservations: mappedSavingsReservations } };
+  return { id: row.id, periodStart: row.period_start, periodEnd: row.period_end, inputSnapshot: { forecast: { month: row.forecast_month, totalAmountCentavos: row.forecast_total_centavos, modelVersion: row.forecast_model_version, generatedAt: row.forecast_generated_at, quality: row.forecast_quality, categoryForecasts: points.map((point) => ({ category: point.category_key, amountCentavos: point.amount_centavos })) }, restrictions: { allocations: mappedAllocations }, obligations: { reservations: [] }, debtRequirements: { reservations: mappedDebtReservations, surplusCentavos: row.debt_surplus_centavos }, savingsRequirements: { reservations: mappedSavingsReservations, surplusCentavos: row.savings_surplus_centavos }, classification: { status: row.classification_status, rule_set_version: row.classification_rule_set_version, assessed_at: row.classification_assessed_at } }, recommendation: { availableFundsCentavos: row.available_funds_centavos, requiredFundsCentavos: row.required_funds_centavos, shortfallCentavos: row.shortfall_centavos, allocations: mappedAllocations, debtReservations: mappedDebtReservations, debtSurplusCentavos: row.debt_surplus_centavos, savingsReservations: mappedSavingsReservations, savingsSurplusCentavos: row.savings_surplus_centavos } };
 }
 
 export async function getFinancialPlan(userId: string, id: string): Promise<AcceptedFinancialPlan | null> {
@@ -210,4 +222,28 @@ export async function getAcceptedFinancialPlanForPeriod(userId: string, periodSt
     periodEnd,
   );
   return row ? mapPlan(db, row) : null;
+}
+
+export async function getFinancialPlanLabels(userId: string, plan: Pick<AcceptedFinancialPlan, "recommendation">): Promise<FinancialPlanLabels> {
+  const recommendation = plan.recommendation as { allocations?: FinancialPlanAllocation[]; debtReservations?: FinancialPlanDebtReservation[]; savingsReservations?: FinancialPlanSavingsReservation[] };
+  const categoryIds = [...new Set((recommendation.allocations ?? []).flatMap((allocation) => allocation.categoryId ? [allocation.categoryId] : []))];
+  const subcategoryIds = [...new Set((recommendation.allocations ?? []).flatMap((allocation) => allocation.subcategoryId ? [allocation.subcategoryId] : []))];
+  const debtIds = [...new Set((recommendation.debtReservations ?? []).flatMap((reservation) => reservation.debtAccountId ? [reservation.debtAccountId] : []))];
+  const goalIds = [...new Set((recommendation.savingsReservations ?? []).map((reservation) => reservation.savingsGoalId))];
+  const statementIds = [...new Set((recommendation.debtReservations ?? []).flatMap((reservation) => reservation.creditCardStatementId ? [reservation.creditCardStatementId] : []))];
+  const db = await getDb();
+  const [categories, subcategories, debts, goals, statements] = await Promise.all([
+    categoryIds.length ? db.getAllAsync<{ id: string; label: string }>(`SELECT id, label FROM categories WHERE user_id = ? AND deleted = 0 AND id IN (${categoryIds.map(() => "?").join(",")})`, userId, ...categoryIds) : [],
+    subcategoryIds.length ? db.getAllAsync<{ id: string; label: string }>(`SELECT id, label FROM subcategories WHERE user_id = ? AND deleted = 0 AND id IN (${subcategoryIds.map(() => "?").join(",")})`, userId, ...subcategoryIds) : [],
+    debtIds.length ? db.getAllAsync<{ id: string; name: string }>(`SELECT id, name FROM debt_accounts WHERE user_id = ? AND deleted = 0 AND id IN (${debtIds.map(() => "?").join(",")})`, userId, ...debtIds) : [],
+    goalIds.length ? db.getAllAsync<{ id: string; name: string }>(`SELECT id, name FROM savings_goals WHERE user_id = ? AND deleted = 0 AND id IN (${goalIds.map(() => "?").join(",")})`, userId, ...goalIds) : [],
+    statementIds.length ? db.getAllAsync<{ id: string; name: string }>(`SELECT s.id, a.name FROM credit_card_statements s JOIN credit_card_cycles c ON c.id = s.cycle_id AND c.user_id = s.user_id JOIN financial_accounts a ON a.id = c.account_id AND a.user_id = c.user_id WHERE s.user_id = ? AND s.deleted = 0 AND c.deleted = 0 AND a.deleted = 0 AND s.id IN (${statementIds.map(() => "?").join(",")})`, userId, ...statementIds) : [],
+  ]);
+  return {
+    categories: Object.fromEntries(categories.map((category) => [category.id, category.label])),
+    subcategories: Object.fromEntries(subcategories.map((subcategory) => [subcategory.id, subcategory.label])),
+    debtAccounts: Object.fromEntries(debts.map((debt) => [debt.id, debt.name])),
+    savingsGoals: Object.fromEntries(goals.map((goal) => [goal.id, goal.name])),
+    creditCardStatements: Object.fromEntries(statements.map((statement) => [statement.id, `${statement.name} statement`])),
+  };
 }

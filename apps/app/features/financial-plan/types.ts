@@ -38,7 +38,9 @@ export type FinancialPlanRecommendation = {
     shortfallCentavos?: number;
     allocations: FinancialPlanAllocation[];
     debtReservations: FinancialPlanReservation[];
+    debtSurplusCentavos?: number;
     savingsReservations: FinancialPlanReservation[];
+    savingsSurplusCentavos?: number;
   };
   explanations: string[];
 };

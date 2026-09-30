@@ -43,4 +43,15 @@ describe("listForecastTransactions", () => {
 
     expect(getForecastHistoryStartDate(new Date("2026-09-15T12:00:00Z"))).toBe("2025-09-01");
   });
+
+  it("returns only recent posted expense subcategories for plan recommendations", async () => {
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([{ subcategory_id: "groceries" }, { subcategory_id: "transport" }]);
+    mockInitDatabase.mockResolvedValue({ getAllAsync });
+    const { _resetDbCacheForTesting, listRecentExpenseSubcategoryIds } = await import("../forecastTransactions");
+    _resetDbCacheForTesting();
+
+    await expect(listRecentExpenseSubcategoryIds("user-1", "2026-03-30")).resolves.toEqual(["groceries", "transport"]);
+    expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("transaction_type = 'expense'"), "user-1", "2026-03-30");
+    expect(getAllAsync.mock.calls[0]![0]).toContain("transaction_date >= ?");
+  });
 });
