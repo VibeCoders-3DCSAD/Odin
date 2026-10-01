@@ -34,7 +34,7 @@ const mlResponse = {
 };
 
 describe("forecast ML adapter", () => {
-  afterEach(() => { delete process.env.FORECASTING_ML_BASE_URL; delete process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET; });
+  afterEach(() => { delete process.env.FORECASTING_ML_BASE_URL; delete process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET; jest.useRealTimers(); });
 
   it("validates transaction history without the retired horizon and level controls", () => {
     expect(parseForecastRequest({ historicalTransactions: [transaction] })).toEqual({ historicalTransactions: [transaction] });
@@ -42,6 +42,7 @@ describe("forecast ML adapter", () => {
   });
 
   it("derives supported categories and maps the HFCE quarterly response", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-09-30T12:00:00.000Z"));
     process.env.FORECASTING_ML_BASE_URL = "http://ml.internal/";
     process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
     const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => mlResponse });

@@ -30,7 +30,7 @@ describe("POST /odin/api/forecast", () => {
   afterEach(() => { delete process.env.FORECASTING_ML_BASE_URL; delete process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET; jest.restoreAllMocks(); });
 
   it("requires auth and injects the authenticated user into the ML request", async () => {
-    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 1, user_baseline_amount: 1, hfce_multiplier: 1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast." }], model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 1, user_baseline_amount: 1, hfce_multiplier: 1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast." }], snapshot: { month: "2026-10", total_amount: 1, category_forecasts: [{ category: "food", amount: 1 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-09-29T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
     const response = await request(app).post("/odin/api/forecast").set(authHeader()).send(body);
     expect(response.status).toBe(200);
     expect(JSON.parse(String(fetchSpy.mock.calls[0]![1]?.body))).toMatchObject({ user_id: validUserId });
