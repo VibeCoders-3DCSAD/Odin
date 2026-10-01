@@ -48,7 +48,8 @@ const config = {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#ffffff",
     },
-    edgeToEdgeEnabled: true,
+    // Bottom sheets are not inset-aware yet, so reserve Android's navigation area.
+    edgeToEdgeEnabled: false,
     predictiveBackGestureEnabled: false,
   },
   web: {
