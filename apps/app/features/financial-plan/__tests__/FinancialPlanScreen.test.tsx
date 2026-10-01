@@ -1,14 +1,18 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import FinancialPlanScreen from "../FinancialPlanScreen";
 
 const mockGetLatestFinancialPlan = jest.fn();
 const mockGetFinancialPlanLabels = jest.fn();
 const mockGetFinancialPlanAllocationSpending = jest.fn();
 const mockGetFinancialPlanSpentAmount = jest.fn();
+const mockDeleteFinancialPlan = jest.fn();
+const mockListFinancialAccounts = jest.fn();
 
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   createFinancialPlan: jest.fn(),
+  deleteFinancialPlan: (...args: unknown[]) => mockDeleteFinancialPlan(...args),
   getLatestFinancialPlan: (...args: unknown[]) => mockGetLatestFinancialPlan(...args),
   getFinancialPlanLabels: (...args: unknown[]) => mockGetFinancialPlanLabels(...args),
   getFinancialPlanAllocationSpending: (...args: unknown[]) => mockGetFinancialPlanAllocationSpending(...args),
@@ -27,12 +31,8 @@ jest.mock("../../../local-db/repositories/taxonomy", () => ({
   updateSubcategory: jest.fn(),
 }));
 
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({
-  listIncomeSources: jest.fn().mockResolvedValue([]),
-}));
-
-jest.mock("../../../local-db/repositories/debtAccounts", () => ({
-  listDebtAccounts: jest.fn().mockResolvedValue([]),
+jest.mock("../../../local-db/repositories/financialAccounts", () => ({
+  listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
 }));
 
 jest.mock("../api", () => ({ requestFinancialPlanRecommendation: jest.fn() }));
@@ -54,6 +54,8 @@ describe("FinancialPlanScreen", () => {
     mockGetFinancialPlanLabels.mockResolvedValue({ categories: { food: "Food" }, subcategories: {}, debtAccounts: {}, savingsGoals: {}, creditCardStatements: {} });
     mockGetFinancialPlanAllocationSpending.mockResolvedValue({ "category:food": 0 });
     mockGetFinancialPlanSpentAmount.mockResolvedValue(0);
+    mockDeleteFinancialPlan.mockResolvedValue({});
+    mockListFinancialAccounts.mockResolvedValue([]);
   });
 
   it("opens the saved Financial Plan instead of the category selector", async () => {
@@ -80,5 +82,31 @@ describe("FinancialPlanScreen", () => {
 
     await waitFor(() => expect(view.getByText("₱500.00 remaining of ₱600.00")).toBeTruthy());
     expect(view.getByText("₱900.00")).toBeTruthy();
+  });
+
+  it("requires confirmation before resetting a saved Financial Plan", async () => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Reset Financial Plan")).toBeTruthy());
+
+    fireEvent.press(view.getByText("Reset plan"));
+
+    expect(alert).toHaveBeenCalledWith("Reset Financial Plan?", expect.stringContaining("debt reservations"), expect.any(Array));
+    alert.mockRestore();
+  });
+
+  it("uses active non-savings, non-credit-card account balances as available money", async () => {
+    mockGetLatestFinancialPlan.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([
+      { kind: "cash", current_balance_centavos: 25_000 },
+      { kind: "bank", current_balance_centavos: 75_000 },
+      { kind: "savings", current_balance_centavos: 50_000 },
+      { kind: "credit_card", current_balance_centavos: 10_000 },
+    ]);
+
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+
+    await waitFor(() => expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy());
+    expect(mockListFinancialAccounts).toHaveBeenCalledWith("user-1", "active");
   });
 });

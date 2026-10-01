@@ -28,7 +28,7 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries", "groceries", "transport"], plannedAmountCentavos: 100_000 });
     expect(response.status).toBe(200);
     expect(response.body.payload.status).toBe("RECOMMENDATION_READY");
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries", "transport"], []);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries", "transport"], [], []);
     expect((await request(app).post("/odin/api/financial-plans/recommendation").send({})).status).toBe(401);
   });
 
@@ -41,6 +41,20 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
 
   it("requires a positive planning amount", async () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries"], plannedAmountCentavos: 0 });
+
+    expect(response.status).toBe(422);
+    expect(getFinancialPlanRecommendation).not.toHaveBeenCalled();
+  });
+
+  it("accepts a one-time amount for a selected new category", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["pet-care"], plannedAmountCentavos: 100_000, manualAllocations: [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }] });
+
+    expect(response.status).toBe(200);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["pet-care"], [], [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }]);
+  });
+
+  it("rejects invalid one-time category amounts", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["pet-care"], plannedAmountCentavos: 100_000, manualAllocations: [{ target: "subcategory", id: "pet-care", amountCentavos: 0 }] });
 
     expect(response.status).toBe(422);
     expect(getFinancialPlanRecommendation).not.toHaveBeenCalled();

@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { createFinancialPlan, getFinancialPlanAllocationSpending, getFinancialPlanLabels, getFinancialPlanSpentAmount, getLatestFinancialPlan } from "../../local-db/repositories/financialPlans";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { createFinancialPlan, deleteFinancialPlan, getFinancialPlanAllocationSpending, getFinancialPlanLabels, getFinancialPlanSpentAmount, getLatestFinancialPlan } from "../../local-db/repositories/financialPlans";
 import { listRecentExpenseCategoryIds, listRecentExpenseSubcategoryIds } from "../../local-db/repositories/forecastTransactions";
 import { listCategories, listSubcategories, updateCategory, updateSubcategory, type Category, type Subcategory } from "../../local-db/repositories/taxonomy";
-import { listIncomeSources } from "../../local-db/repositories/financialFoundations";
-import { listDebtAccounts } from "../../local-db/repositories/debtAccounts";
-import { getIncomeSummary } from "../../local-db/repositories/incomeSummary";
-import { requestFinancialPlanRecommendation } from "./api";
+import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
+import { requestFinancialPlanRecommendation, type ManualPlanAllocation } from "./api";
 import { PlanAllocations } from "./PlanAllocations";
 import { PlanCategorySelection } from "./PlanCategorySelection";
 import { PlanReservations } from "./PlanReservations";
@@ -40,6 +38,9 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
   const [recommendedCategoryIds, setRecommendedCategoryIds] = useState<Set<string>>(new Set());
   const [availableMoneyCentavos, setAvailableMoneyCentavos] = useState(0);
   const [plannedAmount, setPlannedAmount] = useState("");
+  const [manualAllocations, setManualAllocations] = useState<ManualPlanAllocation[]>([]);
+  const [savedPlanId, setSavedPlanId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const requestAbort = useRef<AbortController | null>(null);
   const observedSyncVersion = useRef(syncVersion);
 
@@ -50,7 +51,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       ? "Your planning amount cannot exceed available money."
       : null;
 
-  const loadRecommendation = useCallback(async () => {
+  const loadRecommendation = useCallback(async (nextManualAllocations: ManualPlanAllocation[] = manualAllocations) => {
     if (plannedAmountCentavos === null || planningAmountError) return;
     requestAbort.current?.abort();
     const controller = new AbortController();
@@ -58,9 +59,10 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     setState("loading");
     setError(null);
     try {
-      const { response, body } = await requestFinancialPlanRecommendation(accessToken, [...includedIds], [...includedCategoryIds], plannedAmountCentavos, controller.signal);
+      const { response, body } = await requestFinancialPlanRecommendation(accessToken, [...includedIds], [...includedCategoryIds], plannedAmountCentavos, nextManualAllocations, controller.signal);
       if (!response.ok || !body.payload) throw new Error(body.message ?? "Your Financial Plan could not be generated.");
       const labels = await getFinancialPlanLabels(userId, { recommendation: body.payload.recommendation });
+      setManualAllocations(nextManualAllocations);
       setPlan({ ...body.payload, recommendation: applyFinancialPlanLabels(body.payload.recommendation, labels) });
       setState(body.payload.status === "INFEASIBLE" ? "infeasible" : "ready");
     } catch (cause) {
@@ -71,6 +73,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
         const [labels, spending, spentAmount] = await Promise.all([getFinancialPlanLabels(userId, savedPlan), getFinancialPlanAllocationSpending(userId, savedPlan.id), getFinancialPlanSpentAmount(userId, savedPlan.id)]);
         setPlan({ ...savedRecommendation, recommendation: applyFinancialPlanLabels({ ...savedRecommendation.recommendation, allocations: applyFinancialPlanSpending(savedRecommendation.recommendation.allocations, spending) }, labels) });
         setPlanSpentCentavos(spentAmount);
+        setSavedPlanId(savedPlan.id);
         setState("saved");
         return;
       }
@@ -79,11 +82,11 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     } finally {
       if (requestAbort.current === controller) requestAbort.current = null;
     }
-  }, [accessToken, includedCategoryIds, includedIds, plannedAmountCentavos, planningAmountError, userId]);
+  }, [accessToken, includedCategoryIds, includedIds, manualAllocations, plannedAmountCentavos, planningAmountError, userId]);
 
   useEffect(() => {
     let active = true;
-    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listRecentExpenseSubcategoryIds(userId), listRecentExpenseCategoryIds(userId), getLatestFinancialPlan(userId), listIncomeSources(userId), listDebtAccounts(userId)]).then(async ([topLevelResult, result, recentIds, recentCategoryIds, savedPlan, incomeSources, debts]) => {
+    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listRecentExpenseSubcategoryIds(userId), listRecentExpenseCategoryIds(userId), getLatestFinancialPlan(userId), listFinancialAccounts(userId, "active")]).then(async ([topLevelResult, result, recentIds, recentCategoryIds, savedPlan, accounts]) => {
       if (!active) return;
       if (savedPlan) {
         const savedRecommendation = savedPlanToRecommendation(savedPlan);
@@ -91,6 +94,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
         if (!active) return;
         setPlan({ ...savedRecommendation, recommendation: applyFinancialPlanLabels({ ...savedRecommendation.recommendation, allocations: applyFinancialPlanSpending(savedRecommendation.recommendation.allocations, spending) }, labels) });
         setPlanSpentCentavos(spentAmount);
+        setSavedPlanId(savedPlan.id);
         setState("saved");
         return;
       }
@@ -102,9 +106,12 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       const requiredCategoryIds = topLevelResult.filter((category) => category.fixed_amount_centavos != null || category.minimum_amount_centavos != null).map((category) => category.id);
       setRecommendedIds(validRecentIds);
       setRecommendedCategoryIds(validRecentCategoryIds);
-      setIncludedIds(new Set([...requiredIds, ...validRecentIds]));
-      setIncludedCategoryIds(new Set([...requiredCategoryIds, ...validRecentCategoryIds]));
-      const available = getIncomeSummary(incomeSources, debts).netMonthlyCentavos;
+       setIncludedIds(new Set([...requiredIds, ...validRecentIds]));
+       setIncludedCategoryIds(new Set([...requiredCategoryIds, ...validRecentCategoryIds]));
+       setManualAllocations([]);
+      const available = accounts
+        .filter((account) => account.kind !== "savings" && account.kind !== "credit_card")
+        .reduce((sum, account) => sum + account.current_balance_centavos, 0);
       setAvailableMoneyCentavos(available);
       setPlannedAmount((current) => current || (available / 100).toFixed(2));
       setState("selecting");
@@ -114,7 +121,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       setState("error");
     });
     return () => { active = false; requestAbort.current?.abort(); };
-  }, [userId]);
+  }, [reloadKey, userId]);
 
   useEffect(() => {
     if (observedSyncVersion.current === syncVersion) return;
@@ -129,6 +136,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       const [labels, spending, spentAmount] = await Promise.all([getFinancialPlanLabels(userId, savedPlan), getFinancialPlanAllocationSpending(userId, savedPlan.id), getFinancialPlanSpentAmount(userId, savedPlan.id)]);
       setPlan({ ...savedRecommendation, recommendation: applyFinancialPlanLabels({ ...savedRecommendation.recommendation, allocations: applyFinancialPlanSpending(savedRecommendation.recommendation.allocations, spending) }, labels) });
       setPlanSpentCentavos(spentAmount);
+      setSavedPlanId(savedPlan.id);
     }).catch(() => {});
   }, [state, syncVersion, userId]);
 
@@ -197,7 +205,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       const allocations = plan.recommendation.allocations.map(({ label: _label, ...allocation }) => allocation);
       const debtReservations = plan.recommendation.debtReservations.map(({ debtAccountId, creditCardStatementId, amountCentavos, dueDate }) => ({ debtAccountId, creditCardStatementId, amountCentavos, dueDate }));
       const savingsReservations = plan.recommendation.savingsReservations.filter((reservation) => reservation.savingsGoalId).map(({ savingsGoalId, amountCentavos, dueDate }) => ({ savingsGoalId: savingsGoalId!, amountCentavos, dueDate }));
-      await createFinancialPlan(userId, deviceId, {
+      const { id } = await createFinancialPlan(userId, deviceId, {
         periodStart: plan.period.start,
         periodEnd: plan.period.end,
         inputSnapshot: plan.inputSnapshot,
@@ -207,6 +215,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
         savingsReservations,
       });
       try { await onSyncRequested?.(); } catch {}
+      setSavedPlanId(id);
       setState("saved");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Your Financial Plan could not be saved.");
@@ -214,8 +223,32 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     }
   };
 
+  const resetPlan = () => {
+    if (!savedPlanId) return;
+    Alert.alert("Reset Financial Plan?", "This permanently removes this plan's allocations, debt reservations, savings reservations, and forecast data. You can create a new plan afterward, but this action cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reset plan",
+        style: "destructive",
+        onPress: () => {
+          void deleteFinancialPlan(userId, deviceId, savedPlanId)
+            .then(async () => {
+              try { await onSyncRequested?.(); } catch {}
+              setPlan(null);
+              setPlanSpentCentavos(0);
+              setSavedPlanId(null);
+              setError(null);
+              setState("loading");
+              setReloadKey((current) => current + 1);
+            })
+            .catch((cause) => setError(cause instanceof Error ? cause.message : "Your Financial Plan could not be reset."));
+        },
+      },
+    ]);
+  };
+
   if (state === "loading") return <View style={{ paddingTop: 32, alignItems: "center" }}><ActivityIndicator color="#0E6D46" /><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 10 }}>Preparing your next-month plan...</Text></View>;
-  if (state === "selecting") return <PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} onContinue={() => void loadRecommendation()} />;
+  if (state === "selecting") return <PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} onContinue={(manualAllocations) => void loadRecommendation(manualAllocations)} />;
   if (!plan) return <View style={{ marginTop: 16, backgroundColor: "#FBE9E7", borderRadius: 16, padding: 16 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#D9001F" }}>Plan unavailable</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#414942", marginTop: 5 }}>{error ?? "Your Financial Plan could not be generated."}</Text><Pressable accessibilityRole="button" accessibilityLabel="Retry Financial Plan" onPress={() => void loadRecommendation()} style={{ marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#0E6D46" }}>Try again</Text></Pressable></View>;
 
   const { recommendation } = plan;
@@ -225,6 +258,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     <View style={{ paddingBottom: 28 }}>
        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>Financial Plan</Text>
        <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 2 }}>Review your plan for {plan.period.start} to {plan.period.end}.</Text>
+       {state === "saved" ? <Pressable accessibilityRole="button" accessibilityLabel="Reset Financial Plan" onPress={resetPlan} style={{ alignSelf: "flex-start", marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 12, color: "#D9001F" }}>Reset plan</Text></Pressable> : null}
         <View style={{ marginTop: 16, borderRadius: 16, padding: 16, backgroundColor: "#013220" }}><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#D7EEE2" }}>Remaining Money in Plan</Text><Text accessibilityRole={overAllocated ? "alert" : undefined} style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 25, color: overAllocated ? "#FFB4AB" : "#FFFFFF", marginTop: 2 }}>{formatPeso(remainingUnallocated)}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: "#D7EEE2", marginTop: 4 }}>After category allocations, debt surplus, and savings surplus.</Text></View>
        {state === "infeasible" ? <View accessibilityRole="alert" style={{ marginTop: 16, borderRadius: 16, padding: 16, backgroundColor: "#FFF0F2" }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#D9001F" }}>This plan cannot cover all requirements</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#414942", marginTop: 5 }}>Shortfall: {formatPeso(recommendation.shortfallCentavos ?? 0)}. Fixed and minimum commitments were not reduced.</Text></View> : null}
          <PlanReservations title="Debt reservations" reservations={recommendation.debtReservations} surplusCentavos={recommendation.debtSurplusCentavos} onSurplusAmountChange={state === "saved" ? undefined : (amount) => updateSurplus("debtSurplusCentavos", amount)} />

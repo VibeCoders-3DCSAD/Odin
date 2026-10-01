@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { DotsThreeVertical } from "phosphor-react-native";
 import type { Category, Subcategory } from "../../local-db/repositories/taxonomy";
+import type { ManualPlanAllocation } from "./api";
 import { PlanCategoryRuleEditor, type PlanCategoryRuleUpdate } from "./PlanCategoryRuleEditor";
 
 type Props = {
@@ -19,7 +20,7 @@ type Props = {
   availableMoneyCentavos: number;
   planningAmountError: string | null;
   onPlannedAmountChange: (amount: string) => void;
-  onContinue: () => void;
+  onContinue: (manualAllocations: ManualPlanAllocation[]) => void;
 };
 
 function requirement(category: { fixed_amount_centavos?: number | null; minimum_amount_centavos?: number | null }): "Fixed" | "Minimum" | null {
@@ -31,6 +32,19 @@ function requirement(category: { fixed_amount_centavos?: number | null; minimum_
 export function PlanCategorySelection({ topLevelCategories, subcategories, includedCategoryIds = new Set(), includedIds, recommendedCategoryIds = new Set(), recommendedIds, onToggle, onToggleCategory, onSaveCategoryRule = async () => {}, onSaveRule, plannedAmount, availableMoneyCentavos, planningAmountError, onPlannedAmountChange, onContinue }: Props) {
   const uncategorizedSubcategories = subcategories.filter((subcategory) => !subcategory.category_id);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
+
+  const manualAmount = (target: ManualPlanAllocation["target"], id: string) => manualAmounts[`${target}:${id}`] ?? "";
+  const setManualAmount = (target: ManualPlanAllocation["target"], id: string, value: string) => setManualAmounts((current) => ({ ...current, [`${target}:${id}`]: value }));
+  const parsedManualAmount = (target: ManualPlanAllocation["target"], id: string) => {
+    const value = manualAmount(target, id).trim();
+    return /^\d+(\.\d{1,2})?$/.test(value) ? Math.round(Number(value) * 100) : null;
+  };
+  const manualAllocations = (): ManualPlanAllocation[] => [
+    ...subcategories.filter((subcategory) => includedIds.has(subcategory.id) && requirement(subcategory) === null && !recommendedIds.has(subcategory.id)).map((subcategory) => ({ target: "subcategory" as const, id: subcategory.id, amountCentavos: parsedManualAmount("subcategory", subcategory.id) ?? 0 })),
+    ...topLevelCategories.filter((category) => includedCategoryIds.has(category.id) && requirement(category) === null && !recommendedCategoryIds.has(category.id)).map((category) => ({ target: "category" as const, id: category.id, amountCentavos: parsedManualAmount("category", category.id) ?? 0 })),
+  ];
+  const hasInvalidManualAmount = manualAllocations().some((allocation) => allocation.amountCentavos <= 0);
 
   function renderSubcategory(subcategory: Subcategory) {
     const locked = requirement(subcategory) !== null;
@@ -38,7 +52,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
     return <View key={subcategory.id} style={{ marginTop: 8, marginLeft: 12 }}><View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: locked }} accessibilityLabel={`Include ${subcategory.label} in Financial Plan`} disabled={locked} onPress={() => onToggle(subcategory.id)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: selected ? "#0E6D46" : "#EAEAE6", backgroundColor: selected ? "#EEFFF8" : "#FCF8F0", borderRadius: 13, padding: 13, opacity: locked ? 0.8 : 1 }}>
       <View style={{ width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: selected ? "#0E6D46" : "#A8B0AA", backgroundColor: selected ? "#0E6D46" : "#FFFFFF", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800" }}>{selected ? "x" : ""}</Text></View>
       <View style={{ flex: 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#1B1C1A" }}>{subcategory.label}</Text>{locked ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: "#416153", marginTop: 2 }}>{requirement(subcategory)} requirement</Text> : recommendedIds.has(subcategory.id) ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: "#416153", marginTop: 2 }}>Recommended from your past 6 months</Text> : null}</View>
-      </Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Configure Financial Plan rule for ${subcategory.label}`} onPress={() => setEditingId(subcategory.id)} hitSlop={8} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}><DotsThreeVertical size={20} color="#6B7A6F" weight="bold" /></Pressable></View>{editingId === subcategory.id ? <PlanCategoryRuleEditor category={subcategory} onClose={() => setEditingId(null)} onSave={async (update) => { await onSaveRule(subcategory, update); setEditingId(null); }} /> : null}</View>;
+      </Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Configure Financial Plan rule for ${subcategory.label}`} onPress={() => setEditingId(subcategory.id)} hitSlop={8} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}><DotsThreeVertical size={20} color="#6B7A6F" weight="bold" /></Pressable></View>{selected && !locked && !recommendedIds.has(subcategory.id) ? <View style={{ marginTop: 7, marginLeft: 8 }}><Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11 }}>You haven't used {subcategory.label} before. How much do you want to set aside?</Text><TextInput accessibilityLabel={`One-time plan amount for ${subcategory.label} in pesos`} value={manualAmount("subcategory", subcategory.id)} onChangeText={(value) => setManualAmount("subcategory", subcategory.id, value)} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#8A938C" style={{ height: 40, marginTop: 6, backgroundColor: "#FFFFFF", borderColor: (parsedManualAmount("subcategory", subcategory.id) ?? 0) <= 0 ? "#D7DDD8" : "#0E6D46", borderRadius: 9, borderWidth: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 13, paddingHorizontal: 11 }} /></View> : null}{editingId === subcategory.id ? <PlanCategoryRuleEditor category={subcategory} onClose={() => setEditingId(null)} onSave={async (update) => { await onSaveRule(subcategory, update); setEditingId(null); }} /> : null}</View>;
   }
 
   function renderCategory(category: Category) {
@@ -53,6 +67,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
         <View style={{ width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: selected ? "#0E6D46" : "#A8B0AA", backgroundColor: selected ? "#0E6D46" : "#FFFFFF", alignItems: "center", justifyContent: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800" }}>{selected ? "x" : ""}</Text></View>
         <View style={{ flex: 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#1B1C1A" }}>{category.label}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11, color: "#416153", marginTop: 2 }}>{locked ? `${requirement(category)} requirement` : recommendedCategoryIds.has(category.id) ? "Recommended from broad-category spending" : "Broad category only"}</Text></View>
       </Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Configure Financial Plan rule for ${category.label}`} onPress={() => setEditingId(category.id)} hitSlop={8} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}><DotsThreeVertical size={20} color="#6B7A6F" weight="bold" /></Pressable></View>
+      {selected && !locked && !recommendedCategoryIds.has(category.id) ? <View style={{ marginTop: 7, marginLeft: 8 }}><Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11 }}>You haven't used {category.label} before. How much do you want to set aside?</Text><TextInput accessibilityLabel={`One-time plan amount for ${category.label} in pesos`} value={manualAmount("category", category.id)} onChangeText={(value) => setManualAmount("category", category.id, value)} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#8A938C" style={{ height: 40, marginTop: 6, backgroundColor: "#FFFFFF", borderColor: (parsedManualAmount("category", category.id) ?? 0) <= 0 ? "#D7DDD8" : "#0E6D46", borderRadius: 9, borderWidth: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 13, paddingHorizontal: 11 }} /></View> : null}
       {editingId === category.id ? <PlanCategoryRuleEditor category={category} onClose={() => setEditingId(null)} onSave={async (update) => { await onSaveCategoryRule(category, update); setEditingId(null); }} /> : null}
       {children.map(renderSubcategory)}
     </View>;
@@ -70,7 +85,8 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
       </View>
       {topLevelCategories.map(renderCategory)}
       {uncategorizedSubcategories.length > 0 ? <View style={{ marginTop: 16 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#1B1C1A" }}>Other expense categories</Text>{uncategorizedSubcategories.map(renderSubcategory)}</View> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Create Financial Plan recommendation" disabled={includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null} onPress={onContinue} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>Create recommendation</Text></Pressable>
+        {hasInvalidManualAmount ? <Text accessibilityRole="alert" style={{ color: "#D9001F", fontFamily: "Manrope", fontSize: 11, marginTop: 10 }}>Enter an amount greater than zero for each new category.</Text> : null}
+        <Pressable accessibilityRole="button" accessibilityLabel="Create Financial Plan recommendation" disabled={includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null || hasInvalidManualAmount} onPress={() => onContinue(manualAllocations())} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null || hasInvalidManualAmount ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>Create recommendation</Text></Pressable>
     </View>
   );
 }

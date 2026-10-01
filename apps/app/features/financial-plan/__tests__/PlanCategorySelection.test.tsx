@@ -96,6 +96,32 @@ describe("PlanCategorySelection", () => {
     }));
   });
 
+  it("requires a one-time amount for a selected category without history", () => {
+    const onContinue = jest.fn();
+    const view = render(<PlanCategorySelection
+      topLevelCategories={[food]}
+      subcategories={[groceries]}
+      includedIds={new Set(["groceries"])}
+      recommendedIds={new Set()}
+      onToggle={jest.fn()}
+      onToggleCategory={jest.fn()}
+      onSaveRule={jest.fn().mockResolvedValue(undefined)}
+      plannedAmount="1000.00"
+      availableMoneyCentavos={100_000}
+      planningAmountError={null}
+      onPlannedAmountChange={jest.fn()}
+      onContinue={onContinue}
+    />);
+
+    expect(view.getByText("You haven't used Groceries before. How much do you want to set aside?")).toBeTruthy();
+    expect(view.getByLabelText("Create Financial Plan recommendation").props.accessibilityState?.disabled).toBe(true);
+
+    fireEvent.changeText(view.getByLabelText("One-time plan amount for Groceries in pesos"), "750.50");
+    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+
+    expect(onContinue).toHaveBeenCalledWith([{ target: "subcategory", id: "groceries", amountCentavos: 75_050 }]);
+  });
+
   it("prevents a planning amount above available money", () => {
     const view = render(<PlanCategorySelection
       topLevelCategories={[food]}

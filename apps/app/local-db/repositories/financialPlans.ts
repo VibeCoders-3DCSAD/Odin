@@ -74,6 +74,7 @@ type FinancialPlanRow = {
   shortfall_centavos: number | null;
   debt_surplus_centavos: number;
   savings_surplus_centavos: number;
+  version: number;
 };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -211,6 +212,23 @@ export async function getLatestFinancialPlan(userId: string): Promise<AcceptedFi
     userId,
   );
   return row ? mapPlan(await getDb(), row) : null;
+}
+
+export async function deleteFinancialPlan(userId: string, deviceId: string, id: string): Promise<{ operation: SyncOperation }> {
+  const db = await getDb();
+  let result!: { operation: SyncOperation };
+  await db.withTransactionAsync(async () => {
+    const plan = await db.getFirstAsync<FinancialPlanRow>("SELECT * FROM financial_plans WHERE id = ? AND user_id = ? AND status = 'accepted' AND deleted = 0", id, userId);
+    if (!plan) throw new LocalDbError("NOT_FOUND", "Financial Plan is not accessible");
+    const timestamp = now();
+    await db.runAsync("DELETE FROM financial_plan_forecast_points WHERE plan_id = ?", id);
+    await db.runAsync("DELETE FROM financial_plan_allocations WHERE plan_id = ?", id);
+    await db.runAsync("DELETE FROM financial_plan_debt_reservations WHERE plan_id = ?", id);
+    await db.runAsync("DELETE FROM financial_plan_savings_reservations WHERE plan_id = ?", id);
+    await db.runAsync("UPDATE financial_plans SET deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", timestamp, id, userId);
+    result = { operation: await enqueueOperation(db, { userId, deviceId, entity: "financial_plans", recordId: id, operationType: "delete", baseVersion: plan.version, changedFields: [], payload: {}, failureMessage: "This Financial Plan could not be reset." }) };
+  });
+  return result;
 }
 
 export async function getFinancialPlanAllocationSpending(userId: string, planId: string): Promise<Record<string, number>> {
