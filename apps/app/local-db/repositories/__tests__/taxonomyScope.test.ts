@@ -34,3 +34,13 @@ it("limits taxonomy to the active account", async () => {
   expect(mockGetAllAsync.mock.calls[2]![0]).toContain("user_id = ?");
   expect(mockGetAllAsync.mock.calls[2]![0]).not.toContain("is_system = 1");
 });
+
+it("retries a taxonomy read when SQLite is temporarily locked", async () => {
+  mockGetAllAsync
+    .mockRejectedValueOnce(new Error("database is locked"))
+    .mockResolvedValueOnce([]);
+
+  await expect(listCategories("account-y")).resolves.toEqual([]);
+
+  expect(mockGetAllAsync).toHaveBeenCalledTimes(2);
+});

@@ -232,13 +232,15 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     if (!userId) return;
     setError(null);
     try {
-      const [localGroups, localCats, localSubs] = await Promise.all([
-        listCategoryGroups(userId),
-        listCategories(userId),
-        listSubcategories(userId),
-      ]);
+      const localGroups = await listCategoryGroups(userId);
+      const localCats = await listCategories(userId);
+      const localSubs = await listSubcategories(userId);
       setGroups(assembleNested(localGroups, localCats, localSubs));
-    } catch {
+    } catch (error) {
+      console.error("[taxonomy] failed to load categories", {
+        userId,
+        reason: error instanceof Error ? error.message : "unknown error",
+      });
       setError("Failed to load categories.");
     } finally {
       setLoading(false);
