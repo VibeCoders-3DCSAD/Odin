@@ -113,9 +113,9 @@ export async function pushOperations(
           ? "apply_financial_plan_sync_operation"
         : prepared.entity === "debt_accounts" || prepared.entity === "debt_payments" || prepared.entity === "user_debt_priorities" || prepared.entity === "debt_strategy_preferences"
           ? "apply_debt_sync_operation"
-          : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_repayment_preferences" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements" || prepared.entity === "credit_card_payments" || prepared.entity === "credit_card_settlements" || prepared.entity === "credit_card_statement_strategies"
-            ? "apply_credit_card_sync_operation"
-            : "apply_sync_operation";
+        : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_repayment_preferences" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements" || prepared.entity === "credit_card_payments" || prepared.entity === "credit_card_settlements" || prepared.entity === "credit_card_statement_strategies"
+          ? "apply_credit_card_sync_operation"
+          : "apply_sync_operation";
       const { data, error } = await supabase.rpc(rpcName, {
         p_operation_id: prepared.operation_id,
         p_device_id: deviceId,
