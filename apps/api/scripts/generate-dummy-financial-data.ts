@@ -61,7 +61,10 @@ function parseArgs() {
 
   const userId = valueFor("--user-id");
   if (!userId) {
-    throw new Error("Usage: pnpm dummy-data:financial -- --user-id <uuid> [--end-date YYYY-MM-DD] [--seed number] [--dry-run]");
+    throw new Error("Usage: pnpm dummy-data:financial -- --user-id <uuid> [--end-date YYYY-MM-DD] [--seed number] [--dry-run] [--confirm <uuid>]");
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+    throw new Error("--user-id must be a UUID");
   }
 
   const endDate = valueFor("--end-date") ?? new Date().toISOString().slice(0, 10);
@@ -72,7 +75,12 @@ function parseArgs() {
   const seed = Number(valueFor("--seed") ?? "42");
   if (!Number.isSafeInteger(seed)) throw new Error("--seed must be an integer");
 
-  return { userId, endDate, seed, dryRun: args.includes("--dry-run") };
+  const dryRun = args.includes("--dry-run");
+  const confirmation = valueFor("--confirm");
+  if (!dryRun && confirmation !== userId) {
+    throw new Error("Seeding replaces prior dummy records for this user. Re-run with --confirm <the same user UUID> after using --dry-run.");
+  }
+  return { userId, endDate, seed, dryRun };
 }
 
 function createRandom(seed: number) {
@@ -228,6 +236,40 @@ async function clearDummyData(supabase: ReturnType<typeof createClient>, userId:
   await deleteRows(supabase, "financial_accounts", userId, accountIds);
 }
 
+async function ensureIncomeSubcategory(supabase: ReturnType<typeof createClient>, userId: string) {
+  const { data: existing, error: existingError } = await supabase
+    .from("subcategories")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("slug", "income_salary")
+    .eq("deleted", false)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return;
+  const { error } = await supabase.from("subcategories").insert({
+    user_id: userId,
+    category_id: null,
+    slug: "income_salary",
+    kind: "income",
+    label: "Salary",
+    short_label: "Salary",
+    description: "Regular employment income.",
+    is_system: false,
+    sort_order: 10,
+  });
+  if (error) throw new Error(`Could not create the salary subcategory: ${error.message}`);
+}
+
+function loadSeedSubcategories(supabase: ReturnType<typeof createClient>, userId: string, allowSystemDefaults: boolean) {
+  const query = supabase
+    .from("subcategories")
+    .select("id, slug, category_id")
+    .in("slug", requiredSubcategorySlugs)
+    .eq("is_active", true)
+    .eq("deleted", false);
+  return allowSystemDefaults ? query.or(`user_id.eq.${userId},user_id.is.null`) : query.eq("user_id", userId);
+}
+
 async function main() {
   const { userId, endDate, seed, dryRun } = parseArgs();
   const url = process.env.SUPABASE_URL;
@@ -235,17 +277,15 @@ async function main() {
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
 
   const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-  const [{ data: profile, error: profileError }, { data: categories, error: categoryError }] = await Promise.all([
-    supabase.from("profiles").select("user_id").eq("user_id", userId).maybeSingle(),
-    supabase
-      .from("subcategories")
-      .select("id, slug, category_id")
-      .in("slug", requiredSubcategorySlugs)
-      .eq("is_active", true)
-      .eq("user_id", userId),
-  ]);
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("user_id").eq("user_id", userId).maybeSingle();
   if (profileError) throw profileError;
   if (!profile) throw new Error(`No profile exists for user ${userId}`);
+  if (!dryRun) {
+    const { error: taxonomySeedError } = await supabase.rpc("seed_hfce_taxonomy_for_user", { p_user_id: userId });
+    if (taxonomySeedError) throw new Error(`Could not provision the user's financial taxonomy: ${taxonomySeedError.message}`);
+    await ensureIncomeSubcategory(supabase, userId);
+  }
+  const { data: categories, error: categoryError } = await loadSeedSubcategories(supabase, userId, dryRun);
   if (categoryError) throw categoryError;
 
   const start = formatDate(addMonths(new Date(`${endDate}T00:00:00Z`), -11), 1);
