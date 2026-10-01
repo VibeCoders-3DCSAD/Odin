@@ -1,10 +1,10 @@
-import { Text, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { formatPeso, reservationLabel } from "./financialPlanPresentation";
 import type { FinancialPlanReservation } from "./types";
 
-type Props = { title: string; reservations: FinancialPlanReservation[]; surplusCentavos?: number };
+type Props = { title: string; reservations: FinancialPlanReservation[]; surplusCentavos?: number; onSurplusAmountChange?: (amount: string) => void };
 
-export function PlanReservations({ title, reservations, surplusCentavos = 0 }: Props) {
+export function PlanReservations({ title, reservations, surplusCentavos = 0, onSurplusAmountChange }: Props) {
   const total = reservations.reduce((sum, reservation) => sum + reservation.amountCentavos, 0) + surplusCentavos;
   return (
     <View style={{ marginTop: 16, backgroundColor: "#F1F0EB", borderRadius: 16, padding: 16 }}>
@@ -22,7 +22,7 @@ export function PlanReservations({ title, reservations, surplusCentavos = 0 }: P
           <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#1B1C1A" }}>{formatPeso(reservation.amountCentavos)}</Text>
         </View>
        ))}
-       {surplusCentavos > 0 ? <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12, marginTop: 10 }}><Text style={{ flex: 1, fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: "#414942" }}>Surplus</Text><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#1B1C1A" }}>{formatPeso(surplusCentavos)}</Text></View> : null}
+       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 10 }}><Text style={{ flex: 1, fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: "#414942" }}>Surplus</Text>{onSurplusAmountChange ? <TextInput value={(surplusCentavos / 100).toFixed(2)} onChangeText={onSurplusAmountChange} accessibilityLabel={`${title} surplus amount in pesos`} keyboardType="decimal-pad" style={{ width: 94, height: 40, borderWidth: 1, borderColor: "#D6D8D4", borderRadius: 9, paddingHorizontal: 9, fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", textAlign: "right", backgroundColor: "#FFFFFF" }} /> : <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#1B1C1A" }}>{formatPeso(surplusCentavos)}</Text>}</View>
     </View>
   );
 }

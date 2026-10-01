@@ -24,4 +24,16 @@ describe("subcategory budget configuration sync validation", () => {
       payload: { always_in_budget: true, fixed_amount_centavos: 5_000 },
     })).resolves.toMatchObject({ payload: { always_in_budget: true, fixed_amount_centavos: 5_000 } });
   });
+
+  it("accepts clearing every saved Financial Plan rule value", async () => {
+    await expect(prepareOperation({} as never, "user-1", {
+      operation_id: "operation-3",
+      entity: "subcategories",
+      record_id: "subcategory-1",
+      operation_type: "update",
+      base_version: 1,
+      changed_fields: ["minimum_amount_centavos", "fixed_amount_centavos", "always_in_budget"],
+      payload: { minimum_amount_centavos: null, fixed_amount_centavos: null, always_in_budget: false },
+    })).resolves.toMatchObject({ payload: { minimum_amount_centavos: null, fixed_amount_centavos: null, always_in_budget: false } });
+  });
 });

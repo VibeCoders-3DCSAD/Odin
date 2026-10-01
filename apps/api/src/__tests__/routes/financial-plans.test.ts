@@ -25,18 +25,25 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
   afterEach(() => jest.restoreAllMocks());
 
   it("requires authentication and derives inputs for the authenticated user", async () => {
-    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries", "groceries", "transport"] });
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries", "groceries", "transport"], plannedAmountCentavos: 100_000 });
     expect(response.status).toBe(200);
     expect(response.body.payload.status).toBe("RECOMMENDATION_READY");
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), ["groceries", "transport"]);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries", "transport"], []);
     expect((await request(app).post("/odin/api/financial-plans/recommendation").send({})).status).toBe(401);
   });
 
   it("rejects an invalid category selection", async () => {
-    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: "groceries" });
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: "groceries", plannedAmountCentavos: 100_000 });
 
     expect(response.status).toBe(422);
     expect(response.body).toEqual({ error: "Unprocessable Entity", message: "Financial Plan inputs are incomplete" });
+  });
+
+  it("requires a positive planning amount", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries"], plannedAmountCentavos: 0 });
+
+    expect(response.status).toBe(422);
+    expect(getFinancialPlanRecommendation).not.toHaveBeenCalled();
   });
 
   it("returns a safe validation response when plan inputs are incomplete", async () => {

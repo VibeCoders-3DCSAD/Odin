@@ -50,7 +50,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   categories: new Set([
     "id", "user_id", "category_group_id", "slug", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "sort_order",
+    "description", "is_system", "is_filipino_context", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos", "sort_order",
     "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),

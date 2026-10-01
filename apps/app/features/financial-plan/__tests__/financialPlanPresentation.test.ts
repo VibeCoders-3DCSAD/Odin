@@ -1,4 +1,4 @@
-import { allocationLabel, applyFinancialPlanLabels, formatPeso, reservationLabel, toCentavos } from "../financialPlanPresentation";
+import { allocationLabel, applyFinancialPlanLabels, formatPeso, remainingUnallocatedCentavos, reservationLabel, toCentavos } from "../financialPlanPresentation";
 
 describe("financial plan presentation", () => {
   it("formats centavos and uses human-readable fallback labels", () => {
@@ -25,5 +25,11 @@ describe("financial plan presentation", () => {
     expect(toCentavos("10.235")).toBe(1024);
     expect(toCentavos("-1")).toBeNull();
     expect(toCentavos("not money")).toBeNull();
+  });
+
+  it("includes category allocations and surplus reservations in the remaining amount", () => {
+    expect(remainingUnallocatedCentavos(200_000, [
+      { allocationRule: "FLEXIBLE", allocatedAmountCentavos: 300_000, floorAmountCentavos: 0, subcategoryId: "food" },
+    ], 10_000, 20_000)).toBe(-130_000);
   });
 });

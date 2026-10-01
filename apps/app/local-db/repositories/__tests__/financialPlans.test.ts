@@ -57,6 +57,40 @@ describe("financial plan repository", () => {
     );
   });
 
+  it("aggregates posted expenses for each allocation within the plan period", async () => {
+    const db = { getAllAsync: jest.fn(async () => [
+      { category_id: "food", subcategory_id: null, spent_amount_centavos: 4_500 },
+      { category_id: null, subcategory_id: "transport", spent_amount_centavos: 1_250 },
+    ]) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { getFinancialPlanAllocationSpending } = await import("../financialPlans");
+    await expect(getFinancialPlanAllocationSpending("user-1", "plan-1")).resolves.toEqual({
+      "category:food": 4_500,
+      "subcategory:transport": 1_250,
+    });
+
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("t.transaction_date >= p.period_start AND t.transaction_date <= p.period_end"),
+      "user-1",
+      "plan-1",
+    );
+  });
+
+  it("totals only posted expense transactions in the accepted plan period", async () => {
+    const db = { getFirstAsync: jest.fn(async () => ({ spent_amount_centavos: 12_345 })) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { getFinancialPlanSpentAmount } = await import("../financialPlans");
+    await expect(getFinancialPlanSpentAmount("user-1", "plan-1")).resolves.toBe(12_345);
+
+    expect(db.getFirstAsync).toHaveBeenCalledWith(
+      expect.stringContaining("t.transaction_date >= p.period_start AND t.transaction_date <= p.period_end"),
+      "user-1",
+      "plan-1",
+    );
+  });
+
   it("resolves plan references to owned display names in bounded queries", async () => {
     const db = {
       getAllAsync: jest.fn()

@@ -1,7 +1,11 @@
 import React from "react";
-import { fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import { PlanCategorySelection } from "../PlanCategorySelection";
 import type { Category, Subcategory } from "../../../local-db/repositories/taxonomy";
+
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ bottom: 0 }),
+}));
 
 const food: Category = {
   id: "food",
@@ -37,7 +41,7 @@ const groceries: Subcategory = {
 const dining: Subcategory = { ...groceries, id: "dining", slug: "dining", label: "Dining" };
 
 describe("PlanCategorySelection", () => {
-  it("groups subcategories under their top-level category and selects the full category", () => {
+  it("selects the broad category without selecting its subcategories", () => {
     const onToggleCategory = jest.fn();
     const view = render(<PlanCategorySelection
       topLevelCategories={[food]}
@@ -45,16 +49,71 @@ describe("PlanCategorySelection", () => {
       includedIds={new Set(["groceries"])}
       recommendedIds={new Set()}
       onToggle={jest.fn()}
-      onToggleCategory={onToggleCategory}
-      onContinue={jest.fn()}
+       onToggleCategory={onToggleCategory}
+       onSaveRule={jest.fn().mockResolvedValue(undefined)}
+       plannedAmount="1000.00"
+       availableMoneyCentavos={100_000}
+       planningAmountError={null}
+       onPlannedAmountChange={jest.fn()}
+       onContinue={jest.fn()}
     />);
 
     expect(view.getByText("Food")).toBeTruthy();
     expect(view.getByText("Groceries")).toBeTruthy();
     expect(view.getByText("Dining")).toBeTruthy();
 
-    fireEvent.press(view.getByLabelText("Include all Food in Financial Plan"));
+    fireEvent.press(view.getByLabelText("Include Food in Financial Plan"));
 
-    expect(onToggleCategory).toHaveBeenCalledWith(["groceries", "dining"]);
+    expect(onToggleCategory).toHaveBeenCalledWith("food");
+  });
+
+  it("saves a fixed Financial Plan rule on a subcategory", async () => {
+    const onSaveRule = jest.fn().mockResolvedValue(undefined);
+    const view = render(<PlanCategorySelection
+      topLevelCategories={[food]}
+      subcategories={[groceries]}
+      includedIds={new Set()}
+      recommendedIds={new Set()}
+      onToggle={jest.fn()}
+       onToggleCategory={jest.fn()}
+       onSaveRule={onSaveRule}
+       plannedAmount="1000.00"
+       availableMoneyCentavos={100_000}
+       planningAmountError={null}
+       onPlannedAmountChange={jest.fn()}
+       onContinue={jest.fn()}
+    />);
+
+    fireEvent.press(view.getByLabelText("Configure Financial Plan rule for Groceries"));
+    fireEvent.press(view.getByLabelText("Fixed rule for Groceries"));
+    fireEvent.changeText(view.getByLabelText("Fixed amount for Groceries in pesos"), "1250.50");
+    fireEvent.press(view.getByLabelText("Save Financial Plan rule for Groceries"));
+
+    await waitFor(() => expect(onSaveRule).toHaveBeenCalledWith(groceries, {
+      rule: "FIXED",
+      minimumAmountCentavos: null,
+      fixedAmountCentavos: 125_050,
+    }));
+  });
+
+  it("prevents a planning amount above available money", () => {
+    const view = render(<PlanCategorySelection
+      topLevelCategories={[food]}
+      subcategories={[groceries]}
+      includedIds={new Set(["groceries"])}
+      recommendedIds={new Set()}
+      onToggle={jest.fn()}
+      onToggleCategory={jest.fn()}
+      onSaveRule={jest.fn().mockResolvedValue(undefined)}
+      plannedAmount="1000.01"
+      availableMoneyCentavos={100_000}
+      planningAmountError="Your planning amount cannot exceed available money."
+      onPlannedAmountChange={jest.fn()}
+      onContinue={jest.fn()}
+    />);
+
+    expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy();
+    expect(view.getByText("Your planning amount cannot exceed available money.")).toBeTruthy();
+    expect(view.getByLabelText("Create Financial Plan recommendation").props.accessibilityState?.disabled).toBe(true);
   });
 });

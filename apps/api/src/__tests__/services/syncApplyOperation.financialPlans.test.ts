@@ -44,10 +44,10 @@ describe("Financial Plan sync payload", () => {
     await expect(prepareOperation({} as never, "user-1", { ...operation, operation_type: "update", base_version: 1, changed_fields: ["status"], payload: { status: "edited" } })).rejects.toThrow("accepted Financial Plans are immutable");
   });
 
-  it("rejects allocations above the category funds", async () => {
+  it("rejects allocations and surplus above available funds", async () => {
     const operation = financialPlanOperation();
-    const payload = { ...operation.payload, recommendation: { ...operation.payload.recommendation, availableFundsCentavos: 100, allocations: [{ subcategoryId: "subcategory-1", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 101, floorAmountCentavos: 0 }] } };
-    await expect(prepareOperation({} as never, "user-1", { ...operation, payload })).rejects.toThrow("Financial Plan allocations exceed available funds");
+    const payload = { ...operation.payload, recommendation: { ...operation.payload.recommendation, availableFundsCentavos: 100, allocations: [{ subcategoryId: "subcategory-1", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 80, floorAmountCentavos: 0 }], debtSurplusCentavos: 21 } };
+    await expect(prepareOperation({} as never, "user-1", { ...operation, payload })).rejects.toThrow("Financial Plan allocations and surplus exceed available funds");
   });
 
   it("rejects duplicate allocation targets before sync", async () => {

@@ -9,6 +9,7 @@ export type FinancialPlanAllocation = {
   ceilingAmountCentavos?: number | null;
   forecastAmountCentavos?: number | null;
   subcategoryWeightBps?: number | null;
+  spentAmountCentavos?: number;
   label?: string;
 };
 

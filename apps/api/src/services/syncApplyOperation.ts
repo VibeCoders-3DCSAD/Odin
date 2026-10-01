@@ -70,6 +70,9 @@ const CATEGORY_CREATE_FIELDS = new Set([
   "short_label",
   "description",
   "is_filipino_context",
+  "minimum_amount_centavos",
+  "always_in_budget",
+  "fixed_amount_centavos",
   "sort_order",
 ]);
 
@@ -78,6 +81,9 @@ const CATEGORY_UPDATE_FIELDS = new Set([
   "short_label",
   "description",
   "is_filipino_context",
+  "minimum_amount_centavos",
+  "always_in_budget",
+  "fixed_amount_centavos",
   "sort_order",
   "is_active",
 ]);
@@ -192,6 +198,7 @@ const TRANSACTION_CREATE_FIELDS = new Set([
   "transaction_date",
   "credit_card_posting_date",
   "amount_centavos",
+  "category_id",
   "subcategory_id",
   "source_account_id",
   "destination_account_id",
@@ -205,6 +212,7 @@ const TRANSACTION_CREATE_FIELDS = new Set([
 
 const TRANSACTION_UPDATE_FIELDS = new Set([
   "amount_centavos",
+  "category_id",
   "subcategory_id",
   "source_account_id",
   "destination_account_id",
@@ -539,6 +547,7 @@ async function validateCreatePayload(
     if (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data)) throw new Error("preset_data must be an object");
     for (const field of ["lender_name", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "notes"]) optionalString(sanitized, field);
     if (sanitized.linked_account_id != null) { requireString(sanitized, "linked_account_id"); await verifyAccountOwnership(supabase, userId, sanitized.linked_account_id as string); }
+    await validateDebtPreset(supabase, userId, sanitized.preset_key as string, sanitized.preset_data as Record<string, unknown>);
     return sanitized;
   }
   if (entity === "debt_payments") {
@@ -825,6 +834,11 @@ async function validateTaxonomyCreatePayload(
     requireString(sanitized, "description");
     optionalString(sanitized, "short_label");
     optionalBoolean(sanitized, "is_filipino_context");
+    optionalNumber(sanitized, "minimum_amount_centavos");
+    optionalBoolean(sanitized, "always_in_budget");
+    optionalNumber(sanitized, "fixed_amount_centavos");
+    validateNonNegative(sanitized, ["minimum_amount_centavos", "fixed_amount_centavos"]);
+    validateMinMaxOrdering(sanitized, "minimum_amount_centavos", "fixed_amount_centavos");
     optionalNumber(sanitized, "sort_order");
 
     const { data: group, error } = await supabase
@@ -872,17 +886,17 @@ async function validateTaxonomyCreatePayload(
 
     if (txType === "income") {
       requireString(sanitized, "destination_account_id");
-      requireString(sanitized, "subcategory_id");
+      if (Boolean(sanitized.category_id) === Boolean(sanitized.subcategory_id)) throw new Error("income requires one category target");
       if (sanitized.source_account_id != null) throw new Error("source_account_id must not be set for income");
       await verifyOwnedAccount(supabase, userId, sanitized.destination_account_id as string);
-      await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
+      if (sanitized.category_id) await verifyCategoryOwnership(supabase, userId, sanitized.category_id as string); else await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
       sanitized.source_account_id = null;
     } else if (txType === "expense") {
       requireString(sanitized, "source_account_id");
-      requireString(sanitized, "subcategory_id");
+      if (Boolean(sanitized.category_id) === Boolean(sanitized.subcategory_id)) throw new Error("expense requires one category target");
       if (sanitized.destination_account_id != null) throw new Error("destination_account_id must not be set for expense");
       await verifyOwnedAccount(supabase, userId, sanitized.source_account_id as string);
-      await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "expense");
+      if (sanitized.category_id) await verifyCategoryOwnership(supabase, userId, sanitized.category_id as string); else await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "expense");
       sanitized.destination_account_id = null;
     } else {
       requireString(sanitized, "source_account_id");
@@ -890,10 +904,11 @@ async function validateTaxonomyCreatePayload(
       if (sanitized.source_account_id === sanitized.destination_account_id) {
         throw new Error("source and destination accounts must differ");
       }
-      if (sanitized.subcategory_id != null) throw new Error("subcategory_id must not be set for transfer");
+      if (sanitized.subcategory_id != null || sanitized.category_id != null) throw new Error("category target must not be set for transfer");
       await verifyOwnedAccount(supabase, userId, sanitized.source_account_id as string);
       await verifyOwnedAccount(supabase, userId, sanitized.destination_account_id as string);
       sanitized.subcategory_id = null;
+      sanitized.category_id = null;
     }
 
     optionalString(sanitized, "merchant_name");
@@ -1129,6 +1144,7 @@ async function validateUpdatePayload(
     if (sanitized.preset_key !== undefined && !DEBT_ACCOUNT_TYPES.includes(sanitized.preset_key as string)) throw new Error("preset_key is not a supported non-credit-card debt type");
     if (sanitized.status !== undefined && !["active", "archived", "paid_off"].includes(sanitized.status as string)) throw new Error("status is invalid");
     if (sanitized.preset_data !== undefined && (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data))) throw new Error("preset_data must be an object");
+    if (sanitized.preset_data !== undefined) await validateDebtPreset(supabase, userId, sanitized.preset_key as string | undefined, sanitized.preset_data as Record<string, unknown>);
     for (const [key, value] of Object.entries(sanitized)) {
       if (["original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps", "minimum_payment_centavos"].includes(key) && (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)) throw new Error(`${key} must be a non-negative whole number`);
       if (["lender_name", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "notes", "next_due_date", "payment_frequency"].includes(key) && value !== null && typeof value !== "string") throw new Error(`${key} must be a string or null`);
@@ -1618,8 +1634,9 @@ async function validateFinancialPlanPayload(
     if (allocation.subcategoryWeightBps != null && (!Number.isSafeInteger(allocation.subcategoryWeightBps) || (allocation.subcategoryWeightBps as number) < 0 || (allocation.subcategoryWeightBps as number) > 10_000)) throw new Error("Financial Plan subcategory weight must be between 0 and 10000 basis points");
   }
   assertPlanAmount(recommendationDocument, "availableFundsCentavos");
-  if ((recommendationDocument.allocations as Record<string, unknown>[]).reduce((total, allocation) => total + (allocation.allocatedAmountCentavos as number), 0) > (recommendationDocument.availableFundsCentavos as number)) {
-    throw new Error("Financial Plan allocations exceed available funds");
+  const totalAllocatedFunds = (recommendationDocument.allocations as Record<string, unknown>[]).reduce((total, allocation) => total + (allocation.allocatedAmountCentavos as number), 0) + (recommendationDocument.debtSurplusCentavos as number | undefined ?? 0) + (recommendationDocument.savingsSurplusCentavos as number | undefined ?? 0);
+  if (totalAllocatedFunds > (recommendationDocument.availableFundsCentavos as number)) {
+    throw new Error("Financial Plan allocations and surplus exceed available funds");
   }
   for (const reservation of recommendationDocument.debtReservations as Record<string, unknown>[]) {
     if (Boolean(reservation.debtAccountId) === Boolean(reservation.creditCardStatementId)) throw new Error("each debt reservation must reference one debt or statement"); assertPlanAmount(reservation, "amountCentavos");
@@ -1662,6 +1679,19 @@ function nextFinancialPlanPeriod(now = new Date()): { start: string; end: string
 
 function requireString(payload: Record<string, unknown>, field: string): void {
   if (!payload[field] || typeof payload[field] !== "string") throw new Error(`${field} is required`);
+}
+
+async function validateDebtPreset(supabase: SupabaseClient, userId: string, presetKey: string | undefined, preset: Record<string, unknown>): Promise<void> {
+  const salary = preset.salaryLoan as Record<string, unknown> | undefined;
+  if (presetKey === "salary_loan" || salary !== undefined) {
+    if (!salary || !["sss", "gsis", "pag_ibig", "other"].includes(salary.provider as string)) throw new Error("salary loan provider is invalid");
+    if (!["payroll_deduction", "automatic_debit", "manual_payment", "other"].includes(salary.repaymentMethod as string)) throw new Error("salary loan repayment method is invalid");
+    if (salary.repaymentMethod === "payroll_deduction") {
+      if (!Number.isSafeInteger(salary.deductionAmountCentavos) || (salary.deductionAmountCentavos as number) <= 0) throw new Error("salary loan deduction amount must be positive");
+      if (!["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "custom"].includes(salary.deductionSchedule as string)) throw new Error("salary loan deduction schedule is invalid");
+    }
+  }
+  await verifyDebtPresetReferences(supabase, userId, { preset_data: preset });
 }
 
 async function verifyDebtPresetReferences(supabase: SupabaseClient, userId: string, payload: Record<string, unknown>): Promise<void> {

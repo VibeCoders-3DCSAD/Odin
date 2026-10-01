@@ -12,6 +12,17 @@ export function formatPeso(centavos: number): string {
   return `₱${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+export function remainingUnallocatedCentavos(availableFundsCentavos: number, allocations: FinancialPlanAllocation[], debtSurplusCentavos = 0, savingsSurplusCentavos = 0): number {
+  return availableFundsCentavos - allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0) - debtSurplusCentavos - savingsSurplusCentavos;
+}
+
+export function applyFinancialPlanSpending(allocations: FinancialPlanAllocation[], spending: Record<string, number>): FinancialPlanAllocation[] {
+  return allocations.map((allocation) => ({
+    ...allocation,
+    spentAmountCentavos: spending[allocation.categoryId ? `category:${allocation.categoryId}` : `subcategory:${allocation.subcategoryId}`] ?? 0,
+  }));
+}
+
 export function allocationLabel(allocation: FinancialPlanAllocation): string {
   return allocation.label ?? (allocation.subcategoryId ? "Expense category" : allocation.categoryId ? "Category" : "Uncategorized");
 }

@@ -2,6 +2,38 @@ BEGIN;
 
 DO $$
 BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM jsonb_array_elements(
+        '[{"categoryId":null,"subcategoryId":"00000000-0000-0000-0000-000000000001"}]'::jsonb
+      ) AS allocation(value)
+     WHERE (NULLIF(allocation.value->>'categoryId', '') IS NULL)
+         = (NULLIF(allocation.value->>'subcategoryId', '') IS NULL)
+  ) THEN
+    RAISE EXCEPTION 'a nullable inactive Financial Plan allocation target must be valid';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM jsonb_array_elements(
+        '[{"debtAccountId":"00000000-0000-0000-0000-000000000001","creditCardStatementId":null}]'::jsonb
+      ) AS reservation(value)
+     WHERE (NULLIF(reservation.value->>'debtAccountId', '') IS NULL)
+         = (NULLIF(reservation.value->>'creditCardStatementId', '') IS NULL)
+  ) THEN
+    RAISE EXCEPTION 'a nullable inactive Financial Plan debt reservation target must be valid';
+  END IF;
+
+  IF pg_get_functiondef('public.apply_financial_plan_sync_operation_base(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
+     NOT LIKE '%NULLIF(a.value->>''categoryId'', '''') IS NULL%' THEN
+    RAISE EXCEPTION 'Financial Plan sync must accept a null inactive allocation target';
+  END IF;
+
+  IF pg_get_functiondef('public.apply_financial_plan_sync_operation_base(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
+     NOT LIKE '%NULLIF(r.value->>''debtAccountId'', '''') IS NULL%' THEN
+    RAISE EXCEPTION 'Financial Plan sync must accept a null inactive debt reservation target';
+  END IF;
+
   IF has_schema_privilege('authenticated', 'private', 'USAGE') THEN
     RAISE EXCEPTION 'authenticated has USAGE on the private schema';
   END IF;

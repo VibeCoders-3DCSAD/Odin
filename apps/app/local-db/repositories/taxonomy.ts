@@ -31,6 +31,9 @@ type CategoryRow = {
   description: string;
   is_system: number;
   is_filipino_context: number;
+  minimum_amount_centavos: number | null;
+  always_in_budget: number;
+  fixed_amount_centavos: number | null;
   sort_order: number;
   is_active: number;
   metadata: string;
@@ -85,6 +88,9 @@ export type Category = {
   description: string;
   is_system: boolean;
   is_filipino_context: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
   sort_order: number;
   is_active: boolean;
 };
@@ -114,6 +120,9 @@ export type CreateCategoryInput = {
   description: string;
   short_label?: string | null;
   is_filipino_context?: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
   sort_order?: number;
 };
 
@@ -122,6 +131,9 @@ export type UpdateCategoryInput = {
   short_label?: string | null;
   description?: string;
   is_filipino_context?: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
   sort_order?: number;
   is_active?: boolean;
 };
@@ -176,6 +188,9 @@ function mapCategory(row: CategoryRow): Category {
     description: row.description,
     is_system: row.is_system === 1,
     is_filipino_context: row.is_filipino_context === 1,
+    minimum_amount_centavos: row.minimum_amount_centavos,
+    always_in_budget: row.always_in_budget === 1,
+    fixed_amount_centavos: row.fixed_amount_centavos,
     sort_order: row.sort_order,
     is_active: row.is_active === 1,
   };
@@ -202,6 +217,7 @@ function mapSubcategory(row: SubcategoryRow): Subcategory {
 }
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+const DATABASE_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) dbPromise = initDatabase();
@@ -214,6 +230,20 @@ function boolToInt(v: boolean | undefined | null): number {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+async function retryDatabaseRead<T>(read: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      const retryDelay = DATABASE_LOCK_RETRY_DELAYS_MS[attempt];
+      if (!(error instanceof Error && /database is locked/i.test(error.message)) || retryDelay === undefined) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
 }
 
 function validateBudgetAmounts(minimumAmountCentavos: number | null | undefined, fixedAmountCentavos: number | null | undefined): void {
@@ -237,9 +267,9 @@ function subcategoryFailureMessage(action: "created" | "updated" | "deleted", la
 
 export async function listCategoryGroups(userId: string): Promise<CategoryGroup[]> {
   const db = await getDb();
-  const rows = await db.getAllAsync<CategoryGroupRow>(
+  const rows = await retryDatabaseRead(() => db.getAllAsync<CategoryGroupRow>(
     "SELECT * FROM category_groups WHERE deleted = 0 AND is_active = 1 ORDER BY sort_order",
-  );
+  ));
   return rows.map(mapCategoryGroup);
 }
 
@@ -249,17 +279,17 @@ export async function listCategories(
 ): Promise<Category[]> {
   const db = await getDb();
   if (categoryGroupId) {
-    const rows = await db.getAllAsync<CategoryRow>(
+    const rows = await retryDatabaseRead(() => db.getAllAsync<CategoryRow>(
       "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
       userId,
       categoryGroupId,
-    );
+    ));
     return rows.map(mapCategory);
   }
-  const rows = await db.getAllAsync<CategoryRow>(
+  const rows = await retryDatabaseRead(() => db.getAllAsync<CategoryRow>(
     "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
     userId,
-  );
+  ));
   return rows.map(mapCategory);
 }
 
@@ -292,7 +322,7 @@ export async function listSubcategories(
   }
   sql += " ORDER BY sort_order";
 
-  const rows = await db.getAllAsync<SubcategoryRow>(sql, ...params);
+  const rows = await retryDatabaseRead(() => db.getAllAsync<SubcategoryRow>(sql, ...params));
   return rows.map(mapSubcategory);
 }
 
@@ -314,6 +344,7 @@ export async function createCategory(
   if (!input.category_group_id || !input.slug || !input.label || !input.description) {
     throw new LocalDbError("VALIDATION_ERROR", "category_group_id, slug, label, and description are required");
   }
+  validateBudgetAmounts(input.minimum_amount_centavos, input.fixed_amount_centavos);
 
   const db = await getDb();
   const id = randomUUID();
@@ -334,17 +365,20 @@ export async function createCategory(
     await db.runAsync(
       `INSERT INTO categories
         (id, user_id, category_group_id, slug, label, short_label, description,
-         is_system, is_filipino_context, sort_order, is_active, metadata,
-         version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?, 1, 0, ?, ?)`,
+         is_system, is_filipino_context, minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order, is_active, metadata,
+          version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
       id,
       userId,
       input.category_group_id,
       input.slug,
       input.label,
       input.short_label ?? null,
-      input.description,
-      boolToInt(input.is_filipino_context),
+       input.description,
+       boolToInt(input.is_filipino_context),
+       input.minimum_amount_centavos ?? null,
+       boolToInt(input.always_in_budget),
+       input.fixed_amount_centavos ?? null,
       input.sort_order ?? 0,
       metadata,
       ts,
@@ -393,6 +427,10 @@ export async function updateCategory(
       id,
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
+    validateBudgetAmounts(
+      input.minimum_amount_centavos === undefined ? current.minimum_amount_centavos : input.minimum_amount_centavos,
+      input.fixed_amount_centavos === undefined ? current.fixed_amount_centavos : input.fixed_amount_centavos,
+    );
 
     const updates: string[] = [];
     const params: SQLite.SQLiteBindValue[] = [];
@@ -402,7 +440,7 @@ export async function updateCategory(
       if (value === undefined) continue;
       changedFields.push(key);
 
-      if (key === "is_filipino_context" || key === "is_active") {
+      if (key === "is_filipino_context" || key === "always_in_budget" || key === "is_active") {
         updates.push(`${key} = ?`);
         params.push(boolToInt(value as boolean));
       } else {
@@ -596,8 +634,8 @@ export async function updateSubcategory(
     );
     if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
     validateBudgetAmounts(
-      input.minimum_amount_centavos ?? current.minimum_amount_centavos,
-      input.fixed_amount_centavos ?? current.fixed_amount_centavos,
+      input.minimum_amount_centavos === undefined ? current.minimum_amount_centavos : input.minimum_amount_centavos,
+      input.fixed_amount_centavos === undefined ? current.fixed_amount_centavos : input.fixed_amount_centavos,
     );
 
     const updates: string[] = [];

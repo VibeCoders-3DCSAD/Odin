@@ -130,8 +130,10 @@ function validate(input: CreateFinancialPlanInput): void {
   if (new Set(targets).size !== targets.length) throw new LocalDbError("VALIDATION_ERROR", "Financial Plan allocations cannot target the same category or subcategory twice");
   const availableFunds = input.recommendation.availableFundsCentavos;
   if (!Number.isSafeInteger(availableFunds) || availableFunds < 0) throw new LocalDbError("VALIDATION_ERROR", "recommendation available funds must be a non-negative whole number");
-  if (input.allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0) > availableFunds) {
-    throw new LocalDbError("VALIDATION_ERROR", "Financial Plan allocations exceed available funds");
+  const debtSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "debtSurplusCentavos");
+  const savingsSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "savingsSurplusCentavos");
+  if (input.allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0) + debtSurplusCentavos + savingsSurplusCentavos > availableFunds) {
+    throw new LocalDbError("VALIDATION_ERROR", "Financial Plan allocations and surplus exceed available funds");
   }
   for (const reservation of input.debtReservations) {
     if (Boolean(reservation.debtAccountId) === Boolean(reservation.creditCardStatementId)) throw new LocalDbError("VALIDATION_ERROR", "each debt reservation must reference one debt or statement");
@@ -209,6 +211,38 @@ export async function getLatestFinancialPlan(userId: string): Promise<AcceptedFi
     userId,
   );
   return row ? mapPlan(await getDb(), row) : null;
+}
+
+export async function getFinancialPlanAllocationSpending(userId: string, planId: string): Promise<Record<string, number>> {
+  const rows = await (await getDb()).getAllAsync<{ category_id: string | null; subcategory_id: string | null; spent_amount_centavos: number }>(
+    `SELECT a.category_id, a.subcategory_id, COALESCE(SUM(t.amount_centavos), 0) AS spent_amount_centavos
+       FROM financial_plan_allocations a
+       JOIN financial_plans p ON p.id = a.plan_id AND p.user_id = ? AND p.status = 'accepted' AND p.deleted = 0
+       LEFT JOIN transactions t ON t.user_id = p.user_id AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
+         AND t.transaction_date >= p.period_start AND t.transaction_date <= p.period_end
+         AND ((a.category_id IS NOT NULL AND t.category_id = a.category_id) OR (a.subcategory_id IS NOT NULL AND t.subcategory_id = a.subcategory_id))
+      WHERE a.plan_id = ?
+      GROUP BY a.id, a.category_id, a.subcategory_id`,
+    userId,
+    planId,
+  );
+  return Object.fromEntries(rows.flatMap((row) => {
+    const key = row.category_id ? `category:${row.category_id}` : row.subcategory_id ? `subcategory:${row.subcategory_id}` : null;
+    return key ? [[key, row.spent_amount_centavos]] : [];
+  }));
+}
+
+export async function getFinancialPlanSpentAmount(userId: string, planId: string): Promise<number> {
+  const row = await (await getDb()).getFirstAsync<{ spent_amount_centavos: number }>(
+    `SELECT COALESCE(SUM(t.amount_centavos), 0) AS spent_amount_centavos
+       FROM financial_plans p
+       LEFT JOIN transactions t ON t.user_id = p.user_id AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
+         AND t.transaction_date >= p.period_start AND t.transaction_date <= p.period_end
+      WHERE p.user_id = ? AND p.id = ? AND p.status = 'accepted' AND p.deleted = 0`,
+    userId,
+    planId,
+  );
+  return row?.spent_amount_centavos ?? 0;
 }
 
 export async function getAcceptedFinancialPlanForPeriod(userId: string, periodStart: string, periodEnd: string): Promise<AcceptedFinancialPlan | null> {

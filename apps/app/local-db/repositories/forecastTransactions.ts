@@ -46,17 +46,26 @@ export function getRecentExpenseStartDate(now = new Date()): string {
   return start.toISOString().slice(0, 10);
 }
 
+export async function listRecentExpenseCategoryIds(userId: string, fromDate = getRecentExpenseStartDate()): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ category_id: string }>(
+    `SELECT DISTINCT category_id
+       FROM transactions
+       WHERE user_id = ? AND transaction_type = 'expense' AND status = 'posted' AND deleted = 0
+         AND transaction_date >= ? AND category_id IS NOT NULL AND subcategory_id IS NULL
+       ORDER BY category_id
+       LIMIT ${MAX_RECOMMENDED_SUBCATEGORIES}`,
+    userId,
+    fromDate,
+  );
+  return rows.flatMap((row) => typeof row.category_id === "string" && row.category_id ? [row.category_id] : []);
+}
+
 export async function listRecentExpenseSubcategoryIds(userId: string, fromDate = getRecentExpenseStartDate()): Promise<string[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ subcategory_id: string }>(
-    `SELECT DISTINCT subcategory_id
-       FROM transactions
-      WHERE user_id = ? AND transaction_type = 'expense' AND status = 'posted' AND deleted = 0
-        AND transaction_date >= ? AND subcategory_id IS NOT NULL
-      ORDER BY subcategory_id
-      LIMIT ${MAX_RECOMMENDED_SUBCATEGORIES}`,
-    userId,
-    fromDate,
+    `SELECT DISTINCT subcategory_id FROM transactions WHERE user_id = ? AND transaction_type = 'expense' AND status = 'posted' AND deleted = 0 AND transaction_date >= ? AND subcategory_id IS NOT NULL ORDER BY subcategory_id LIMIT ${MAX_RECOMMENDED_SUBCATEGORIES}`,
+    userId, fromDate,
   );
   return rows.flatMap((row) => typeof row.subcategory_id === "string" && row.subcategory_id ? [row.subcategory_id] : []);
 }
