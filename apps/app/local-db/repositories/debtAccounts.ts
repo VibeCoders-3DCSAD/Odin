@@ -18,6 +18,7 @@ export type DebtRepaymentStatus = "advanced" | "on_track" | "underpaid" | "not_i
 export type InterestMethod = "flat_add_on" | "diminishing_balance" | "provider_calculated" | "no_interest";
 export type InterestRatePeriod = "annual" | "monthly" | "per_term" | "none";
 export type PaymentFrequency = "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "custom";
+export type SalaryLoanProvider = "sss" | "gsis" | "pag_ibig" | "other";
 export type DebtPaymentSchedule = { semiMonthlyDays?: [number, number]; customIntervalDays?: number };
 
 export type DebtPresetData = {
@@ -26,7 +27,7 @@ export type DebtPresetData = {
   penaltyInfo: string | null;
   termMonths: number | null;
   personalLoan?: { purpose: string | null };
-  salaryLoan?: { linkedIncomeSourceId: string | null; repaymentMethod: "payroll_deduction" | "automatic_debit" | "manual_payment" | "other" | null; deductionAmountCentavos: number | null; deductionSchedule: PaymentFrequency | null };
+  salaryLoan?: { provider: SalaryLoanProvider | null; linkedIncomeSourceId: string | null; repaymentMethod: "payroll_deduction" | "automatic_debit" | "manual_payment" | "other" | null; deductionAmountCentavos: number | null; deductionSchedule: PaymentFrequency | null };
   multipurposeLoan?: { purposes: string[] };
   businessLoan?: { linkedBusinessOrIncomeSourceId: string | null; purpose: string | null };
   autoLoan?: { vehicleDescription: string | null; vehiclePurchasePriceCentavos: number | null; downpaymentCentavos: number | null; financedPrincipalCentavos: number | null };
@@ -156,6 +157,7 @@ function validate(input: CreateDebtAccountInput): CreateDebtAccountInput {
   if (input.typeSpecific.termMonths != null) assertInteger(input.typeSpecific.termMonths, "termMonths", true);
   const salary = input.typeSpecific.salaryLoan;
   if (input.type === "salary_loan" && (!salary?.linkedIncomeSourceId || !salary.repaymentMethod)) throw new LocalDbError("VALIDATION_ERROR", "salary loan requires a linked income source and repayment method");
+  if (input.type === "salary_loan" && !["sss", "gsis", "pag_ibig", "other"].includes(salary?.provider ?? "")) throw new LocalDbError("VALIDATION_ERROR", "salary loan requires a valid provider");
   if (input.type === "salary_loan" && salary?.repaymentMethod === "payroll_deduction" && (!salary.deductionAmountCentavos || !salary.deductionSchedule)) throw new LocalDbError("VALIDATION_ERROR", "salary loan payroll deduction requires deduction amount and deduction schedule");
   const auto = input.typeSpecific.autoLoan;
   if (input.type === "auto_loan" && !auto?.vehicleDescription?.trim()) throw new LocalDbError("VALIDATION_ERROR", "auto loan requires a vehicle description");

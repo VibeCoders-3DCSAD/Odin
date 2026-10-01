@@ -14,5 +14,9 @@ export const INTEREST_METHOD_OPTIONS: Array<{ value: InterestMethod; label: stri
 export const INTEREST_PERIOD_OPTIONS: Array<{ value: InterestRatePeriod; label: string }> = [
   { value: "annual", label: "Annual" }, { value: "monthly", label: "Monthly" }, { value: "per_term", label: "Per term" }, { value: "none", label: "None" },
 ];
+export const SALARY_LOAN_PROVIDER_OPTIONS = [
+  { value: "sss", label: "SSS" }, { value: "gsis", label: "GSIS" },
+  { value: "pag_ibig", label: "Pag-IBIG" }, { value: "other", label: "Other" },
+] as const;
 export const DEBT_PLACEHOLDERS = { debtName: "Enter debt name", lenderName: "Enter lender name", originalAmount: "Enter original amount", currentBalance: "Enter current balance", interestRate: "Enter interest rate", paymentAmount: "Enter payment amount", startDate: "Select start date", nextPaymentDate: "Select payment date", maturityDate: "Select maturity date", targetPayoffDate: "Select target payoff date", debtSpecificTerm: "Enter loan or installment term", notes: "Add notes", personalLoanPurpose: "Select loan purpose", salaryLinkedIncomeSource: "Select linked income source", salaryRepaymentMethod: "Select repayment method", salaryDeductionAmount: "Enter deduction amount", multipurposeLoanPurpose: "Select loan purpose or purposes", businessLoanSource: "Select linked business or income source", businessLoanPurpose: "Select business loan purpose", autoVehicleDescription: "Enter vehicle description", autoPurchasePrice: "Enter vehicle purchase price", autoDownpayment: "Enter downpayment" } as const;
 export function getDebtTypeLabel(type: DebtTypePreset) { return DEBT_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Custom Debt"; }

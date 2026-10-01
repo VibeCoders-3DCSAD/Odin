@@ -19,7 +19,7 @@ export type ProfileAssignment = {
   explanation: string | null;
 };
 
-export type StepKind = "card_select" | "card_multi_select" | "dropdown" | "input" | "review" | "result";
+export type StepKind = "card_select" | "card_multi_select" | "dropdown" | "input" | "amount_list" | "review" | "result";
 
 export type StepOption = {
   key: string;
@@ -37,6 +37,8 @@ export type StepConfig = {
   inputPlaceholder?: string;
   inputLabel?: string;
   inputSuffix?: string;
+  amountSourceKey?: string;
+  amountOptions?: StepOption[];
 };
 
 export const STEPS: StepConfig[] = [
@@ -123,12 +125,101 @@ export const STEPS: StepConfig[] = [
   },
   {
     key: "monthly_income",
-    title: "Monthly Income",
-    subtitle: "Enter your average monthly take-home income.",
+    title: "Monthly Income Before Deductions",
+    subtitle: "Enter the amount you usually earn before tax, government contributions, loan deductions, or other deductions.",
     kind: "input",
     questionKey: "monthly_income",
-    inputLabel: "Average Monthly Income",
+    inputLabel: "Average Monthly Income Before Deductions",
     inputSuffix: "PHP",
+  },
+  {
+    key: "monthly_deductions",
+    title: "Monthly Income Deductions",
+    subtitle: "What deductions are taken from your monthly income? Select all that apply.",
+    kind: "card_multi_select",
+    questionKey: "monthly_deductions",
+    options: [
+      { key: "tax", label: "Tax" },
+      { key: "sss", label: "SSS" },
+      { key: "philhealth", label: "PhilHealth" },
+      { key: "pag_ibig", label: "Pag-IBIG" },
+      { key: "salary_loan", label: "Salary Loan" },
+      { key: "other", label: "Other" },
+      { key: "none", label: "None" },
+    ],
+  },
+  {
+    key: "monthly_deduction_amounts",
+    title: "Deduction Amounts",
+    subtitle: "Enter the monthly amount for each deduction you selected.",
+    kind: "amount_list",
+    questionKey: "monthly_deduction_amounts",
+    amountSourceKey: "monthly_deductions",
+    amountOptions: [
+      { key: "tax", label: "Tax" },
+      { key: "sss", label: "SSS" },
+      { key: "philhealth", label: "PhilHealth" },
+      { key: "pag_ibig", label: "Pag-IBIG" },
+      { key: "salary_loan", label: "Salary Loan" },
+      { key: "other", label: "Other" },
+    ],
+  },
+  {
+    key: "emergency_savings_runway",
+    title: "Savings Runway",
+    subtitle: "If your income stopped today, about how long could your available savings cover your essential needs?",
+    kind: "card_select",
+    questionKey: "emergency_savings_runway",
+    options: [
+      { key: "less_than_1_month", label: "Less than 1 month" },
+      { key: "1_to_3_months", label: "1–3 months" },
+      { key: "3_to_6_months", label: "3–6 months" },
+      { key: "more_than_6_months", label: "More than 6 months" },
+      { key: "not_sure", label: "Not sure" },
+    ],
+  },
+  {
+    key: "liquid_emergency_savings",
+    title: "Emergency Savings",
+    subtitle: "Include cash or savings you can use right away. Do not include investments or money reserved for another purpose.",
+    kind: "input",
+    questionKey: "liquid_emergency_savings",
+    inputLabel: "Available for Emergencies",
+    inputSuffix: "PHP",
+  },
+  {
+    key: "monthly_essential_living_costs",
+    title: "Essential Living Costs",
+    subtitle: "Include essentials such as food, housing, utilities, transport, medicine, and necessary care.",
+    kind: "input",
+    questionKey: "monthly_essential_living_costs",
+    inputLabel: "Estimated Monthly Essential Costs",
+    inputSuffix: "PHP",
+  },
+  {
+    key: "paying_off_debt",
+    title: "Current Debt",
+    subtitle: "Are you currently paying off any debt?",
+    kind: "card_select",
+    questionKey: "paying_off_debt",
+    options: [
+      { key: "true", label: "Yes" },
+      { key: "false", label: "No" },
+    ],
+  },
+  {
+    key: "credit_card_payment_behavior",
+    title: "Credit Card Payments",
+    subtitle: "Over the last 12 months, how often did you have an unpaid credit-card balance after the due date?",
+    kind: "card_select",
+    questionKey: "credit_card_payment_behavior",
+    options: [
+      { key: "no_credit_card", label: "I don't use a credit card" },
+      { key: "never", label: "Never" },
+      { key: "some_months", label: "Some months" },
+      { key: "every_month", label: "Every month" },
+      { key: "not_sure", label: "Not sure" },
+    ],
   },
   {
     key: "dependents_protected",
@@ -143,6 +234,56 @@ export const STEPS: StepConfig[] = [
       { key: "solo_parent", label: "Solo Parent" },
       { key: "indigenous", label: "Indigenous Community Member" },
       { key: "none", label: "None of the above" },
+    ],
+  },
+  {
+    key: "protected_category_costs",
+    title: "Household Support Costs",
+    subtitle: "Enter the monthly support or essential cost for each option you selected.",
+    kind: "amount_list",
+    questionKey: "protected_category_costs",
+    amountSourceKey: "protected_categories",
+    amountOptions: [
+      { key: "dependents_children", label: "Children" },
+      { key: "dependents_elderly", label: "Elderly Dependents" },
+      { key: "pwd", label: "Person with Disability" },
+      { key: "solo_parent", label: "Solo Parent Responsibilities" },
+      { key: "indigenous", label: "Indigenous Community Needs" },
+    ],
+  },
+  {
+    key: "high_expense_seasons",
+    title: "Higher-Expense Seasons",
+    subtitle: "When are your expenses usually higher? Select all that apply.",
+    kind: "card_multi_select",
+    questionKey: "high_expense_seasons",
+    options: [
+      { key: "rainy_season", label: "Rainy Season" },
+      { key: "back_to_school", label: "Back-to-School Season" },
+      { key: "undas", label: "Undas / All Souls' Day" },
+      { key: "christmas_ber_months", label: "Christmas and Ber Months" },
+      { key: "new_year", label: "New Year" },
+      { key: "summer", label: "Summer" },
+      { key: "annual_payments", label: "Tax and Annual-Payment Season" },
+      { key: "family_celebrations", label: "Birthday and Family-Celebration Months" },
+      { key: "other", label: "Other" },
+      { key: "none", label: "My Expenses Do Not Usually Change by Season" },
+    ],
+  },
+  {
+    key: "saving_seasons",
+    title: "Saving Seasons",
+    subtitle: "What seasons are more likely for you to save? Select all that apply.",
+    kind: "card_multi_select",
+    questionKey: "saving_seasons",
+    options: [
+      { key: "rainy_season", label: "Rainy Season" },
+      { key: "back_to_school", label: "Back-to-School Season" },
+      { key: "christmas_ber_months", label: "Christmas and Ber Months" },
+      { key: "new_year", label: "New Year" },
+      { key: "summer", label: "Summer" },
+      { key: "other", label: "Other" },
+      { key: "none", label: "No Particular Seasonal Pattern" },
     ],
   },
   {

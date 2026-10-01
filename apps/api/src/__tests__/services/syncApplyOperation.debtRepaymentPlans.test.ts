@@ -43,4 +43,22 @@ describe("debt repayment-plan sync validation", () => {
       },
     });
   });
+
+  it("rejects a salary loan without a recognized provider", async () => {
+    await expect(prepareOperation({} as never, "user-1", {
+      operation_id: "operation-3",
+      entity: "debt_accounts",
+      record_id: "debt-1",
+      operation_type: "create",
+      base_version: null,
+      changed_fields: [],
+      payload: {
+        name: "Government salary loan", preset_key: "salary_loan", status: "active",
+        original_balance_centavos: 100_000, current_balance_centavos: 100_000,
+        annual_interest_rate_bps: 600, minimum_payment_centavos: 5_000,
+        payment_frequency: "monthly", next_due_date: "2026-11-01",
+        preset_data: { salaryLoan: { provider: "invalid", linkedIncomeSourceId: "income-1", repaymentMethod: "payroll_deduction", deductionAmountCentavos: 5_000, deductionSchedule: "monthly" } },
+      },
+    })).rejects.toThrow("salary loan provider is invalid");
+  });
 });

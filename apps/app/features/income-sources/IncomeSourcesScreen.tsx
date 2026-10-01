@@ -32,6 +32,8 @@ import {
 } from "../../local-db/repositories/financialFoundations";
 import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialAccounts";
 import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
+import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
+import { getIncomeSummary } from "../../local-db/repositories/incomeSummary";
 import KebabTooltip from "../../components/KebabTooltip";
 import AvailableBalanceCard from "../../components/AvailableBalanceCard";
 import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
@@ -75,30 +77,20 @@ type Props = { userId: string; deviceId: string; onBack: () => void; onSyncReque
 
 export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRequested }: Props) {
   const [sources, setSources] = useState<IncomeSource[]>([]);
+  const [debts, setDebts] = useState<DebtAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editing, setEditing] = useState<IncomeSource | null>(null);
 
   const load = useCallback(async () => {
-    setSources(await listIncomeSources(userId));
+    const [incomeSources, debtAccounts] = await Promise.all([listIncomeSources(userId), listDebtAccounts(userId)]);
+    setSources(incomeSources);
+    setDebts(debtAccounts);
     setLoading(false);
   }, [userId]);
   useEffect(() => { load(); }, [load]);
 
-  const MONTHLY_MULTIPLIER: Record<string, number> = {
-    weekly: 4.33,
-    biweekly: 2.17,
-    semi_monthly: 2,
-    monthly: 1,
-    irregular: 1,
-    custom: 1,
-  };
-
-  const totalMonthly = sources.reduce((sum, s) => {
-    const amount = s.expectedAmountCentavos ?? 0;
-    const multiplier = MONTHLY_MULTIPLIER[s.frequency] ?? 1;
-    return sum + Math.round(amount * multiplier);
-  }, 0);
+  const incomeSummary = getIncomeSummary(sources, debts);
 
   const handleCreate = async (input: CreateIncomeSourceInput) => {
     await createIncomeSource(userId, deviceId, input);
@@ -127,9 +119,9 @@ export default function IncomeSourcesScreen({ userId, deviceId, onBack, onSyncRe
         </TouchableOpacity>
       </View>
       <AvailableBalanceCard
-        label="Total monthly income"
-        amount={formatPeso(totalMonthly).replace("₱", "")}
-        detail={`${sources.length} ${sources.length === 1 ? "income source" : "income sources"}`}
+        label="Estimated monthly income after debt deductions"
+        amount={formatPeso(incomeSummary.netMonthlyCentavos).replace("₱", "")}
+        detail={`${formatPeso(incomeSummary.grossMonthlyCentavos)} after taxes, before ${formatPeso(incomeSummary.salaryLoanDeductionsCentavos)} in salary-loan deductions`}
         marginBottom={16}
       />
       {loading ? null : sources.length === 0 ? (
@@ -405,7 +397,7 @@ function IncomeFormSheet({ userId, visible, editing, onClose, onSubmit }: { user
 
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2, marginBottom: 6 }}>
-                      EXPECTED AMOUNT (₱)
+                      EXPECTED INCOME AFTER TAXES (₱)
                     </Text>
                     <TextInput
                       value={expected}
@@ -415,6 +407,7 @@ function IncomeFormSheet({ userId, visible, editing, onClose, onSubmit }: { user
                       keyboardType="decimal-pad"
                       style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                     />
+                    <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, marginTop: 5 }}>Enter the amount you receive after taxes, before debt deductions. Linked salary loans are subtracted separately.</Text>
                   </View>
 
                   <View>

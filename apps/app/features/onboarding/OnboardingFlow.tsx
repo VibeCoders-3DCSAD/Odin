@@ -49,6 +49,21 @@ type SubmitResult = {
   classification_available: boolean;
 };
 
+function isStepComplete(step: StepConfig, answers: Record<string, unknown>) {
+  const value = answers[step.questionKey];
+  if (step.kind === "review") return true;
+  if (step.kind === "card_multi_select") return Array.isArray(value) && value.length > 0;
+  if (step.kind === "amount_list") {
+    const selected = (answers[step.amountSourceKey ?? ""] as string[] | undefined) ?? [];
+    const selectedKeys = selected.filter((key) => key !== "none");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    if (selectedKeys.length === 0) return true;
+    const amounts = value as Record<string, unknown>;
+    return selectedKeys.every((key) => typeof amounts[key] === "string" && amounts[key] !== "");
+  }
+  return typeof value === "string" && value.trim() !== "";
+}
+
 export default function OnboardingFlow({
   accessToken,
   userId: _userId,
@@ -153,13 +168,7 @@ export default function OnboardingFlow({
     if (stepIndex >= STEPS.length - 1) return;
     const currentStep = STEPS[stepIndex];
     if (!currentStep) return;
-    const value = answersRef.current[currentStep.questionKey];
-    const incomplete = currentStep.kind === "input"
-      ? (currentStep.key === "monthly_income" ? incomeText === "" : typeof value !== "string" || value.trim() === "")
-      : currentStep.kind === "card_multi_select"
-        ? !Array.isArray(value) || value.length === 0
-        : currentStep.kind !== "review" && (typeof value !== "string" || value === "");
-    if (incomplete) {
+    if (!isStepComplete(currentStep, answersRef.current)) {
       setFieldErrors({ [currentStep.questionKey]: currentStep.kind === "card_multi_select" ? "Select at least one answer." : "This answer is required." });
       return;
     }
@@ -167,9 +176,15 @@ export default function OnboardingFlow({
     const next = stepIndex + 1;
     const nextStep = STEPS[next];
     if (!nextStep) return;
+    let nextAnswers = answersRef.current;
+    if (nextStep.kind === "amount_list" && !nextAnswers[nextStep.questionKey]) {
+      nextAnswers = { ...nextAnswers, [nextStep.questionKey]: {} };
+      answersRef.current = nextAnswers;
+      setAnswers(nextAnswers);
+    }
     setStepIndex(next);
     if (sessionRef.current)
-      persistStep(sessionRef.current, nextStep.key, answersRef.current);
+      persistStep(sessionRef.current, nextStep.key, nextAnswers);
   }, [stepIndex, persistStep, incomeText]);
 
   const goBack = useCallback(() => {
@@ -218,11 +233,7 @@ export default function OnboardingFlow({
     const sid = sessionRef.current;
     if (!sid) return;
     const firstIncomplete = STEPS.findIndex((item) => {
-      if (item.kind === "review") return false;
-      const answer = answersRef.current[item.questionKey];
-      if (item.kind === "input") return typeof answer !== "string" || answer === "";
-      if (item.kind === "card_multi_select") return !Array.isArray(answer) || answer.length === 0;
-      return typeof answer !== "string" || answer === "";
+      return !isStepComplete(item, answersRef.current);
     });
     if (firstIncomplete >= 0) {
       setStepIndex(firstIncomplete);
@@ -496,8 +507,23 @@ export default function OnboardingFlow({
                     setIncomeText(digits);
                     saveAnswer(step.questionKey, digits === "" ? "" : digits);
                   }
-                : (t: string) => saveAnswer(step.questionKey, t)
+                : (t: string) => saveAnswer(
+                    step.questionKey,
+                    step.inputSuffix === "PHP" ? t.replace(/[^0-9]/g, "") : t,
+                  )
             }
+          />
+        )}
+
+        {step.kind === "amount_list" && (
+          <AmountListStep
+            step={step}
+            selected={(answers[step.amountSourceKey ?? ""] as string[] | undefined) ?? []}
+            values={(answers[step.questionKey] as Record<string, string> | undefined) ?? {}}
+            onChange={(key, value) => saveAnswer(step.questionKey, {
+              ...((answers[step.questionKey] as Record<string, string> | undefined) ?? {}),
+              [key]: value.replace(/[^0-9]/g, ""),
+            })}
           />
         )}
 
@@ -943,6 +969,51 @@ function InputStep({
   );
 }
 
+function AmountListStep({
+  step,
+  selected,
+  values,
+  onChange,
+}: {
+  step: StepConfig;
+  selected: string[];
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+}) {
+  const options = step.amountOptions?.filter((option) => selected.includes(option.key)) ?? [];
+  if (options.length === 0) {
+    return (
+      <Text style={{ fontFamily: "Manrope", fontSize: 14, color: MUTED }}>
+        No amounts are needed for your selection.
+      </Text>
+    );
+  }
+  return (
+    <View className="gap-4">
+      {options.map((option) => (
+        <View key={option.key}>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: INK2, marginBottom: 10 }}>
+            {option.label} Monthly Amount
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: LINE, borderRadius: 14, backgroundColor: CARD }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12, color: MUTED, paddingLeft: 16 }}>
+              PHP
+            </Text>
+            <TextInput
+              value={values[option.key] ? Number(values[option.key]).toLocaleString() : ""}
+              onChangeText={(text) => onChange(option.key, text)}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={MUTED}
+              style={{ flex: 1, fontFamily: "Manrope", fontWeight: "700", fontSize: 20, color: INK, padding: 16 }}
+            />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function ReviewStep({
   answers,
   onEdit,
@@ -959,6 +1030,27 @@ function ReviewStep({
     const option = step?.options?.find((item) => item.key === answers[questionKey]);
     if (step && option) rows.push({ label, value: option.label, stepIndex: STEPS.indexOf(step) });
   };
+  const addMultiOptionRow = (label: string, questionKey: string) => {
+    const step = stepFor(questionKey);
+    const selections = answers[questionKey];
+    if (!step || !Array.isArray(selections)) return;
+    const labels = selections
+      .map((selection) => step.options?.find((option) => option.key === selection)?.label)
+      .filter(Boolean)
+      .join(", ");
+    if (labels) rows.push({ label, value: labels, stepIndex: STEPS.indexOf(step) });
+  };
+  const addAmountMapRows = (questionKey: string) => {
+    const step = stepFor(questionKey);
+    const values = answers[questionKey];
+    if (!step || !values || typeof values !== "object" || Array.isArray(values)) return;
+    for (const [key, amount] of Object.entries(values as Record<string, unknown>)) {
+      const option = step.amountOptions?.find((item) => item.key === key);
+      if (option && typeof amount === "string") {
+        rows.push({ label: `${option.label} Monthly Amount`, value: `PHP ${Number(amount).toLocaleString()}`, stepIndex: STEPS.indexOf(step) });
+      }
+    }
+  };
 
   const displayName = answers.display_name;
   if (displayName && displayName !== "") rows.push({ label: "Name", value: displayName as string, stepIndex: STEPS.findIndex((step) => step.questionKey === "display_name") });
@@ -973,13 +1065,19 @@ function ReviewStep({
 
   if (incomeText)
     rows.push({
-      label: "Monthly Income",
+      label: "Monthly Income Before Deductions",
       value: `PHP ${Number(incomeText).toLocaleString()}`,
       stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_income"),
     });
-  addOptionRow("Income Pattern", "income_pattern");
-  addOptionRow("Obligation Load", "obligation_load");
-  addOptionRow("Emergency Runway", "emergency_runway");
+  addMultiOptionRow("Monthly Deductions", "monthly_deductions");
+  addAmountMapRows("monthly_deduction_amounts");
+  addOptionRow("Savings Runway", "emergency_savings_runway");
+  const emergencySavings = answers.liquid_emergency_savings;
+  if (typeof emergencySavings === "string") rows.push({ label: "Emergency Savings", value: `PHP ${Number(emergencySavings).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "liquid_emergency_savings") });
+  const essentialCosts = answers.monthly_essential_living_costs;
+  if (typeof essentialCosts === "string") rows.push({ label: "Monthly Essential Costs", value: `PHP ${Number(essentialCosts).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_essential_living_costs") });
+  addOptionRow("Currently Paying Off Debt", "paying_off_debt");
+  addOptionRow("Credit Card Payments", "credit_card_payment_behavior");
 
   const protectedCats = (answers.protected_categories as string[] | undefined) ?? [];
   const catLabels = protectedCats
@@ -988,6 +1086,9 @@ function ReviewStep({
     .join(", ");
   const protectedStep = stepFor("protected_categories");
   if (catLabels && protectedStep) rows.push({ label: "Categories", value: catLabels, stepIndex: STEPS.indexOf(protectedStep) });
+  addAmountMapRows("protected_category_costs");
+  addMultiOptionRow("Higher-Expense Seasons", "high_expense_seasons");
+  addMultiOptionRow("Saving Seasons", "saving_seasons");
 
   return (
     <View>

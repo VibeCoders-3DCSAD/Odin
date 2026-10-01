@@ -9,6 +9,7 @@ import {
   type InterestMethod,
   type InterestRatePeriod,
   type PaymentFrequency,
+  type SalaryLoanProvider,
 } from "../../local-db/repositories/debtAccounts";
 import { listIncomeSources, type IncomeSource } from "../../local-db/repositories/financialFoundations";
 import {
@@ -17,6 +18,7 @@ import {
   INTEREST_METHOD_OPTIONS,
   INTEREST_PERIOD_OPTIONS,
   PAYMENT_FREQUENCY_OPTIONS,
+  SALARY_LOAN_PROVIDER_OPTIONS,
 } from "./debtTypes";
 
 const P = {
@@ -153,6 +155,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
   const [method, setMethod] = useState<InterestMethod>(debt?.interestMethod ?? "no_interest");
   const [purpose, setPurpose] = useState(debt?.typeSpecific.personalLoan?.purpose ?? "");
   const [incomeSource, setIncomeSource] = useState(debt?.typeSpecific.salaryLoan?.linkedIncomeSourceId ?? "");
+  const [salaryLoanProvider, setSalaryLoanProvider] = useState<SalaryLoanProvider | "">(debt?.typeSpecific.salaryLoan?.provider ?? "");
   const [repaymentMethod, setRepaymentMethod] = useState(debt?.typeSpecific.salaryLoan?.repaymentMethod ?? "manual_payment");
   const [deduction, setDeduction] = useState(debt?.typeSpecific.salaryLoan?.deductionAmountCentavos ? String(debt.typeSpecific.salaryLoan.deductionAmountCentavos / 100) : "");
   const [deductionSchedule, setDeductionSchedule] = useState<PaymentFrequency>(debt?.typeSpecific.salaryLoan?.deductionSchedule ?? "monthly");
@@ -178,7 +181,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
       typeSpecific: {
         startDate, feesCentavos: fees ? pesos(fees) : 0, penaltyInfo: penaltyInfo || null, termMonths: termMonths ? Number(termMonths) : null,
         personalLoan: type === "personal_loan" ? { purpose: purpose || null } : undefined,
-        salaryLoan: type === "salary_loan" ? { linkedIncomeSourceId: incomeSource || null, repaymentMethod, deductionAmountCentavos: deduction ? pesos(deduction) : null, deductionSchedule } : undefined,
+        salaryLoan: type === "salary_loan" ? { provider: salaryLoanProvider || null, linkedIncomeSourceId: incomeSource || null, repaymentMethod, deductionAmountCentavos: deduction ? pesos(deduction) : null, deductionSchedule } : undefined,
         multipurposeLoan: type === "multipurpose_loan" ? { purposes: purpose ? [purpose] : [] } : undefined,
         businessLoan: type === "business_loan" ? { linkedBusinessOrIncomeSourceId: businessSource || null, purpose: purpose || null } : undefined,
         autoLoan: type === "auto_loan" ? { vehicleDescription: vehicle || null, vehiclePurchasePriceCentavos: vehiclePrice ? pesos(vehiclePrice) : null, downpaymentCentavos: downpayment ? pesos(downpayment) : null, financedPrincipalCentavos: vehiclePrice ? pesos(vehiclePrice) - pesos(downpayment || "0") : null } : undefined,
@@ -188,6 +191,9 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
     const nextErrors: Record<string, string> = {};
     if (!name.trim()) nextErrors.name = "Debt name is required.";
     if (type !== "custom_debt" && !lender.trim()) nextErrors.lender = "Lender or provider is required.";
+    if (type === "salary_loan" && !salaryLoanProvider) nextErrors.salaryLoanProvider = "Choose the salary-loan provider.";
+    if (type === "salary_loan" && !incomeSource) nextErrors.incomeSource = "Choose the income source that is deducted.";
+    if (type === "salary_loan" && repaymentMethod === "payroll_deduction" && (!deduction || !Number.isFinite(input.typeSpecific.salaryLoan?.deductionAmountCentavos) || input.typeSpecific.salaryLoan.deductionAmountCentavos! <= 0)) nextErrors.deduction = "Payroll deduction must be positive.";
     if (!Number.isFinite(input.originalBalanceCentavos) || input.originalBalanceCentavos <= 0) nextErrors.original = "Original amount must be positive.";
     if (!Number.isFinite(input.currentBalanceCentavos) || input.currentBalanceCentavos < 0) nextErrors.balance = "Current balance must be non-negative.";
     if (!Number.isFinite(input.minimumPaymentCentavos) || input.minimumPaymentCentavos <= 0) nextErrors.payment = "Minimum payment must be positive.";
@@ -222,7 +228,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
   function renderTypeFields() {
     const incomeOptions = incomeSources.map((source) => ({ value: source.id, label: source.name }));
     const purposeOptions = (type === "business_loan" ? BUSINESS_PURPOSES : type === "multipurpose_loan" ? MULTIPURPOSE_PURPOSES : PERSONAL_PURPOSES).map((value) => ({ value, label: value }));
-    if (type === "salary_loan") return <View style={{ gap: 12 }}><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Linked income source</Text>{incomeOptions.length ? <Options values={incomeOptions} selected={incomeSource} onChange={setIncomeSource} compact /> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Add an income source before creating a salary loan.</Text>}</View><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Repayment method</Text><Options values={[...REPAYMENT_METHODS]} selected={repaymentMethod} onChange={setRepaymentMethod} compact /></View>{repaymentMethod === "payroll_deduction" ? <><Field label="Payroll deduction" placeholder={DEBT_PLACEHOLDERS.salaryDeductionAmount} value={deduction} onChangeText={setDeduction} numeric prefix="PHP" /><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Deduction schedule</Text><Options values={PAYMENT_FREQUENCY_OPTIONS} selected={deductionSchedule} onChange={setDeductionSchedule} compact /></View></> : null}</View>;
+    if (type === "salary_loan") return <View style={{ gap: 12 }}><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Provider</Text><Options values={[...SALARY_LOAN_PROVIDER_OPTIONS]} selected={salaryLoanProvider} onChange={setSalaryLoanProvider} compact />{errors.salaryLoanProvider ? <Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 11 }}>{errors.salaryLoanProvider}</Text> : null}</View><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Income source to deduct from</Text>{incomeOptions.length ? <Options values={incomeOptions} selected={incomeSource} onChange={setIncomeSource} compact /> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Add an income source before creating a salary loan.</Text>}{errors.incomeSource ? <Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 11 }}>{errors.incomeSource}</Text> : null}</View><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Repayment method</Text><Options values={[...REPAYMENT_METHODS]} selected={repaymentMethod} onChange={setRepaymentMethod} compact /></View>{repaymentMethod === "payroll_deduction" ? <><Field label="Payroll deduction" placeholder={DEBT_PLACEHOLDERS.salaryDeductionAmount} value={deduction} onChangeText={setDeduction} numeric prefix="PHP" error={errors.deduction} /><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16 }}>This amount is subtracted from the selected income source after its gross income is calculated.</Text><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Deduction schedule</Text><Options values={PAYMENT_FREQUENCY_OPTIONS} selected={deductionSchedule} onChange={setDeductionSchedule} compact /></View></> : null}</View>;
     if (type === "auto_loan") return <View style={{ gap: 12 }}><Field label="Vehicle" placeholder={DEBT_PLACEHOLDERS.autoVehicleDescription} value={vehicle} onChangeText={setVehicle} /><Field label="Vehicle purchase price" placeholder={DEBT_PLACEHOLDERS.autoPurchasePrice} value={vehiclePrice} onChangeText={setVehiclePrice} numeric prefix="PHP" /><Field label="Downpayment" placeholder={DEBT_PLACEHOLDERS.autoDownpayment} value={downpayment} onChangeText={setDownpayment} numeric prefix="PHP" /></View>;
     if (type === "business_loan") return <View style={{ gap: 12 }}><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Linked income source</Text>{incomeOptions.length ? <Options values={incomeOptions} selected={businessSource} onChange={setBusinessSource} compact /> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Add an income source before linking this business loan.</Text>}</View><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Loan purpose</Text><Options values={purposeOptions} selected={purpose} onChange={setPurpose} compact /></View></View>;
     return <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Loan purpose</Text><Options values={purposeOptions} selected={purpose} onChange={setPurpose} compact /></View>;

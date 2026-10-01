@@ -10,18 +10,40 @@ const router = Router();
 const ONBOARDING_ANSWER_KEYS = new Set([
   "display_name", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
   "primary_employment_classification", "employment_status", "monthly_income",
-  "protected_categories", "has_dependents",
+  "monthly_deductions", "monthly_deduction_amounts", "emergency_savings_runway", "liquid_emergency_savings",
+  "monthly_essential_living_costs", "paying_off_debt", "credit_card_payment_behavior", "protected_categories",
+  "protected_category_costs", "high_expense_seasons", "saving_seasons", "has_dependents",
 ]);
 
-const ARRAY_ANSWER_KEYS = new Set(["protected_categories"]);
-const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && key !== "has_dependents"));
+const ARRAY_ANSWER_KEYS = new Set(["monthly_deductions", "protected_categories", "high_expense_seasons", "saving_seasons"]);
+const AMOUNT_MAP_ANSWER_KEYS = new Set(["monthly_deduction_amounts", "protected_category_costs"]);
+const AMOUNT_MAP_OPTIONS: Record<string, readonly string[]> = {
+  monthly_deduction_amounts: ["tax", "sss", "philhealth", "pag_ibig", "salary_loan", "other"],
+  protected_category_costs: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous"],
+};
+const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && !AMOUNT_MAP_ANSWER_KEYS.has(key) && key !== "has_dependents"));
 const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   is_filipino: ["true", "false"],
   metro_manila_presence: VALID_METRO_MANILA_PRESENCE,
   primary_employment_classification: VALID_EMPLOYMENT_CLASSIFICATIONS,
   employment_status: ["employed_full_time", "employed_part_time", "self_employed", "unemployed", "retired", "student"],
+  monthly_deductions: ["tax", "sss", "philhealth", "pag_ibig", "salary_loan", "other", "none"],
+  emergency_savings_runway: ["less_than_1_month", "1_to_3_months", "3_to_6_months", "more_than_6_months", "not_sure"],
+  paying_off_debt: ["true", "false"],
+  credit_card_payment_behavior: ["no_credit_card", "never", "some_months", "every_month", "not_sure"],
   protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
+  high_expense_seasons: ["rainy_season", "back_to_school", "undas", "christmas_ber_months", "new_year", "summer", "annual_payments", "family_celebrations", "other", "none"],
+  saving_seasons: ["rainy_season", "back_to_school", "christmas_ber_months", "new_year", "summer", "other", "none"],
 };
+
+function amountMapIsComplete(rawAnswers: Record<string, unknown>, selectionKey: string, amountKey: string) {
+  const selections = rawAnswers[selectionKey];
+  const amounts = rawAnswers[amountKey];
+  if (!Array.isArray(selections) || !amounts || typeof amounts !== "object" || Array.isArray(amounts)) return false;
+  return selections
+    .filter((selection): selection is string => typeof selection === "string" && selection !== "none")
+    .every((selection) => typeof (amounts as Record<string, unknown>)[selection] === "string" && (amounts as Record<string, unknown>)[selection] !== "");
+}
 
 function validateOnboardingPayload(
   raw_answers: unknown,
@@ -36,12 +58,21 @@ function validateOnboardingPayload(
       if (ARRAY_ANSWER_KEYS.has(key) && (!Array.isArray(value) || value.some((item) => typeof item !== "string"))) {
         return `${key} must be an array of strings.`;
       }
+      if (AMOUNT_MAP_ANSWER_KEYS.has(key)) {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return `${key} must be an object of amounts.`;
+        if (Object.keys(value).some((amountKey) => !AMOUNT_MAP_OPTIONS[key]!.includes(amountKey))) {
+          return `Invalid ${key} entry.`;
+        }
+        if (Object.values(value).some((amount) => typeof amount !== "string" || !/^\d+$/.test(amount))) {
+          return `${key} amounts must be non-negative whole numbers.`;
+        }
+      }
       if (STRING_ANSWER_KEYS.has(key) && typeof value !== "string") return `${key} must be a string.`;
       if (key === "has_dependents" && typeof value !== "boolean") return "has_dependents must be a boolean.";
       const options = ANSWER_OPTIONS[key];
       if (options && typeof value === "string" && value !== "" && !options.includes(value)) return `Invalid ${key}.`;
       if (options && Array.isArray(value) && value.some((item) => !options.includes(item))) return `Invalid ${key}.`;
-      if (key === "monthly_income" && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
+      if (["monthly_income", "liquid_emergency_savings", "monthly_essential_living_costs"].includes(key) && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
         return `${key} must be a non-negative whole number.`;
       }
     }
@@ -228,14 +259,26 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     "primary_employment_classification",
     "employment_status",
     "monthly_income",
+    "monthly_deductions",
+    "monthly_deduction_amounts",
+    "emergency_savings_runway",
+    "liquid_emergency_savings",
+    "monthly_essential_living_costs",
+    "paying_off_debt",
+    "credit_card_payment_behavior",
     "protected_categories",
+    "protected_category_costs",
+    "high_expense_seasons",
+    "saving_seasons",
   ];
   const missing = requiredFields.filter((f) => {
     const v = rawAnswers[f];
-    if (f === "monthly_income")
+    if (["monthly_income", "liquid_emergency_savings", "monthly_essential_living_costs"].includes(f))
       return typeof v !== "string" || v === "";
-    if (f === "protected_categories")
+    if (ARRAY_ANSWER_KEYS.has(f))
       return !Array.isArray(v) || v.length === 0;
+    if (AMOUNT_MAP_ANSWER_KEYS.has(f))
+      return typeof v !== "object" || v === null || Array.isArray(v);
     return typeof v !== "string" || v === "";
   });
   if (missing.length > 0) {
@@ -243,6 +286,16 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
       error: "Bad Request",
       message: "Onboarding questionnaire is incomplete. Please complete all required steps before submitting.",
       fields: missing,
+    });
+    return;
+  }
+  if (
+    !amountMapIsComplete(rawAnswers, "monthly_deductions", "monthly_deduction_amounts")
+    || !amountMapIsComplete(rawAnswers, "protected_categories", "protected_category_costs")
+  ) {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Enter an amount for each selected deduction or household support cost.",
     });
     return;
   }

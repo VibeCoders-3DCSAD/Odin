@@ -117,6 +117,18 @@ describe("POST /odin/api/onboarding/sessions", () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when an amount map contains an unsupported entry", async () => {
+    mockAuth();
+
+    const response = await request(app)
+      .post(`${basePath}/sessions`)
+      .set(authHeader())
+      .send({ payload: { raw_answers: { monthly_deduction_amounts: { unsupported: "100" } } } });
+
+    expect(response.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when current_step_key is not a string", async () => {
     mockAuth();
 

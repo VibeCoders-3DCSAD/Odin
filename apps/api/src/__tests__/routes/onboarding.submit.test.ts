@@ -56,7 +56,17 @@ function mockInProgressSession() {
         primary_employment_classification: "full_time_employee",
         employment_status: "employed_full_time",
         monthly_income: "50000",
+        monthly_deductions: ["none"],
+        monthly_deduction_amounts: {},
+        emergency_savings_runway: "1_to_3_months",
+        liquid_emergency_savings: "20000",
+        monthly_essential_living_costs: "30000",
+        paying_off_debt: "false",
+        credit_card_payment_behavior: "never",
         protected_categories: ["none"],
+        protected_category_costs: {},
+        high_expense_seasons: ["christmas_ber_months"],
+        saving_seasons: ["summer"],
       },
     },
     error: null,
@@ -240,7 +250,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it("accepts onboarding without V1 financial profile answers", async () => {
+  it("accepts onboarding with Classification V2 financial setup answers", async () => {
     mockAuth();
     mockRpcSuccess();
     mockFrom.mockReturnValueOnce(createMockQuery({
@@ -256,7 +266,17 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
           primary_employment_classification: "full_time_employee",
           employment_status: "employed_full_time",
           monthly_income: "50000",
+          monthly_deductions: ["none"],
+          monthly_deduction_amounts: {},
+          emergency_savings_runway: "1_to_3_months",
+          liquid_emergency_savings: "20000",
+          monthly_essential_living_costs: "30000",
+          paying_off_debt: "false",
+          credit_card_payment_behavior: "never",
           protected_categories: ["none"],
+          protected_category_costs: {},
+          high_expense_seasons: ["christmas_ber_months"],
+          saving_seasons: ["summer"],
         },
       },
       error: null,
@@ -287,7 +307,17 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
           primary_employment_classification: "full_time_employee",
           employment_status: "employed_full_time",
           monthly_income: "0",
+          monthly_deductions: ["none"],
+          monthly_deduction_amounts: {},
+          emergency_savings_runway: "not_sure",
+          liquid_emergency_savings: "0",
+          monthly_essential_living_costs: "0",
+          paying_off_debt: "false",
+          credit_card_payment_behavior: "no_credit_card",
           protected_categories: ["none"],
+          protected_category_costs: {},
+          high_expense_seasons: ["none"],
+          saving_seasons: ["none"],
         },
       },
       error: null,
