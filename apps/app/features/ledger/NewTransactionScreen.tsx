@@ -52,6 +52,7 @@ type Props = {
   deviceId: string;
   accessToken: string;
   onClose: () => void;
+  onCreated?: (unusualSpending: UnusualSpendingInsight | null) => void;
   transaction?: Transaction;
   statementPaymentContext?: StatementPaymentContext;
   debtPaymentDebtId?: string;
@@ -59,7 +60,7 @@ type Props = {
   savingsActivityContext?: { savingsGoalId: string; kind: "contribution" | "withdrawal"; amountCentavos?: number };
 };
 
-export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, transaction, statementPaymentContext, debtPaymentDebtId, debtPaymentContext, savingsActivityContext }: Props) {
+export default function NewTransactionScreen({ userId, deviceId, accessToken, onClose, onCreated, transaction, statementPaymentContext, debtPaymentDebtId, debtPaymentContext, savingsActivityContext }: Props) {
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
   const isEdit = !!transaction;
@@ -75,7 +76,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const isStatementPayment = Boolean(statementPaymentContext);
 
   useEffect(() => {
-    if (!isEdit) setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
+    if (!isEdit) setCategorySelection({ tier: null, categoryId: null, subcategoryId: null });
   }, [txType]);
   const [amount, setAmount] = useState(transaction ? String(transaction.amount_centavos / 100) : savingsActivityContext?.amountCentavos ? String(savingsActivityContext.amountCentavos / 100) : "");
   const [date, setDate] = useState(transaction ? new Date(transaction.transaction_date + "T00:00:00") : new Date());
@@ -92,7 +93,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [destAccountId, setDestAccountId] = useState(transaction?.destination_account_id ?? "");
   const [categorySelection, setCategorySelection] = useState<CategorySelection>({
     tier: transaction?.subcategory_id ? "subcategory" : null,
-    groupId: null,
     categoryId: null,
     subcategoryId: transaction?.subcategory_id ?? null,
   });
@@ -119,9 +119,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     deficitCentavos: number;
     isCreditCard: boolean;
   } | null>(null);
-  const [unusualSpending, setUnusualSpending] = useState<UnusualSpendingInsight | null>(null);
 
-  const { accounts, groups, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
+  const { accounts, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
 
   useEffect(() => { listDebtAccounts(userId).then(setActiveDebts).catch(() => setActiveDebts([])); }, [userId]);
 
@@ -160,7 +159,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
   useEffect(() => {
     if (!isEdit) {
-      setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
+      setCategorySelection({ tier: null, categoryId: null, subcategoryId: null });
     }
   }, [txType, isEdit]);
 
@@ -173,15 +172,10 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const currentCategory = categorySelection.categoryId
       ? categories.find((item) => item.id === categorySelection.categoryId) ?? null
       : currentSubcategory?.category_id ? categories.find((item) => item.id === currentSubcategory.category_id) ?? null : null;
-    const currentGroup = categorySelection.groupId
-      ? groups.find((item) => item.id === categorySelection.groupId) ?? null
-      : currentCategory ? groups.find((item) => item.id === currentCategory.category_group_id) ?? null : null;
-
-    if (currentCategory || currentGroup || currentSubcategory) {
-      if (currentGroup?.id !== categorySelection.groupId || currentCategory?.id !== categorySelection.categoryId) {
+    if (currentCategory || currentSubcategory) {
+      if (currentCategory?.id !== categorySelection.categoryId) {
         setCategorySelection((current) => ({
           ...current,
-          groupId: currentGroup?.id ?? current.groupId,
           categoryId: currentCategory?.id ?? current.categoryId,
         }));
       }
@@ -191,10 +185,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     if (!isEdit && subcategories.length > 0) {
       const fallback = subcategories[0]!;
       const fallbackCategory = fallback.category_id ? categories.find((item) => item.id === fallback.category_id) ?? null : null;
-      const fallbackGroup = fallbackCategory ? groups.find((item) => item.id === fallbackCategory.category_group_id) ?? null : null;
       setCategorySelection({
         tier: "subcategory",
-        groupId: fallbackGroup?.id ?? null,
         categoryId: fallbackCategory?.id ?? null,
         subcategoryId: fallback.id,
       });
@@ -202,9 +194,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   }, [
     subcategories,
     categories,
-    groups,
     txType,
-    categorySelection.groupId,
     categorySelection.categoryId,
     categorySelection.subcategoryId,
     isEdit,
@@ -266,7 +256,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     setAmount("");
     setDescription("");
     setNotes("");
-    setCategorySelection({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
+    setCategorySelection({ tier: null, categoryId: null, subcategoryId: null });
     setSourceAccountId("");
     setDestAccountId("");
     setPostingDate("");
@@ -321,25 +311,10 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     return categories.find((item) => item.id === selectedSubcategory.category_id) ?? null;
   }
 
-  function getSelectedGroup() {
-    if (categorySelection.groupId) {
-      return groups.find((item) => item.id === categorySelection.groupId) ?? null;
-    }
-    const selectedCategory = getSelectedCategory();
-    if (!selectedCategory) return null;
-    return groups.find((item) => item.id === selectedCategory.category_group_id) ?? null;
-  }
-
   function resolveEffectiveSubcategoryId(): string {
     if (categorySelection.subcategoryId) return categorySelection.subcategoryId;
     if (categorySelection.categoryId) {
       return subcategories.find((item) => item.category_id === categorySelection.categoryId)?.id ?? "";
-    }
-    if (categorySelection.groupId) {
-      const categoryIds = categories
-        .filter((item) => item.category_group_id === categorySelection.groupId)
-        .map((item) => item.id);
-      return subcategories.find((item) => item.category_id && categoryIds.includes(item.category_id))?.id ?? "";
     }
     return "";
   }
@@ -347,7 +322,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   function getCategorySummaryLabel(): string {
     if (categorySelection.tier === "subcategory") return getSelectedSubcategory()?.label ?? "Select category";
     if (categorySelection.tier === "category") return getSelectedCategory()?.label ?? "Select category";
-    if (categorySelection.tier === "group") return getSelectedGroup()?.label ?? "Select category";
     return "Select category";
   }
 
@@ -507,6 +481,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     setSaving(true);
     try {
       let createdExpense: Transaction | null = null;
+      let unusualSpending: UnusualSpendingInsight | null = null;
       if (isStatementPayment && (!statementPayment || (isEdit && !existingStatementPayment))) {
         setFormError("The selected credit-card statement is no longer available.");
         return;
@@ -633,7 +608,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         try {
           const insight = await getUnusualSpending(userId, createdExpense.id);
           if (insight) await saveUnusualSpending(userId, deviceId, insight);
-          setUnusualSpending(insight);
+          unusualSpending = insight;
         } catch (error) {
           console.error("[UNUSUAL-SPENDING] evaluation failed", error);
         }
@@ -650,6 +625,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       });
 
       resetForm(true);
+      if (!isEdit) onCreated?.(unusualSpending);
     } catch (error) {
       console.error("[DEBUG-TX-SAVE] failed", {
         phase: savePhase,
@@ -790,7 +766,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   }
 
   function renderCategoryPickerPage() {
-    const selectedGroup = getSelectedGroup();
     const selectedCategory = getSelectedCategory();
     const selectedSubcategory = getSelectedSubcategory();
 
@@ -800,7 +775,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           Pick from your full {txType} category list.
         </Text>
 
-        {(selectedGroup || selectedCategory || selectedSubcategory) ? (
+        {(selectedCategory || selectedSubcategory) ? (
           <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.successTint, backgroundColor: palette.successCard, padding: 14, marginBottom: 18 }}>
             <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: "600", color: palette.successTint, letterSpacing: 0.4, marginBottom: 4 }}>
               CURRENT SELECTION
@@ -825,7 +800,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     <Pressable
                       key={sub.id}
                       onPress={() => {
-                        setCategorySelection({ tier: "subcategory", groupId: null, categoryId: null, subcategoryId: sub.id });
+                        setCategorySelection({ tier: "subcategory", categoryId: null, subcategoryId: sub.id });
                         setShowCategoryPicker(false);
                       }}
                       accessibilityRole="button"
@@ -854,7 +829,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             )
           ) : (
             <CategorySelectorTree
-              groups={groups}
               categories={categories}
               subcategories={subcategories}
               selection={categorySelection}
@@ -1186,26 +1160,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     accessibilityLabel="Confirm record transaction"
                   >
                     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Continue</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
-        <Modal visible={unusualSpending !== null} transparent animationType="fade" onRequestClose={() => setUnusualSpending(null)}>
-          <Pressable onPress={() => setUnusualSpending(null)} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
-            <Pressable onPress={() => {}}>
-              <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
-                <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>Unusual spending detected</Text>
-                <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 12 }}>
-                  This {formatCurrency(unusualSpending?.amountCentavos ?? 0)} expense is outside your usual spending range for {unusualSpending?.subcategoryLabel ?? "this subcategory"}.
-                </Text>
-                <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
-                  Your usual spending is {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. This is only a personal spending observation.
-                </Text>
-                <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 22 }}>
-                  <Pressable onPress={() => setUnusualSpending(null)} accessibilityRole="button" accessibilityLabel="Close unusual spending insight">
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Got it</Text>
                   </Pressable>
                 </View>
               </View>

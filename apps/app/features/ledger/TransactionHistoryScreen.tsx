@@ -18,6 +18,7 @@ import { useToast } from "../../components/Toast";
 import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
+import type { UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 
 const palette = {
   shell: "#fcf8f0",
@@ -50,13 +51,15 @@ type Props = {
   userId: string;
   deviceId: string;
   accessToken: string;
+  unusualSpending: UnusualSpendingInsight | null;
+  onUnusualSpendingDismissed: () => void;
   onNewTransaction: () => void;
   onLoadMoreChange?: (loadMore: (() => void) | null) => void;
 };
 
 const PAGE_SIZE = 50;
 
-export default function TransactionHistoryScreen({ userId, deviceId, accessToken, onNewTransaction, onLoadMoreChange }: Props) {
+export default function TransactionHistoryScreen({ userId, deviceId, accessToken, unusualSpending, onUnusualSpendingDismissed, onNewTransaction, onLoadMoreChange }: Props) {
   const { showToast } = useToast();
 
   const [transactions, setTransactions] = useState<TransactionListItem[]>([]);
@@ -78,6 +81,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
   const [deleteBlockedTarget, setDeleteBlockedTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showUnusualSpending, setShowUnusualSpending] = useState(false);
   const requestId = useRef(0);
   const loadingMoreRef = useRef(false);
   const nextOffsetRef = useRef(0);
@@ -134,6 +138,10 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   useEffect(() => {
     load();
   }, [typeFilter, categoryFilter, sortBy, sortDir, dateRange, customFromDate, customToDate]);
+
+  useEffect(() => {
+    if (!loading && unusualSpending) setShowUnusualSpending(true);
+  }, [loading, unusualSpending]);
 
   useEffect(() => {
     let active = true;
@@ -272,6 +280,15 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     if (!date) return;
     if (field === "from") setCustomFromDate(formatIsoDate(date));
     else setCustomToDate(formatIsoDate(date));
+  }
+
+  function dismissUnusualSpending(): void {
+    setShowUnusualSpending(false);
+    onUnusualSpendingDismissed();
+  }
+
+  function formatCurrency(amountCentavos: number): string {
+    return `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   const filterActive = showFilters || activeFilterCount > 0;
@@ -683,6 +700,27 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
             </Pressable>
           </View>
         </View>
+      </Modal>
+
+      <Modal visible={showUnusualSpending && unusualSpending !== null} transparent animationType="fade" onRequestClose={dismissUnusualSpending}>
+        <Pressable onPress={dismissUnusualSpending} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <Pressable onPress={() => {}}>
+            <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
+              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>Unusual spending detected</Text>
+              <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 12 }}>
+                This {formatCurrency(unusualSpending?.amountCentavos ?? 0)} expense is outside your usual spending range for {unusualSpending?.subcategoryLabel ?? "this subcategory"}.
+              </Text>
+              <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+                Your usual spending is {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. This is only a personal spending observation.
+              </Text>
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 22 }}>
+                <Pressable onPress={dismissUnusualSpending} accessibilityRole="button" accessibilityLabel="Close unusual spending insight">
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Got it</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
