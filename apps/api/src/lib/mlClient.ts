@@ -12,7 +12,8 @@ export async function classifyFinancialCondition(
 ): Promise<FinancialClassificationResult> {
   const baseUrl = process.env.ML_SERVICE_URL?.replace(/\/$/, "");
   if (!baseUrl) return { ok: false, reason: "not_configured" };
-  const requestBody = JSON.stringify({ request_id: crypto.randomUUID(), user_id: userId, ...input });
+  const { source_updated_at: _sourceUpdatedAt, ...classificationInput } = input;
+  const requestBody = JSON.stringify({ request_id: crypto.randomUUID(), user_id: userId, ...classificationInput });
   const headers = trustedMlHeaders(userId, requestBody);
   if (!headers) return { ok: false, reason: "not_configured" };
 

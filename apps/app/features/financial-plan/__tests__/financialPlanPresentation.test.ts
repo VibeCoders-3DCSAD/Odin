@@ -32,4 +32,12 @@ describe("financial plan presentation", () => {
       { allocationRule: "FLEXIBLE", allocatedAmountCentavos: 300_000, floorAmountCentavos: 0, subcategoryId: "food" },
     ], 10_000, 20_000)).toBe(-130_000);
   });
+
+  it("preserves the full shortfall for an infeasible plan after reservations", () => {
+    const plannedCentavos = 500_000;
+    const debtAndSavingsReservationsCentavos = 1_930_000;
+    const categoryAllocations = [{ allocationRule: "FLEXIBLE" as const, allocatedAmountCentavos: 500_000, floorAmountCentavos: 0, subcategoryId: "fast-food" }];
+
+    expect(remainingUnallocatedCentavos(plannedCentavos - debtAndSavingsReservationsCentavos, categoryAllocations)).toBe(-1_930_000);
+  });
 });

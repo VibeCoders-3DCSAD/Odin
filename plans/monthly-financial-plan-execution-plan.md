@@ -26,8 +26,9 @@ user's Fixed or Minimum requirements.
 
 - Financial Plans do not support weekly, custom, income-cycle, historical, or
   user-selected planning periods; each plan is for the next calendar month.
-- Anomaly/IQR output does not alter expense forecasts, optimizer inputs,
-  category rules, or allocations; it remains Financial Report content only.
+- Transactions flagged as unusual are excluded from Financial Plan forecast and
+  category-weight inputs; anomaly findings otherwise remain Financial Report
+  content only.
 - Do not auto-accept, auto-save, or overwrite a plan after a recommendation.
 - Do not rewrite debt repayment strategies or savings-goal forecasting; those
   modules remain the source of their required monthly commitments.

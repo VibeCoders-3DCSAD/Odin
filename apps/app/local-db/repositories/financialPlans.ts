@@ -43,6 +43,7 @@ export type CreateFinancialPlanInput = {
   periodStart: string;
   periodEnd: string;
   inputSnapshot: {
+    plannedAmountCentavos: number;
     forecast: Record<string, unknown>;
     restrictions: Record<string, unknown>;
     obligations: Record<string, unknown>;
@@ -115,7 +116,9 @@ function validate(input: CreateFinancialPlanInput): void {
   assertDate(input.periodStart, "periodStart"); assertDate(input.periodEnd, "periodEnd");
   const nextMonth = nextCalendarMonth();
   if (input.periodStart !== nextMonth.start || input.periodEnd !== nextMonth.end) throw new LocalDbError("VALIDATION_ERROR", "Financial Plans can only cover the next calendar month");
-  for (const [name, snapshot] of Object.entries(input.inputSnapshot)) {
+  if (!Number.isSafeInteger(input.inputSnapshot.plannedAmountCentavos) || input.inputSnapshot.plannedAmountCentavos <= 0) throw new LocalDbError("VALIDATION_ERROR", "planned amount snapshot must be a positive whole number");
+  const { plannedAmountCentavos: _plannedAmountCentavos, ...nestedSnapshots } = input.inputSnapshot;
+  for (const [name, snapshot] of Object.entries(nestedSnapshots)) {
     if (Array.isArray(snapshot) || Object.keys(snapshot).length === 0) throw new LocalDbError("VALIDATION_ERROR", `${name} snapshot must contain plan input data`);
   }
   if (input.allocations.length > 200 || input.debtReservations.length > 100 || input.savingsReservations.length > 100) throw new LocalDbError("VALIDATION_ERROR", "Financial Plan has too many reservations or allocations");

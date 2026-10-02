@@ -1,0 +1,37 @@
+import { applyFinancialPlanPriorityWeights, excludeUnusualTransactions, financialPlanPriorityGroup, isFinancialPlanInfeasible } from "../../../services/financialPlan/recommendationService.js";
+
+describe("Financial Plan feasibility", () => {
+  it("marks a 5,000-peso plan infeasible when required minimums exceed it", () => {
+    expect(isFinancialPlanInfeasible(500_000, 750_000)).toBe(true);
+  });
+
+  it("keeps a plan feasible when available money exactly covers minimums", () => {
+    expect(isFinancialPlanInfeasible(500_000, 500_000)).toBe(false);
+  });
+});
+
+describe("Financial Plan allocation priority", () => {
+  it("classifies only the configured HFCE essentials as essential", () => {
+    expect(financialPlanPriorityGroup("food")).toBe("ESSENTIAL");
+    expect(financialPlanPriorityGroup("recreation_culture")).toBe("NON_ESSENTIAL");
+    expect(financialPlanPriorityGroup(undefined)).toBe("NON_ESSENTIAL");
+  });
+
+  it("uses clean spending shares and ignores categories whose spend was removed as unusual", () => {
+    const weighted = applyFinancialPlanPriorityWeights([
+      { id: "food", target: "category", priorityGroup: "ESSENTIAL", priorityWeight: 1, rule: "FLEXIBLE", floorCentavos: 0, ceilingCentavos: 1_000_000, forecastCentavos: 800_000 },
+      { id: "housing", target: "category", priorityGroup: "ESSENTIAL", priorityWeight: 1, rule: "FLEXIBLE", floorCentavos: 0, ceilingCentavos: 1_000_000, forecastCentavos: 600_000 },
+    ], new Map([["food", 800_000], ["housing", 0]]));
+
+    expect(weighted.map((category) => category.priorityWeight)).toEqual([1, 0]);
+  });
+
+  it("excludes an unusual transaction before deriving category baselines", () => {
+    const cleanTransactions = excludeUnusualTransactions([
+      { id: "normal-food", amountCentavos: 8_000 },
+      { id: "unusual-food", amountCentavos: 100_000 },
+    ], new Set(["unusual-food"]));
+
+    expect(cleanTransactions).toEqual([{ id: "normal-food", amountCentavos: 8_000 }]);
+  });
+});

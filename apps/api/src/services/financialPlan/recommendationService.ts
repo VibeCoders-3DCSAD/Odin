@@ -1,24 +1,83 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ForecastUpstreamError, ForecastValidationError, getMlForecast, type ForecastPayload } from "../forecastService.js";
 import { recommendPlanCategories, type MlExpenseForecastSnapshot, type MlPlanCategory } from "./mlAdapter.js";
-import { explainFinancialPlan, fallbackFinancialPlanExplanations, type FinancialPlanEvidence } from "./explanationService.js";
+import { explainFinancialPlan, fallbackFinancialPlanExplanations, isUserFacingFinancialPlanExplanation, zeroAllocationExplanations, type FinancialPlanEvidence } from "./explanationService.js";
+import { deriveSurplusRecommendation } from "./classificationPolicy.js";
+import { createFinancialConditionAssessment } from "../financialConditionAssessmentService.js";
+import { getServiceRoleClient } from "../../lib/supabase.js";
 
 const MANILA = "Asia/Manila";
 const MAX_HISTORY = 500;
+const ESSENTIAL_HFCE_CATEGORY_SLUGS = new Set(["food", "housing_water_utilities", "health", "communication", "transport", "education", "furnishings_household", "clothing_footwear"]);
+const SEASONAL_LABELS: Record<string, string> = { rainy_season: "Rainy Season", back_to_school: "Back-to-School Season", undas: "Undas / All Souls' Day", christmas_ber_months: "Christmas and Ber Months", new_year: "New Year", summer: "Summer", annual_payments: "Tax and Annual-Payment Season", family_celebrations: "Birthday and Family-Celebration Months" };
+const SEASONAL_WINDOWS: Record<string, string> = { rainy_season: "June to November", back_to_school: "June to August", undas: "October to November", christmas_ber_months: "September to December", new_year: "January", summer: "March to May", annual_payments: "January to April", family_celebrations: "varies by the selected month" };
+const SEASONAL_MONTHS: Record<string, number[]> = { rainy_season: [6, 7, 8, 9, 10, 11], back_to_school: [6, 7, 8], undas: [10, 11], christmas_ber_months: [9, 10, 11, 12], new_year: [1], summer: [3, 4, 5], annual_payments: [1, 2, 3, 4], family_celebrations: [] };
 
 type Subcategory = { id: string; category_id: string | null; label: string; minimum_amount_centavos: number | null; fixed_amount_centavos: number | null; always_in_budget: boolean };
 type Category = { id: string; slug: string; label: string; minimum_amount_centavos: number | null; fixed_amount_centavos: number | null };
-type Debt = { id: string; current_balance_centavos: number; minimum_payment_centavos: number; next_due_date: string | null };
-type Goal = { id: string; planned_contribution_amount_centavos: number | null; next_contribution_date: string | null };
+type Timestamped = { updated_at: string };
+type Debt = Timestamped & { id: string; current_balance_centavos: number; minimum_payment_centavos: number; next_due_date: string | null; annual_interest_rate_bps: number; allows_extra_payments: boolean };
+type Goal = Timestamped & { id: string; planned_contribution_amount_centavos: number | null; next_contribution_date: string | null; goal_type: string; target_amount_centavos: number; current_amount_centavos: number };
 type Obligation = { id: string; amount_centavos: number; due_day_of_month: number | null };
 type Statement = { id: string; minimum_due_centavos: number; due_date: string };
-type FinancialAccount = { kind: string; current_balance_centavos: number };
-type Transaction = { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null };
+type FinancialAccount = Timestamped & { kind: string; current_balance_centavos: number };
+type Transaction = Timestamped & { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null };
 type OnboardingSession = { raw_answers: Record<string, unknown> | null };
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
+type AnomalyEvaluation = { transaction_id: string; is_anomaly: boolean };
+type TransactionWithAnomalies = Transaction & { anomaly_evaluations: AnomalyEvaluation[] | null };
+
+function selectEligibleDebt(debts: Debt[], strategy: "avalanche" | "snowball", priorityIds: string[]): string | null {
+  const eligible = debts.filter((debt) => debt.allows_extra_payments && debt.current_balance_centavos > 0);
+  const priorityRank = new Map(priorityIds.map((id, index) => [id, index]));
+  return eligible.sort((left, right) => {
+    const leftPriority = priorityRank.get(left.id);
+    const rightPriority = priorityRank.get(right.id);
+    if (leftPriority !== undefined || rightPriority !== undefined) return (leftPriority ?? Number.MAX_SAFE_INTEGER) - (rightPriority ?? Number.MAX_SAFE_INTEGER);
+    return strategy === "snowball"
+      ? left.current_balance_centavos - right.current_balance_centavos || right.annual_interest_rate_bps - left.annual_interest_rate_bps || left.id.localeCompare(right.id)
+      : right.annual_interest_rate_bps - left.annual_interest_rate_bps || left.current_balance_centavos - right.current_balance_centavos || left.id.localeCompare(right.id);
+  })[0]?.id ?? null;
+}
 
 export class FinancialPlanInputError extends Error {}
 export class FinancialPlanUnavailableError extends Error {}
+
+export function isFinancialPlanInfeasible(availableCentavos: number, minimumRequiredCentavos: number): boolean {
+  return availableCentavos <= 0 || minimumRequiredCentavos > availableCentavos;
+}
+
+export function financialPlanPriorityGroup(categorySlug: string | undefined): MlPlanCategory["priorityGroup"] {
+  return categorySlug && ESSENTIAL_HFCE_CATEGORY_SLUGS.has(categorySlug) ? "ESSENTIAL" : "NON_ESSENTIAL";
+}
+
+export function applyFinancialPlanPriorityWeights(categories: MlPlanCategory[], cleanSpendByTarget: Map<string, number>): MlPlanCategory[] {
+  const weights = new Map<string, number>();
+  for (const priorityGroup of ["ESSENTIAL", "NON_ESSENTIAL"] as const) {
+    const group = categories.filter((category) => category.priorityGroup === priorityGroup);
+    const baselineTotal = group.reduce((sum, category) => sum + (cleanSpendByTarget.get(category.id) ?? 0), 0);
+    const forecastTotal = group.reduce((sum, category) => sum + category.forecastCentavos, 0);
+    for (const category of group) {
+      weights.set(category.id, baselineTotal > 0
+        ? (cleanSpendByTarget.get(category.id) ?? 0) / baselineTotal
+        : forecastTotal > 0 ? category.forecastCentavos / forecastTotal : 1 / group.length);
+    }
+  }
+  return categories.map((category) => ({ ...category, priorityWeight: weights.get(category.id) ?? 1 }));
+}
+
+export function excludeUnusualTransactions<T extends { id: string }>(transactions: T[], unusualTransactionIds: Set<string>): T[] {
+  return transactions.filter((transaction) => !unusualTransactionIds.has(transaction.id));
+}
+
+function latestSourceUpdate(...groups: unknown[][]): string | null {
+  const updates = groups.flatMap((group) => group.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const updatedAt = (item as { updated_at?: unknown }).updated_at;
+    return typeof updatedAt === "string" && !Number.isNaN(new Date(updatedAt).getTime()) ? [updatedAt] : [];
+  }));
+  return updates.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
+}
 
 export function nextCalendarMonth(now = new Date()): { start: string; end: string } {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: MANILA, year: "numeric", month: "2-digit" }).formatToParts(now);
@@ -63,10 +122,7 @@ function mapPlanForecast(
     const orderedTargets = [...targets].sort((left, right) => left.id.localeCompare(right.id));
     const index = orderedTargets.findIndex((target) => target.id === category.id);
     const mlDetail = slug ? mlForecast.forecasts.find((point) => point.category === slug) : undefined;
-    const impliedTrendMultiplier = mlDetail && mlDetail.userBaselineCentavos > 0 && mlDetail.hfceMultiplier > 0
-      ? Number((mlDetail.amountCentavos / (mlDetail.userBaselineCentavos * mlDetail.hfceMultiplier)).toFixed(6))
-      : null;
-    // If this top-level category has no six-month spend, split its forecast evenly.
+    // If this top-level category has no twelve-month spend, split its forecast evenly.
     const precedingWeight = orderedTargets.slice(0, index).reduce((sum, target) => sum + target.forecastCentavos, 0);
     const amount = totalWeight > 0
       ? Math.floor(total * (precedingWeight + category.forecastCentavos) / totalWeight) - Math.floor(total * precedingWeight / totalWeight)
@@ -77,13 +133,12 @@ function mapPlanForecast(
       target_id: category.id,
       ml_user_baseline_centavos: mlDetail?.userBaselineCentavos ?? null,
       ml_hfce_multiplier: mlDetail?.hfceMultiplier ?? null,
-      ml_implied_trend_multiplier: impliedTrendMultiplier,
       parent_forecast_centavos: total,
       target_count: orderedTargets.length,
       spend_weight_centavos: category.forecastCentavos,
       total_weight_centavos: totalWeight,
       weight_percentage: totalWeight > 0 ? Number((category.forecastCentavos / totalWeight * 100).toFixed(4)) : null,
-      allocation_method: totalWeight > 0 ? "six_month_spend_weighted" : "even_split_no_spend_history",
+       allocation_method: totalWeight > 0 ? "twelve_month_spend_weighted" : "even_split_no_spend_history",
       allocated_centavos: amount,
       floor_centavos: category.floorCentavos,
       final_forecast_centavos: Math.max(category.floorCentavos, amount),
@@ -109,21 +164,53 @@ function mapRecommendation(categories: MlPlanCategory[], allocationAmounts: unkn
   });
 }
 
+export function seasonalPreferencesFromAnswers(answers: Record<string, unknown>, periodStart: string): FinancialPlanEvidence["seasonalPreferences"] {
+  const month = Number(periodStart.slice(5, 7));
+  return ["saving_seasons", "high_expense_seasons"].flatMap((key) => Array.isArray(answers[key]) ? answers[key].flatMap((value) => typeof value === "string" && SEASONAL_LABELS[value] && SEASONAL_MONTHS[value]?.includes(month) ? [{ evidenceId: `${key}:${value}`, season: SEASONAL_LABELS[value], seasonWindow: SEASONAL_WINDOWS[value] ?? "not specified", preference: key === "saving_seasons" ? "saving" as const : "higher_expense" as const }] : []) : []);
+}
+
+function userFacingForecastRationale(value: string): string {
+  return isUserFacingFinancialPlanExplanation(value) ? value : "";
+}
+
 export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = []) {
   const period = nextCalendarMonth();
   const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, obligationsResult, statementsResult, transactionsResult, classificationResult, onboardingResult] = await Promise.all([
-    supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
-    supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
-    supabase.from("financial_accounts").select("kind, current_balance_centavos").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
-    supabase.from("debt_accounts").select("id, current_balance_centavos, minimum_payment_centavos, next_due_date").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
-    supabase.from("savings_goals").select("id, planned_contribution_amount_centavos, next_contribution_date").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
+    supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
+    supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos, updated_at").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
+    supabase.from("financial_accounts").select("kind, current_balance_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
+    supabase.from("debt_accounts").select("id, current_balance_centavos, minimum_payment_centavos, next_due_date, annual_interest_rate_bps, allows_extra_payments, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
+    supabase.from("savings_goals").select("id, planned_contribution_amount_centavos, next_contribution_date, goal_type, target_amount_centavos, current_amount_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("financial_obligations").select("id, amount_centavos, due_day_of_month").eq("user_id", userId).eq("status", "active").limit(100),
     supabase.from("credit_card_statements").select("id, minimum_due_centavos, due_date").eq("user_id", userId).eq("authoritative", true).eq("deleted", false).gte("due_date", period.start).lte("due_date", period.end).limit(100),
-    supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id").eq("user_id", userId).eq("status", "posted").eq("deleted", false).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
+    supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id, updated_at, anomaly_evaluations!anomaly_evaluations_transaction_id_fkey(transaction_id, is_anomaly)").eq("user_id", userId).eq("status", "posted").eq("deleted", false).eq("anomaly_evaluations.is_anomaly", true).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
     supabase.from("financial_condition_assessments").select("id, assessed_at, rule_set_version, output_snapshot").eq("user_id", userId).order("assessed_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("onboarding_sessions").select("raw_answers").eq("user_id", userId).eq("status", "submitted").order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
-  if ([subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, obligationsResult, statementsResult, transactionsResult, classificationResult, onboardingResult].some((result) => result.error)) throw new FinancialPlanUnavailableError("Financial plan inputs are unavailable");
+  const inputFailures = [
+    { source: "subcategories", error: subcategoriesResult.error },
+    { source: "categories", error: categoriesResult.error },
+    { source: "financial_accounts", error: accountsResult.error },
+    { source: "debt_accounts", error: debtsResult.error },
+    { source: "savings_goals", error: goalsResult.error },
+    { source: "financial_obligations", error: obligationsResult.error },
+    { source: "credit_card_statements", error: statementsResult.error },
+    { source: "transactions", error: transactionsResult.error },
+    { source: "onboarding_sessions", error: onboardingResult.error },
+  ].flatMap(({ source, error }) => error ? [{
+    source,
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  }] : []);
+  if (inputFailures.length) {
+    console.error("financial plan inputs unavailable", {
+      user_id: userId,
+      failures: inputFailures,
+    });
+    throw new FinancialPlanUnavailableError("Financial plan inputs are unavailable");
+  }
   const subcategories = (subcategoriesResult.data ?? []) as Subcategory[];
   if (!subcategories.length) throw new FinancialPlanInputError("No expense categories are configured");
   const availableMoney = ((accountsResult.data ?? []) as FinancialAccount[])
@@ -137,17 +224,22 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const obligations = ((obligationsResult.data ?? []) as Obligation[]).flatMap((obligation) => obligation.due_day_of_month ? [{ id: obligation.id, amountCentavos: obligation.amount_centavos, dueDate: `${period.start.slice(0, 8)}${String(Math.min(obligation.due_day_of_month, Number(period.end.slice(8)))).padStart(2, "0")}` }] : []);
   const reserved = [...debtReservations, ...statementReservations, ...savingsReservations, ...obligations].reduce((sum, item) => sum + item.amountCentavos, 0);
   const available = plannedAmountCentavos - reserved;
-  const transactions = (transactionsResult.data ?? []) as Transaction[];
-  const trailingSixMonths = new Date();
-  trailingSixMonths.setUTCMonth(trailingSixMonths.getUTCMonth() - 6);
-  const trailingSixMonthsStart = trailingSixMonths.toISOString().slice(0, 10);
+  const seasonalPreferences = seasonalPreferencesFromAnswers(((onboardingResult.data as OnboardingSession | null)?.raw_answers ?? {}), period.start);
+  const transactions = (transactionsResult.data ?? []) as TransactionWithAnomalies[];
+  const unusualTransactionIds = new Set(transactions.flatMap((transaction) => (transaction.anomaly_evaluations ?? [])
+    .filter((evaluation) => evaluation.is_anomaly)
+    .map((evaluation) => evaluation.transaction_id)));
+  const cleanTransactions = excludeUnusualTransactions(transactions, unusualTransactionIds);
+  const trailingTwelveMonths = new Date();
+  trailingTwelveMonths.setUTCMonth(trailingTwelveMonths.getUTCMonth() - 12);
+  const trailingTwelveMonthsStart = trailingTwelveMonths.toISOString().slice(0, 10);
   const spendBySubcategory = new Map<string, number>();
   const spendByCategory = new Map<string, number>();
-  for (const transaction of transactions) {
-    if (transaction.transaction_type === "expense" && transaction.subcategory_id && transaction.transaction_date >= trailingSixMonthsStart) {
+  for (const transaction of cleanTransactions) {
+    if (transaction.transaction_type === "expense" && transaction.subcategory_id && transaction.transaction_date >= trailingTwelveMonthsStart) {
       spendBySubcategory.set(transaction.subcategory_id, (spendBySubcategory.get(transaction.subcategory_id) ?? 0) + transaction.amount_centavos);
     }
-    if (transaction.transaction_type === "expense" && transaction.category_id && !transaction.subcategory_id && transaction.transaction_date >= trailingSixMonthsStart) spendByCategory.set(transaction.category_id, (spendByCategory.get(transaction.category_id) ?? 0) + transaction.amount_centavos);
+    if (transaction.transaction_type === "expense" && transaction.category_id && !transaction.subcategory_id && transaction.transaction_date >= trailingTwelveMonthsStart) spendByCategory.set(transaction.category_id, (spendByCategory.get(transaction.category_id) ?? 0) + transaction.amount_centavos);
   }
   const slugByCategoryId = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.id, category.slug]));
   const categorySlugBySubcategoryId = new Map([
@@ -170,7 +262,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
       if (fixed === null && category.minimum_amount_centavos === null && !includedTopLevelIds.has(category.id)) return [];
       const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (category.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
       const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`category:${category.id}`) ?? 0);
-      return [{ id: category.id, target: "category" as const, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendByCategory.get(category.id) ?? 0 }];
+      return [{ id: category.id, target: "category" as const, priorityGroup: financialPlanPriorityGroup(category.slug), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendByCategory.get(category.id) ?? 0 }];
     }),
     ...subcategories.flatMap((subcategory) => {
     const fixed = subcategory.fixed_amount_centavos;
@@ -179,16 +271,25 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     if (!automaticallyIncluded && !includedIds.has(subcategory.id)) return [];
     const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (subcategory.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
     const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`subcategory:${subcategory.id}`) ?? 0);
-    return [{ id: subcategory.id, target: "subcategory" as const, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendBySubcategory.get(subcategory.id) ?? 0 }];
+    return [{ id: subcategory.id, target: "subcategory" as const, priorityGroup: financialPlanPriorityGroup(subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendBySubcategory.get(subcategory.id) ?? 0 }];
   }),
   ];
   if (!categories.length) throw new FinancialPlanInputError("Choose at least one expense category");
   const minimumRequired = categories.reduce((sum, category) => sum + category.floorCentavos, 0);
+  if (isFinancialPlanInfeasible(available, minimumRequired)) {
+    const forecast = fallbackForecast(period, categories);
+    const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: classificationResult.data ?? { status: "unavailable" } };
+    const requiredFundsCentavos = reserved + minimumRequired;
+    const shortfallCentavos = Math.max(0, requiredFundsCentavos - plannedAmountCentavos);
+    const explanationEvidence: FinancialPlanEvidence = { planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, shortfall: { plannedAmountCentavos, requiredFundsCentavos, shortfallCentavos }, seasonalPreferences, forecastChanges: [] };
+    const aiExplanations = await explainFinancialPlan(explanationEvidence, fetch, userId);
+    return { status: "INFEASIBLE" as const, period, inputSnapshot, recommendation: { availableFundsCentavos: available, requiredFundsCentavos, shortfallCentavos, allocations: categories.map((category) => ({ categoryId: category.target === "category" ? category.id : null, subcategoryId: category.target === "subcategory" ? category.id : null, allocationRule: category.rule, allocatedAmountCentavos: category.floorCentavos, floorAmountCentavos: category.floorCentavos, ceilingAmountCentavos: category.ceilingCentavos, forecastAmountCentavos: category.forecastCentavos })), debtReservations: [...debtReservations, ...statementReservations], savingsReservations }, explanations: aiExplanations.length ? aiExplanations : fallbackFinancialPlanExplanations(explanationEvidence) };
+  }
   let forecast = fallbackForecast(period, categories);
   let forecastDetails: ForecastPayload["forecasts"] = [];
   try {
     const plannedSubcategoryIds = new Set(categories.map((category) => category.id));
-    const forecastTransactions = transactions.flatMap((transaction) => {
+    const forecastTransactions = cleanTransactions.flatMap((transaction) => {
       const category = transaction.subcategory_id ? categorySlugBySubcategoryId.get(transaction.subcategory_id) : slugByCategoryId.get(transaction.category_id ?? "");
       const targetId = transaction.subcategory_id ?? (transaction.category_id && !transaction.subcategory_id ? transaction.category_id : null);
       return category && targetId && plannedSubcategoryIds.has(targetId)
@@ -203,27 +304,55 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   } catch (error) {
     if (!(error instanceof ForecastValidationError || error instanceof ForecastUpstreamError)) throw error;
   }
-  const plannedCategories = categories.map((category) => ({ ...category, forecastCentavos: forecast.categoryForecasts.find((point) => point.category === category.id)?.amountCentavos ?? category.floorCentavos }));
-  const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: classificationResult.data ?? { status: "unavailable" } };
-  if (available <= 0 || minimumRequired > available) return { status: "INFEASIBLE" as const, period, inputSnapshot, recommendation: { availableFundsCentavos: Math.max(available, 0), requiredFundsCentavos: reserved + minimumRequired, shortfallCentavos: Math.max(0, reserved + minimumRequired - plannedAmountCentavos), allocations: plannedCategories.map((category) => ({ categoryId: category.target === "category" ? category.id : null, subcategoryId: category.target === "subcategory" ? category.id : null, allocationRule: category.rule, allocatedAmountCentavos: category.floorCentavos, floorAmountCentavos: category.floorCentavos, ceilingAmountCentavos: category.ceilingCentavos, forecastAmountCentavos: category.forecastCentavos })), debtReservations: [...debtReservations, ...statementReservations], savingsReservations }, explanations: [] };
+  const plannedCategories = applyFinancialPlanPriorityWeights(categories.map((category) => ({ ...category, forecastCentavos: forecast.categoryForecasts.find((point) => point.category === category.id)?.amountCentavos ?? category.floorCentavos })), new Map([...spendByCategory, ...spendBySubcategory]));
+  const freshAssessment = await createFinancialConditionAssessment(userId, getServiceRoleClient());
+  const assessmentRow = freshAssessment ?? (classificationResult.error ? null : classificationResult.data as { id: string; assessed_at: string; rule_set_version: string; output_snapshot: unknown } | null);
+  const assessment = assessmentRow && assessmentRow.output_snapshot && typeof assessmentRow.output_snapshot === "object" && !Array.isArray(assessmentRow.output_snapshot)
+    ? { id: assessmentRow.id, assessedAt: assessmentRow.assessed_at, ruleSetVersion: assessmentRow.rule_set_version, outputSnapshot: assessmentRow.output_snapshot as Record<string, unknown> }
+    : null;
+  const sourceUpdatedAt = latestSourceUpdate(subcategoriesResult.data ?? [], categoriesResult.data ?? [], accountsResult.data ?? [], debtsResult.data ?? [], goalsResult.data ?? [], transactionsResult.data ?? []);
+  const goals = (goalsResult.data ?? []) as Goal[];
+  const debts = (debtsResult.data ?? []) as Debt[];
+  const eligibleEmergencyGoalId = goals.find((goal) => goal.goal_type === "emergency_fund" && goal.current_amount_centavos < goal.target_amount_centavos)?.id ?? null;
+  const [strategyResult, prioritiesResult] = await Promise.all([
+    supabase.from("debt_strategy_preferences").select("strategy").eq("user_id", userId).eq("deleted", false).maybeSingle(),
+    supabase.from("user_debt_priorities").select("debt_account_id, priority_rank").eq("user_id", userId).eq("deleted", false).order("priority_rank").limit(100),
+  ]);
+  const strategy = strategyResult.data?.strategy === "snowball" ? "snowball" : "avalanche";
+  const priorityIds = (prioritiesResult.data ?? []).map((priority) => priority.debt_account_id).filter((id): id is string => typeof id === "string");
+  const eligibleDebtId = strategyResult.error || prioritiesResult.error ? null : selectEligibleDebt(debts, strategy, priorityIds);
+  const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
   const ml = await recommendPlanCategories(userId, period, available, plannedCategories, forecast);
   const recommendation = ml.recommendation as { feasibility?: string; required_funds?: number; shortfall?: number; unallocated_surplus?: number; allocations?: unknown };
   const surplusCentavos = typeof recommendation.unallocated_surplus === "number" && Number.isFinite(recommendation.unallocated_surplus) && recommendation.unallocated_surplus > 0 ? Math.round(recommendation.unallocated_surplus * 100) : 0;
-  const debtSurplusCentavos = Math.floor(surplusCentavos / 2);
-  const savingsSurplusCentavos = surplusCentavos - debtSurplusCentavos;
+  const surplusRecommendation = deriveSurplusRecommendation({ unallocatedSurplusCentavos: surplusCentavos, assessment, sourceUpdatedAt, eligibleEmergencyGoalId, eligibleDebtId });
+  const debtSurplusCentavos = 0;
+  const savingsSurplusCentavos = 0;
   const baseDebtReservations = [...debtReservations, ...statementReservations];
-  const plannedInputSnapshot = { ...inputSnapshot, debtRequirements: { reservations: baseDebtReservations, surplusCentavos: debtSurplusCentavos }, savingsRequirements: { reservations: savingsReservations, surplusCentavos: savingsSurplusCentavos } };
-  const answers = ((onboardingResult.data as OnboardingSession | null)?.raw_answers ?? {});
-  const seasonalLabels: Record<string, string> = { rainy_season: "Rainy Season", back_to_school: "Back-to-School Season", undas: "Undas / All Souls' Day", christmas_ber_months: "Christmas and Ber Months", new_year: "New Year", summer: "Summer", annual_payments: "Tax and Annual-Payment Season", family_celebrations: "Birthday and Family-Celebration Months" };
-  const seasonalPreferences = ["saving_seasons", "high_expense_seasons"].flatMap((key) => Array.isArray(answers[key]) ? answers[key].flatMap((value) => typeof value === "string" && seasonalLabels[value] ? [{ evidenceId: `${key}:${value}`, season: seasonalLabels[value], preference: key === "saving_seasons" ? "saving" as const : "higher_expense" as const }] : []) : []);
+  const allocations = mapRecommendation(plannedCategories, recommendation.allocations);
   const categoryLabelById = new Map([...((categoriesResult.data ?? []) as Category[]), ...subcategories].map((category) => [category.id, category.label]));
+  const zeroAllocationInsights = zeroAllocationExplanations(allocations.flatMap((allocation) => {
+    const targetId = allocation.categoryId ?? allocation.subcategoryId;
+    const category = targetId ? plannedCategories.find((item) => item.id === targetId) : undefined;
+    if (!category) return [];
+    return [{ categoryName: categoryLabelById.get(category.id) ?? category.id, allocationCentavos: allocation.allocatedAmountCentavos, requiredFloorCentavos: category.floorCentavos, forecastCentavos: category.forecastCentavos }];
+  }));
+  const plannedInputSnapshot = { ...inputSnapshot, debtRequirements: { reservations: baseDebtReservations, surplusCentavos: debtSurplusCentavos }, savingsRequirements: { reservations: savingsReservations, surplusCentavos: savingsSurplusCentavos } };
+  const categoryBySlug = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.slug, category]));
+  const possibleSeasonalContext = seasonalPreferences.find((preference) => preference.preference === "higher_expense")?.season ?? null;
   const forecastChanges = forecastDetails.flatMap((detail) => {
-    const target = plannedCategories.find((category) => categorySlugBySubcategoryId.get(category.id) === detail.category);
-    if (!target) return [];
-    return [{ evidenceId: `forecast:${target.id}`, categoryName: categoryLabelById.get(target.id) ?? detail.category, baselineCentavos: detail.userBaselineCentavos, forecastCentavos: detail.amountCentavos, differenceCentavos: detail.amountCentavos - detail.userBaselineCentavos }];
+    const category = categoryBySlug.get(detail.category);
+    if (!category) return [];
+    const allocationCentavos = allocations.reduce((sum, allocation) => {
+      const targetId = allocation.categoryId ?? allocation.subcategoryId;
+      return targetId && categorySlugBySubcategoryId.get(targetId) === detail.category ? sum + allocation.allocatedAmountCentavos : sum;
+    }, 0);
+    const differenceCentavos = detail.amountCentavos - detail.userBaselineCentavos;
+    return [{ evidenceId: `forecast:${detail.category}`, categoryName: category.label, baselineCentavos: detail.userBaselineCentavos, forecastCentavos: detail.amountCentavos, allocationCentavos, allocationForecastDifferenceCentavos: allocationCentavos - detail.amountCentavos, differenceCentavos, percentageChange: detail.userBaselineCentavos > 0 ? Number((differenceCentavos / detail.userBaselineCentavos * 100).toFixed(1)) : null, forecastRationale: userFacingForecastRationale(detail.explanation), possibleSeasonalContext }];
   });
   const explanationEvidence: FinancialPlanEvidence = { planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos, debtSurplusCentavos, savingsSurplusCentavos, seasonalPreferences, forecastChanges };
   const deterministicExplanations = fallbackFinancialPlanExplanations(explanationEvidence);
-  const aiExplanations = await explainFinancialPlan(explanationEvidence);
-  return { status: recommendation.feasibility === "INFEASIBLE" ? "INFEASIBLE" as const : "RECOMMENDATION_READY" as const, period, inputSnapshot: plannedInputSnapshot, recommendation: { availableFundsCentavos: available, requiredFundsCentavos: typeof recommendation.required_funds === "number" ? Math.round(recommendation.required_funds * 100) : undefined, shortfallCentavos: typeof recommendation.shortfall === "number" ? Math.round(recommendation.shortfall * 100) : undefined, allocations: mapRecommendation(plannedCategories, recommendation.allocations), debtReservations: baseDebtReservations, debtSurplusCentavos, savingsReservations, savingsSurplusCentavos }, explanations: aiExplanations.length ? aiExplanations : [...deterministicExplanations, ...(Array.isArray(ml.explanations) ? ml.explanations.map((explanation) => typeof explanation === "object" && explanation !== null && "reason" in explanation ? String((explanation as { reason: unknown }).reason) : String(explanation)) : [])] };
+  const aiExplanations = await explainFinancialPlan(explanationEvidence, fetch, userId);
+  const uniqueExplanations = [...zeroAllocationInsights, ...deterministicExplanations, ...aiExplanations, ...(Array.isArray(ml.explanations) ? ml.explanations.map((explanation) => typeof explanation === "object" && explanation !== null && "reason" in explanation ? String((explanation as { reason: unknown }).reason) : String(explanation)) : [])].filter(isUserFacingFinancialPlanExplanation).filter((explanation, index, all) => all.findIndex((item) => item.replace(/\s+/g, " ").trim().toLocaleLowerCase() === explanation.replace(/\s+/g, " ").trim().toLocaleLowerCase()) === index).slice(0, 3);
+  return { status: recommendation.feasibility === "INFEASIBLE" ? "INFEASIBLE" as const : "RECOMMENDATION_READY" as const, period, inputSnapshot: plannedInputSnapshot, recommendation: { availableFundsCentavos: available, requiredFundsCentavos: typeof recommendation.required_funds === "number" ? Math.round(recommendation.required_funds * 100) : undefined, shortfallCentavos: typeof recommendation.shortfall === "number" ? Math.round(recommendation.shortfall * 100) : undefined, allocations, debtReservations: baseDebtReservations, debtSurplusCentavos, savingsReservations, savingsSurplusCentavos, surplusRecommendation }, explanations: uniqueExplanations };
 }

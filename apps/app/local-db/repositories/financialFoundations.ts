@@ -172,7 +172,7 @@ export type CreditCardRepaymentStrategy = "pay_in_full" | "pay_minimum" | "perce
 
 export type CreditCardDetailsInput = {
   creditLimitCentavos: number;
-  billingCycleDays: number;
+  billingCycleDays?: number | null;
   cutoffDay: number;
   statementDay?: number | null;
   alertThresholdPercent: number;
@@ -549,7 +549,7 @@ function isDayOfMonth(value: number): boolean {
 
 function validateCreditCardDetails(details: Partial<CreditCardDetailsInput>, required: boolean): void {
   if (required) {
-    for (const field of ["creditLimitCentavos", "billingCycleDays", "cutoffDay", "alertThresholdPercent"] as const) {
+    for (const field of ["creditLimitCentavos", "cutoffDay", "alertThresholdPercent"] as const) {
       const value = details[field];
       if (value === undefined || value === null) {
         throw new LocalDbError("VALIDATION_ERROR", `${field} is required for credit card accounts`);
@@ -559,13 +559,6 @@ function validateCreditCardDetails(details: Partial<CreditCardDetailsInput>, req
   const limit = details.creditLimitCentavos;
   if (limit != null && (typeof limit !== "number" || !Number.isFinite(limit) || !Number.isInteger(limit) || limit <= 0)) {
     throw new LocalDbError("VALIDATION_ERROR", "creditLimitCentavos must be a positive integer");
-  }
-  const cycle = details.billingCycleDays;
-  if (cycle != null && !Number.isInteger(cycle)) {
-    throw new LocalDbError("VALIDATION_ERROR", "billingCycleDays must be an integer");
-  }
-  if (cycle != null && (cycle < 28 || cycle > 31)) {
-    throw new LocalDbError("VALIDATION_ERROR", "billingCycleDays must be between 28 and 31");
   }
   if (details.cutoffDay != null && !isDayOfMonth(details.cutoffDay)) {
     throw new LocalDbError("VALIDATION_ERROR", "cutoffDay must be an integer between 1 and 31");
@@ -618,7 +611,7 @@ async function upsertCreditCardDetails(
     availableCredit,
     details.cutoffDay,
     details.statementDay ?? null,
-    details.billingCycleDays,
+    details.billingCycleDays ?? null,
     details.alertThresholdPercent,
     ts,
     ts,

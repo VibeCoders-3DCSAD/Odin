@@ -22,10 +22,19 @@ export type FinancialPlanReservation = {
   label?: string;
 };
 
+export type FinancialPlanSurplusRecommendation = {
+  unallocatedSurplusCentavos: number;
+  reasonCode: "NEGATIVE_FINANCIAL_MARGIN" | "EMERGENCY_FUND_INADEQUATE" | "DEBT_SIGNAL" | "USER_DIRECTED" | "ASSESSMENT_UNAVAILABLE" | "ASSESSMENT_STALE" | "ASSESSMENT_INSUFFICIENT_DATA";
+  assessmentStatus: "applied" | "unavailable" | "stale" | "insufficient_data";
+  advisoryDestination: { type: "emergency_fund"; savingsGoalId: string; label?: string } | { type: "debt"; debtAccountId: string; label?: string } | null;
+  assessmentEvidence: Record<string, unknown> | null;
+};
+
 export type FinancialPlanRecommendation = {
   status: FinancialPlanStatus;
   period: { start: string; end: string };
   inputSnapshot: {
+    plannedAmountCentavos: number;
     forecast: Record<string, unknown>;
     restrictions: Record<string, unknown>;
     obligations: Record<string, unknown>;
@@ -42,6 +51,7 @@ export type FinancialPlanRecommendation = {
     debtSurplusCentavos?: number;
     savingsReservations: FinancialPlanReservation[];
     savingsSurplusCentavos?: number;
+    surplusRecommendation?: FinancialPlanSurplusRecommendation;
   };
   explanations: string[];
 };

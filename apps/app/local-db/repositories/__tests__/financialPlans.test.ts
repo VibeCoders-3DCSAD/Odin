@@ -21,6 +21,10 @@ describe("financial plan repository", () => {
     mockEnqueueOperation.mockReset();
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("loads only the latest accepted plan for the current user", async () => {
     const row = {
       id: "plan-1", period_start: "2026-10-01", period_end: "2026-10-31", status: "accepted",
@@ -40,6 +44,39 @@ describe("financial plan repository", () => {
       expect.stringContaining("WHERE user_id = ? AND status = 'accepted' AND deleted = 0"),
       "user-1",
     );
+  });
+
+  it("accepts the numeric planned amount in a recommendation input snapshot", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-01T00:00:00.000Z"));
+    const db = {
+      withTransactionAsync: jest.fn(async (callback: () => Promise<void>) => callback()),
+      getAllAsync: jest.fn(async () => []),
+      runAsync: jest.fn(async () => ({})),
+    };
+    mockInitDatabase.mockResolvedValue(db);
+    mockEnqueueOperation.mockResolvedValue({ id: "operation-1" });
+
+    const { createFinancialPlan } = await import("../financialPlans");
+    const input = {
+      periodStart: "2026-11-01",
+      periodEnd: "2026-11-30",
+      inputSnapshot: {
+        plannedAmountCentavos: 100_000,
+        forecast: { month: "2026-11", totalAmountCentavos: 0, modelVersion: "v1", generatedAt: "2026-10-01T00:00:00.000Z", quality: "FALLBACK", categoryForecasts: [] },
+        restrictions: { allocations: [] },
+        obligations: { reservations: [] },
+        debtRequirements: { reservations: [] },
+        savingsRequirements: { reservations: [] },
+        classification: { status: "unavailable" },
+      },
+      recommendation: { availableFundsCentavos: 100_000 },
+      allocations: [],
+      debtReservations: [],
+      savingsReservations: [],
+    };
+
+    await expect(createFinancialPlan("user-1", "device-1", input)).resolves.toEqual(expect.objectContaining({ id: "plan-1" }));
+    expect(db.runAsync).toHaveBeenCalled();
   });
 
   it("loads an accepted plan only for the requested user and period", async () => {

@@ -32,11 +32,13 @@ export function reservationLabel(reservation: FinancialPlanReservation): string 
 }
 
 export function applyFinancialPlanLabels<T extends { allocations: FinancialPlanAllocation[]; debtReservations: FinancialPlanReservation[]; savingsReservations: FinancialPlanReservation[] }>(recommendation: T, labels: FinancialPlanLabels): T {
+  const destination = "surplusRecommendation" in recommendation ? recommendation.surplusRecommendation?.advisoryDestination : null;
   return {
     ...recommendation,
     allocations: recommendation.allocations.map((allocation) => ({ ...allocation, label: allocation.subcategoryId ? labels.subcategories[allocation.subcategoryId] : allocation.categoryId ? labels.categories[allocation.categoryId] : undefined })),
     debtReservations: recommendation.debtReservations.map((reservation) => ({ ...reservation, label: reservation.debtAccountId ? labels.debtAccounts[reservation.debtAccountId] : reservation.creditCardStatementId ? labels.creditCardStatements[reservation.creditCardStatementId] : undefined })),
     savingsReservations: recommendation.savingsReservations.map((reservation) => ({ ...reservation, label: reservation.savingsGoalId ? labels.savingsGoals[reservation.savingsGoalId] : undefined })),
+    ...(destination ? { surplusRecommendation: { ...recommendation.surplusRecommendation, advisoryDestination: { ...destination, label: destination.type === "debt" ? labels.debtAccounts[destination.debtAccountId] : labels.savingsGoals[destination.savingsGoalId] } } } : {}),
   };
 }
 

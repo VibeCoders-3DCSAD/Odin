@@ -9,6 +9,9 @@ const mockGetFinancialPlanAllocationSpending = jest.fn();
 const mockGetFinancialPlanSpentAmount = jest.fn();
 const mockDeleteFinancialPlan = jest.fn();
 const mockListFinancialAccounts = jest.fn();
+const mockListCategories = jest.fn();
+const mockListSubcategories = jest.fn();
+const mockRequestFinancialPlanRecommendation = jest.fn();
 
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   createFinancialPlan: jest.fn(),
@@ -25,8 +28,8 @@ jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
 }));
 
 jest.mock("../../../local-db/repositories/taxonomy", () => ({
-  listCategories: jest.fn().mockResolvedValue([]),
-  listSubcategories: jest.fn().mockResolvedValue([]),
+  listCategories: (...args: unknown[]) => mockListCategories(...args),
+  listSubcategories: (...args: unknown[]) => mockListSubcategories(...args),
   updateCategory: jest.fn(),
   updateSubcategory: jest.fn(),
 }));
@@ -35,7 +38,7 @@ jest.mock("../../../local-db/repositories/financialAccounts", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
 }));
 
-jest.mock("../api", () => ({ requestFinancialPlanRecommendation: jest.fn() }));
+jest.mock("../api", () => ({ requestFinancialPlanRecommendation: (...args: unknown[]) => mockRequestFinancialPlanRecommendation(...args) }));
 
 describe("FinancialPlanScreen", () => {
   beforeEach(() => {
@@ -56,6 +59,9 @@ describe("FinancialPlanScreen", () => {
     mockGetFinancialPlanSpentAmount.mockResolvedValue(0);
     mockDeleteFinancialPlan.mockResolvedValue({});
     mockListFinancialAccounts.mockResolvedValue([]);
+    mockListCategories.mockResolvedValue([]);
+    mockListSubcategories.mockResolvedValue([]);
+    mockRequestFinancialPlanRecommendation.mockReset();
   });
 
   it("opens the saved Financial Plan instead of the category selector", async () => {
@@ -108,5 +114,31 @@ describe("FinancialPlanScreen", () => {
 
     await waitFor(() => expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy());
     expect(mockListFinancialAccounts).toHaveBeenCalledWith("user-1", "active");
+  });
+
+  it("lets the user enter a different planning amount and refresh an infeasible plan", async () => {
+    mockGetLatestFinancialPlan.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
+    mockRequestFinancialPlanRecommendation
+      .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
+        status: "INFEASIBLE", period: { start: "2026-11-01", end: "2026-11-30" }, inputSnapshot: {}, explanations: [],
+        recommendation: { availableFundsCentavos: -25_000, shortfallCentavos: 25_000, allocations: [{ subcategoryId: "rent", categoryId: null, allocationRule: "MINIMUM", allocatedAmountCentavos: 75_000, floorAmountCentavos: 75_000, ceilingAmountCentavos: 75_000, forecastAmountCentavos: 75_000 }], debtReservations: [], savingsReservations: [] },
+      } } })
+      .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
+        status: "RECOMMENDATION_READY", period: { start: "2026-11-01", end: "2026-11-30" }, inputSnapshot: {}, explanations: [],
+        recommendation: { availableFundsCentavos: 25_000, allocations: [{ subcategoryId: "rent", categoryId: null, allocationRule: "MINIMUM", allocatedAmountCentavos: 75_000, floorAmountCentavos: 75_000, ceilingAmountCentavos: 100_000, forecastAmountCentavos: 75_000 }], debtReservations: [], savingsReservations: [] },
+      } } });
+
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Create Financial Plan recommendation")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+    await waitFor(() => expect(view.getByText("Have another number in mind?")).toBeTruthy());
+
+    fireEvent.changeText(view.getByLabelText("New planning amount in pesos"), "1000");
+    fireEvent.press(view.getByLabelText("Refresh plan with new amount"));
+
+    await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(2));
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[1][3]).toBe(100_000);
   });
 });

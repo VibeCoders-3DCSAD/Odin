@@ -8,6 +8,8 @@ export class FinancialPlanMlError extends Error {
 export type MlPlanCategory = {
   id: string;
   target: "category" | "subcategory";
+  priorityGroup: "ESSENTIAL" | "NON_ESSENTIAL";
+  priorityWeight: number;
   rule: "FIXED" | "MINIMUM" | "FLEXIBLE";
   floorCentavos: number;
   ceilingCentavos: number;
@@ -29,7 +31,7 @@ export async function recommendPlanCategories(userId: string, period: { start: s
   const body = JSON.stringify({
     request_id: randomUUID(), user_id: userId, available_funds: availableCentavos / 100,
     period, include_reasoning: true,
-    categories: categories.map((category) => ({ category_id: category.id, target_type: category.target, restriction_level: category.rule, floor: category.floorCentavos / 100, ceiling: category.ceilingCentavos / 100, priority_weight: 1 })),
+    categories: categories.map((category) => ({ category_id: category.id, target_type: category.target, priority_group: category.priorityGroup, restriction_level: category.rule, floor: category.floorCentavos / 100, ceiling: category.ceilingCentavos / 100, priority_weight: category.priorityWeight })),
     forecast: { month: forecast.month, total_amount: forecast.totalAmountCentavos / 100, category_forecasts: forecast.categoryForecasts.map((point) => ({ category: point.category, amount: point.amountCentavos / 100 })), model_version: forecast.modelVersion, generated_at: forecast.generatedAt, quality: forecast.quality },
   });
   const headers = trustedMlHeaders(userId, body);

@@ -33,13 +33,25 @@ export async function getCurrentSavingsEnvelopeAllocation(userId: string, asOfDa
     if (!reservation.savingsGoalId || !Number.isSafeInteger(reservation.amountCentavos)) continue;
     reservedByGoalId.set(reservation.savingsGoalId, (reservedByGoalId.get(reservation.savingsGoalId) ?? 0) + Math.max(0, reservation.amountCentavos));
   }
-  const envelopeCentavos = [...reservedByGoalId.values()].reduce((total, amount) => total + amount, 0);
-  const allocation = allocateSavingsEnvelope(0, strategy, goals, accountRequiredCentavos);
-  const proposals = allocation.proposals.map((proposal) => {
+  const savingsSurplus = plan.recommendation.savingsSurplusCentavos;
+  const savingsSurplusCentavos = Number.isSafeInteger(savingsSurplus) ? Math.max(0, savingsSurplus) : 0;
+  const envelopeCentavos = [...reservedByGoalId.values()].reduce((total, amount) => total + amount, savingsSurplusCentavos);
+  const reservationAllocation = allocateSavingsEnvelope(0, strategy, goals, accountRequiredCentavos);
+  const reservedProposals = reservationAllocation.proposals.map((proposal) => {
     const reserved = Math.min(proposal.remainingAmountCentavos, reservedByGoalId.get(proposal.id) ?? 0);
     const required = Math.min(proposal.remainingAmountCentavos, Math.max(0, proposal.requiredCentavos - proposal.recordedContributionCentavos));
     return { ...proposal, proposedRequiredCentavos: Math.min(required, reserved), proposedSurplusCentavos: Math.max(0, reserved - required), proposedTotalCentavos: reserved, unfundedRequiredCentavos: Math.max(0, required - reserved), state: reserved >= required ? "funded" as const : reserved > 0 ? "partially_funded" as const : "unfunded" as const, reason: reserved > 0 ? proposal.reason : "no_envelope" as const };
   });
-  const requiredCentavos = accountRequiredCentavos + proposals.reduce((total, proposal) => total + Math.max(0, proposal.requiredCentavos - proposal.recordedContributionCentavos), 0);
+  const surplusAllocation = allocateSavingsEnvelope(savingsSurplusCentavos, strategy, reservedProposals.map((proposal) => ({ ...proposal, remainingAmountCentavos: Math.max(0, proposal.remainingAmountCentavos - proposal.proposedTotalCentavos), recordedContributionCentavos: proposal.recordedContributionCentavos + proposal.proposedRequiredCentavos })), accountRequiredCentavos);
+  const surplusByGoalId = new Map(surplusAllocation.proposals.map((proposal) => [proposal.id, proposal]));
+  const proposals = reservedProposals.map((proposal) => {
+    const surplus = surplusByGoalId.get(proposal.id);
+    if (!surplus) return proposal;
+    const proposedRequiredCentavos = proposal.proposedRequiredCentavos + surplus.proposedRequiredCentavos;
+    const proposedSurplusCentavos = proposal.proposedSurplusCentavos + surplus.proposedSurplusCentavos;
+    const proposedTotalCentavos = proposal.proposedTotalCentavos + surplus.proposedTotalCentavos;
+    return { ...proposal, proposedRequiredCentavos, proposedSurplusCentavos, proposedTotalCentavos, unfundedRequiredCentavos: Math.max(0, proposal.unfundedRequiredCentavos - surplus.proposedRequiredCentavos), state: proposedTotalCentavos >= Math.min(proposal.remainingAmountCentavos, Math.max(0, proposal.requiredCentavos - proposal.recordedContributionCentavos)) ? "funded" as const : "partially_funded" as const, reason: proposal.proposedTotalCentavos > 0 ? proposal.reason : surplus.reason };
+  });
+  const requiredCentavos = accountRequiredCentavos + reservedProposals.reduce((total, proposal) => total + Math.max(0, proposal.requiredCentavos - proposal.recordedContributionCentavos), 0);
   return { envelopeCentavos, requiredCentavos, accountRequiredCentavos, shortfallCentavos: Math.max(0, requiredCentavos - envelopeCentavos), unallocatedCentavos: Math.max(0, envelopeCentavos - proposals.reduce((total, proposal) => total + proposal.proposedTotalCentavos, 0)), proposals };
 }

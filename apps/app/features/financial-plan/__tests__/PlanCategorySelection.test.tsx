@@ -9,7 +9,6 @@ jest.mock("react-native-safe-area-context", () => ({
 
 const food: Category = {
   id: "food",
-  category_group_id: "household",
   slug: "food",
   label: "Food",
   short_label: null,
