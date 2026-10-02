@@ -1,7 +1,9 @@
 import type { DebtAccount } from "../../local-db/repositories/debtAccounts";
 import type { DebtPriority, DebtStrategy } from "../../local-db/repositories/debtRepaymentPlans";
 
-type AllocatableDebt = Pick<DebtAccount, "id" | "status" | "currentBalanceCentavos" | "minimumPaymentCentavos" | "annualInterestRateBps">;
+type AllocatableDebt = Pick<DebtAccount, "id" | "status" | "currentBalanceCentavos" | "minimumPaymentCentavos" | "annualInterestRateBps" | "allowsExtraPayments"> & {
+  type?: DebtAccount["type"];
+};
 
 export type DebtRepaymentAllocation = {
   requiredPaymentCentavos: number;
@@ -28,26 +30,28 @@ export function allocateDebtRepayments({
   debtBudgetCentavos,
   strategy,
   priorities = [],
+  includeMinimumPayments = true,
 }: {
   debts: AllocatableDebt[];
   debtBudgetCentavos: number;
   strategy: DebtStrategy;
   priorities?: DebtPriority[];
+  includeMinimumPayments?: boolean;
 }): DebtRepaymentAllocation {
   const activeDebts = debts.filter((debt) => debt.status === "active" && debt.currentBalanceCentavos > 0);
-  const requiredPaymentCentavos = activeDebts.reduce((total, debt) => total + Math.min(debt.minimumPaymentCentavos, debt.currentBalanceCentavos), 0);
+  const requiredPaymentCentavos = includeMinimumPayments ? activeDebts.reduce((total, debt) => total + Math.min(debt.minimumPaymentCentavos, debt.currentBalanceCentavos), 0) : 0;
   const availableCentavos = Math.max(0, debtBudgetCentavos);
   const shortfallCentavos = Math.max(0, requiredPaymentCentavos - availableCentavos);
   let remainingSurplusCentavos = Math.max(0, availableCentavos - requiredPaymentCentavos);
-  const allocations = new Map(activeDebts.map((debt) => [debt.id, Math.min(debt.minimumPaymentCentavos, debt.currentBalanceCentavos)]));
+  const allocations = new Map(activeDebts.map((debt) => [debt.id, includeMinimumPayments ? Math.min(debt.minimumPaymentCentavos, debt.currentBalanceCentavos) : 0]));
   const activeById = new Map(activeDebts.map((debt) => [debt.id, debt]));
   const prioritized = priorities
     .slice()
     .sort((left, right) => left.priorityRank - right.priorityRank)
     .map((priority) => activeById.get(priority.debtAccountId))
-    .filter((debt): debt is AllocatableDebt => Boolean(debt));
+    .filter((debt): debt is AllocatableDebt => debt !== undefined && debt.type !== "salary_loan" && debt.allowsExtraPayments === true);
   const prioritizedIds = new Set(prioritized.map((debt) => debt.id));
-  const orderedDebts = [...prioritized, ...strategyOrder(strategy, activeDebts.filter((debt) => !prioritizedIds.has(debt.id)))];
+  const orderedDebts = [...prioritized, ...strategyOrder(strategy, activeDebts.filter((debt) => debt.type !== "salary_loan" && debt.allowsExtraPayments === true && !prioritizedIds.has(debt.id)))];
 
   for (const debt of orderedDebts) {
     if (remainingSurplusCentavos <= 0) break;

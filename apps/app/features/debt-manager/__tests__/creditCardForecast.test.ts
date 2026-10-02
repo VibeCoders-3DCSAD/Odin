@@ -11,7 +11,7 @@ describe("buildCreditCardForecast", () => {
       installments: [],
       availableCreditCentavos: 9_949_000,
       creditLimitCentavos: 10_000_000,
-      billingCycleDays: 31,
+      billingCycleEndDay: 4,
       asOfDate: "2026-09-01",
     };
 
@@ -26,7 +26,7 @@ describe("buildCreditCardForecast", () => {
         { transaction_id: "after", account_id: "card-1", cycle_id: "cycle-1", purchase_type: "regular", installment_id: null, transaction_date: "2026-09-10", merchant_name: null, amount_centavos: 50_000, forecast_recorded_at: "2026-09-10T14:00:00.000Z" },
       ],
       statements: [], strategy: undefined, payments: [], installments: [],
-      creditLimitCentavos: 1_000_000, availableCreditCentavos: 700_000, billingCycleDays: null,
+      creditLimitCentavos: 1_000_000, availableCreditCentavos: 700_000, billingCycleEndDay: 30,
       reconciledAvailableCreditCentavos: 800_000, preReconciliationAvailableCreditCentavos: 900_000,
       availableCreditReconciledAt: "2026-09-10T12:00:00.000Z", asOfDate: "2026-09-10",
     });
@@ -43,7 +43,7 @@ describe("buildCreditCardForecast", () => {
       cycles: [{ id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-09-01", cutoff_date: "2026-09-30", statement_date: null, version: 1, deleted: false, created_at: "2026-09-01T00:00:00.000Z", updated_at: "2026-09-01T00:00:00.000Z" }],
       transactions: [{ transaction_id: "purchase-1", account_id: "card-1", cycle_id: "cycle-1", purchase_type: "regular", installment_id: null, transaction_date: "2026-09-02", merchant_name: null, amount_centavos: 4_500_000 }],
       statements: [], strategy: undefined, payments: [], installments: [],
-      creditLimitCentavos: 6_000_000, availableCreditCentavos: 6_000_000, billingCycleDays: null,
+      creditLimitCentavos: 6_000_000, availableCreditCentavos: 6_000_000, billingCycleEndDay: 30,
       reconciledAvailableCreditCentavos: 6_000_000, preReconciliationAvailableCreditCentavos: null,
       availableCreditReconciledAt: "2026-09-14T08:00:00.000Z", asOfDate: "2026-09-14",
     });
@@ -55,7 +55,7 @@ describe("buildCreditCardForecast", () => {
     }));
   });
 
-  it("uses the recorded billing-cycle length when the card configuration is missing it", () => {
+  it("uses the billing-cycle end day for future forecast dates", () => {
     const baseInput = {
       cycles: [{ id: "cycle-1", user_id: "user-1", account_id: "card-1", cycle_start_date: "2026-08-05", cutoff_date: "2026-09-04", statement_date: "2026-09-04", version: 1, deleted: false, created_at: "2026-08-05T00:00:00.000Z", updated_at: "2026-09-04T00:00:00.000Z" }],
       transactions: [],
@@ -64,7 +64,7 @@ describe("buildCreditCardForecast", () => {
       installments: [],
       availableCreditCentavos: 7_000_000,
       creditLimitCentavos: 10_000_000,
-      billingCycleDays: null,
+      billingCycleEndDay: 4,
       reconciledAvailableCreditCentavos: 7_000_000,
       preReconciliationAvailableCreditCentavos: 7_000_000,
       availableCreditReconciledAt: "2026-09-10T08:00:00.000Z",
@@ -94,7 +94,7 @@ describe("buildCreditCardForecast", () => {
       installments: [{ id: "installment-1", user_id: "user-1", account_id: "card-1", transaction_id: "transaction-1", description: "Refrigerator", original_principal_centavos: 1_000_000, remaining_principal_centavos: 1_000_000, term_months: 4, remaining_months: 4, monthly_amortization_centavos: 250_000, interest_type: "zero_interest", interest_rate_bps: 0, settlement_status: "active", version: 1, deleted: false, created_at: "2026-09-02T00:00:00.000Z", updated_at: "2026-09-02T00:00:00.000Z" }],
       availableCreditCentavos: 0,
       creditLimitCentavos: 5_000_000,
-      billingCycleDays: 31,
+      billingCycleEndDay: 4,
       asOfDate: "2026-09-14",
     };
 
@@ -140,12 +140,12 @@ describe("buildCreditCardForecast", () => {
       }],
       availableCreditCentavos: 4_000_000,
       creditLimitCentavos: 10_000_000,
-      billingCycleDays: 31,
+      billingCycleEndDay: 4,
       asOfDate: "2026-09-05",
     });
 
     const forecastPoints = forecast.points.filter((point) => point.cycleId.startsWith("forecast"));
-    expect(forecastPoints.slice(0, 3).map((point) => point.date)).toEqual(["2026-09-15", "2026-10-16", "2026-11-16"]);
+    expect(forecastPoints.slice(0, 3).map((point) => point.date)).toEqual(["2026-09-15", "2026-10-04", "2026-11-04"]);
     expect(forecastPoints.slice(0, 3).map((point) => 10_000_000 - point.availableCreditCentavos)).toEqual(expectedBalances);
   });
 
@@ -159,7 +159,7 @@ describe("buildCreditCardForecast", () => {
       installments: [],
       availableCreditCentavos: 6_000_000,
       creditLimitCentavos: 10_000_000,
-      billingCycleDays: 31,
+      billingCycleEndDay: 4,
       asOfDate: "2026-09-10",
     });
 
@@ -179,7 +179,7 @@ describe("buildCreditCardForecast", () => {
       installments: [{ id: "installment-1", user_id: "user-1", account_id: "card-1", transaction_id: "installment-transaction-1", description: "Installment purchase", original_principal_centavos: 1_500_000, remaining_principal_centavos: 1_500_000, term_months: 10, remaining_months: 10, monthly_amortization_centavos: 250_000, interest_type: "zero_interest", interest_rate_bps: 0, settlement_status: "active", version: 1, deleted: false, created_at: "2026-09-04T00:00:00.000Z", updated_at: "2026-09-04T00:00:00.000Z" }],
       availableCreditCentavos: 10_000_000,
       creditLimitCentavos: 10_000_000,
-      billingCycleDays: 31,
+      billingCycleEndDay: 4,
       asOfDate: "2026-09-15",
     });
 
@@ -212,7 +212,7 @@ describe("buildCreditCardForecast", () => {
       installments: [],
       availableCreditCentavos: 8_000_000,
       creditLimitCentavos: 10_000_000,
-      billingCycleDays: 31,
+      billingCycleEndDay: 4,
       asOfDate: "2026-09-10",
     });
 
@@ -236,7 +236,7 @@ describe("buildCreditCardForecast", () => {
       installments: [],
       availableCreditCentavos: 7_000_000,
       creditLimitCentavos: 10_000_000,
-      billingCycleDays: 31,
+      billingCycleEndDay: 4,
       asOfDate: "2026-09-20",
     });
 

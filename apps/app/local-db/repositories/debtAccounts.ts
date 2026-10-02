@@ -37,7 +37,7 @@ export type DebtPresetData = {
 export type DebtAccount = {
   id: string; name: string; lenderName: string | null; type: DebtTypePreset; status: DebtAccountStatus;
   progress: DebtProgressStatus; originalBalanceCentavos: number; currentBalanceCentavos: number;
-  annualInterestRateBps: number; minimumPaymentCentavos: number; paymentFrequency: PaymentFrequency;
+  annualInterestRateBps: number; minimumPaymentCentavos: number; allowsExtraPayments?: boolean; paymentFrequency: PaymentFrequency;
   nextDueDate: string | null; maturityDate: string | null; targetPayoffDate: string | null; paymentSchedule: DebtPaymentSchedule;
   interestPeriod: InterestRatePeriod | null; interestMethod: InterestMethod | null; notes: string | null;
   typeSpecific: DebtPresetData; hasPaymentHistory: boolean; archivedAt: string | null;
@@ -52,7 +52,7 @@ export type DebtRepaymentForecast = {
 export type CreateDebtAccountInput = {
   type: DebtTypePreset; name: string; lenderName: string | null; linkedAccountId?: string | null;
   originalBalanceCentavos: number; currentBalanceCentavos: number; annualInterestRateBps: number;
-  minimumPaymentCentavos: number; paymentFrequency: PaymentFrequency; paymentSchedule: DebtPaymentSchedule; startDate: string; nextDueDate: string;
+  minimumPaymentCentavos: number; allowsExtraPayments?: boolean; paymentFrequency: PaymentFrequency; paymentSchedule: DebtPaymentSchedule; startDate: string; nextDueDate: string;
   maturityDate?: string | null; targetPayoffDate?: string | null; interestPeriod: InterestRatePeriod | null;
   interestMethod: InterestMethod | null; notes?: string | null; typeSpecific: DebtPresetData;
 };
@@ -61,7 +61,7 @@ export type UpdateDebtAccountInput = Partial<CreateDebtAccountInput>;
 type DebtAccountRow = {
   id: string; user_id: string; linked_account_id: string | null; name: string; lender_name: string | null;
   preset_key: string; status: string; original_balance_centavos: number; current_balance_centavos: number;
-  annual_interest_rate_bps: number; minimum_payment_centavos: number; payment_frequency: string;
+  annual_interest_rate_bps: number; minimum_payment_centavos: number; allows_extra_payments: number; payment_frequency: string;
   next_due_date: string | null; maturity_date: string | null; target_payoff_date: string | null;
   interest_period: string | null; interest_method: string | null; preset_data: string; payment_schedule: string; notes: string | null;
   paid_off_at: string | null; archived_at: string | null; version: number; deleted: number;
@@ -95,7 +95,7 @@ function mapDebt(row: DebtAccountRow): DebtAccount {
     id: row.id, name: row.name, lenderName: row.lender_name, type: normalizeType(row.preset_key),
     status: normalizeStatus(row.status, row.deleted), progress: "no_payments", originalBalanceCentavos: row.original_balance_centavos,
     currentBalanceCentavos: row.current_balance_centavos, annualInterestRateBps: row.annual_interest_rate_bps,
-    minimumPaymentCentavos: row.minimum_payment_centavos, paymentFrequency: row.payment_frequency as PaymentFrequency,
+    minimumPaymentCentavos: row.minimum_payment_centavos, allowsExtraPayments: row.allows_extra_payments === 1, paymentFrequency: row.payment_frequency as PaymentFrequency,
     nextDueDate: row.next_due_date, maturityDate: row.maturity_date, targetPayoffDate: row.target_payoff_date, paymentSchedule: parsePaymentSchedule(row.payment_schedule),
     interestPeriod: row.interest_period as InterestRatePeriod | null, interestMethod: row.interest_method as InterestMethod | null,
     notes: row.notes, typeSpecific: parsePresetData(row.preset_data), hasPaymentHistory: row.has_payment_history === 1,
@@ -140,6 +140,7 @@ function validate(input: CreateDebtAccountInput): CreateDebtAccountInput {
   if (!DEBT_TYPES.includes(input.type)) throw new LocalDbError("VALIDATION_ERROR", "debt type is required");
   if (input.type !== "custom_debt" && !input.lenderName?.trim()) throw new LocalDbError("VALIDATION_ERROR", "lender or provider is required");
   for (const [value, field, positive] of [[input.originalBalanceCentavos, "originalBalanceCentavos", true], [input.currentBalanceCentavos, "currentBalanceCentavos", false], [input.annualInterestRateBps, "annualInterestRateBps", false], [input.minimumPaymentCentavos, "minimumPaymentCentavos", true]] as const) assertInteger(value, field, positive);
+  if (input.allowsExtraPayments !== undefined && typeof input.allowsExtraPayments !== "boolean") throw new LocalDbError("VALIDATION_ERROR", "allowsExtraPayments must be a boolean");
   if (input.currentBalanceCentavos > input.originalBalanceCentavos) throw new LocalDbError("VALIDATION_ERROR", "current balance cannot exceed original balance");
   assertDate(input.startDate, "start date", true); assertDate(input.nextDueDate, "first or next payment date", true);
   assertDate(input.maturityDate, "maturity date", false); assertDate(input.targetPayoffDate, "target payoff date", false);
@@ -167,7 +168,7 @@ function validate(input: CreateDebtAccountInput): CreateDebtAccountInput {
   return { ...input, name, lenderName: input.lenderName?.trim() || null };
 }
 function payload(input: CreateDebtAccountInput, status: DebtAccountStatus = "active"): Record<string, unknown> {
-  return { linked_account_id: input.linkedAccountId ?? null, name: input.name.trim(), lender_name: input.lenderName?.trim() ?? null, preset_key: input.type, status, original_balance_centavos: input.originalBalanceCentavos, current_balance_centavos: input.currentBalanceCentavos, annual_interest_rate_bps: input.annualInterestRateBps, minimum_payment_centavos: input.minimumPaymentCentavos, payment_frequency: input.paymentFrequency, payment_schedule: input.paymentSchedule, next_due_date: input.nextDueDate, maturity_date: input.maturityDate ?? null, target_payoff_date: input.targetPayoffDate ?? null, interest_period: input.interestPeriod, interest_method: input.interestMethod, preset_data: { ...input.typeSpecific, startDate: input.startDate }, notes: input.notes ?? null };
+  return { linked_account_id: input.linkedAccountId ?? null, name: input.name.trim(), lender_name: input.lenderName?.trim() ?? null, preset_key: input.type, status, original_balance_centavos: input.originalBalanceCentavos, current_balance_centavos: input.currentBalanceCentavos, annual_interest_rate_bps: input.annualInterestRateBps, minimum_payment_centavos: input.minimumPaymentCentavos, allows_extra_payments: input.allowsExtraPayments ?? false, payment_frequency: input.paymentFrequency, payment_schedule: input.paymentSchedule, next_due_date: input.nextDueDate, maturity_date: input.maturityDate ?? null, target_payoff_date: input.targetPayoffDate ?? null, interest_period: input.interestPeriod, interest_method: input.interestMethod, preset_data: { ...input.typeSpecific, startDate: input.startDate }, notes: input.notes ?? null };
 }
 async function readOwnedDebt(db: SQLite.SQLiteDatabase, userId: string, id: string) {
   const row = await db.getFirstAsync<DebtAccountRow>("SELECT * FROM debt_accounts WHERE user_id = ? AND id = ? AND deleted = 0", userId, id);
@@ -199,7 +200,7 @@ export async function createDebtAccount(userId: string, deviceId: string, input:
   const valid = validate(input); const db = await getDb(); const id = randomUUID(); const ts = now(); const data = payload(valid); let result!: { debt: DebtAccount; operation: SyncOperation };
   await db.withTransactionAsync(async () => {
     await assertAccessibleDebtReferences(db, userId, valid);
-    await db.runAsync(`INSERT INTO debt_accounts (id, user_id, linked_account_id, name, lender_name, preset_key, status, original_balance_centavos, current_balance_centavos, annual_interest_rate_bps, minimum_payment_centavos, payment_frequency, payment_schedule, next_due_date, maturity_date, target_payoff_date, interest_period, interest_method, preset_data, notes, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, id, userId, data.linked_account_id as string | null, data.name as string, data.lender_name as string | null, data.preset_key as string, data.status as string, data.original_balance_centavos as number, data.current_balance_centavos as number, data.annual_interest_rate_bps as number, data.minimum_payment_centavos as number, data.payment_frequency as string, JSON.stringify(data.payment_schedule), data.next_due_date as string, data.maturity_date as string | null, data.target_payoff_date as string | null, data.interest_period as string | null, data.interest_method as string | null, JSON.stringify(data.preset_data), data.notes as string | null, ts, ts);
+    await db.runAsync(`INSERT INTO debt_accounts (id, user_id, linked_account_id, name, lender_name, preset_key, status, original_balance_centavos, current_balance_centavos, annual_interest_rate_bps, minimum_payment_centavos, allows_extra_payments, payment_frequency, payment_schedule, next_due_date, maturity_date, target_payoff_date, interest_period, interest_method, preset_data, notes, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, id, userId, data.linked_account_id as string | null, data.name as string, data.lender_name as string | null, data.preset_key as string, data.status as string, data.original_balance_centavos as number, data.current_balance_centavos as number, data.annual_interest_rate_bps as number, data.minimum_payment_centavos as number, data.allows_extra_payments ? 1 : 0, data.payment_frequency as string, JSON.stringify(data.payment_schedule), data.next_due_date as string, data.maturity_date as string | null, data.target_payoff_date as string | null, data.interest_period as string | null, data.interest_method as string | null, JSON.stringify(data.preset_data), data.notes as string | null, ts, ts);
     const operation = await enqueueOperation(db, { userId, deviceId, entity: "debt_accounts", recordId: id, operationType: "create", baseVersion: null, changedFields: Object.keys(data), payload: data, failureMessage: `This debt "${valid.name}" could not be created.` });
     result = { debt: await readResult(db, userId, id), operation };
   });
@@ -208,7 +209,7 @@ export async function createDebtAccount(userId: string, deviceId: string, input:
 
 function inputFromRow(row: DebtAccountRow): CreateDebtAccountInput {
   const typeSpecific = parsePresetData(row.preset_data);
-  return { type: normalizeType(row.preset_key), name: row.name, lenderName: row.lender_name, linkedAccountId: row.linked_account_id, originalBalanceCentavos: row.original_balance_centavos, currentBalanceCentavos: row.current_balance_centavos, annualInterestRateBps: row.annual_interest_rate_bps, minimumPaymentCentavos: row.minimum_payment_centavos, paymentFrequency: row.payment_frequency as PaymentFrequency, paymentSchedule: parsePaymentSchedule(row.payment_schedule), startDate: typeSpecific.startDate ?? "", nextDueDate: row.next_due_date ?? "", maturityDate: row.maturity_date, targetPayoffDate: row.target_payoff_date, interestPeriod: row.interest_period as InterestRatePeriod | null, interestMethod: row.interest_method as InterestMethod | null, notes: row.notes, typeSpecific };
+  return { type: normalizeType(row.preset_key), name: row.name, lenderName: row.lender_name, linkedAccountId: row.linked_account_id, originalBalanceCentavos: row.original_balance_centavos, currentBalanceCentavos: row.current_balance_centavos, annualInterestRateBps: row.annual_interest_rate_bps, minimumPaymentCentavos: row.minimum_payment_centavos, allowsExtraPayments: row.allows_extra_payments === 1, paymentFrequency: row.payment_frequency as PaymentFrequency, paymentSchedule: parsePaymentSchedule(row.payment_schedule), startDate: typeSpecific.startDate ?? "", nextDueDate: row.next_due_date ?? "", maturityDate: row.maturity_date, targetPayoffDate: row.target_payoff_date, interestPeriod: row.interest_period as InterestRatePeriod | null, interestMethod: row.interest_method as InterestMethod | null, notes: row.notes, typeSpecific };
 }
 export async function updateDebtAccount(userId: string, deviceId: string, id: string, input: UpdateDebtAccountInput): Promise<{ debt: DebtAccount; operation: SyncOperation }> {
   const db = await getDb(); let result!: { debt: DebtAccount; operation: SyncOperation };

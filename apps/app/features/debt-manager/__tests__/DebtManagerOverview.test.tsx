@@ -98,3 +98,37 @@ beforeEach(() => {
 
     await waitFor(() => expect(view.getByText("Avalanche repayment plan")).toBeTruthy());
   });
+
+  it("lists repayments reserved by the accepted Financial Plan", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({
+      recommendation: {
+        debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 1_000, dueDate: "2026-10-01" }],
+      },
+    });
+
+    const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
+
+    await waitFor(() => {
+      expect(view.getByText("Financial Plan repayments")).toBeTruthy();
+      expect(view.getByText("Loan: PHP 10.00 due 2026-10-01")).toBeTruthy();
+    });
+  });
+
+  it("uses Financial Plan surplus for an unpaid statement before rolling over to loans", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({
+      recommendation: { debtReservations: [], debtSurplusCentavos: 3_000 },
+    });
+    mockListCreditCardStatements.mockResolvedValue([{
+      id: "statement-1", cycle_id: "cycle-1", statement_date: "2020-01-01", due_date: "2020-02-01",
+      statement_balance_centavos: 1_500, minimum_due_centavos: 100, authoritative: true, deleted: false,
+    }]);
+    mockListCreditCardPayments.mockResolvedValue([{ cycle_id: "cycle-1", statement_id: "statement-1", payment_date: "2020-01-02", amount_centavos: 500 }]);
+
+    const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
+
+    await waitFor(() => {
+      expect(view.getByText("Recommended surplus allocation")).toBeTruthy();
+      expect(view.getByText("Visa statement: PHP 10.00")).toBeTruthy();
+      expect(view.getByText("Loan: PHP 20.00")).toBeTruthy();
+    });
+  });

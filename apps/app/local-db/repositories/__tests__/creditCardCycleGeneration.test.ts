@@ -53,7 +53,7 @@ describe("deferred credit-card cycle generation", () => {
       updated_at: "2026-09-04T00:00:00.000Z",
     }];
     const db = {
-      getAllAsync: jest.fn(async () => [{ account_id: "card-1", cutoff_day: 4, billing_cycle_days: 31 }]),
+      getAllAsync: jest.fn(async () => [{ account_id: "card-1", cutoff_day: 4, billing_cycle_days: null }]),
       getFirstAsync: jest.fn(async (sql: string, ...params: unknown[]) => {
         const accountId = params[1] as string;
         const date = params[2] as string;
@@ -87,11 +87,11 @@ describe("deferred credit-card cycle generation", () => {
     const { ensureCurrentCreditCardCycles } = await import("../creditCardCycles");
     const ensured = await ensureCurrentCreditCardCycles("user-1", "device-1", "2026-09-16");
 
-    expect(ensured).toMatchObject([{ cycle_start_date: "2026-09-16", cutoff_date: "2026-10-16" }]);
+    expect(ensured).toMatchObject([{ cycle_start_date: "2026-09-16", cutoff_date: "2026-10-04" }]);
     expect(cycles).toHaveLength(2);
     expect(mockEnqueueOperation).toHaveBeenCalledWith(db, expect.objectContaining({
       entity: "credit_card_cycles",
-      payload: expect.objectContaining({ cycle_start_date: "2026-09-16", cutoff_date: "2026-10-16" }),
+      payload: expect.objectContaining({ cycle_start_date: "2026-09-16", cutoff_date: "2026-10-04" }),
     }));
   });
 });

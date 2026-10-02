@@ -43,7 +43,7 @@ describe("NonCreditDebtForm", () => {
     const debt: DebtAccount = {
       id: "auto-1", name: "Car loan", lenderName: "Bank A", type: "auto_loan", status: "active", progress: "on_schedule",
       originalBalanceCentavos: 1_000_000, currentBalanceCentavos: 800_000, annualInterestRateBps: 0,
-      minimumPaymentCentavos: 20_000, paymentFrequency: "monthly", paymentSchedule: {}, nextDueDate: "2026-10-01",
+      minimumPaymentCentavos: 20_000, allowsExtraPayments: false, paymentFrequency: "monthly", paymentSchedule: {}, nextDueDate: "2026-10-01",
       maturityDate: null, targetPayoffDate: "2030-01-01", interestPeriod: "none", interestMethod: "no_interest", notes: null,
       typeSpecific: { startDate: "2026-01-01", feesCentavos: 0, penaltyInfo: null, termMonths: 48, autoLoan: { vehicleDescription: "Sedan", vehiclePurchasePriceCentavos: 1_200_000, downpaymentCentavos: 200_000, financedPrincipalCentavos: 1_000_000 } },
       hasPaymentHistory: false, archivedAt: null, paidOffAt: null, version: 1,
@@ -56,5 +56,13 @@ describe("NonCreditDebtForm", () => {
     await waitFor(() => expect(mockUpdateDebtAccount).toHaveBeenCalledWith("user-1", "device-1", "auto-1", expect.objectContaining({
       typeSpecific: expect.objectContaining({ autoLoan: expect.objectContaining({ vehiclePurchasePriceCentavos: 1_200_000, downpaymentCentavos: 200_000, financedPrincipalCentavos: 1_000_000 }) }),
     })));
+  });
+
+  it("toggles whether this debt can receive extra payments", async () => {
+    mockCreateDebtAccount.mockResolvedValue({ debt: { id: "debt-1", name: "Emergency loan" } });
+    const view = render(<NonCreditDebtForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
+
+    fireEvent.press(view.getByRole("switch", { name: "Allow extra payments" }));
+    expect(view.getByRole("switch", { name: "Allow extra payments" }).props.accessibilityState).toEqual({ checked: true });
   });
 });

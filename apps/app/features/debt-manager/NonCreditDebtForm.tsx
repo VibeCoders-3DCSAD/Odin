@@ -22,15 +22,15 @@ import {
 } from "./debtTypes";
 
 const P = {
-  shell: "#fcf8f0",
-  card: "#F1F0EB",
-  ink: "#1B1C1A",
-  muted: "#6B7A6F",
-  brand: "#013220",
+  shell: "#F8F4EB",
+  card: "#FFFDF8",
+  ink: "#17261E",
+  muted: "#66736A",
+  brand: "#123F2C",
   white: "#FFFFFF",
-  softCard: "#f7eed9",
-  optionLine: "#e8deca",
-  line: "#EAEAE6",
+  softCard: "#E5F0E3",
+  optionLine: "#C8D9C6",
+  line: "#E2E4DC",
   error: "#D9001F",
 } as const;
 const PERSONAL_PURPOSES = ["Emergency", "Medical", "Education", "Home Improvement", "Debt Consolidation", "Personal Purchase", "Other"];
@@ -55,10 +55,15 @@ function pesos(value: string) {
 
 function Section({ eyebrow, title, children, first = false }: { eyebrow: string; title: string; children: React.ReactNode; first?: boolean }) {
   return (
-    <View style={{ borderTopWidth: first ? 0 : 1, borderTopColor: P.line, gap: 12, paddingTop: first ? 0 : 16 }}>
-      <View>
-        <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 11, fontWeight: "700", marginBottom: 3 }}>{eyebrow}</Text>
-        <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 15, fontWeight: "800" }}>{title}</Text>
+    <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 18, borderWidth: 1, gap: 16, padding: 16 }}>
+      <View style={{ flexDirection: "row", gap: 11, alignItems: "center" }}>
+        <View style={{ alignItems: "center", backgroundColor: first ? P.brand : P.softCard, borderRadius: 9, height: 32, justifyContent: "center", width: 32 }}>
+          <Text style={{ color: first ? P.white : P.brand, fontFamily: "Manrope", fontSize: 10, fontWeight: "800" }}>{eyebrow}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 10, fontWeight: "800", letterSpacing: 0.8, marginBottom: 2 }}>{first ? "START HERE" : "DETAILS"}</Text>
+          <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 16, fontWeight: "800" }}>{title}</Text>
+        </View>
       </View>
       {children}
     </View>
@@ -75,10 +80,12 @@ function Field({ label, placeholder, value, onChangeText, numeric = false, prefi
   suffix?: string;
   error?: string;
 }) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={{ gap: 6 }}>
-      <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 11.5, fontWeight: "700" }}>{label}</Text>
-      <View style={{ alignItems: "center", backgroundColor: P.shell, borderColor: error ? P.error : P.line, borderRadius: 10, borderWidth: 1, flexDirection: "row", height: 46, paddingHorizontal: 12 }}>
+      <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 11.5, fontWeight: "800" }}>{label}</Text>
+      <View style={{ alignItems: "center", backgroundColor: "#FBFAF5", borderColor: error ? P.error : focused ? P.brand : P.line, borderRadius: 12, borderWidth: focused || error ? 1.5 : 1, flexDirection: "row", height: 50, paddingHorizontal: 13 }}>
         {prefix ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 13, fontWeight: "700", marginRight: 7 }}>{prefix}</Text> : null}
         <TextInput
           accessibilityLabel={label}
@@ -86,6 +93,8 @@ function Field({ label, placeholder, value, onChangeText, numeric = false, prefi
           placeholderTextColor="#919A91"
           value={value}
           onChangeText={onChangeText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           keyboardType={numeric ? "decimal-pad" : "default"}
           style={{ color: P.ink, flex: 1, fontFamily: "Manrope", fontSize: 14, paddingVertical: 8 }}
         />
@@ -96,7 +105,7 @@ function Field({ label, placeholder, value, onChangeText, numeric = false, prefi
   );
 }
 
-function Options<T extends string>({ values, selected, onChange, compact = false }: { values: Option<T>[]; selected: T; onChange: (value: T) => void; compact?: boolean }) {
+function Options<T extends string>({ values, selected, onChange, compact = false, cards = false }: { values: Option<T>[]; selected: T; onChange: (value: T) => void; compact?: boolean; cards?: boolean }) {
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {values.map((item) => {
@@ -110,24 +119,25 @@ function Options<T extends string>({ values, selected, onChange, compact = false
             accessibilityHint="Double tap to select this option"
             onPress={() => onChange(item.value)}
             style={({ pressed }) => ({
-              alignItems: "center",
-              backgroundColor: active ? P.brand : P.softCard,
-              borderColor: active ? P.brand : P.optionLine,
-              borderRadius: 10,
-              borderWidth: 1,
-              flexDirection: "row",
-              gap: 7,
-              justifyContent: "center",
-              minHeight: 44,
-              opacity: pressed ? 0.8 : 1,
-              paddingHorizontal: compact ? 10 : 12,
-              paddingVertical: compact ? 6 : 9,
-            })}
-          >
+               alignItems: "center",
+               backgroundColor: active ? P.brand : P.softCard,
+               borderColor: active ? P.brand : P.optionLine,
+               borderRadius: cards ? 14 : 11,
+               borderWidth: 1,
+               flexDirection: "row",
+               gap: 7,
+               justifyContent: "center",
+               minHeight: cards ? 52 : 44,
+               opacity: pressed ? 0.8 : 1,
+               paddingHorizontal: compact ? 10 : 12,
+               paddingVertical: compact ? 6 : 9,
+               ...(cards ? { flexBasis: "47.5%", flexGrow: 1 } : {}),
+             })}
+           >
             <View style={{ alignItems: "center", backgroundColor: active ? P.white : "transparent", borderColor: active ? P.white : P.muted, borderRadius: 6, borderWidth: 1.5, height: 12, justifyContent: "center", width: 12 }}>
               {active ? <View style={{ backgroundColor: P.brand, borderRadius: 3, height: 6, width: 6 }} /> : null}
             </View>
-            <Text style={{ color: active ? P.white : P.ink, fontFamily: "Manrope", fontSize: compact ? 12 : 13, fontWeight: "700" }}>{item.label}</Text>
+             <Text style={{ color: active ? P.white : P.ink, fontFamily: "Manrope", fontSize: compact ? 12 : cards ? 12.5 : 13, fontWeight: "800" }}>{item.label}</Text>
           </Pressable>
         );
       })}
@@ -142,6 +152,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
   const [original, setOriginal] = useState(debt ? String(debt.originalBalanceCentavos / 100) : "");
   const [balance, setBalance] = useState(debt ? String(debt.currentBalanceCentavos / 100) : "");
   const [payment, setPayment] = useState(debt ? String(debt.minimumPaymentCentavos / 100) : "");
+  const [allowsExtraPayments, setAllowsExtraPayments] = useState(debt?.allowsExtraPayments ?? false);
   const [startDate, setStartDate] = useState(debt?.typeSpecific.startDate ?? "");
   const [nextDueDate, setNextDueDate] = useState(debt?.nextDueDate ?? "");
   const [targetPayoffDate, setTargetPayoffDate] = useState(debt?.targetPayoffDate ?? "");
@@ -177,7 +188,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
 
   async function save() {
     const input: CreateDebtAccountInput = {
-      type, name, lenderName: lender || null, originalBalanceCentavos: pesos(original), currentBalanceCentavos: pesos(balance), annualInterestRateBps: Math.round(Number(rate) * 100), minimumPaymentCentavos: pesos(payment), paymentFrequency: frequency, paymentSchedule: { semiMonthlyDays: frequency === "semi_monthly" ? [Number(semiMonthlyFirstDay), Number(semiMonthlySecondDay)] : undefined, customIntervalDays: frequency === "custom" ? Number(customIntervalDays) : undefined }, startDate, nextDueDate, maturityDate: maturityDate || null, targetPayoffDate, interestPeriod: period, interestMethod: method, notes: notes || null,
+      type, name, lenderName: lender || null, originalBalanceCentavos: pesos(original), currentBalanceCentavos: pesos(balance), annualInterestRateBps: Math.round(Number(rate) * 100), minimumPaymentCentavos: pesos(payment), allowsExtraPayments, paymentFrequency: frequency, paymentSchedule: { semiMonthlyDays: frequency === "semi_monthly" ? [Number(semiMonthlyFirstDay), Number(semiMonthlySecondDay)] : undefined, customIntervalDays: frequency === "custom" ? Number(customIntervalDays) : undefined }, startDate, nextDueDate, maturityDate: maturityDate || null, targetPayoffDate, interestPeriod: period, interestMethod: method, notes: notes || null,
       typeSpecific: {
         startDate, feesCentavos: fees ? pesos(fees) : 0, penaltyInfo: penaltyInfo || null, termMonths: termMonths ? Number(termMonths) : null,
         personalLoan: type === "personal_loan" ? { purpose: purpose || null } : undefined,
@@ -193,7 +204,8 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
     if (type !== "custom_debt" && !lender.trim()) nextErrors.lender = "Lender or provider is required.";
     if (type === "salary_loan" && !salaryLoanProvider) nextErrors.salaryLoanProvider = "Choose the salary-loan provider.";
     if (type === "salary_loan" && !incomeSource) nextErrors.incomeSource = "Choose the income source that is deducted.";
-    if (type === "salary_loan" && repaymentMethod === "payroll_deduction" && (!deduction || !Number.isFinite(input.typeSpecific.salaryLoan?.deductionAmountCentavos) || input.typeSpecific.salaryLoan.deductionAmountCentavos! <= 0)) nextErrors.deduction = "Payroll deduction must be positive.";
+    const salaryDeduction = input.typeSpecific.salaryLoan?.deductionAmountCentavos;
+    if (type === "salary_loan" && repaymentMethod === "payroll_deduction" && (!deduction || typeof salaryDeduction !== "number" || !Number.isFinite(salaryDeduction) || salaryDeduction <= 0)) nextErrors.deduction = "Payroll deduction must be positive.";
     if (!Number.isFinite(input.originalBalanceCentavos) || input.originalBalanceCentavos <= 0) nextErrors.original = "Original amount must be positive.";
     if (!Number.isFinite(input.currentBalanceCentavos) || input.currentBalanceCentavos < 0) nextErrors.balance = "Current balance must be non-negative.";
     if (!Number.isFinite(input.minimumPaymentCentavos) || input.minimumPaymentCentavos <= 0) nextErrors.payment = "Minimum payment must be positive.";
@@ -235,27 +247,48 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
   }
 
   return (
-    <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
-      <View>
-        <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 20, fontWeight: "800" }}>{debt ? "Edit debt" : "Add debt"}</Text>
-        <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 3 }}>{debt ? "Update the account terms and repayment details." : "Add the account terms to track your repayment progress."}</Text>
+    <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 36 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <View style={{ backgroundColor: P.brand, borderRadius: 22, overflow: "hidden", padding: 20 }}>
+        <View style={{ alignItems: "center", flexDirection: "row", justifyContent: "space-between" }}>
+          <Text style={{ color: "#B8D9BD", fontFamily: "Manrope", fontSize: 10, fontWeight: "800", letterSpacing: 1.2 }}>DEBT SETUP</Text>
+          <View style={{ backgroundColor: "#2B5B43", borderRadius: 99, paddingHorizontal: 9, paddingVertical: 5 }}>
+            <Text style={{ color: P.white, fontFamily: "Manrope", fontSize: 10, fontWeight: "800" }}>{debt ? "EDITING" : "NEW ACCOUNT"}</Text>
+          </View>
+        </View>
+        <Text style={{ color: P.white, fontFamily: "Manrope", fontSize: 25, fontWeight: "800", letterSpacing: -0.5, marginTop: 12 }}>{debt ? "Refine your plan." : "Give this debt a plan."}</Text>
+        <Text style={{ color: "#C4D6C8", fontFamily: "Manrope", fontSize: 12.5, lineHeight: 18, marginTop: 6 }}>{debt ? "Update the numbers and keep your repayment forecast honest." : "A few precise details turn a balance into a repayment forecast."}</Text>
+        <View style={{ flexDirection: "row", gap: 5, marginTop: 18 }}>
+          {["Account", "Balance", "Terms", "Plan"].map((step, index) => (
+            <View key={step} style={{ flex: 1, gap: 5 }}>
+              <View style={{ backgroundColor: index === 0 ? "#B8D9BD" : "#497158", borderRadius: 99, height: 4 }} />
+              <Text style={{ color: index === 0 ? P.white : "#A8C0AD", fontFamily: "Manrope", fontSize: 9.5, fontWeight: "700" }}>{step}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
-      <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 16, padding: 14 }}>
-        <Section first eyebrow="Account" title="What are you tracking?">
-          <Options values={DEBT_TYPE_OPTIONS} selected={type} onChange={setType} />
+      <Section first eyebrow="01" title="What are you tracking?">
+          <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, lineHeight: 17 }}>Choose the debt that best matches its repayment rules.</Text>
+          <Options values={DEBT_TYPE_OPTIONS} selected={type} onChange={setType} cards />
           <Field label="Debt name" placeholder={DEBT_PLACEHOLDERS.debtName} value={name} onChangeText={setName} error={errors.name} />
           <Field label={`Lender or provider${type === "custom_debt" ? " (optional)" : ""}`} placeholder={DEBT_PLACEHOLDERS.lenderName} value={lender} onChangeText={setLender} error={errors.lender} />
-        </Section>
+      </Section>
 
-        <Section eyebrow="Balance" title="Set the starting point">
+      <Section eyebrow="02" title="Set the starting point">
+        <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, lineHeight: 17 }}>Use the current balance for tracking. The original amount gives your progress context.</Text>
         <Field label="Original amount" placeholder={DEBT_PLACEHOLDERS.originalAmount} value={original} onChangeText={setOriginal} numeric prefix="PHP" error={errors.original} />
         <Field label="Current balance" placeholder={DEBT_PLACEHOLDERS.currentBalance} value={balance} onChangeText={setBalance} numeric prefix="PHP" error={errors.balance} />
-        <Field label="Minimum payment" placeholder={DEBT_PLACEHOLDERS.paymentAmount} value={payment} onChangeText={setPayment} numeric prefix="PHP" error={errors.payment} />
-        <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16 }}>Enter amounts in Philippine pesos. You can update the balance later as payments are made.</Text>
-        </Section>
+         <Field label="Minimum payment" placeholder={DEBT_PLACEHOLDERS.paymentAmount} value={payment} onChangeText={setPayment} numeric prefix="PHP" error={errors.payment} />
+         <View style={{ backgroundColor: "#FBFAF5", borderColor: P.line, borderRadius: 12, borderWidth: 1, flexDirection: "row", gap: 12, padding: 12 }}>
+           <Pressable accessibilityRole="switch" accessibilityLabel="Allow extra payments" accessibilityHint="Put extra money toward this debt when available" accessibilityState={{ checked: allowsExtraPayments }} onPress={() => setAllowsExtraPayments((value) => !value)} style={{ alignSelf: "center", backgroundColor: allowsExtraPayments ? P.brand : P.line, borderRadius: 99, height: 26, justifyContent: "center", paddingHorizontal: 3, width: 44 }}>
+             <View style={{ alignSelf: allowsExtraPayments ? "flex-end" : "flex-start", backgroundColor: P.white, borderRadius: 10, height: 20, width: 20 }} />
+           </Pressable>
+           <View style={{ flex: 1, gap: 2 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Allow extra payments</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16 }}>Put extra money toward this debt when available.</Text></View>
+         </View>
+        <View style={{ backgroundColor: P.softCard, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 }}><Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 11, fontWeight: "700", lineHeight: 16 }}>Amounts are in Philippine pesos. Recorded payments update your balance over time.</Text></View>
+      </Section>
 
-        <Section eyebrow="Terms" title="How does repayment work?">
+      <Section eyebrow="03" title="How does repayment work?">
         <Field label="Interest rate" placeholder={DEBT_PLACEHOLDERS.interestRate} value={rate} onChangeText={setRate} numeric suffix="%" error={errors.rate} />
         <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Rate period</Text><Options values={INTEREST_PERIOD_OPTIONS} selected={period} onChange={setPeriod} compact /></View>
         <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Interest method</Text><Options values={INTEREST_METHOD_OPTIONS} selected={method} onChange={setMethod} compact /></View>
@@ -265,24 +298,24 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
           <Field label="Loan or installment term (months)" placeholder={DEBT_PLACEHOLDERS.debtSpecificTerm} value={termMonths} onChangeText={setTermMonths} numeric error={errors.termMonths} />
           <Field label="Fees" placeholder="Enter fees" value={fees} onChangeText={setFees} numeric prefix="PHP" error={errors.fees} />
          <Field label="Penalty information" placeholder="Add penalty information" value={penaltyInfo} onChangeText={setPenaltyInfo} />
-        </Section>
+      </Section>
 
-         <Section eyebrow="Calendar" title="Anchor the payment plan">
+      <Section eyebrow="04" title="Anchor the payment plan">
+        <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, lineHeight: 17 }}>Use YYYY-MM-DD so your schedule and forecast line up correctly.</Text>
           <Field label="Start date" placeholder={DEBT_PLACEHOLDERS.startDate} value={startDate} onChangeText={setStartDate} error={errors.startDate} />
            <Field label="Next payment date" placeholder={DEBT_PLACEHOLDERS.nextPaymentDate} value={nextDueDate} onChangeText={setNextDueDate} error={errors.nextDueDate} />
           <Field label="Maturity date" placeholder={DEBT_PLACEHOLDERS.maturityDate} value={maturityDate} onChangeText={setMaturityDate} />
           <Field label="When do you want to get this debt paid?" placeholder={DEBT_PLACEHOLDERS.targetPayoffDate} value={targetPayoffDate} onChangeText={setTargetPayoffDate} error={errors.targetPayoffDate} />
-         </Section>
+      </Section>
 
-         {type !== "custom_debt" ? <Section eyebrow="Additional details" title="Add the details that matter">{renderTypeFields()}</Section> : null}
-         <Section eyebrow="Notes" title="Anything else to remember?"><Field label="Notes" placeholder={DEBT_PLACEHOLDERS.notes} value={notes} onChangeText={setNotes} /></Section>
+      {type !== "custom_debt" ? <Section eyebrow="05" title="Add the details that matter">{renderTypeFields()}</Section> : null}
+      <Section eyebrow="06" title="Anything else to remember?"><Field label="Notes" placeholder={DEBT_PLACEHOLDERS.notes} value={notes} onChangeText={setNotes} /></Section>
 
-        {message ? <Text accessibilityLiveRegion="polite" style={{ color: P.error, fontFamily: "Manrope", fontSize: 12, marginTop: 2 }}>{message}</Text> : null}
+      {message ? <View accessibilityLiveRegion="polite" style={{ backgroundColor: "#FFF0F2", borderColor: "#F3C6CE", borderRadius: 12, borderWidth: 1, padding: 12 }}><Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 12, fontWeight: "700", lineHeight: 17 }}>{message}</Text></View> : null}
 
-        <View style={{ flexDirection: "row", gap: 10, paddingTop: 2 }}>
-          <Pressable accessibilityRole="button" disabled={saving} onPress={() => save().catch(() => {})} style={({ pressed }) => ({ alignItems: "center", backgroundColor: P.brand, borderRadius: 10, flex: 1, height: 46, justifyContent: "center", opacity: saving || pressed ? 0.6 : 1 })}><Text style={{ color: P.white, fontFamily: "Manrope", fontSize: 13, fontWeight: "700" }}>{saving ? "Saving..." : debt ? "Save changes" : "Save debt"}</Text></Pressable>
-          <Pressable accessibilityRole="button" disabled={saving} onPress={onCancel} style={({ pressed }) => ({ alignItems: "center", borderColor: P.line, borderRadius: 10, borderWidth: 1, flex: 1, height: 46, justifyContent: "center", opacity: saving || pressed ? 0.6 : 1 })}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 13, fontWeight: "700" }}>Cancel</Text></Pressable>
-        </View>
+      <View style={{ gap: 8, paddingTop: 2 }}>
+        <Pressable accessibilityRole="button" disabled={saving} onPress={() => save().catch(() => {})} style={({ pressed }) => ({ alignItems: "center", backgroundColor: P.brand, borderRadius: 13, height: 54, justifyContent: "center", opacity: saving || pressed ? 0.6 : 1 })}><Text style={{ color: P.white, fontFamily: "Manrope", fontSize: 14, fontWeight: "800" }}>{saving ? "Saving..." : debt ? "Save changes" : "Save debt"}</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={saving} onPress={onCancel} style={({ pressed }) => ({ alignItems: "center", borderRadius: 13, height: 46, justifyContent: "center", opacity: saving || pressed ? 0.6 : 1 })}><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Cancel</Text></Pressable>
       </View>
     </ScrollView>
   );

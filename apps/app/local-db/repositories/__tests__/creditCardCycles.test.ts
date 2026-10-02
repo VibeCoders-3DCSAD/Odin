@@ -44,10 +44,10 @@ describe("credit-card cycle dates", () => {
     })).toThrow("statement_date must be on or after cutoff_date");
   });
 
-  it("starts an overridden cycle successor on the day after the cutoff", () => {
-    expect(calculateSuccessorCreditCardCycle("2026-09-05", 30)).toEqual({
+  it("uses the recurring cycle end day for an overridden cycle successor", () => {
+    expect(calculateSuccessorCreditCardCycle("2026-09-05", 4)).toEqual({
       cycle_start_date: "2026-09-06",
-      cutoff_date: "2026-10-05",
+      cutoff_date: "2026-10-04",
     });
   });
 });

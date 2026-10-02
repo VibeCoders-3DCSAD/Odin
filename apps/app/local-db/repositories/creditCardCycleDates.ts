@@ -73,13 +73,12 @@ export function calculateCurrentCreditCardCycle(
   return { account_id: defaults.account_id, cycle_start_date: cycleStartDate, cutoff_date: cutoffDate, statement_date: null };
 }
 
-export function calculateSuccessorCreditCardCycle(cutoffDate: string, billingCycleDays: number) {
-  parseIsoDate(cutoffDate, "cutoffDate");
-  if (!Number.isInteger(billingCycleDays) || billingCycleDays < 1) {
-    throw new Error("billingCycleDays must be a positive whole number");
-  }
+export function calculateSuccessorCreditCardCycle(cutoffDate: string, cutoffDay: number | string) {
+  const cutoffParts = parseIsoDate(cutoffDate, "cutoffDate");
+  const endDay = normalizeDay(cutoffDay, "cutoff_day");
+  const next = nextMonth(cutoffParts.year, cutoffParts.month);
   const cycle_start_date = addDays(cutoffDate, 1);
-  return { cycle_start_date, cutoff_date: addDays(cycle_start_date, billingCycleDays - 1) };
+  return { cycle_start_date, cutoff_date: effectiveDay(next.year, next.month, endDay) };
 }
 
 export function validateCreditCardCycleDates(input: {

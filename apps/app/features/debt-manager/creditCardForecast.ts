@@ -24,7 +24,7 @@ export type CreditCardForecastInput = {
   installments: CreditCardInstallment[];
   availableCreditCentavos: number;
   creditLimitCentavos: number;
-  billingCycleDays: number | null;
+  billingCycleEndDay: number | null;
   asOfDate: string;
   reconciledAvailableCreditCentavos?: number | null;
   preReconciliationAvailableCreditCentavos?: number | null;
@@ -38,24 +38,29 @@ function clampAvailableCredit(value: number, limit: number): number {
   return Math.max(0, Math.min(limit, value));
 }
 
-function addDays(isoDate: string, days: number): string {
+function nextCycleEndAfter(isoDate: string, endDay: number): string | null {
+  if (!Number.isInteger(endDay) || endDay < 1 || endDay > 31) return null;
   const date = new Date(`${isoDate}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  if (Number.isNaN(date.getTime())) return null;
+  let year = date.getUTCFullYear();
+  let month = date.getUTCMonth();
+  const format = () => new Date(Date.UTC(year, month, Math.min(endDay, new Date(Date.UTC(year, month + 1, 0)).getUTCDate()))).toISOString().slice(0, 10);
+  let candidate = format();
+  if (candidate > isoDate) return candidate;
+  month += 1;
+  if (month === 12) { year += 1; month = 0; }
+  candidate = format();
+  return candidate;
 }
 
-function resolveBillingCycleDays(
-  billingCycleDays: number | null,
-  cycles: CreditCardCycle[],
-  statement?: CreditCardStatement,
-): number | null {
-  if (billingCycleDays) return billingCycleDays;
-  const cycle = cycles.find((item) => item.id === statement?.cycle_id);
-  if (!cycle) return null;
-  const start = new Date(`${cycle.cycle_start_date}T00:00:00.000Z`).getTime();
-  const cutoff = new Date(`${cycle.cutoff_date}T00:00:00.000Z`).getTime();
-  const days = Math.round((cutoff - start) / 86_400_000) + 1;
-  return days > 0 ? days : null;
+function forecastDate(anchorDate: string, cycleEndDay: number, cycleOffset: number): string | null {
+  let date = anchorDate;
+  for (let offset = 0; offset < cycleOffset; offset += 1) {
+    const next = nextCycleEndAfter(date, cycleEndDay);
+    if (!next) return null;
+    date = next;
+  }
+  return date;
 }
 
 function paymentTargetForNode(balanceCentavos: number, minimumDueCentavos: number, strategy?: CreditCardStrategy, percentagePaymentCentavos?: number): number {
@@ -121,7 +126,7 @@ function buildAnchoredForecast(
   const latestStatement = cardStatements
     .filter((statement) => statement.authoritative && !statement.deleted && statement.statement_date <= input.asOfDate)
     .sort((left, right) => right.statement_date.localeCompare(left.statement_date))[0];
-  const billingCycleDays = resolveBillingCycleDays(input.billingCycleDays, input.cycles, latestStatement);
+  const cycleEndDay = input.billingCycleEndDay;
   const recordedForLatestStatement = cardPayments
     .filter((payment) => payment.statement_id === latestStatement?.id && payment.payment_date <= input.asOfDate)
     .reduce((total, payment) => total + payment.amount_centavos, 0);
@@ -130,7 +135,7 @@ function buildAnchoredForecast(
     : 0;
   const expectedThroughToday = latestStatement && latestStatement.due_date <= input.asOfDate ? target : 0;
   const currentDebt = Math.max(0, input.creditLimitCentavos - available);
-  if (latestStatement && billingCycleDays && currentDebt > 0) {
+  if (latestStatement && cycleEndDay && currentDebt > 0) {
     const installmentBalance = Math.min(
       currentDebt,
       input.installments.reduce((total, installment) => total + installment.remaining_principal_centavos, 0),
@@ -140,7 +145,7 @@ function buildAnchoredForecast(
     const forecastMonths = Math.max(0, ...input.installments.map((installment) => installment.remaining_months));
     const missedStatement = latestStatement.due_date < input.asOfDate && recordedForLatestStatement === 0;
     let firstForecastMonth = 0;
-    while (addDays(latestStatement.due_date, firstForecastMonth * billingCycleDays) < input.asOfDate) firstForecastMonth += 1;
+    while ((forecastDate(latestStatement.due_date, cycleEndDay, firstForecastMonth) ?? input.asOfDate) < input.asOfDate) firstForecastMonth += 1;
     const lastInstallmentMonth = firstForecastMonth + forecastMonths - 1;
     for (let month = firstForecastMonth; month <= lastInstallmentMonth || (!missedStatement && regularBalance > 0); month += 1) {
       if (month - firstForecastMonth >= 600) break;
@@ -165,7 +170,7 @@ function buildAnchoredForecast(
       if (projectedPayment <= 0) break;
       points.push({
         cycleId: `forecast-${month}`,
-        date: addDays(latestStatement.due_date, month * billingCycleDays),
+        date: forecastDate(latestStatement.due_date, cycleEndDay, month)!,
         availableCreditCentavos: clampAvailableCredit(input.creditLimitCentavos - regularBalance - projectedInstallmentBalance, input.creditLimitCentavos),
         targetCentavos: projectedPayment,
         ...components,
@@ -176,7 +181,7 @@ function buildAnchoredForecast(
 }
 
 function* calculateCreditCardForecast(input: CreditCardForecastInput): Generator<void, CreditCardForecast, undefined> {
-  const { cycles, transactions, statements, strategy, payments, installments, availableCreditCentavos, creditLimitCentavos, billingCycleDays, asOfDate } = input;
+  const { cycles, transactions, statements, strategy, payments, installments, availableCreditCentavos, creditLimitCentavos, billingCycleEndDay, asOfDate } = input;
   const cycleIds = new Set(cycles.map((cycle) => cycle.id));
   const cardTransactions: CreditCardCycleTransaction[] = [];
   for (let index = 0; index < transactions.length; index += 1) {
@@ -236,7 +241,6 @@ function* calculateCreditCardForecast(input: CreditCardForecastInput): Generator
     if (statement.authoritative && !statement.deleted && statement.statement_date <= asOfDate && (!latestStatement || statement.statement_date > latestStatement.statement_date)) latestStatement = statement;
     if (index % YIELD_INTERVAL === 0) yield;
   }
-  const forecastBillingCycleDays = resolveBillingCycleDays(billingCycleDays, cycles, latestStatement);
   const target = latestStatement ? paymentTargetForNode(latestStatement.statement_balance_centavos, latestStatement.minimum_due_centavos, strategy) : 0;
   let recordedForLatestStatement = 0;
   for (let index = 0; index < cardPayments.length; index += 1) {
@@ -255,7 +259,7 @@ function* calculateCreditCardForecast(input: CreditCardForecastInput): Generator
     if (index % YIELD_INTERVAL === 0) yield;
   }
   const anchorDate = latestStatement?.due_date ?? points.at(-1)?.date ?? cycles.slice().sort((left, right) => right.cutoff_date.localeCompare(left.cutoff_date))[0]?.cutoff_date;
-  if (anchorDate && forecastBillingCycleDays && (target > 0 || forecastMonths > 0)) {
+  if (anchorDate && billingCycleEndDay && (target > 0 || forecastMonths > 0)) {
     const currentDebt = Math.max(0, creditLimitCentavos - forecastAvailableCredit);
     let installmentBalance = Math.min(
       currentDebt,
@@ -263,7 +267,7 @@ function* calculateCreditCardForecast(input: CreditCardForecastInput): Generator
     );
     let regularBalance = currentDebt - installmentBalance;
     let firstForecastMonth = recordedForLatestStatement > 0 ? 1 : 0;
-    while (addDays(anchorDate, firstForecastMonth * forecastBillingCycleDays) < asOfDate) firstForecastMonth += 1;
+    while ((forecastDate(anchorDate, billingCycleEndDay, firstForecastMonth) ?? asOfDate) < asOfDate) firstForecastMonth += 1;
     const lastInstallmentMonth = firstForecastMonth + forecastMonths - 1;
     const missedStatement = latestStatement?.due_date != null && latestStatement.due_date < asOfDate && recordedForLatestStatement === 0;
     for (let month = firstForecastMonth; month <= lastInstallmentMonth || (!missedStatement && regularBalance > 0); month++) {
@@ -286,7 +290,7 @@ function* calculateCreditCardForecast(input: CreditCardForecastInput): Generator
       const projectedPayment = components.regularPaymentCentavos + components.amortizationPaymentCentavos;
       points.push({
         cycleId: `forecast-${month}`,
-        date: addDays(anchorDate, month * forecastBillingCycleDays),
+        date: forecastDate(anchorDate, billingCycleEndDay, month)!,
         availableCreditCentavos: clampAvailableCredit(creditLimitCentavos - regularBalance - installmentBalance, creditLimitCentavos),
         targetCentavos: projectedPayment,
         ...components,

@@ -61,4 +61,16 @@ describe("debt repayment-plan sync validation", () => {
       },
     })).rejects.toThrow("salary loan provider is invalid");
   });
+
+  it("accepts an extra-payment preference update", async () => {
+    await expect(prepareOperation({} as never, "user-1", {
+      operation_id: "operation-4",
+      entity: "debt_accounts",
+      record_id: "debt-1",
+      operation_type: "update",
+      base_version: 1,
+      changed_fields: ["allows_extra_payments"],
+      payload: { allows_extra_payments: true },
+    })).resolves.toMatchObject({ payload: { allows_extra_payments: true } });
+  });
 });

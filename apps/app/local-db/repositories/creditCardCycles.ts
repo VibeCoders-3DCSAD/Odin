@@ -335,7 +335,7 @@ export async function ensureCurrentCreditCardCycles(userId: string, deviceId: st
           date,
         );
         const calculated = latestCycle
-          ? calculateSuccessorCreditCardCycle(latestCycle.cutoff_date, defaults.billing_cycle_days ?? 0)
+          ? calculateSuccessorCreditCardCycle(latestCycle.cutoff_date, defaults.cutoff_day)
           : calculateCurrentCreditCardCycle(defaults, date);
         const id = randomUUID();
         const ts = now();
