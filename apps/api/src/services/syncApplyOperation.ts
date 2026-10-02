@@ -39,6 +39,7 @@ const SYNCED_ENTITIES = new Set([
   "alert_notification_preferences",
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
+  "anomaly_evaluations",
   "savings_goals",
   "savings_goal_activities",
   "savings_allocation_preferences",
@@ -50,6 +51,7 @@ const ANOMALY_WHITELIST_CREATE_FIELDS = new Set(["merchant_name", "subcategory_i
 const ANOMALY_WHITELIST_UPDATE_FIELDS = new Set(["status", "notes"]);
 const ALERT_SUPPRESSION_CREATE_FIELDS = new Set(["category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata"]);
 const ALERT_SUPPRESSION_UPDATE_FIELDS = new Set(["status", "ends_at", "reason"]);
+const ANOMALY_EVALUATION_CREATE_FIELDS = new Set(["transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "model_version", "evaluated_at"]);
 
 const SERVER_COLUMNS = new Set([
   "id",
@@ -815,6 +817,19 @@ async function validateCreatePayload(
     if (entity === "alert_suppression_rules") { requireString(sanitized, "category"); requireString(sanitized, "reason"); }
     return sanitized;
   }
+  if (entity === "anomaly_evaluations") {
+    assertOnlyAllowed(payload, ANOMALY_EVALUATION_CREATE_FIELDS);
+    const sanitized = sanitizePayload(payload, ANOMALY_EVALUATION_CREATE_FIELDS);
+    requireString(sanitized, "transaction_id");
+    requireString(sanitized, "subcategory_id");
+    requirePositiveInteger(sanitized, "amount_centavos");
+    requirePositiveInteger(sanitized, "usable_history_count");
+    for (const field of ["usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos"]) optionalFiniteInteger(sanitized, field);
+    optionalNumber(sanitized, "severity");
+    requireString(sanitized, "model_version");
+    requireString(sanitized, "evaluated_at");
+    return sanitized;
+  }
 
   throw new Error(`entity '${entity}' is not in the sync allowlist`);
 }
@@ -1063,6 +1078,8 @@ async function validateUpdatePayload(
     const fields = entity === "alert_notification_preferences" ? ALERT_PREFERENCE_UPDATE_FIELDS : entity === "anomaly_whitelist_rules" ? ANOMALY_WHITELIST_UPDATE_FIELDS : ALERT_SUPPRESSION_UPDATE_FIELDS;
     assertOnlyAllowed(payload, fields);
     return sanitizePayload(payload, fields);
+  } else if (entity === "anomaly_evaluations") {
+    throw new Error("anomaly evaluations are immutable");
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
