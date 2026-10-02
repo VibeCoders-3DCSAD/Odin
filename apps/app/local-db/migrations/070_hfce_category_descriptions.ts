@@ -24,9 +24,6 @@ const migration: Migration = {
         'housing_water_utilities', 'furnishings_household', 'health',
         'transport', 'communication', 'recreation_culture', 'education',
         'restaurants_hotels', 'miscellaneous_goods_services'
-      )
-        AND category_group_id IN (
-          SELECT id FROM category_groups WHERE slug = 'hfce_categories'
         );
     `);
   },

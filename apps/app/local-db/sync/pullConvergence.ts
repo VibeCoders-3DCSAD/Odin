@@ -2,15 +2,12 @@ import * as SQLite from "expo-sqlite";
 
 type PullRow = Record<string, unknown>;
 
-const SYSTEM_TAXONOMY_TABLES = new Set(["category_groups"]);
-const LEGACY_TAXONOMY_GROUP_SLUGS = new Set(["essentials", "obligatory", "discretionary", "financial_allocation"]);
 export interface PullDb {
   getFirstAsync<T>(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<T | null>;
   runAsync(sql: string, ...params: SQLite.SQLiteBindValue[]): Promise<SQLite.SQLiteRunResult>;
 }
 
 export const SYNCED_TABLES = [
-  "category_groups",
   "categories",
   "subcategories",
   "financial_accounts",
@@ -44,13 +41,8 @@ export const SYNCED_TABLES = [
 ] as const;
 
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
-  category_groups: new Set([
-    "id", "user_id", "slug", "label", "short_label", "description",
-    "sort_order", "is_active", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
-  ]),
   categories: new Set([
-    "id", "user_id", "category_group_id", "slug", "label", "short_label",
+    "id", "user_id", "slug", "label", "short_label",
     "description", "is_system", "is_filipino_context", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos", "sort_order",
     "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
@@ -159,7 +151,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   debt_accounts: new Set([
     "id", "user_id", "linked_account_id", "name", "lender_name", "preset_key", "status",
     "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps",
-    "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date",
+    "minimum_payment_centavos", "allows_extra_payments", "payment_frequency", "next_due_date", "maturity_date",
     "target_payoff_date", "interest_period", "interest_method", "preset_data", "payment_schedule",
     "notes", "paid_off_at", "archived_at", "version", "deleted", "created_at", "updated_at",
     "last_synced_at",
@@ -210,6 +202,8 @@ export function normalizePullRow(
       const isProtectedDefault = (row.is_protected_default as boolean) === true;
       const isProtected = (row.is_protected as boolean) === true;
       normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
+    } else if (table === "debt_accounts" && col === "allows_extra_payments") {
+      normalized[col] = row[col] === true || row[col] === 1 ? 1 : 0;
     } else if (col === "metadata" || col === "preset_data" || col === "payment_schedule" || col.endsWith("_snapshot_json") || col === "recommendation_json") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
@@ -231,20 +225,13 @@ export async function applyPullRow(
   row: PullRow,
 ): Promise<void> {
   const identityColumn = PULL_IDENTITY_COLUMNS[table] ?? "id";
-  const userScoped = !SYSTEM_TAXONOMY_TABLES.has(table);
+  const userScoped = true;
   const recordId = row[identityColumn] as string;
   const identityWhere = `"${identityColumn}" = ?${userScoped ? " AND user_id = ?" : ""}`;
   const identityParams: SQLite.SQLiteBindValue[] = userScoped ? [recordId, row.user_id as string] : [recordId];
   const rowVersion = (row.version as number) ?? 1;
   const rowDeleted = row.deleted === true || (row.deleted as number) === 1;
   const now = new Date().toISOString();
-
-  const taxonomySlug = typeof row.slug === "string" ? row.slug : "";
-  const isLegacyTaxonomy = table === "category_groups"
-    ? LEGACY_TAXONOMY_GROUP_SLUGS.has(taxonomySlug)
-    : (table === "categories" || table === "subcategories")
-      && /^(essentials|obligatory|discretionary|financial)_/.test(taxonomySlug);
-  if (isLegacyTaxonomy) return;
 
   const existing = await db.getFirstAsync<{ version: number; user_id: string; statement_date?: string | null }>(
     `SELECT version, user_id${table === "credit_card_cycles" ? ", statement_date" : ""} FROM "${table}" WHERE ${identityWhere}`,

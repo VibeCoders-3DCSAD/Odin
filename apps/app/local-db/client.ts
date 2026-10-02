@@ -152,8 +152,10 @@ export async function loadMigrations(): Promise<Migration[]> {
   const { default: m068 } = await import("./migrations/068_financial_plan_surplus");
   const { default: m069 } = await import("./migrations/069_category_budget_defaults");
   const { default: m070 } = await import("./migrations/070_hfce_category_descriptions");
-  const { default: m071 } = await import("./migrations/071_anomaly_evaluations");
-  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040, m041, m042, m043, m044, m045, m046, m047, m048, m049, m050, m051, m052, m053, m054, m055, m056, m057, m058, m059, m060, m061, m062, m063, m064, m065, m066, m067, m068, m069, m070, m071];
+  const { default: m071 } = await import("./migrations/071_remove_category_groups");
+  const { default: m072 } = await import("./migrations/072_debt_extra_payments");
+  const { default: m073 } = await import("./migrations/073_anomaly_evaluations");
+  return [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010, m011, m012, m013, m014, m015, m016, m017, m018, m019, m020, m021, m022, m023, m024, m025, m026, m027, m028, m029, m030, m031, m032, m033, m034, m035, m036, m037, m038, m039, m040, m041, m042, m043, m044, m045, m046, m047, m048, m049, m050, m051, m052, m053, m054, m055, m056, m057, m058, m059, m060, m061, m062, m063, m064, m065, m066, m067, m068, m069, m070, m071, m072, m073];
 }
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {

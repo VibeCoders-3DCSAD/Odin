@@ -144,7 +144,6 @@ async function resetTaxonomyCursorsIfEmpty(
   );
   if ((row?.count ?? 0) > 0) return;
 
-  delete cursors.category_groups;
   delete cursors.categories;
   delete cursors.subcategories;
 }

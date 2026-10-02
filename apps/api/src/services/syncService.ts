@@ -36,7 +36,6 @@ const CLIENT_SYNC_FAILURE_REASON = "Sync operation rejected";
 const EDIT_HISTORY_FAILURE_REASON = "sync_operation_rejected";
 
 export const SYNCED_TABLES = [
-  "category_groups",
   "categories",
   "subcategories",
   "financial_accounts",
@@ -141,7 +140,7 @@ export async function pushOperations(
          status,
           reason: status === "rejected" || status === "conflict" ? result.reason ?? CLIENT_SYNC_FAILURE_REASON : undefined,
           current_version: typeof result.current_version === "number" ? result.current_version : undefined,
-          conflicted_fields: result.conflicted_fields ?? undefined,
+        conflicted_fields: result.conflicted_fields ?? undefined,
       });
     } catch (error) {
       console.error("[sync/push] rejected", {
@@ -193,9 +192,7 @@ export async function pullChanges(
       .order(cursorColumn, { ascending: true })
       .limit(500);
 
-    if (table === "category_groups") {
-      // category_groups has no user_id column — system-wide data
-    } else if (
+    if (
        table === "financial_accounts" ||
        table === "savings_account_details" ||
       table === "transactions" ||

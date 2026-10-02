@@ -202,20 +202,8 @@ Table financial_profile_reclassification_schedules {
   metadata json [not null]
 }
 
-Table category_groups {
-  id uuid [pk]
-  slug text [not null, unique]
-  label text [not null]
-  short_label text
-  description text [not null]
-  sort_order integer [not null]
-  is_active boolean [not null]
-  metadata json [not null]
-}
-
 Table categories {
   id uuid [pk]
-  category_group_id uuid [not null, ref: > category_groups.id]
   user_id uuid [ref: > profiles.user_id]
   slug text [not null]
   label text [not null]
@@ -229,8 +217,6 @@ Table categories {
 
   indexes {
     (user_id, slug) [unique]
-    (label, category_group_id) [unique]
-    (user_id, label, category_group_id) [unique]
   }
 }
 

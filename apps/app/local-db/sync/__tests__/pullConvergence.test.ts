@@ -43,6 +43,7 @@ describe("debt account pull convergence", () => {
       paid_off_at: null, archived_at: null, version: 1, deleted: false,
       created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z",
     }, "user-1");
+    expect(row.allows_extra_payments).toBe(0);
     const db = { getFirstAsync: jest.fn(async () => null), runAsync: jest.fn<(...args: any[]) => any>(async () => ({ changes: 1 })) };
 
     await applyPullRow(db as never, "debt_accounts", row);

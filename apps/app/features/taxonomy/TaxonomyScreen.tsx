@@ -16,7 +16,6 @@ import {
   ArrowLeft,
 } from "phosphor-react-native";
 import {
-  listCategoryGroups,
   listCategories,
   listSubcategories,
   deleteCategory,
@@ -30,16 +29,6 @@ import KebabTooltip from "../../components/KebabTooltip";
 
 type Subcategory = RepoSubcategory;
 type Category = RepoCategory & { subcategories?: Subcategory[] };
-type Group = {
-  id: string;
-  slug: string;
-  label: string;
-  short_label: string | null;
-  description: string;
-  sort_order: number;
-  is_active: boolean;
-  categories?: Category[];
-};
 
 type TaxonomyScreenProps = {
   userId: string;
@@ -188,10 +177,9 @@ function SubcategoryRow({
 }
 
 function assembleNested(
-  localGroups: { id: string; slug: string; label: string; short_label: string | null; description: string; sort_order: number; is_active: boolean }[],
   localCategories: RepoCategory[],
   localSubcategories: RepoSubcategory[],
-): Group[] {
+): Category[] {
   const subsByCat = new Map<string, Subcategory[]>();
   for (const s of localSubcategories) {
     if (!s.category_id) continue;
@@ -200,18 +188,11 @@ function assembleNested(
     subsByCat.set(s.category_id, arr);
   }
 
-  const catsByGroup = new Map<string, Category[]>();
-  for (const c of localCategories) {
-    const arr = catsByGroup.get(c.category_group_id) ?? [];
-    arr.push({ ...c, subcategories: subsByCat.get(c.id) ?? [] });
-    catsByGroup.set(c.category_group_id, arr);
-  }
-
-  return localGroups.map((g) => ({ ...g, categories: catsByGroup.get(g.id) ?? [] }));
+  return localCategories.map((category) => ({ ...category, subcategories: subsByCat.get(category.id) ?? [] }));
 }
 
 export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBack }: TaxonomyScreenProps) {
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -232,10 +213,9 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     if (!userId) return;
     setError(null);
     try {
-      const localGroups = await listCategoryGroups(userId);
       const localCats = await listCategories(userId);
       const localSubs = await listSubcategories(userId);
-      setGroups(assembleNested(localGroups, localCats, localSubs));
+      setCategories(assembleNested(localCats, localSubs));
     } catch (error) {
       console.error("[taxonomy] failed to load categories", {
         userId,
@@ -351,7 +331,6 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     load();
   }
 
-  const categories = groups.find((group) => group.slug === "hfce_categories")?.categories ?? [];
   const viewingCategory = viewingCategoryId
     ? categories.find((category) => category.id === viewingCategoryId)
     : undefined;
@@ -520,7 +499,6 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
         visible={categoryFormVisible}
         mode={categoryFormMode}
         category={editingCategory}
-        groups={groups.map((group) => ({ id: group.id, slug: group.slug, label: group.label }))}
         userId={userId}
         deviceId={deviceId}
         onSaved={handleCategoryFormSaved}

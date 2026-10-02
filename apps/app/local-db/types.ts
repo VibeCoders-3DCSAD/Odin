@@ -5,7 +5,6 @@ export type SyncOperationType = "create" | "update" | "delete";
 export type SyncableEntity =
   | "categories"
   | "subcategories"
-  | "category_groups"
   | "financial_accounts"
   | "savings_account_details"
   | "income_sources"

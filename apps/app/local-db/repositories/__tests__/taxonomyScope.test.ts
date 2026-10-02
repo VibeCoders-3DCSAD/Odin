@@ -11,7 +11,7 @@ jest.mock("../../client", () => ({
   initDatabase: jest.fn(),
 }));
 
-import { listCategories, listCategoryGroups, listSubcategories } from "../taxonomy";
+import { listCategories, listSubcategories } from "../taxonomy";
 
 beforeEach(() => {
   mockGetAllAsync.mockReset().mockResolvedValue([]);
@@ -24,15 +24,13 @@ beforeEach(() => {
 });
 
 it("limits taxonomy to the active account", async () => {
-  await listCategoryGroups("account-y");
   await listCategories("account-y");
   await listSubcategories("account-y");
 
-  expect(mockGetAllAsync.mock.calls[0]![0]).not.toContain("user_id = ?");
+  expect(mockGetAllAsync.mock.calls[0]![0]).toContain("user_id = ?");
+  expect(mockGetAllAsync.mock.calls[0]![0]).not.toContain("is_system = 1");
   expect(mockGetAllAsync.mock.calls[1]![0]).toContain("user_id = ?");
   expect(mockGetAllAsync.mock.calls[1]![0]).not.toContain("is_system = 1");
-  expect(mockGetAllAsync.mock.calls[2]![0]).toContain("user_id = ?");
-  expect(mockGetAllAsync.mock.calls[2]![0]).not.toContain("is_system = 1");
 });
 
 it("retries a taxonomy read when SQLite is temporarily locked", async () => {

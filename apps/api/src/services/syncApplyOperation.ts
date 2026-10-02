@@ -66,7 +66,6 @@ const SERVER_COLUMNS = new Set([
 ]);
 
 const CATEGORY_CREATE_FIELDS = new Set([
-  "category_group_id",
   "slug",
   "label",
   "short_label",
@@ -333,7 +332,7 @@ const CREDIT_CARD_INSTALLMENT_CREATE_FIELDS = new Set([
 const DEBT_ACCOUNT_FIELDS = new Set([
   "linked_account_id", "name", "lender_name", "preset_key", "status",
   "original_balance_centavos", "current_balance_centavos", "annual_interest_rate_bps",
-  "minimum_payment_centavos", "payment_frequency", "next_due_date", "maturity_date",
+  "minimum_payment_centavos", "allows_extra_payments", "payment_frequency", "next_due_date", "maturity_date",
   "target_payoff_date", "interest_period", "interest_method", "preset_data", "notes",
 ]);
 const DEBT_PAYMENT_FIELDS = new Set(["debt_account_id", "transaction_id", "source", "payment_date", "amount_centavos", "principal_centavos", "interest_centavos", "notes", "linked_transaction_type", "linked_source_account_id", "linked_subcategory_id"]);
@@ -548,6 +547,7 @@ async function validateCreatePayload(
     if ((sanitized.current_balance_centavos as number) > (sanitized.original_balance_centavos as number)) throw new Error("current_balance_centavos must not exceed original_balance_centavos");
     if (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data)) throw new Error("preset_data must be an object");
     for (const field of ["lender_name", "maturity_date", "target_payoff_date", "interest_period", "interest_method", "notes"]) optionalString(sanitized, field);
+    if (sanitized.allows_extra_payments !== undefined && typeof sanitized.allows_extra_payments !== "boolean") throw new Error("allows_extra_payments must be a boolean");
     if (sanitized.linked_account_id != null) { requireString(sanitized, "linked_account_id"); await verifyAccountOwnership(supabase, userId, sanitized.linked_account_id as string); }
     await validateDebtPreset(supabase, userId, sanitized.preset_key as string, sanitized.preset_data as Record<string, unknown>);
     return sanitized;
@@ -843,7 +843,6 @@ async function validateTaxonomyCreatePayload(
   if (entity === "categories") {
     assertOnlyAllowed(payload, CATEGORY_CREATE_FIELDS);
     const sanitized = sanitizePayload(payload, CATEGORY_CREATE_FIELDS);
-    requireString(sanitized, "category_group_id");
     requireString(sanitized, "slug");
     requireString(sanitized, "label");
     requireString(sanitized, "description");
@@ -856,14 +855,6 @@ async function validateTaxonomyCreatePayload(
     validateMinMaxOrdering(sanitized, "minimum_amount_centavos", "fixed_amount_centavos");
     optionalNumber(sanitized, "sort_order");
 
-    const { data: group, error } = await supabase
-      .from("category_groups")
-      .select("id")
-      .eq("id", sanitized.category_group_id as string)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (error) throw new Error(`category_group_id validation failed: ${error.message}`);
-    if (!group) throw new Error("category_group_id does not reference an active category group");
     return sanitized;
   }
 
@@ -1160,6 +1151,7 @@ async function validateUpdatePayload(
     if (sanitized.name !== undefined && (typeof sanitized.name !== "string" || !sanitized.name.trim())) throw new Error("name must be a non-empty string");
     if (sanitized.preset_key !== undefined && !DEBT_ACCOUNT_TYPES.includes(sanitized.preset_key as string)) throw new Error("preset_key is not a supported non-credit-card debt type");
     if (sanitized.status !== undefined && !["active", "archived", "paid_off"].includes(sanitized.status as string)) throw new Error("status is invalid");
+    if (sanitized.allows_extra_payments !== undefined && typeof sanitized.allows_extra_payments !== "boolean") throw new Error("allows_extra_payments must be a boolean");
     if (sanitized.preset_data !== undefined && (!sanitized.preset_data || typeof sanitized.preset_data !== "object" || Array.isArray(sanitized.preset_data))) throw new Error("preset_data must be an object");
     if (sanitized.preset_data !== undefined) await validateDebtPreset(supabase, userId, sanitized.preset_key as string | undefined, sanitized.preset_data as Record<string, unknown>);
     for (const [key, value] of Object.entries(sanitized)) {
@@ -1635,6 +1627,28 @@ async function validateFinancialPlanPayload(
   const recommendation = sanitized.recommendation;
   if (!recommendation || typeof recommendation !== "object" || Array.isArray(recommendation)) throw new Error("recommendation must be an object");
   const recommendationDocument = recommendation as Record<string, unknown>;
+  let advisoryDebtId: string | null = null;
+  let advisorySavingsGoalId: string | null = null;
+  if (recommendationDocument.surplusRecommendation !== undefined) {
+    const surplusRecommendation = recommendationDocument.surplusRecommendation;
+    if (!surplusRecommendation || typeof surplusRecommendation !== "object" || Array.isArray(surplusRecommendation)) throw new Error("surplusRecommendation must be an object");
+    const document = surplusRecommendation as Record<string, unknown>;
+    assertPlanAmount(document, "unallocatedSurplusCentavos");
+    if (!["NEGATIVE_FINANCIAL_MARGIN", "EMERGENCY_FUND_INADEQUATE", "DEBT_SIGNAL", "USER_DIRECTED", "ASSESSMENT_UNAVAILABLE", "ASSESSMENT_STALE", "ASSESSMENT_INSUFFICIENT_DATA"].includes(document.reasonCode as string)) throw new Error("surplusRecommendation reason code is invalid");
+    if (!["applied", "unavailable", "stale", "insufficient_data"].includes(document.assessmentStatus as string)) throw new Error("surplusRecommendation assessment status is invalid");
+    const destination = document.advisoryDestination;
+    if (destination !== null) {
+      if (!destination || typeof destination !== "object" || Array.isArray(destination)) throw new Error("surplusRecommendation destination is invalid");
+      const target = destination as Record<string, unknown>;
+      if (target.type === "debt") {
+        requireString(target, "debtAccountId");
+        advisoryDebtId = target.debtAccountId as string;
+      } else if (target.type === "emergency_fund") {
+        requireString(target, "savingsGoalId");
+        advisorySavingsGoalId = target.savingsGoalId as string;
+      } else throw new Error("surplusRecommendation destination is invalid");
+    }
+  }
   for (const field of ["debtSurplusCentavos", "savingsSurplusCentavos"]) {
     if (recommendationDocument[field] !== undefined) assertPlanAmount(recommendationDocument, field);
   }
@@ -1668,9 +1682,9 @@ async function validateFinancialPlanPayload(
   if (new Set(allocationTargets).size !== allocationTargets.length) throw new Error("Financial Plan allocations cannot target the same category or subcategory twice");
   await verifyFinancialPlanAllocationReferences(supabase, userId, categoryIds, subcategoryIds);
   const debtReservations = recommendationDocument.debtReservations as Record<string, unknown>[];
-  const debtIds = debtReservations.flatMap((reservation) => typeof reservation.debtAccountId === "string" ? [reservation.debtAccountId] : []);
+  const debtIds = [...debtReservations.flatMap((reservation) => typeof reservation.debtAccountId === "string" ? [reservation.debtAccountId] : []), ...(advisoryDebtId ? [advisoryDebtId] : [])];
   const statementIds = debtReservations.flatMap((reservation) => typeof reservation.creditCardStatementId === "string" ? [reservation.creditCardStatementId] : []);
-  const savingsGoalIds = (recommendationDocument.savingsReservations as Record<string, unknown>[]).map((reservation) => reservation.savingsGoalId as string);
+  const savingsGoalIds = [...(recommendationDocument.savingsReservations as Record<string, unknown>[]).map((reservation) => reservation.savingsGoalId as string), ...(advisorySavingsGoalId ? [advisorySavingsGoalId] : [])];
   const [debts, statements, goals] = await Promise.all([
     debtIds.length ? supabase.from("debt_accounts").select("id").in("id", [...new Set(debtIds)]).eq("user_id", userId).eq("deleted", false) : Promise.resolve({ data: [], error: null }),
     statementIds.length ? supabase.from("credit_card_statements").select("id").in("id", [...new Set(statementIds)]).eq("user_id", userId).eq("deleted", false) : Promise.resolve({ data: [], error: null }),

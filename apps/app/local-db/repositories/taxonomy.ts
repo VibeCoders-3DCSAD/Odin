@@ -4,27 +4,9 @@ import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
 import type { SyncOperation } from "../types";
 
-type CategoryGroupRow = {
-  id: string;
-  user_id: string;
-  slug: string;
-  label: string;
-  short_label: string | null;
-  description: string;
-  sort_order: number;
-  is_active: number;
-  metadata: string;
-  version: number;
-  deleted: number;
-  created_at: string;
-  updated_at: string;
-  last_synced_at: string | null;
-};
-
 type CategoryRow = {
   id: string;
   user_id: string;
-  category_group_id: string;
   slug: string;
   label: string;
   short_label: string | null;
@@ -69,19 +51,8 @@ type SubcategoryRow = {
   last_synced_at: string | null;
 };
 
-export type CategoryGroup = {
-  id: string;
-  slug: string;
-  label: string;
-  short_label: string | null;
-  description: string;
-  sort_order: number;
-  is_active: boolean;
-};
-
 export type Category = {
   id: string;
-  category_group_id: string;
   slug: string;
   label: string;
   short_label: string | null;
@@ -114,7 +85,6 @@ export type Subcategory = {
 };
 
 export type CreateCategoryInput = {
-  category_group_id: string;
   slug: string;
   label: string;
   description: string;
@@ -166,22 +136,9 @@ export type UpdateSubcategoryInput = {
   is_active?: boolean;
 };
 
-function mapCategoryGroup(row: CategoryGroupRow): CategoryGroup {
-  return {
-    id: row.id,
-    slug: row.slug,
-    label: row.label,
-    short_label: row.short_label,
-    description: row.description,
-    sort_order: row.sort_order,
-    is_active: row.is_active === 1,
-  };
-}
-
 function mapCategory(row: CategoryRow): Category {
   return {
     id: row.id,
-    category_group_id: row.category_group_id,
     slug: row.slug,
     label: row.label,
     short_label: row.short_label,
@@ -265,27 +222,10 @@ function subcategoryFailureMessage(action: "created" | "updated" | "deleted", la
   return `This subcategory "${label}" could not be ${action}.`;
 }
 
-export async function listCategoryGroups(userId: string): Promise<CategoryGroup[]> {
-  const db = await getDb();
-  const rows = await retryDatabaseRead(() => db.getAllAsync<CategoryGroupRow>(
-    "SELECT * FROM category_groups WHERE deleted = 0 AND is_active = 1 ORDER BY sort_order",
-  ));
-  return rows.map(mapCategoryGroup);
-}
-
 export async function listCategories(
   userId: string,
-  categoryGroupId?: string,
 ): Promise<Category[]> {
   const db = await getDb();
-  if (categoryGroupId) {
-    const rows = await retryDatabaseRead(() => db.getAllAsync<CategoryRow>(
-      "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 AND category_group_id = ? ORDER BY sort_order",
-      userId,
-      categoryGroupId,
-    ));
-    return rows.map(mapCategory);
-  }
   const rows = await retryDatabaseRead(() => db.getAllAsync<CategoryRow>(
     "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
     userId,
@@ -341,8 +281,8 @@ export async function createCategory(
   deviceId: string,
   input: CreateCategoryInput,
 ): Promise<{ category: Category; operation: SyncOperation }> {
-  if (!input.category_group_id || !input.slug || !input.label || !input.description) {
-    throw new LocalDbError("VALIDATION_ERROR", "category_group_id, slug, label, and description are required");
+  if (!input.slug || !input.label || !input.description) {
+    throw new LocalDbError("VALIDATION_ERROR", "slug, label, and description are required");
   }
   validateBudgetAmounts(input.minimum_amount_centavos, input.fixed_amount_centavos);
 
@@ -354,23 +294,14 @@ export async function createCategory(
   let result: { category: Category; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
-    const groupRow = await db.getFirstAsync<CategoryGroupRow>(
-      "SELECT id FROM category_groups WHERE id = ? AND deleted = 0",
-      input.category_group_id,
-    );
-    if (!groupRow) {
-      throw new LocalDbError("VALIDATION_ERROR", "category_group_id does not exist");
-    }
-
     await db.runAsync(
       `INSERT INTO categories
-        (id, user_id, category_group_id, slug, label, short_label, description,
+        (id, user_id, slug, label, short_label, description,
          is_system, is_filipino_context, minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order, is_active, metadata,
           version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
       id,
       userId,
-      input.category_group_id,
       input.slug,
       input.label,
       input.short_label ?? null,

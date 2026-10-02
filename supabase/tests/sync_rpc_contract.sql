@@ -91,6 +91,16 @@ BEGIN
     RAISE EXCEPTION 'a canonical sync RPC is not executable by authenticated';
   END IF;
 
+  IF pg_get_functiondef('public.apply_debt_sync_operation(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
+     NOT LIKE '%private.apply_debt_sync_operation_hardened%' THEN
+    RAISE EXCEPTION 'debt sync must route non-account operations to the private implementation';
+  END IF;
+
+  IF pg_get_functiondef('public.apply_debt_sync_operation(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
+     NOT LIKE '%status = CASE WHEN p_payload ? ''status''%' THEN
+    RAISE EXCEPTION 'debt account status updates must not collide with RPC result columns';
+  END IF;
+
   IF pg_get_functiondef('public.apply_sync_operation(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
      LIKE '%transaction would overdraw a financial account%' THEN
     RAISE EXCEPTION 'transaction sync must allow recovery from a historical overdraft';

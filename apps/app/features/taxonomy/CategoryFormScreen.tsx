@@ -17,11 +17,9 @@ type CategoryFormScreenProps = {
   mode: "create" | "edit";
   category?: {
     id: string;
-    category_group_id: string;
     label: string;
     description: string;
   };
-  groups?: { id: string; slug: string; label: string }[];
   userId: string;
   deviceId: string;
   onSaved: () => void;
@@ -45,16 +43,13 @@ function generateSlug(text: string): string {
 }
 
 export default function CategoryFormScreen({
-  visible, mode, category, groups, userId, deviceId,
+  visible, mode, category, userId, deviceId,
   onSaved, onCancel,
 }: CategoryFormScreenProps) {
   const isCreate = mode === "create";
-  const hfceGroup = groups?.find((group) => group.slug === "hfce_categories");
-  const hfceGroupId = hfceGroup?.id ?? "";
   const [label, setLabel] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
-  const [selectedGroupId, setSelectedGroupId] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -63,10 +58,9 @@ export default function CategoryFormScreen({
       setLabel(category?.label ?? "");
       setSlug(category ? generateSlug(category.label) : "");
       setDescription(category?.description ?? "");
-      setSelectedGroupId(category?.category_group_id ?? hfceGroupId);
       setFormError(null);
     }
-  }, [visible, mode, category?.id, hfceGroupId]);
+  }, [visible, mode, category?.id]);
 
   useEffect(() => {
     if (label.trim()) {
@@ -78,13 +72,11 @@ export default function CategoryFormScreen({
     setFormError(null);
     if (!label.trim()) { setFormError("Label is required"); return; }
     if (!description.trim()) { setFormError("Description is required"); return; }
-    if (isCreate && !selectedGroupId) { setFormError("Category group is required"); return; }
 
     setSaving(true);
     try {
       if (isCreate) {
         await createCategory(userId, deviceId, {
-          category_group_id: selectedGroupId,
           slug: slug.trim() || generateSlug(label.trim()),
           label: label.trim(),
           description: description.trim(),
