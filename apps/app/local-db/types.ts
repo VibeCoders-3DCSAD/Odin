@@ -20,6 +20,7 @@ export type SyncableEntity =
   | "alert_notification_preferences"
   | "anomaly_whitelist_rules"
   | "alert_suppression_rules"
+  | "anomaly_evaluations"
   | "credit_card_cycles"
   | "credit_card_details"
   | "credit_card_repayment_preferences"

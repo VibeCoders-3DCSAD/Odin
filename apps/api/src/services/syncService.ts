@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getServiceRoleClient } from "../lib/supabase.js";
 import { prepareOperation } from "./syncApplyOperation.js";
-import { retryDailyFinancialReport } from "./alerts/dailyReportService.js";
 
 type PushOperation = {
   operation_id: string;
@@ -37,18 +35,6 @@ type PullCursors = Record<string, TableCursor>;
 const CLIENT_SYNC_FAILURE_REASON = "Sync operation rejected";
 const EDIT_HISTORY_FAILURE_REASON = "sync_operation_rejected";
 
-function manilaDate(now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-}
-
-async function refreshAlertsForNewTransaction(userId: string): Promise<void> {
-  try {
-    await retryDailyFinancialReport(getServiceRoleClient(), userId, manilaDate(), "daily");
-  } catch (error) {
-    console.error("[alerts] transaction report refresh failed", { userId, error });
-  }
-}
-
 export const SYNCED_TABLES = [
   "category_groups",
   "categories",
@@ -77,6 +63,7 @@ export const SYNCED_TABLES = [
   "alert_notification_preferences",
   "anomaly_whitelist_rules",
   "alert_suppression_rules",
+  "anomaly_evaluations",
   "savings_goals",
   "savings_goal_activities",
   "savings_allocation_preferences",
@@ -100,7 +87,6 @@ export async function pushOperations(
 ): Promise<PushResult[]> {
   assertDeviceId(deviceId);
   const results: PushResult[] = [];
-  let createdTransaction = false;
 
   for (const op of operations) {
     let auditPayload: Record<string, unknown> = { redacted: true, fields: Object.keys(op.payload) };
@@ -157,7 +143,6 @@ export async function pushOperations(
           current_version: typeof result.current_version === "number" ? result.current_version : undefined,
           conflicted_fields: result.conflicted_fields ?? undefined,
       });
-      createdTransaction ||= status === "applied" && prepared.entity === "transactions" && prepared.operation_type === "create";
     } catch (error) {
       console.error("[sync/push] rejected", {
         userId,
@@ -186,7 +171,6 @@ export async function pushOperations(
     }
   }
 
-  if (createdTransaction) await refreshAlertsForNewTransaction(userId);
   return results;
 }
 
@@ -236,6 +220,7 @@ export async function pullChanges(
             || table === "alert_notification_preferences"
             || table === "anomaly_whitelist_rules"
              || table === "alert_suppression_rules"
+              || table === "anomaly_evaluations"
               || table === "savings_goals"
                || table === "savings_goal_activities"
                || table === "savings_allocation_preferences"

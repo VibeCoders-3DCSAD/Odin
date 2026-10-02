@@ -19,7 +19,7 @@ provider or a product alert inbox.
   experimentation produces a stable, versioned result contract.
 - Run one daily report per active user at 18:00 Philippine time
   (`Asia/Manila`).
-- Evaluate the prior six months of posted financial data for every report.
+- Evaluate the prior 12 months of posted financial data for every report.
 - Backfill missed report dates individually during the current week. For a
   fully missed prior week, create one weekly report covering that Monday through
   Sunday period instead of recreating seven daily reports.
@@ -50,11 +50,7 @@ export const anomalyConfig = {
     timezone: "Asia/Manila",
     weekStartsOn: "monday",
   },
-  history: { lookbackMonths: 6 },
-  scoring: {
-    anomalousAtScore: 0.7,
-    criticalAtScore: 0.9,
-  },
+  history: { lookbackMonths: 12 },
   reports: {
     currentWeekCadence: "daily",
     pastWeekCadence: "weekly",

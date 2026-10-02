@@ -23,6 +23,7 @@ import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/
 import { createTransactionDebtPayment, updateTransactionDebtPayment, type DebtPaymentContext } from "../../local-db/repositories/debtPayments";
 import { getCreditCardPurchaseMetadataForTransaction, type CreateCreditCardInstallmentInput } from "../../local-db/repositories/creditCardInstallments";
 import { createRecurringTemplate } from "../../local-db/repositories/recurringTransactions";
+import { getUnusualSpending, saveUnusualSpending, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
@@ -118,6 +119,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     deficitCentavos: number;
     isCreditCard: boolean;
   } | null>(null);
+  const [unusualSpending, setUnusualSpending] = useState<UnusualSpendingInsight | null>(null);
 
   const { accounts, groups, categories, subcategories, loading, error: dataError } = useTransactionData(userId, txType);
 
@@ -504,6 +506,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     console.log("[DEBUG-TX-SAVE] validation passed", { isEdit, txType });
     setSaving(true);
     try {
+      let createdExpense: Transaction | null = null;
       if (isStatementPayment && (!statementPayment || (isEdit && !existingStatementPayment))) {
         setFormError("The selected credit-card statement is no longer available.");
         return;
@@ -559,7 +562,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           } else if (txType === "expense") {
             savePhase = "createExpense";
            console.log("[DEBUG-TX-SAVE] calling createExpense");
-           await createExpense(userId, deviceId, {
+            const result = await createExpense(userId, deviceId, {
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
           subcategory_id: effectiveSubcategoryId,
@@ -567,8 +570,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
            credit_card_posting_date: selectedSourceIsCreditCard() ? postingDate.trim() || null : null,
           merchant_name: description.trim() || undefined,
           notes: notes.trim() || undefined,
-          installment: installmentInput,
+            installment: installmentInput,
         });
+            createdExpense = result.transaction;
       } else if (txType === "income") {
          savePhase = "createIncome";
          console.log("[DEBUG-TX-SAVE] calling createIncome");
@@ -623,6 +627,16 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           destination_account_id: destAccountId || undefined,
           notes: notes.trim() || undefined,
         });
+      }
+
+      if (createdExpense) {
+        try {
+          const insight = await getUnusualSpending(userId, createdExpense.id);
+          if (insight) await saveUnusualSpending(userId, deviceId, insight);
+          setUnusualSpending(insight);
+        } catch (error) {
+          console.error("[UNUSUAL-SPENDING] evaluation failed", error);
+        }
       }
 
       showToast(isStatementPayment ? "Your credit-card payment was recorded. Review the statement status to confirm the update." : isEdit ? "Transaction updated" : "Transaction saved", "success");
@@ -1172,6 +1186,26 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     accessibilityLabel="Confirm record transaction"
                   >
                     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Continue</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+        <Modal visible={unusualSpending !== null} transparent animationType="fade" onRequestClose={() => setUnusualSpending(null)}>
+          <Pressable onPress={() => setUnusualSpending(null)} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
+            <Pressable onPress={() => {}}>
+              <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>Unusual spending detected</Text>
+                <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 12 }}>
+                  This {formatCurrency(unusualSpending?.amountCentavos ?? 0)} expense is outside your usual spending range for {unusualSpending?.categoryLabel ?? "this category"}.
+                </Text>
+                <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+                  Your usual spending is {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. This is only a personal spending observation.
+                </Text>
+                <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 22 }}>
+                  <Pressable onPress={() => setUnusualSpending(null)} accessibilityRole="button" accessibilityLabel="Close unusual spending insight">
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Got it</Text>
                   </Pressable>
                 </View>
               </View>

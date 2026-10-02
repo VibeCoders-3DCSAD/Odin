@@ -14,7 +14,6 @@ import financialClassificationRoutes from "./routes/financial-classification.js"
 import syncRoutes from "./routes/sync.js";
 import recurringRoutes from "./routes/recurring.js";
 import forecastRoutes from "./routes/forecast.js";
-import dailyFinancialReportRoutes, { financialReportRefreshRouter } from "./routes/daily-financial-reports.js";
 import alertRoutes from "./routes/alerts.js";
 import financialPlanRoutes from "./routes/financial-plans.js";
 
@@ -63,8 +62,6 @@ app.use("/odin/api/recurring", recurringRoutes);
 app.use("/odin/api/forecast", forecastRoutes);
 app.use("/odin/api/financial-plans", financialPlanRoutes);
 app.use("/odin/api/alerts", alertRoutes);
-app.use("/odin/api/financial-reports", financialReportRefreshRouter);
-app.use("/odin/internal/daily-financial-reports", dailyFinancialReportRoutes);
 
 app.use((error: Error, request: Request, response: Response, _next: NextFunction) => {
   const parseError = error as Error & { type?: string };
