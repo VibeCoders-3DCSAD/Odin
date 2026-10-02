@@ -21,6 +21,7 @@ const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", tint: "#EFFEF7" 
 
 const PERIODS: { value: ReportPeriod; label: string }[] = [
   { value: "this_month", label: "This month" },
+  { value: "last_month", label: "Last month" },
   { value: "this_year", label: "This year" },
   { value: "this_week", label: "This week" },
 ];
@@ -63,6 +64,6 @@ export default function FinancialReportsScreen({ userId, accessToken }: Props) {
     </View>
 
     <View style={{ marginTop: 32 }}><SpendingForecastScreen userId={userId} accessToken={accessToken} embedded /></View>
-    <View style={{ marginTop: 32 }}><AnomalyAlertsScreen userId={userId} accessToken={accessToken} /></View>
+    <View style={{ marginTop: 32 }}><AnomalyAlertsScreen userId={userId} /></View>
   </View>;
 }

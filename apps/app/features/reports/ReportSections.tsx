@@ -11,7 +11,7 @@ import {
   getCashFlowComparisonSummary,
   getCashFlowSummary,
   getDebtSummary,
-  getExpenseCategoryDistribution,
+  getCashOutflowDistribution,
   getSavingsSummary,
   listCategoryBreakdown,
   type ReportRange,
@@ -71,23 +71,23 @@ export function CashFlowSection({ userId, range, comparison, refreshKey }: { use
   }, [userId, range.startDate, range.endDate, comparison.range.startDate, comparison.range.endDate, comparison.averageByActiveMonth, refreshKey]);
   return <Section title="Cash flow"><State loading={loading} error={error}>{data ? <View style={{ marginTop: 14, gap: 8 }}>
     <ComparisonMetric label="Income" current={data.current.incomeCentavos} previous={data.previous.incomeCentavos} comparisonLabel={comparison.label} />
-    <ComparisonMetric label="Expenses" current={data.current.expenseCentavos} previous={data.previous.expenseCentavos} comparisonLabel={comparison.label} />
+    <ComparisonMetric label="Outflow" current={data.current.outflowCentavos} previous={data.previous.outflowCentavos} comparisonLabel={comparison.label} />
     <Metric label="Net cash flow" value={money(data.current.netCashFlowCentavos)} color={data.current.netCashFlowCentavos >= 0 ? P.positive : P.negative} strong />
   </View> : <LoadingValue>No posted income or expenses in this period.</LoadingValue>}</State></Section>;
 }
 
 export function ExpenseDistributionSection({ userId, range, refreshKey }: { userId: string; range: ReportRange } & RefreshProps) {
-  const { data, loading, error } = useReportData(() => getExpenseCategoryDistribution(userId, range), [userId, range.startDate, range.endDate, refreshKey]);
+  const { data, loading, error } = useReportData(() => getCashOutflowDistribution(userId, range), [userId, range.startDate, range.endDate, refreshKey]);
   const total = data?.reduce((sum, item) => sum + item.amountCentavos, 0) ?? 0;
-  return <Section title="Spending breakdown"><State loading={loading} error={error}>{data?.length && total > 0 ? <View style={{ marginTop: 14 }}>
-    <View accessibilityLabel={`Spending breakdown chart showing ${data.length} categories`} style={{ alignItems: "center" }}><ExpensePieChart items={data} total={total} /></View>
+  return <Section title="Cash outflow breakdown"><State loading={loading} error={error}>{data?.length && total > 0 ? <View style={{ marginTop: 14 }}>
+    <View accessibilityLabel={`Cash outflow breakdown chart showing ${data.length} categories`} style={{ alignItems: "center" }}><ExpensePieChart items={data} total={total} /></View>
     <View style={{ gap: 8, marginTop: 14 }}>{data.map((item, index) => <View key={item.label} style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
       <View style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length], borderRadius: 4, height: 10, width: 10 }} />
       <Text style={{ color: P.muted, flex: 1, fontFamily: "Manrope", fontSize: 12 }}>{item.label}</Text>
       <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{Math.round(item.amountCentavos / total * 100)}%</Text>
       <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{money(item.amountCentavos)}</Text>
     </View>)}</View>
-  </View> : <LoadingValue>No expenses to break down in this period.</LoadingValue>}</State></Section>;
+  </View> : <LoadingValue>No cash outflows to break down in this period.</LoadingValue>}</State></Section>;
 }
 
 export function AccountSummarySection({ userId, comparison, refreshKey }: { userId: string; comparison: CashFlowComparison } & RefreshProps) {

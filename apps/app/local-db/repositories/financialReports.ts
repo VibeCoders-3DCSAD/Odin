@@ -3,7 +3,7 @@ import { initDatabase } from "../client";
 
 export type ReportRange = { startDate: string; endDate: string };
 
-export type CashFlowSummary = { incomeCentavos: number; expenseCentavos: number; netCashFlowCentavos: number };
+export type CashFlowSummary = { incomeCentavos: number; outflowCentavos: number; netCashFlowCentavos: number };
 export type AccountSummary = { accountCount: number; balanceCentavos: number };
 export type BudgetActualSummary = { plannedCentavos: number; actualCentavos: number; varianceCentavos: number } | null;
 export type SavingsSummary = { currentCentavos: number; targetCentavos: number };
@@ -24,18 +24,18 @@ function periodPredicate(range: ReportRange): [string, string] {
 
 export async function getCashFlowSummary(userId: string, range: ReportRange): Promise<CashFlowSummary> {
   const db = await getDb();
-  const row = await db.getFirstAsync<{ income: number | null; expense: number | null }>(
+  const row = await db.getFirstAsync<{ income: number | null; outflow: number | null }>(
     `SELECT SUM(CASE WHEN transaction_type = 'income' THEN amount_centavos ELSE 0 END) AS income,
-            SUM(CASE WHEN transaction_type = 'expense' THEN amount_centavos ELSE 0 END) AS expense
+            SUM(CASE WHEN transaction_type = 'expense' OR destination_savings_goal_id IS NOT NULL THEN amount_centavos ELSE 0 END) AS outflow
        FROM transactions
-      WHERE user_id = ? AND deleted = 0 AND status = 'posted'
-        AND transaction_type IN ('income', 'expense')
-        AND transaction_date >= ? AND transaction_date <= ?`,
+       WHERE user_id = ? AND deleted = 0 AND status = 'posted'
+         AND (transaction_type IN ('income', 'expense') OR destination_savings_goal_id IS NOT NULL)
+         AND transaction_date >= ? AND transaction_date <= ?`,
     userId, ...periodPredicate(range),
   );
   const incomeCentavos = row?.income ?? 0;
-  const expenseCentavos = row?.expense ?? 0;
-  return { incomeCentavos, expenseCentavos, netCashFlowCentavos: incomeCentavos - expenseCentavos };
+  const outflowCentavos = row?.outflow ?? 0;
+  return { incomeCentavos, outflowCentavos, netCashFlowCentavos: incomeCentavos - outflowCentavos };
 }
 
 export async function getCashFlowComparisonSummary(
@@ -46,21 +46,21 @@ export async function getCashFlowComparisonSummary(
   if (!averageByActiveMonth) return getCashFlowSummary(userId, range);
 
   const db = await getDb();
-  const row = await db.getFirstAsync<{ income: number | null; expense: number | null; activeMonths: number }>(
+  const row = await db.getFirstAsync<{ income: number | null; outflow: number | null; activeMonths: number }>(
     `SELECT SUM(CASE WHEN transaction_type = 'income' THEN amount_centavos ELSE 0 END) AS income,
-            SUM(CASE WHEN transaction_type = 'expense' THEN amount_centavos ELSE 0 END) AS expense,
+            SUM(CASE WHEN transaction_type = 'expense' OR destination_savings_goal_id IS NOT NULL THEN amount_centavos ELSE 0 END) AS outflow,
             COUNT(DISTINCT substr(transaction_date, 1, 7)) AS activeMonths
        FROM transactions
-      WHERE user_id = ? AND deleted = 0 AND status = 'posted'
-        AND transaction_type IN ('income', 'expense')
-        AND transaction_date >= ? AND transaction_date <= ?`,
+       WHERE user_id = ? AND deleted = 0 AND status = 'posted'
+         AND (transaction_type IN ('income', 'expense') OR destination_savings_goal_id IS NOT NULL)
+         AND transaction_date >= ? AND transaction_date <= ?`,
     userId, ...periodPredicate(range),
   );
   const activeMonths = row?.activeMonths ?? 0;
-  if (activeMonths === 0) return { incomeCentavos: 0, expenseCentavos: 0, netCashFlowCentavos: 0 };
+  if (activeMonths === 0) return { incomeCentavos: 0, outflowCentavos: 0, netCashFlowCentavos: 0 };
   const incomeCentavos = Math.round((row?.income ?? 0) / activeMonths);
-  const expenseCentavos = Math.round((row?.expense ?? 0) / activeMonths);
-  return { incomeCentavos, expenseCentavos, netCashFlowCentavos: incomeCentavos - expenseCentavos };
+  const outflowCentavos = Math.round((row?.outflow ?? 0) / activeMonths);
+  return { incomeCentavos, outflowCentavos, netCashFlowCentavos: incomeCentavos - outflowCentavos };
 }
 
 export async function getAccountSummary(userId: string): Promise<AccountSummary> {
@@ -161,16 +161,32 @@ export async function listCategoryBreakdown(userId: string, range: ReportRange):
   );
 }
 
-export async function getExpenseCategoryDistribution(userId: string, range: ReportRange): Promise<CategoryBreakdown[]> {
+export async function getCashOutflowDistribution(userId: string, range: ReportRange): Promise<CategoryBreakdown[]> {
   const db = await getDb();
   const categories = await db.getAllAsync<CategoryBreakdown>(
-    `SELECT COALESCE(s.label, 'Uncategorised') AS label, SUM(t.amount_centavos) AS amountCentavos
+    `SELECT CASE
+              WHEN dp.id IS NOT NULL THEN 'Debt repayments'
+              WHEN t.destination_savings_goal_id IS NOT NULL THEN 'Savings contributions'
+              ELSE COALESCE(s.label, 'Uncategorised')
+            END AS label,
+            SUM(t.amount_centavos) AS amountCentavos
        FROM transactions t
-       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
-       WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
-         AND t.transaction_date >= ? AND t.transaction_date <= ?
-       GROUP BY COALESCE(s.id, 'uncategorised'), COALESCE(s.label, 'Uncategorised')
-       ORDER BY amountCentavos DESC`,
+        LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
+        LEFT JOIN debt_payments dp ON dp.transaction_id = t.id AND dp.user_id = t.user_id AND dp.deleted = 0
+        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'
+          AND (t.transaction_type = 'expense' OR t.destination_savings_goal_id IS NOT NULL)
+          AND t.transaction_date >= ? AND t.transaction_date <= ?
+        GROUP BY CASE
+                   WHEN dp.id IS NOT NULL THEN 'Debt repayments'
+                   WHEN t.destination_savings_goal_id IS NOT NULL THEN 'Savings contributions'
+                   ELSE COALESCE(s.id, 'uncategorised')
+                 END,
+                 CASE
+                   WHEN dp.id IS NOT NULL THEN 'Debt repayments'
+                   WHEN t.destination_savings_goal_id IS NOT NULL THEN 'Savings contributions'
+                   ELSE COALESCE(s.label, 'Uncategorised')
+                 END
+        ORDER BY amountCentavos DESC`,
     userId, ...periodPredicate(range),
   );
   const primaryCategories = categories.slice(0, 5);

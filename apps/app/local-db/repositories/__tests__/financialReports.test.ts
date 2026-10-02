@@ -13,7 +13,8 @@ import {
   _resetDbCacheForTesting,
   getAccountBalanceAt,
   getCashFlowComparisonSummary,
-  getExpenseCategoryDistribution,
+  getCashFlowSummary,
+  getCashOutflowDistribution,
   listCategoryBreakdown,
 } from "../financialReports";
 
@@ -28,26 +29,39 @@ beforeEach(() => {
 
 describe("getCashFlowComparisonSummary", () => {
   it("uses the full prior period for weekly and monthly comparisons", async () => {
-    mockGetFirstAsync.mockResolvedValue({ income: 20000, expense: 5000 });
+    mockGetFirstAsync.mockResolvedValue({ income: 20000, outflow: 5000 });
 
     await expect(getCashFlowComparisonSummary("user-1", { startDate: "2026-08-01", endDate: "2026-08-31" }, false)).resolves.toEqual({
       incomeCentavos: 20000,
-      expenseCentavos: 5000,
+      outflowCentavos: 5000,
       netCashFlowCentavos: 15000,
     });
     expect(mockGetFirstAsync.mock.calls[0]?.slice(1)).toEqual(["user-1", "2026-08-01", "2026-08-31"]);
   });
 
   it("averages only months with prior-year activity", async () => {
-    mockGetFirstAsync.mockResolvedValue({ income: 125000, expense: 45000, activeMonths: 1 });
+    mockGetFirstAsync.mockResolvedValue({ income: 125000, outflow: 45000, activeMonths: 1 });
 
     await expect(getCashFlowComparisonSummary("user-1", { startDate: "2025-01-01", endDate: "2025-12-31" }, true)).resolves.toEqual({
       incomeCentavos: 125000,
-      expenseCentavos: 45000,
+      outflowCentavos: 45000,
       netCashFlowCentavos: 80000,
     });
     expect(mockGetFirstAsync.mock.calls[0]?.[0]).toContain("COUNT(DISTINCT substr(transaction_date, 1, 7))");
     expect(mockGetFirstAsync.mock.calls[0]?.slice(1)).toEqual(["user-1", "2025-01-01", "2025-12-31"]);
+  });
+});
+
+describe("getCashFlowSummary", () => {
+  it("includes expenses and transfers into savings goals in cash outflow", async () => {
+    mockGetFirstAsync.mockResolvedValue({ income: 20_000, outflow: 12_000 });
+
+    await expect(getCashFlowSummary("user-1", { startDate: "2026-09-01", endDate: "2026-09-30" })).resolves.toEqual({
+      incomeCentavos: 20_000,
+      outflowCentavos: 12_000,
+      netCashFlowCentavos: 8_000,
+    });
+    expect(mockGetFirstAsync.mock.calls[0]?.[0]).toContain("destination_savings_goal_id IS NOT NULL");
   });
 });
 
@@ -67,13 +81,13 @@ describe("getAccountBalanceAt", () => {
   });
 });
 
-describe("expense category breakdowns", () => {
-  it("groups expenses by the selected HFCE subcategory rather than its catalog parent", async () => {
+describe("cash outflow breakdowns", () => {
+  it("groups expenses by subcategory and classifies savings contributions and debt repayments", async () => {
     mockGetAllAsync.mockResolvedValue([{ label: "Groceries", amountCentavos: 7_500 }]);
     const range = { startDate: "2026-09-01", endDate: "2026-09-30" };
 
     await expect(listCategoryBreakdown("user-1", range)).resolves.toEqual([{ label: "Groceries", amountCentavos: 7_500 }]);
-    await expect(getExpenseCategoryDistribution("user-1", range)).resolves.toEqual([{ label: "Groceries", amountCentavos: 7_500 }]);
+    await expect(getCashOutflowDistribution("user-1", range)).resolves.toEqual([{ label: "Groceries", amountCentavos: 7_500 }]);
 
     for (const [sql, ...params] of mockGetAllAsync.mock.calls) {
       expect(sql).toContain("COALESCE(s.label, 'Uncategorised')");
@@ -82,5 +96,10 @@ describe("expense category breakdowns", () => {
       expect(sql).toContain("s.user_id = t.user_id");
       expect(params).toEqual(["user-1", "2026-09-01", "2026-09-30"]);
     }
+    const [cashOutflowSql] = mockGetAllAsync.mock.calls[1]!;
+    expect(cashOutflowSql).toContain("'Savings contributions'");
+    expect(cashOutflowSql).toContain("'Debt repayments'");
+    expect(cashOutflowSql).toContain("t.destination_savings_goal_id IS NOT NULL");
+    expect(cashOutflowSql).toContain("LEFT JOIN debt_payments dp");
   });
 });

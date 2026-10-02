@@ -1,6 +1,6 @@
 import type { ReportRange } from "../../local-db/repositories/financialReports";
 
-export type ReportPeriod = "this_month" | "this_year" | "this_week";
+export type ReportPeriod = "this_month" | "last_month" | "this_year" | "this_week";
 export type CashFlowComparison = { range: ReportRange; label: string; averageByActiveMonth: boolean };
 
 function localDate(date: Date): string {
@@ -11,6 +11,13 @@ export function rangeFor(period: ReportPeriod, now = new Date()): ReportRange {
   const endDate = localDate(now);
   if (period === "this_month") {
     return { startDate: localDate(new Date(now.getFullYear(), now.getMonth(), 1)), endDate };
+  }
+  if (period === "last_month") {
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return {
+      startDate: localDate(previousMonth),
+      endDate: localDate(new Date(now.getFullYear(), now.getMonth(), 0)),
+    };
   }
   if (period === "this_year") {
     return { startDate: `${now.getFullYear()}-01-01`, endDate };
@@ -30,14 +37,15 @@ export function cashFlowComparisonFor(period: ReportPeriod, now = new Date()): C
     };
   }
 
-  if (period === "this_month") {
-    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  if (period === "this_month" || period === "last_month") {
+    const monthsAgo = period === "this_month" ? 1 : 2;
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
     return {
       range: {
         startDate: localDate(previousMonth),
-        endDate: localDate(new Date(now.getFullYear(), now.getMonth(), 0)),
+        endDate: localDate(new Date(now.getFullYear(), now.getMonth() - monthsAgo + 1, 0)),
       },
-      label: "last month",
+      label: period === "this_month" ? "last month" : "the previous month",
       averageByActiveMonth: false,
     };
   }
