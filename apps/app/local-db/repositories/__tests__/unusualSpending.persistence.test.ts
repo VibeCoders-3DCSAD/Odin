@@ -23,7 +23,7 @@ describe("saveUnusualSpending", () => {
 
     await saveUnusualSpending("user-1", "device-1", {
       transactionId: "transaction-1", subcategoryId: "subcategory-1", amountCentavos: 100_000,
-      categoryLabel: "Food", accountName: "Cash", transactionDate: "2026-10-30",
+      subcategoryLabel: "Groceries", accountName: "Cash", transactionDate: "2026-10-30",
       usualSpendingCentavos: 12_500, lowerBoundCentavos: 7_500, upperBoundCentavos: 20_000,
       severity: 1.2, usableHistoryCount: 6,
     });

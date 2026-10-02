@@ -1198,7 +1198,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>Unusual spending detected</Text>
                 <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 12 }}>
-                  This {formatCurrency(unusualSpending?.amountCentavos ?? 0)} expense is outside your usual spending range for {unusualSpending?.categoryLabel ?? "this category"}.
+                  This {formatCurrency(unusualSpending?.amountCentavos ?? 0)} expense is outside your usual spending range for {unusualSpending?.subcategoryLabel ?? "this subcategory"}.
                 </Text>
                 <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
                   Your usual spending is {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. This is only a personal spending observation.

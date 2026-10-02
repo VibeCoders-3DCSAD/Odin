@@ -11,9 +11,8 @@ type SpendingTransaction = {
   id: string;
   transactionDate: string;
   amountCentavos: number;
-  categoryId: string;
   subcategoryId: string;
-  categoryLabel: string;
+  subcategoryLabel: string;
   accountName: string | null;
 };
 
@@ -21,16 +20,15 @@ type SpendingTransactionRow = {
   id: string;
   transaction_date: string;
   amount_centavos: number;
-  category_id: string | null;
   subcategory_id: string;
-  category_label: string | null;
+  subcategory_label: string | null;
   account_name: string | null;
 };
 
 export type UnusualSpendingInsight = {
   transactionId: string;
   amountCentavos: number;
-  categoryLabel: string;
+  subcategoryLabel: string;
   accountName: string | null;
   transactionDate: string;
   usualSpendingCentavos: number;
@@ -73,7 +71,7 @@ export function detectUnusualSpendings(transactions: SpendingTransaction[]): Unu
   const ordered = [...transactions].sort((first, second) => first.transactionDate.localeCompare(second.transactionDate) || first.id.localeCompare(second.id));
 
   for (const transaction of ordered) {
-    const history = histories.get(transaction.categoryId) ?? [];
+    const history = histories.get(transaction.subcategoryId) ?? [];
     if (history.length >= MINIMUM_HISTORY && spansThreeCalendarMonths(history[0]!.transactionDate, transaction.transactionDate)) {
       const values = history.map((item) => Math.log1p(item.amountCentavos / 100)).sort((first, second) => first - second);
       const q1 = percentile(values, 0.25);
@@ -88,7 +86,7 @@ export function detectUnusualSpendings(transactions: SpendingTransaction[]): Unu
           insights.push({
             transactionId: transaction.id,
             amountCentavos: transaction.amountCentavos,
-            categoryLabel: transaction.categoryLabel,
+            subcategoryLabel: transaction.subcategoryLabel,
             accountName: transaction.accountName,
             transactionDate: transaction.transactionDate,
             usualSpendingCentavos: Math.round(usualSpending),
@@ -102,7 +100,7 @@ export function detectUnusualSpendings(transactions: SpendingTransaction[]): Unu
       }
     }
     history.push(transaction);
-    histories.set(transaction.categoryId, history);
+    histories.set(transaction.subcategoryId, history);
   }
   return insights;
 }
@@ -110,8 +108,8 @@ export function detectUnusualSpendings(transactions: SpendingTransaction[]): Unu
 async function listTransactions(userId: string, fromDate: string): Promise<SpendingTransaction[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<SpendingTransactionRow>(
-    `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id, c.id AS category_id,
-            c.label AS category_label, a.name AS account_name
+    `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id,
+            s.label AS subcategory_label, a.name AS account_name
        FROM transactions t
        JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
        JOIN categories c ON c.id = s.category_id AND c.deleted = 0
@@ -124,8 +122,8 @@ async function listTransactions(userId: string, fromDate: string): Promise<Spend
     userId,
     fromDate,
   );
-  return rows.flatMap((row) => row.category_id && row.category_label && Number.isInteger(row.amount_centavos)
-    ? [{ id: row.id, transactionDate: row.transaction_date, amountCentavos: row.amount_centavos, categoryId: row.category_id, subcategoryId: row.subcategory_id, categoryLabel: row.category_label, accountName: row.account_name }]
+  return rows.flatMap((row) => row.subcategory_label && Number.isInteger(row.amount_centavos)
+    ? [{ id: row.id, transactionDate: row.transaction_date, amountCentavos: row.amount_centavos, subcategoryId: row.subcategory_id, subcategoryLabel: row.subcategory_label, accountName: row.account_name }]
     : []);
 }
 

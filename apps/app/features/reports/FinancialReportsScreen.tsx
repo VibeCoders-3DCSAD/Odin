@@ -14,7 +14,6 @@ import {
   SavingsProgressSection,
 } from "./ReportSections";
 import { cashFlowComparisonFor, rangeFor, type ReportPeriod } from "./reportRange";
-import { refreshFinancialReport } from "./api";
 
 type Props = { userId: string; accessToken: string };
 
@@ -29,7 +28,6 @@ const PERIODS: { value: ReportPeriod; label: string }[] = [
 export default function FinancialReportsScreen({ userId, accessToken }: Props) {
   const [period, setPeriod] = useState<ReportPeriod>("this_month");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
   const range = rangeFor(period);
   const cashFlowComparison = cashFlowComparisonFor(period);
 
@@ -47,14 +45,8 @@ export default function FinancialReportsScreen({ userId, accessToken }: Props) {
     </View>
     <View style={{ alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginTop: 7 }}>
       <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11 }}>{range.startDate} to {range.endDate}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial report" disabled={refreshing} onPress={() => {
-        setRefreshing(true);
-        void refreshFinancialReport(accessToken).catch(() => {}).finally(() => {
-          setRefreshKey((value) => value + 1);
-          setRefreshing(false);
-        });
-      }} hitSlop={8}>
-        <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>{refreshing ? "Refreshing..." : "Refresh"}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial report" onPress={() => setRefreshKey((value) => value + 1)} hitSlop={8}>
+        <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Refresh</Text>
       </Pressable>
     </View>
 
