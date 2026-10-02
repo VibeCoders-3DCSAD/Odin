@@ -292,7 +292,7 @@ function AccountTile({ account, negative, tileBg, amountColor, iconColor, onEdit
   );
 }
 
-type FieldErrors = Partial<Record<"name" | "openingBalance" | "creditLimit" | "billingCycle" | "cutoffDay" | "threshold", string>>;
+type FieldErrors = Partial<Record<"name" | "openingBalance" | "creditLimit" | "cutoffDay" | "threshold", string>>;
 
 function InfoButton({ label, text }: { label: string; text: string }) {
   const [visible, setVisible] = useState(false);
@@ -371,7 +371,6 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
   const [institutionName, setInstitutionName] = useState("");
   const [openedOn, setOpenedOn] = useState<string | null>(null);
   const [creditLimit, setCreditLimit] = useState("");
-  const [billingCycle, setBillingCycle] = useState("");
   const [cutoffDay, setCutoffDay] = useState("");
   const [threshold, setThreshold] = useState("");
   const [savingsType, setSavingsType] = useState<SavingsAccountType>("personal_savings");
@@ -421,7 +420,6 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
       setOpenedOn(editing.openedOn);
       const cc = editing.creditCardDetails;
       setCreditLimit(cc ? String(cc.creditLimitCentavos / 100) : "");
-      setBillingCycle(cc && cc.billingCycleDays != null ? String(cc.billingCycleDays) : "");
       setCutoffDay(cc ? String(cc.cutoffDay) : "");
       setThreshold(cc && cc.alertThresholdPercent != null ? String(cc.alertThresholdPercent) : "");
       if (editing.kind === "savings") {
@@ -440,7 +438,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
     } else {
       setName(""); setKind("bank"); setOpeningBalance(""); setInstitutionName("");
       setOpenedOn(null);
-      setCreditLimit(""); setBillingCycle(""); setCutoffDay(""); setThreshold("");
+      setCreditLimit(""); setCutoffDay(""); setThreshold("");
         setSavingsType("personal_savings"); setInterestRate(""); setMinimumBalance(""); setBaseInterestRate(""); setEffectiveInterestRate(""); setInterestConditions(""); setHigherRateEligible(null); setPrincipal(""); setMaturityDate(""); setTermMonths(""); setEarlyWithdrawalRule("");
        setBoostedInterestRate(""); setInterestCalculationBasis("daily_ending_balance"); setInterestCreditFrequency("monthly"); setMaximumEligibleBalance(""); setBalanceTiers([]); setRequiredDeposit(""); setRequiredDepositFrequency("monthly"); setRequiredTransactionCount(""); setRequiredTransactionPeriod("monthly"); setDirectDepositThreshold(""); setQualificationPeriod("monthly"); setPromotionalInterestRate(""); setPromotionStartDate(""); setPromotionEndDate("");
        setPlannedContribution(""); setContributionFrequency("monthly"); setNextContributionDate(""); setContributionDay(""); setContributionSecondDay(""); setContributionDayOfWeek(null); setCustomIntervalDays("");
@@ -482,7 +480,6 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
     if (openingBalance.trim() && openingCents === null) nextErrors.openingBalance = kind === "credit_card" ? "Outstanding balance must be a valid amount." : "Opening balance must be a valid amount.";
 
     let limitCents: number | null = null;
-    let cycleDays: number | null = null;
     let thresholdValue: number | null = null;
     let cutoffDayValue: number | null = null;
 
@@ -493,15 +490,6 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
         limitCents = parseSafeCents(creditLimit);
         if (limitCents === null) nextErrors.creditLimit = "Credit limit must be a valid amount.";
         else if (limitCents <= 0) nextErrors.creditLimit = "Credit limit must be greater than 0.";
-      }
-
-      if (!billingCycle.trim()) {
-        nextErrors.billingCycle = "Billing cycle is required.";
-      } else if (!/^\d+$/.test(billingCycle.trim())) {
-        nextErrors.billingCycle = "Billing cycle must be between 28 and 31 days.";
-      } else {
-        cycleDays = parseInt(billingCycle.trim(), 10);
-        if (cycleDays < 28 || cycleDays > 31) nextErrors.billingCycle = "Billing cycle must be between 28 and 31 days.";
       }
 
       cutoffDayValue = parseDayOfMonth(cutoffDay);
@@ -544,7 +532,6 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
       if (kind === "credit_card") {
         input.creditCardDetails = {
           creditLimitCentavos: limitCents!,
-          billingCycleDays: cycleDays!,
           cutoffDay: cutoffDayValue!,
           alertThresholdPercent: thresholdValue!,
         };
@@ -677,27 +664,16 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                         />
                       </FormField>
 
-                      <FormField label="BILLING CYCLE (DAYS)" required error={fieldErrors.billingCycle}>
-                        <TextInput
-                          value={billingCycle}
-                          onChangeText={(t) => { setBillingCycle(t); clearFieldError("billingCycle"); }}
-                          placeholder="Enter billing cycle in days"
-                          placeholderTextColor={P.muted}
-                          keyboardType="number-pad"
-                          style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: fieldErrors.billingCycle ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
-                        />
-                      </FormField>
-
                       <FormField
-                        label="CUT-OFF DAY OF MONTH"
-                        hint="When your billing cycle ends each month. Enter 1-31; check your card statement."
+                        label="BILLING CYCLE END DAY"
+                        hint="Your bank may call this the cut-off date. Enter the day your billing cycle ends each month (1-31)."
                         required
                         error={fieldErrors.cutoffDay}
                       >
                         <TextInput
                           value={cutoffDay}
                           onChangeText={(t) => { setCutoffDay(t); clearFieldError("cutoffDay"); }}
-                          placeholder="Enter default cut-off day"
+                          placeholder="Enter billing cycle end day"
                           placeholderTextColor={P.muted}
                           keyboardType="number-pad"
                           style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: fieldErrors.cutoffDay ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}

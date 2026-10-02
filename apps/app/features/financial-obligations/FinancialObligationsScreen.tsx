@@ -33,7 +33,7 @@ import {
   type ObligationFrequency,
   listIncomeSources,
 } from "../../local-db/repositories/financialFoundations";
-import { listCategoryGroups, listCategories, listSubcategories, type Category, type CategoryGroup, type Subcategory } from "../../local-db/repositories/taxonomy";
+import { listCategories, listSubcategories, type Category, type Subcategory } from "../../local-db/repositories/taxonomy";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
 import { listRecurringTemplates, deleteRecurringTemplate, type RecurringTemplate } from "../../local-db/repositories/recurringTransactions";
 import { linkObligationToRecurringTemplate } from "../../local-db/repositories/financialFoundations";
@@ -258,11 +258,10 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  const [pickerGroups, setPickerGroups] = useState<CategoryGroup[]>([]);
   const [pickerCategories, setPickerCategories] = useState<Category[]>([]);
   const [pickerSubcategories, setPickerSubcategories] = useState<Subcategory[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
-  const [categorySelection, setCategorySelection] = useState<CategorySelection>({ tier: null, groupId: null, categoryId: null, subcategoryId: null });
+  const [categorySelection, setCategorySelection] = useState<CategorySelection>({ tier: null, categoryId: null, subcategoryId: null });
   const isEdit = editing !== null;
 
   useEffect(() => {
@@ -290,13 +289,11 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
     let cancelled = false;
     async function load() {
       setPickerLoading(true);
-      const [gs, cs, subs] = await Promise.all([
-        listCategoryGroups(userId),
+      const [cs, subs] = await Promise.all([
         listCategories(userId),
         listSubcategories(userId, undefined, "expense"),
       ]);
       if (cancelled) return;
-      setPickerGroups(gs);
       setPickerCategories(cs);
       setPickerSubcategories(subs);
       setPickerLoading(false);
@@ -369,11 +366,8 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
     const selectedCat = selectedSub?.category_id
       ? pickerCategories.find((c) => c.id === selectedSub.category_id) ?? null
       : null;
-    const selectedGrp = selectedCat
-      ? pickerGroups.find((g) => g.id === selectedCat.category_group_id) ?? null
-      : null;
-    const hasSelection = selectedGrp || selectedCat || selectedSub;
-    const summaryLabel = [selectedGrp?.label, selectedCat?.label, selectedSub?.label].filter(Boolean).join(" · ");
+    const hasSelection = selectedCat || selectedSub;
+    const summaryLabel = [selectedCat?.label, selectedSub?.label].filter(Boolean).join(" · ");
 
     return (
       <View style={{ flex: 1 }}>
@@ -390,8 +384,7 @@ function ObligationFormSheet({ visible, editing, subcategories, defaultFrequency
 
         <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
           <CategorySelectorTree
-            groups={pickerGroups}
-            categories={pickerCategories}
+              categories={pickerCategories}
             subcategories={pickerSubcategories}
             selection={categorySelection}
             onSelect={(nextSelection) => {

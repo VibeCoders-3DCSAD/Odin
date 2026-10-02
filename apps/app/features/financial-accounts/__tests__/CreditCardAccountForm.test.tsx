@@ -72,9 +72,9 @@ it("shows credit card fields only when the Credit Card kind is selected", () => 
   fireEvent.press(view.getByLabelText("Credit Card"));
 
   expect(view.getByPlaceholderText("Enter credit limit")).toBeTruthy();
-  expect(view.getByPlaceholderText("Enter billing cycle in days")).toBeTruthy();
-  expect(view.getByPlaceholderText("Enter default cut-off day")).toBeTruthy();
-  expect(view.getByText("When your billing cycle ends each month. Enter 1-31; check your card statement.")).toBeTruthy();
+  expect(view.queryByPlaceholderText("Enter billing cycle in days")).toBeNull();
+  expect(view.getByPlaceholderText("Enter billing cycle end day")).toBeTruthy();
+  expect(view.getByText("Your bank may call this the cut-off date. Enter the day your billing cycle ends each month (1-31).")).toBeTruthy();
   expect(view.getByPlaceholderText("Enter alert percentage")).toBeTruthy();
 });
 
@@ -85,8 +85,7 @@ it("submits credit card details when creating a credit card account", async () =
   fireEvent.changeText(view.getByPlaceholderText("Enter account name"), "Visa Platinum");
   fireEvent.press(view.getByLabelText("Credit Card"));
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "25000");
-  fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "30");
-  fireEvent.changeText(view.getByPlaceholderText("Enter default cut-off day"), "15");
+  fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle end day"), "15");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "80");
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 
@@ -98,7 +97,6 @@ it("submits credit card details when creating a credit card account", async () =
     kind: "credit_card",
     creditCardDetails: {
       creditLimitCentavos: 2500000,
-      billingCycleDays: 30,
       cutoffDay: 15,
       alertThresholdPercent: 80,
     },
@@ -114,29 +112,25 @@ it("shows per-field validation errors without submitting and keeps entered value
 
   expect(view.getByText("Account name is required.")).toBeTruthy();
   expect(view.getByText("Credit limit is required.")).toBeTruthy();
-  expect(view.getByText("Billing cycle is required.")).toBeTruthy();
   expect(view.getByText("Enter a valid cut-off day.")).toBeTruthy();
   expect(view.getByText("Alert threshold is required.")).toBeTruthy();
   expect(mockCreateFinancialAccount).not.toHaveBeenCalled();
 
   fireEvent.changeText(view.getByPlaceholderText("Enter account name"), "Keep Me");
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "abc");
-  fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "27");
-  fireEvent.changeText(view.getByPlaceholderText("Enter default cut-off day"), "0");
+  fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle end day"), "0");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "120");
   expect(view.queryByText("Account name is required.")).toBeNull();
 
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 
   expect(view.getByText("Credit limit must be a valid amount.")).toBeTruthy();
-  expect(view.getByText("Billing cycle must be between 28 and 31 days.")).toBeTruthy();
   expect(view.getByText("Enter a valid cut-off day.")).toBeTruthy();
   expect(view.getByText("Alert threshold must be between 0 and 100.")).toBeTruthy();
   expect(mockCreateFinancialAccount).not.toHaveBeenCalled();
 
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "5000");
-  fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle in days"), "30");
-  fireEvent.changeText(view.getByPlaceholderText("Enter default cut-off day"), "10");
+  fireEvent.changeText(view.getByPlaceholderText("Enter billing cycle end day"), "10");
   fireEvent.changeText(view.getByPlaceholderText("Enter alert percentage"), "90");
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 
@@ -147,7 +141,6 @@ it("shows per-field validation errors without submitting and keeps entered value
     name: "Keep Me",
     creditCardDetails: {
       creditLimitCentavos: 500000,
-      billingCycleDays: 30,
       cutoffDay: 10,
       alertThresholdPercent: 90,
     },
@@ -216,7 +209,6 @@ it("groups credit cards separately and displays their credit limit", async () =>
   const view = renderScreen();
 
   await waitFor(() => {
-    expect(view.getByText("Categories")).toBeTruthy();
     expect(view.getByText("Credit Cards")).toBeTruthy();
     expect(view.getByText("₱25,000.00")).toBeTruthy();
   });

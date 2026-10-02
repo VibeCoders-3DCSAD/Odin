@@ -22,7 +22,7 @@ import type { FinancialAccount } from "../../local-db/repositories/financialAcco
 import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
 import { linkObligationToRecurringTemplate, listFinancialObligations, type FinancialObligation } from "../../local-db/repositories/financialFoundations";
 import { type RecurringTemplate, listRecurringTemplates, createRecurringTemplate, updateRecurringTemplate, deleteRecurringTemplate } from "../../local-db/repositories/recurringTransactions";
-import { type Category, type CategoryGroup, type Subcategory, listCategories, listCategoryGroups, listSubcategories } from "../../local-db/repositories/taxonomy";
+import { type Category, type Subcategory, listCategories, listSubcategories } from "../../local-db/repositories/taxonomy";
 import RecurringScheduleFields, { type RecurringScheduleValue } from "./components/RecurringScheduleFields";
 
 const palette = {
@@ -155,7 +155,7 @@ function makeDefaultFormState(): FormState {
     endsOn: null,
     sourceAccountId: "",
     destinationAccountId: "",
-    categorySelection: { tier: null, groupId: null, categoryId: null, subcategoryId: null },
+    categorySelection: { tier: null, categoryId: null, subcategoryId: null },
     schedule: EMPTY_SCHEDULE,
   };
 }
@@ -173,7 +173,6 @@ function buildEditFormState(template: RecurringTemplate): FormState {
     destinationAccountId: template.destination_account_id ?? "",
     categorySelection: {
       tier: template.subcategory_id ? "subcategory" : null,
-      groupId: null,
       categoryId: null,
       subcategoryId: template.subcategory_id,
     },
@@ -374,7 +373,6 @@ function RecurringTemplateFormModal({
   const { showToast } = useToast();
   const [draft, setDraft] = useState<FormState>(makeDefaultFormState());
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
-  const [groups, setGroups] = useState<CategoryGroup[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [loadingData, setLoadingData] = useState(false);
@@ -396,15 +394,13 @@ function RecurringTemplateFormModal({
       setLoadingData(true);
       try {
         const txKind = draft.txType === "transfer" ? null : draft.txType;
-        const [accountRows, groupRows, categoryRows, subcategoryRows] = await Promise.all([
+        const [accountRows, categoryRows, subcategoryRows] = await Promise.all([
           listFinancialAccounts(userId, "active"),
-          txKind ? listCategoryGroups(userId) : Promise.resolve([] as CategoryGroup[]),
           txKind ? listCategories(userId) : Promise.resolve([] as Category[]),
           txKind ? listSubcategories(userId, undefined, txKind) : Promise.resolve([] as Subcategory[]),
         ]);
         if (cancelled) return;
         setAccounts(accountRows);
-        setGroups(groupRows);
         setCategories(categoryRows);
         setSubcategories(subcategoryRows);
       } finally {
@@ -425,17 +421,12 @@ function RecurringTemplateFormModal({
     const currentCategory = draft.categorySelection.categoryId
       ? categories.find((item) => item.id === draft.categorySelection.categoryId) ?? null
       : currentSubcategory?.category_id ? categories.find((item) => item.id === currentSubcategory.category_id) ?? null : null;
-    const currentGroup = draft.categorySelection.groupId
-      ? groups.find((item) => item.id === draft.categorySelection.groupId) ?? null
-      : currentCategory ? groups.find((item) => item.id === currentCategory.category_group_id) ?? null : null;
-
-    if (currentCategory || currentGroup || currentSubcategory) {
-      if (currentGroup?.id !== draft.categorySelection.groupId || currentCategory?.id !== draft.categorySelection.categoryId) {
+    if (currentCategory || currentSubcategory) {
+      if (currentCategory?.id !== draft.categorySelection.categoryId) {
         setDraft((current) => ({
           ...current,
           categorySelection: {
             ...current.categorySelection,
-            groupId: currentGroup?.id ?? current.categorySelection.groupId,
             categoryId: currentCategory?.id ?? current.categorySelection.categoryId,
           },
         }));
@@ -446,18 +437,16 @@ function RecurringTemplateFormModal({
     if (subcategories.length > 0 && !draft.id) {
       const fallback = subcategories[0]!;
       const fallbackCategory = fallback.category_id ? categories.find((item) => item.id === fallback.category_id) ?? null : null;
-      const fallbackGroup = fallbackCategory ? groups.find((item) => item.id === fallbackCategory.category_group_id) ?? null : null;
       setDraft((current) => ({
         ...current,
         categorySelection: {
           tier: "subcategory",
-          groupId: fallbackGroup?.id ?? null,
           categoryId: fallbackCategory?.id ?? null,
           subcategoryId: fallback.id,
         },
       }));
     }
-  }, [subcategories, categories, groups, draft]);
+  }, [subcategories, categories, draft]);
 
   if (!visible || !formState) return null;
 
@@ -490,23 +479,10 @@ function RecurringTemplateFormModal({
     return categories.find((item) => item.id === selectedSubcategory.category_id) ?? null;
   }
 
-  function getSelectedGroup(): CategoryGroup | null {
-    if (draft.categorySelection.groupId) {
-      return groups.find((item) => item.id === draft.categorySelection.groupId) ?? null;
-    }
-    const selectedCategory = getSelectedCategory();
-    if (!selectedCategory) return null;
-    return groups.find((item) => item.id === selectedCategory.category_group_id) ?? null;
-  }
-
   function resolveEffectiveSubcategoryId(): string {
     if (draft.categorySelection.subcategoryId) return draft.categorySelection.subcategoryId;
     if (draft.categorySelection.categoryId) {
       return subcategories.find((item) => item.category_id === draft.categorySelection.categoryId)?.id ?? "";
-    }
-    if (draft.categorySelection.groupId) {
-      const categoryIds = categories.filter((item) => item.category_group_id === draft.categorySelection.groupId).map((item) => item.id);
-      return subcategories.find((item) => item.category_id && categoryIds.includes(item.category_id))?.id ?? "";
     }
     return "";
   }
@@ -514,7 +490,6 @@ function RecurringTemplateFormModal({
   function getCategorySummaryLabel(): string {
     if (draft.categorySelection.tier === "subcategory") return getSelectedSubcategory()?.label ?? "Select category";
     if (draft.categorySelection.tier === "category") return getSelectedCategory()?.label ?? "Select category";
-    if (draft.categorySelection.tier === "group") return getSelectedGroup()?.label ?? "Select category";
     return "Select category";
   }
 
@@ -628,7 +603,7 @@ function RecurringTemplateFormModal({
                             return (
                               <Pressable
                                 key={type}
-                                onPress={() => setDraft((current) => ({ ...current, txType: type, categorySelection: { tier: null, groupId: null, categoryId: null, subcategoryId: null } }))}
+                                onPress={() => setDraft((current) => ({ ...current, txType: type, categorySelection: { tier: null, categoryId: null, subcategoryId: null } }))}
                                 accessibilityRole="radio"
                                 accessibilityLabel={type}
                                 accessibilityState={{ checked: selected }}
@@ -851,7 +826,6 @@ function RecurringTemplateFormModal({
                   <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
                   <ScrollView contentContainerStyle={{ padding: 22, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" bounces={false}>
                     <CategorySelectorTree
-                      groups={groups}
                       categories={categories}
                       subcategories={subcategories}
                       selection={draft.categorySelection}
