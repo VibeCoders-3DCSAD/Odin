@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../lib/api";
 import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
 import { getTransaction, type Transaction } from "../local-db/repositories/ledger";
+import type { UnusualSpendingInsight } from "../local-db/repositories/unusualSpending";
 import TransactionHistoryScreen from "../features/ledger/TransactionHistoryScreen";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
@@ -133,7 +134,6 @@ function formatSyncAction(operationType: string) {
 }
 
 function formatSyncEntity(entity: string) {
-  if (entity === "category_groups") return "Category Group";
   if (entity === "categories") return "Category";
   if (entity === "subcategories") return "Subcategory";
   return entity.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -219,6 +219,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
+  const [pendingUnusualSpending, setPendingUnusualSpending] = useState<UnusualSpendingInsight | null>(null);
   const [statementPaymentContext, setStatementPaymentContext] = useState<StatementPaymentContext | null>(null);
   const [selectedCreditCardId, setSelectedCreditCardId] = useState<string | null>(null);
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
@@ -413,11 +414,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     );
     const rows = await db.getAllAsync<SyncQueueIssue>(
       `SELECT q.operation_id, q.entity, q.operation_type, q.record_id, q.failure_message, q.status, q.attempts, q.created_at,
-              COALESCE(c.label, s.label, g.label) as item_label
+               COALESCE(c.label, s.label) as item_label
        FROM sync_queue q
        LEFT JOIN categories c ON q.entity = 'categories' AND q.record_id = c.id AND q.user_id = c.user_id
        LEFT JOIN subcategories s ON q.entity = 'subcategories' AND q.record_id = s.id AND q.user_id = s.user_id
-       LEFT JOIN category_groups g ON q.entity = 'category_groups' AND q.record_id = g.id AND q.user_id = g.user_id
        WHERE q.user_id = ? AND q.device_id = ? AND q.status = 'failed' AND q.attempts >= ?
         ORDER BY q.created_at LIMIT ${SYNC_ISSUES_PAGE_SIZE} OFFSET ${Math.max(0, Math.trunc(offset))}`,
       userId,
@@ -799,7 +799,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "add-transaction") {
-      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} statementPaymentContext={statementPaymentContext ?? undefined} debtPaymentDebtId={debtPaymentDebtId ?? undefined} debtPaymentContext={debtPaymentContext ?? undefined} savingsActivityContext={savingsActivityContext ?? undefined} onClose={() => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setSavingsActivityContext(null); setCurrentPage(transactionReturnPage); }} />;
+      return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} statementPaymentContext={statementPaymentContext ?? undefined} debtPaymentDebtId={debtPaymentDebtId ?? undefined} debtPaymentContext={debtPaymentContext ?? undefined} savingsActivityContext={savingsActivityContext ?? undefined} onClose={() => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setSavingsActivityContext(null); setCurrentPage(transactionReturnPage); }} onCreated={(unusualSpending) => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setSavingsActivityContext(null); setPendingUnusualSpending(unusualSpending); setCurrentPage("transactions"); }} />;
     }
 
     if (currentPage === "add-recurring-transaction") {
@@ -807,7 +807,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "transactions") {
-      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} />;
+      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} />;
     }
 
     if (currentPage === "recurring-transactions") {
