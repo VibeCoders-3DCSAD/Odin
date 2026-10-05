@@ -1,6 +1,6 @@
-## 17. Financial Condition Assessment Module
+## 17. Savings and Debt Profile Classification
 
-### 17.1 Financial Condition Assessment
+### 17.1 Savings and Debt Profile Classification
 
 - Collect and store questionnaire answers and cash-flow transaction history.
 - Apply rule-based mathematical rules and statistics to calculate the user's financial-condition dimensions.

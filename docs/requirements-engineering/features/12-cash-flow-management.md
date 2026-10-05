@@ -1,4 +1,4 @@
-## 12. Transaction Management Module
+## 12. Cash Flow Management
 
 ### 12.1 Transaction Entry
 

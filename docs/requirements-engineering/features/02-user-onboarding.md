@@ -1,4 +1,4 @@
-## 2. Onboarding Questionnaire
+## 2. User Onboarding
 
 ### 2.1 Guided Onboarding
 

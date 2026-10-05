@@ -1,4 +1,4 @@
-## 15. Reports and Analytics Module
+## 15. Financial Reports
 
 ### 15.1 Report Creation
 
@@ -90,3 +90,12 @@
 - Loading state: `Loading your report. Please wait a moment.`
 - Generating state: `Generating your report. Please wait a moment.`
 - Success state: `Your report is ready. Review the results below.`
+
+### 15.8 Spending Forecast and Alerts
+
+- Provide detailed spending forecasts and unusual-spending alerts as Financial
+  Reports features.
+- The Dashboard may surface a next-month spending forecast summary and direct
+  users to Financial Reports for details.
+- See the supporting [Spending Forecast](14-spending-forecast.md) and
+  [Spending Alerts](13-spending-alerts.md) specifications.

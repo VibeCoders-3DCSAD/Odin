@@ -1,4 +1,4 @@
-## 11. Financial Obligations Module
+## 11. Billers and Remittances
 
 ### 11.1 Obligation Management
 

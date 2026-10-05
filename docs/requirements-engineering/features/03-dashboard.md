@@ -14,8 +14,8 @@
 
 - View savings goal summary
 - View debt summary
-- View alerts summary
-- View spending forecast and insights
+- View a next-month spending forecast summary and navigate to Financial Reports
+  for forecast details
 - View empty states when financial data is unavailable
 - View cached or stale information when a service is unavailable
 
@@ -27,7 +27,6 @@
 - No budget: prompt the user to create a budget
 - No savings goals: prompt the user to create a savings goal
 - No debts: show that no debts are currently recorded
-- No alerts: show that there are no alerts to review
 - No forecast: explain that forecast information is not yet available
 - No chart data: show an empty chart state instead of a misleading chart
 - Partial data: display available sections without blocking the dashboard
@@ -50,7 +49,6 @@
 - Refresh error: `Dashboard refresh failed. Check your connection and try again.`
 - Savings error: `Savings goal information is unavailable. Refresh to try again.`
 - Debt error: `Debt information is unavailable. Refresh to try again.`
-- Alerts error: `Alerts are unavailable. Refresh to try again.`
 - Forecast error: `Forecast information is unavailable. Refresh to try again.`
 
 #### Dashboard Notice Messages
@@ -67,7 +65,6 @@
 - No expenses recorded: `No expenses have been recorded yet. Record an expense to track spending.`
 - No budget: `Budget health is unavailable until a current status is calculated. Create a budget or refresh to try again.`
 - No budget spending: `No spending is recorded for this budget. Record an expense to see budget health.`
-- No alerts: `There are no alerts to review. Return later for new updates.`
 - No forecast: `Forecast information is not yet available. Keep recording transactions to unlock personalized insights.`
 - No savings goals: `No savings goals are available. Create a goal to start tracking progress.`
 - No debts: `No debts are currently recorded. Add a debt when you need to track one.`

@@ -11,7 +11,7 @@ the existing transaction flow.
 
 ## Source Of Truth
 
-- Requirements: `docs/requirements-engineering/features/08-savings-accounts-module.md`, sections 8.10-8.12.
+- Requirements: `docs/requirements-engineering/features/08-savings-goal-management.md`, sections 8.10-8.12.
 - Existing envelope and budget-period owner: `apps/app/local-db/repositories/budgets.ts` and `apps/app/features/budgeting/BudgetingScreen.tsx`.
 - Existing goal schedules and cycle requirements: `apps/app/features/savings-goals/contributionSchedule.ts` and `apps/app/features/savings-goals/requiredSavingsContributionQueries.ts`.
 - Allocation precedent: `apps/app/features/debt-manager/debtRepaymentAllocation.ts` and `apps/app/local-db/repositories/debtRepaymentPlans.ts`.

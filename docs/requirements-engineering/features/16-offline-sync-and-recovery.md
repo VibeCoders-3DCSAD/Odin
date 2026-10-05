@@ -1,4 +1,4 @@
-## 16. Offline Sync and Recovery Module
+## Cross-Cutting Capability: Offline Sync and Recovery
 
 ### 16.1 Sync Visibility
 

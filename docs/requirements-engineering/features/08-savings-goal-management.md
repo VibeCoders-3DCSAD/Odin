@@ -1,4 +1,4 @@
-## 8. Savings Accounts Module
+## 8. Savings Goal Management
 
 ### 8.1 Savings Overview
 
@@ -346,7 +346,8 @@ transactions do not create or link to savings activities automatically.
 ### 8.11 Savings Allocation
 
 - Select a global savings allocation strategy: Avalanche / Snowball
-- Allocate the Budgeting Module's Savings Envelope across Goal Savings accounts
+- Allocate the Financial Plan Management savings contribution schedule across
+  Goal Savings accounts
 - Allocate savings surplus across eligible Goal Savings accounts
 - Prioritize each Goal Savings account's required contribution
 - View the total minimum savings contribution requirement for the current
@@ -365,8 +366,10 @@ amount.
 
 ### 8.12 Savings Allocation Rules
 
-- Budgeting provides one Savings Envelope for the current cycle
-- Savings allocates the envelope across active Goal Savings accounts
+- Financial Plan Management provides one savings contribution schedule for the
+  current cycle
+- Savings Goal Management allocates the schedule across active Goal Savings
+  accounts
 - Emergency Fund Goal Savings accounts take priority until their selected essential-expense
   coverage target is met
 - Required contributions are allocated before surplus
@@ -381,11 +384,13 @@ amount.
   surplus after required contributions are allocated
 - Display funded, partially funded, and unfunded amounts with the reason for
   each allocation
-- Debt payoff surplus is handled by Budgeting before it becomes part of the Savings Envelope
+- Debt payoff surplus is handled by Financial Plan Management before it becomes
+  part of the savings contribution schedule
 
-The Budgeting Module provides one Savings Envelope. The Savings Accounts Module
-distributes that envelope across Goal Savings accounts. Debt payoff surplus is
-handled by Budgeting before it reaches this allocation step.
+Financial Plan Management provides one savings contribution schedule. Savings
+Goal Management distributes that schedule across Goal Savings accounts. Debt
+payoff surplus is handled by Financial Plan Management before it reaches this
+allocation step.
 
 ### 8.13 Savings Projections
 

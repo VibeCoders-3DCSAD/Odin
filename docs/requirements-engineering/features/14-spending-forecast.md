@@ -1,4 +1,4 @@
-## 14. Forecasting and Financial Intelligence Module
+## Financial Reports Supporting Specification: Spending Forecast
 
 ### 14.1 Forecasting
 

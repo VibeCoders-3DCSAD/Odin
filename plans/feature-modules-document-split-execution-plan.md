@@ -42,16 +42,16 @@ Create sub-issues from this plan when ready.
   from the source's 16 top-level numbered headings, from each heading through
   the line immediately preceding the next top-level numbered heading.
 - Map the sections to these files: `01-user-authentication.md`,
-  `02-onboarding-questionnaire.md`, `03-dashboard.md`,
-  `04-financial-accounts.md`, `05-income-sources.md`,
-  `06-budgeting-module.md`, `07-debt-management.md`,
-  `08-savings-accounts-module.md`, `09-settings-module.md`,
-  `10-categories-and-restrictions-module.md`,
-  `11-financial-obligations-module.md`, `12-transaction-management-module.md`,
-  `13-alerts-and-notifications-module.md`,
-  `14-forecasting-and-financial-intelligence-module.md`,
-  `15-reports-and-analytics-module.md`, and
-  `16-offline-sync-and-recovery-module.md`.
+   `02-user-onboarding.md`, `03-dashboard.md`,
+   `04-income-sources-and-accounts-management.md`,
+    `07-debt-management.md`,
+   `08-savings-goal-management.md`, `09-user-settings.md`,
+   `10-income-and-expense-categories-management.md`,
+   `11-billers-and-remittances.md`, `12-cash-flow-management.md`,
+   `13-spending-alerts.md`,
+   `14-spending-forecast.md`,
+   `15-financial-reports.md`, and
+   `16-offline-sync-and-recovery.md`.
 - Keep the source preamble and its existing table of contents only in
   `feature-modules.md`; the new index supplies the replacement navigation for
   the split documents.
@@ -67,7 +67,8 @@ Create sub-issues from this plan when ready.
 
 ### 3. Copy Sections 1 Through 6 Without Transformation
 
-- Add `01-user-authentication.md` through `06-budgeting-module.md`, each
+- Add `01-user-authentication.md` through
+  `04-income-sources-and-accounts-management.md`, each
   containing its complete source slice including the top-level heading, every
   nested heading, all messages, lists, code formatting, and intervening blank
   lines.
@@ -77,15 +78,15 @@ Create sub-issues from this plan when ready.
 ### 4. Copy Sections 7 Through 11 Without Transformation
 
 - Add `07-debt-management.md` through
-  `11-financial-obligations-module.md`, preserving all subsection depth and
+   `11-billers-and-remittances.md`, preserving all subsection depth and
   repeated subsection labels exactly as found in the source.
 - Treat the large Debt Management section as one contiguous source slice. Do
   not split its credit-card or non-credit-card subsections into separate files.
 
 ### 5. Copy Sections 12 Through 16 Without Transformation
 
-- Add `12-transaction-management-module.md` through
-  `16-offline-sync-and-recovery-module.md`, preserving each entire section and
+- Add `12-cash-flow-management.md` through
+   `16-offline-sync-and-recovery.md`, preserving each entire section and
   all nested headings, messages, lists, and whitespace.
 - End the final file exactly where the source document ends; do not append a
   generated footer or reference note.

@@ -1,4 +1,4 @@
-## 10. Categories and Restrictions Module
+## 10. Income and Expense Categories Management
 
 ### 10.1 Category Taxonomy
 

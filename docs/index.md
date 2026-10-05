@@ -21,3 +21,4 @@
 ## Architecture
 
 - [Budgeting Phase 3b To 3c Handoff](architecture/budgeting-3b-to-3c-handoff.md)
+- [Budgie Level 1 DFD Mapping](architecture/budgie-level-1-dfd-mapping.md)

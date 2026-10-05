@@ -1,4 +1,4 @@
-## 9. Settings Module
+## 9. User Settings
 
 ### 9.1 Account and Profile
 
