@@ -7,8 +7,8 @@ const router = Router();
 
 router.post("/recommendation", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   try {
-    const { includedSubcategoryIds, includedCategoryIds, plannedAmountCentavos, manualAllocations } = parseRecommendationInput(request.body);
-    response.status(200).json({ payload: await getFinancialPlanRecommendation(request.userId!, request.supabase!, plannedAmountCentavos, includedSubcategoryIds, includedCategoryIds, manualAllocations) });
+    const { includedSubcategoryIds, includedCategoryIds, plannedAmountCentavos, manualAllocations, skipDebtRepayments, skipSavingsContributions } = parseRecommendationInput(request.body);
+    response.status(200).json({ payload: await getFinancialPlanRecommendation(request.userId!, request.supabase!, plannedAmountCentavos, includedSubcategoryIds, includedCategoryIds, manualAllocations, { skipDebtRepayments, skipSavingsContributions }) });
   } catch (error) {
     const status = error instanceof FinancialPlanInputError ? 422 : error instanceof FinancialPlanMlError || error instanceof FinancialPlanUnavailableError ? 503 : 500;
     console.error("financial plan recommendation failed", { user_id: request.userId, request_id: request.header("x-request-id")?.slice(0, 128) ?? null, status, error_class: error instanceof Error ? error.constructor.name : "UnknownError" });
@@ -18,7 +18,7 @@ router.post("/recommendation", requireAuth, async (request: AuthenticatedRequest
 
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
 
-function parseRecommendationInput(value: unknown): { includedSubcategoryIds: string[]; includedCategoryIds: string[]; plannedAmountCentavos: number; manualAllocations: ManualAllocation[] } {
+function parseRecommendationInput(value: unknown): { includedSubcategoryIds: string[]; includedCategoryIds: string[]; plannedAmountCentavos: number; manualAllocations: ManualAllocation[]; skipDebtRepayments: boolean; skipSavingsContributions: boolean } {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new FinancialPlanInputError("Planning amount is invalid");
   const parse = (key: "includedSubcategoryIds" | "includedCategoryIds") => {
     const ids = (value as Record<string, unknown>)[key];
@@ -42,7 +42,12 @@ function parseRecommendationInput(value: unknown): { includedSubcategoryIds: str
     return { target: record.target, id: record.id.trim(), amountCentavos: record.amountCentavos };
   });
   if (new Set(manualAllocations.map((allocation) => `${allocation.target}:${allocation.id}`)).size !== manualAllocations.length) throw new FinancialPlanInputError("Manual category allocations are invalid");
-  return { includedSubcategoryIds, includedCategoryIds, plannedAmountCentavos, manualAllocations };
+  const parseSkip = (key: "skipDebtRepayments" | "skipSavingsContributions") => {
+    const skip = (value as Record<string, unknown>)[key];
+    if (skip !== undefined && typeof skip !== "boolean") throw new FinancialPlanInputError("Reservation skips are invalid");
+    return skip ?? false;
+  };
+  return { includedSubcategoryIds, includedCategoryIds, plannedAmountCentavos, manualAllocations, skipDebtRepayments: parseSkip("skipDebtRepayments"), skipSavingsContributions: parseSkip("skipSavingsContributions") };
 }
 
 export default router;

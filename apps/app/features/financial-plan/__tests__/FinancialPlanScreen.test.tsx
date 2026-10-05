@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { Alert } from "react-native";
 import FinancialPlanScreen from "../FinancialPlanScreen";
 
@@ -140,5 +140,37 @@ describe("FinancialPlanScreen", () => {
 
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(2));
     expect(mockRequestFinancialPlanRecommendation.mock.calls[1][3]).toBe(100_000);
+  });
+
+  it("requires confirmation before skipping debt repayments and shows the warning", async () => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    mockGetLatestFinancialPlan.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
+    mockRequestFinancialPlanRecommendation
+      .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
+        status: "INFEASIBLE", period: { start: "2026-11-01", end: "2026-11-30" }, inputSnapshot: {}, explanations: [],
+        recommendation: { availableFundsCentavos: -25_000, shortfallCentavos: 25_000, allocations: [], debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-11-12" }], savingsReservations: [] },
+      } } })
+      .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
+        status: "RECOMMENDATION_READY", period: { start: "2026-11-01", end: "2026-11-30" }, inputSnapshot: {}, explanations: [],
+        recommendation: { availableFundsCentavos: 25_000, allocations: [], debtReservations: [], savingsReservations: [] },
+      } } });
+
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Create Financial Plan recommendation")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+    await waitFor(() => expect(view.getByLabelText("Skip Debt Repayments")).toBeTruthy());
+
+    fireEvent.press(view.getByLabelText("Skip Debt Repayments"));
+    expect(alert).toHaveBeenCalledWith("Skip debt repayments?", expect.stringContaining("may result in missed payments"), expect.any(Array));
+    const actions = alert.mock.calls[0]![2] as { onPress?: () => void }[];
+    await act(async () => {
+      actions[1]!.onPress?.();
+    });
+
+    await waitFor(() => expect(view.getByText("Skipped plan commitments")).toBeTruthy());
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[1]![5]).toEqual({ debtRepayments: true, savingsContributions: false });
+    alert.mockRestore();
   });
 });

@@ -24,6 +24,7 @@ type FinancialAccount = Timestamped & { kind: string; current_balance_centavos: 
 type Transaction = Timestamped & { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null };
 type OnboardingSession = { raw_answers: Record<string, unknown> | null };
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
+type ReservationSkips = { skipDebtRepayments?: boolean; skipSavingsContributions?: boolean };
 type AnomalyEvaluation = { transaction_id: string; is_anomaly: boolean };
 type TransactionWithAnomalies = Transaction & { anomaly_evaluations: AnomalyEvaluation[] | null };
 
@@ -173,7 +174,7 @@ function userFacingForecastRationale(value: string): string {
   return isUserFacingFinancialPlanExplanation(value) ? value : "";
 }
 
-export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = []) {
+export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = [], reservationSkips: ReservationSkips = {}) {
   const period = nextCalendarMonth();
   const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, obligationsResult, statementsResult, transactionsResult, classificationResult, onboardingResult] = await Promise.all([
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
@@ -218,9 +219,9 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     .reduce((sum, account) => sum + account.current_balance_centavos, 0);
   if (availableMoney <= 0) throw new FinancialPlanInputError("No eligible financial-account balance is available");
   if (!Number.isSafeInteger(plannedAmountCentavos) || plannedAmountCentavos <= 0 || plannedAmountCentavos > availableMoney) throw new FinancialPlanInputError("Planning amount exceeds available money");
-  const debtReservations = ((debtsResult.data ?? []) as Debt[]).filter((debt) => debt.current_balance_centavos > 0 && inPeriod(debt.next_due_date, period)).map((debt) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos), dueDate: debt.next_due_date }));
-  const statementReservations = ((statementsResult.data ?? []) as Statement[]).map((statement) => ({ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos: statement.minimum_due_centavos, dueDate: statement.due_date }));
-  const savingsReservations = ((goalsResult.data ?? []) as Goal[]).filter((goal) => inPeriod(goal.next_contribution_date, period)).map((goal) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos ?? 0, dueDate: goal.next_contribution_date }));
+  const debtReservations = reservationSkips.skipDebtRepayments ? [] : ((debtsResult.data ?? []) as Debt[]).filter((debt) => debt.current_balance_centavos > 0 && inPeriod(debt.next_due_date, period)).map((debt) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos), dueDate: debt.next_due_date }));
+  const statementReservations = reservationSkips.skipDebtRepayments ? [] : ((statementsResult.data ?? []) as Statement[]).map((statement) => ({ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos: statement.minimum_due_centavos, dueDate: statement.due_date }));
+  const savingsReservations = reservationSkips.skipSavingsContributions ? [] : ((goalsResult.data ?? []) as Goal[]).filter((goal) => inPeriod(goal.next_contribution_date, period)).map((goal) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos ?? 0, dueDate: goal.next_contribution_date }));
   const obligations = ((obligationsResult.data ?? []) as Obligation[]).flatMap((obligation) => obligation.due_day_of_month ? [{ id: obligation.id, amountCentavos: obligation.amount_centavos, dueDate: `${period.start.slice(0, 8)}${String(Math.min(obligation.due_day_of_month, Number(period.end.slice(8)))).padStart(2, "0")}` }] : []);
   const reserved = [...debtReservations, ...statementReservations, ...savingsReservations, ...obligations].reduce((sum, item) => sum + item.amountCentavos, 0);
   const available = plannedAmountCentavos - reserved;

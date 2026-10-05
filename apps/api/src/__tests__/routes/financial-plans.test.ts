@@ -28,7 +28,7 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries", "groceries", "transport"], plannedAmountCentavos: 100_000 });
     expect(response.status).toBe(200);
     expect(response.body.payload.status).toBe("RECOMMENDATION_READY");
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries", "transport"], [], []);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries", "transport"], [], [], { skipDebtRepayments: false, skipSavingsContributions: false });
     expect((await request(app).post("/odin/api/financial-plans/recommendation").send({})).status).toBe(401);
   });
 
@@ -50,7 +50,14 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["pet-care"], plannedAmountCentavos: 100_000, manualAllocations: [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }] });
 
     expect(response.status).toBe(200);
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["pet-care"], [], [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }]);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["pet-care"], [], [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }], { skipDebtRepayments: false, skipSavingsContributions: false });
+  });
+
+  it("accepts explicit reservation skips", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries"], plannedAmountCentavos: 100_000, skipDebtRepayments: true, skipSavingsContributions: true });
+
+    expect(response.status).toBe(200);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true });
   });
 
   it("rejects invalid one-time category amounts", async () => {
