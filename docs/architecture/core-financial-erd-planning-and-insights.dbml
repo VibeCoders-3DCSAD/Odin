@@ -1,0 +1,147 @@
+// ERD view: plans, forecasts, classifications, and alerts (D11-D14).
+// Anchor tables expose only the keys needed to draw cross-group relationships.
+
+Table "auth"."users" {
+  "user_id" uuid [pk]
+}
+
+Table "profiles" {
+  "profile_id" uuid [pk]
+  "user_id" uuid [not null, unique]
+}
+
+Table "categories" {
+  "category_id" uuid [pk]
+}
+
+Table "subcategories" {
+  "subcategory_id" uuid [pk]
+}
+
+Table "transactions" {
+  "transaction_id" uuid [pk]
+}
+
+Table "debt_accounts" {
+  "debt_account_id" uuid [pk]
+}
+
+Table "credit_card_statements" {
+  "credit_card_statement_id" uuid [pk]
+}
+
+Table "savings_goals" {
+  "savings_goal_id" uuid [pk]
+}
+
+// D11: Financial Plans
+Table "financial_plans" {
+  "financial_plan_id" uuid [pk]
+  "user_id" uuid [not null]
+  "period_start" date [not null]
+  "period_end" date [not null]
+  "status" text [not null]
+  "available_funds_centavos" bigint [not null]
+  "required_funds_centavos" bigint
+  "shortfall_centavos" bigint
+  "classification_status" text
+  "classification_rule_set_version" text
+  "classification_assessed_at" timestamp
+}
+
+Table "financial_plan_allocations" {
+  "financial_plan_allocation_id" uuid [pk]
+  "financial_plan_id" uuid [not null]
+  "category_id" uuid
+  "subcategory_id" uuid
+  "allocated_amount_centavos" bigint [not null]
+}
+
+Table "financial_plan_debt_reservations" {
+  "financial_plan_debt_reservation_id" uuid [pk]
+  "financial_plan_id" uuid [not null]
+  "debt_account_id" uuid
+  "credit_card_statement_id" uuid
+  "amount_centavos" bigint [not null]
+}
+
+Table "financial_plan_savings_reservations" {
+  "financial_plan_savings_reservation_id" uuid [pk]
+  "financial_plan_id" uuid [not null]
+  "savings_goal_id" uuid [not null]
+  "amount_centavos" bigint [not null]
+}
+
+// D14: Forecast History
+Table "financial_plan_forecast_points" {
+  "financial_plan_id" uuid [pk]
+  "category_key" text [pk]
+  "amount_centavos" bigint [not null]
+}
+
+// D12: Savings and Debt Profile Classifications
+Table "financial_condition_assessments" {
+  "financial_condition_assessment_id" uuid [pk]
+  "user_id" uuid [not null]
+  "assessed_at" timestamp [not null]
+  "rule_set_version" text [not null]
+  "input_snapshot" jsonb [not null]
+  "output_snapshot" jsonb [not null]
+  "created_at" timestamp [not null]
+}
+
+// D13: Unusual Expense Alerts
+Table "anomaly_evaluations" {
+  "anomaly_evaluation_id" uuid [pk]
+  "user_id" uuid [not null]
+  "transaction_id" uuid [not null]
+  "subcategory_id" uuid [not null]
+  "is_anomaly" boolean [not null]
+}
+
+Table "overspending_evaluations" {
+  "overspending_evaluation_id" uuid [pk]
+  "user_id" uuid [not null]
+  "category_id" uuid
+  "subcategory_id" uuid
+  "overspent_amount_centavos" bigint [not null]
+}
+
+Table "alerts" {
+  "alert_id" uuid [pk]
+  "user_id" uuid [not null]
+  "transaction_id" uuid
+  "subcategory_id" uuid
+  "debt_account_id" uuid
+  "savings_goal_id" uuid
+  "anomaly_evaluation_id" uuid
+  "overspending_evaluation_id" uuid
+  "category" text [not null]
+  "status" text [not null]
+}
+
+Ref: "auth"."users"."user_id" - "profiles"."user_id"
+Ref: "auth"."users"."user_id" < "financial_plans"."user_id"
+Ref: "financial_plans"."financial_plan_id" < "financial_plan_allocations"."financial_plan_id"
+Ref: "categories"."category_id" ?< "financial_plan_allocations"."category_id"
+Ref: "subcategories"."subcategory_id" ?< "financial_plan_allocations"."subcategory_id"
+Ref: "financial_plans"."financial_plan_id" < "financial_plan_debt_reservations"."financial_plan_id"
+Ref: "debt_accounts"."debt_account_id" ?< "financial_plan_debt_reservations"."debt_account_id"
+Ref: "credit_card_statements"."credit_card_statement_id" ?< "financial_plan_debt_reservations"."credit_card_statement_id"
+Ref: "financial_plans"."financial_plan_id" < "financial_plan_savings_reservations"."financial_plan_id"
+Ref: "savings_goals"."savings_goal_id" < "financial_plan_savings_reservations"."savings_goal_id"
+Ref: "financial_plans"."financial_plan_id" < "financial_plan_forecast_points"."financial_plan_id"
+Ref: "profiles"."user_id" < "financial_condition_assessments"."user_id"
+Ref: "profiles"."user_id" < "anomaly_evaluations"."user_id"
+Ref: "transactions"."transaction_id" < "anomaly_evaluations"."transaction_id"
+Ref: "subcategories"."subcategory_id" < "anomaly_evaluations"."subcategory_id"
+Ref: "profiles"."user_id" < "overspending_evaluations"."user_id"
+Ref: "categories"."category_id" ?< "overspending_evaluations"."category_id"
+Ref: "subcategories"."subcategory_id" ?< "overspending_evaluations"."subcategory_id"
+Ref: "profiles"."user_id" < "alerts"."user_id"
+Ref: "transactions"."transaction_id" ?< "alerts"."transaction_id"
+Ref: "subcategories"."subcategory_id" ?< "alerts"."subcategory_id"
+Ref: "debt_accounts"."debt_account_id" ?< "alerts"."debt_account_id"
+Ref: "savings_goals"."savings_goal_id" ?< "alerts"."savings_goal_id"
+Ref: "anomaly_evaluations"."anomaly_evaluation_id" ?< "alerts"."anomaly_evaluation_id"
+Ref: "overspending_evaluations"."overspending_evaluation_id" ?< "alerts"."overspending_evaluation_id"

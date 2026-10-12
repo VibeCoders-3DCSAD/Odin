@@ -195,6 +195,12 @@ Detailed repository standards live in [REPOSITORY-STANDARDS.md](docs/standards/R
 - Match string literal casing to the actual stored database values instead of guessing.
 - Check sentinel values such as `0`, empty string, or `null` paths explicitly before ownership guards or lookups.
 
+### Supabase Migration Rules
+
+- Every migration sequence must replay on a clean local database before it is considered complete.
+- A schema snapshot migration must only alter objects created by preceding migrations; make operations conditional when a later migration owns the object.
+- Use `pnpm exec supabase db push --local --dry-run` to inspect the pending local sequence. Run `pnpm exec supabase db reset` only with explicit approval because it deletes local data.
+
 ### External I/O and Reliability Rules
 
 - Set explicit timeouts on all outbound HTTP calls.

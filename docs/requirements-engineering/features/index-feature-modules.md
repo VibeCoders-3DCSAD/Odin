@@ -1,57 +1,33 @@
-# Odin Feature Modules
+# BUDGIE Feature Modules
 
-## Product Modules
+## BUDGIE's Modules
 
-1. [Dashboard](03-dashboard.md) provides a quick overview of a next-month
-   spending forecast, recent transactions, Financial Plan health, savings goals,
-   debts, and account activity.
-2. [User Authentication](01-user-authentication.md) allows users to securely
-   register, log in, log out, and recover their accounts.
-3. [Savings and Debt Profile Classification](17-savings-and-debt-profile-classification.md)
-   allows users to complete a questionnaire and receive savings and debt
-   classifications. These classifications inform the Financial Plan and update
-   over time from recorded financial data.
-4. [User Onboarding](02-user-onboarding.md) guides new users through
-   financial preferences, income sources, expense categories, current savings
-   goals, and current debts.
-5. [Financial Plan Management](18-financial-plan-management.md) allows
-   users to manage an accepted or created season-appropriate budget, savings
-   contribution schedule, and debt repayment plan based on expense forecasts,
-   available income, savings and debt profile classification, financial
-   obligations, savings goals, and target debt payoff dates.
-6. [Cash Flow Management](12-cash-flow-management.md) allows users to
-   record, view, categorize, update, and monitor income and expense
-   transactions.
-7. [Income and Expense Categories Management](10-income-and-expense-categories-management.md)
-   allows users to view, create, update, and delete custom categories and
-   subcategories used to classify income, expense, and transfer transactions.
-8. [Billers and Remittances](11-billers-and-remittances.md) allows users to
-   create, update, and delete current bills, essential expenses, payment
-   schedules, and upcoming financial commitments.
-9. [Income Sources and Accounts Management](04-income-sources-and-accounts-management.md)
-   allows users to manage salaries, allowances, side income, and other sources
-   of earnings, while organizing associated cash, bank accounts, and e-wallets
-   based on recorded transactions and balances.
-10. [Savings Goal Management](08-savings-goal-management.md) allows users to
-   define targets such as emergency funds, tuition, rent, medical expenses, or
-   planned purchases; record contributions; monitor cumulative progress; and
-   project goal completion.
-11. [Debt Management](07-debt-management.md) allows users to record debts,
-    track balances and payments, compare snowball and avalanche repayment
-    strategies to project payoff timelines, and identify potential debt risks
-    caused by insufficient budgets or known upcoming expenses.
-12. [User Settings](09-user-settings.md) allows users to manage their
-    profile, preferences, notifications, security, and application
-    configurations.
-13. [Financial Reports](15-financial-reports.md) allows users to
-    view summaries and reports of income, expenses, savings, and debt for
-    specified periods and categories, including personalized spending forecasts
-    and alerts for unusual expenses or spending patterns. See the supporting
-    [spending forecast](14-spending-forecast.md) and [spending alerts](13-spending-alerts.md)
-    specifications.
+The BUDGIE mobile application will provide the following modules for personal
+financial management and financial planning. The linked module documents define
+the detailed requirements. This table records each module's primary happy path;
+validation, recovery, offline, and empty states remain in the linked
+specifications.
 
-Budgeting is not a standalone module. Budget plans and legacy budget-data
-behavior are part of Financial Plan Management.
+| No. | Components                                                                                 | Requirements                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | [User Authentication](01-user-authentication.md)                                           | 1. Allows users to create an account with email and password.<br><br>2. Allows users to sign in with email and password or Google.<br><br>3. Allows users to verify their email, recover a forgotten password, and sign out.                                                                                                                                                                                                                |
+| 2   | [User Onboarding](02-user-onboarding.md)                                                   | 1. Orients newly registered users to Budgie and its initial setup.<br><br>2. Directs users to configure financial preferences, income sources, expense categories, current savings goals, and current debts.<br><br>3. Does not collect or assess questionnaire responses.                                                                                                                                                                  |
+| 3   | [Dashboard](03-dashboard.md)                                                               | 1. Displays the user's available balance, current-month income, expenses, spending distribution, trends, and recent expenses.<br><br>2. Displays Financial Plan allocation health, savings, debts, and a next-month spending forecast summary.<br><br>3. Directs users to Financial Reports to review forecast details.                                                                                                                     |
+| 4   | [Income Sources and Accounts Management](04-income-sources-and-accounts-management.md)     | 1. Allows users to add and manage their cash, bank, e-wallet, savings, credit-card, loan, and other financial accounts.<br><br>2. Allows users to add and manage expected income sources, amounts, schedules, and destination accounts.<br><br>3. Displays total money across accounts and expected monthly income.                                                                                                                         |
+| 5   | [Debt Management](07-debt-management.md)                                                   | 1. Allows users to record and track credit-card and non-credit-card debt, balances, payments, and payoff targets.<br><br>2. Allows users to manage credit-card billing cycles, statements, purchases, and payments.<br><br>3. Displays debt progress, repayment requirements, and projected payoff timelines, using Snowball or Avalanche for non-credit-card debt and a separate per-card repayment strategy for credit-card statements.   |
+| 6   | [Savings Goal Management](08-savings-goal-management.md)                                   | 1. Allows users to create and manage savings accounts and goal-based savings targets.<br><br>2. Allows users to record contributions and withdrawals through transactions.<br><br>3. Displays savings balances, goal progress, target dates, and projected completion.                                                                                                                                                                      |
+| 7   | [User Settings](09-user-settings.md)                                                       | 1. Allows users to view and update their profile, password, and connected sign-in methods.<br><br>2. Allows users to manage privacy, consent, notification, and personalization preferences.<br><br>3. Allows users to export financial data, request account deletion with confirmation, and access help, cloud sync status, and application information.                                                                                  |
+| 8   | [Income and Expense Categories Management](10-income-and-expense-categories-management.md) | 1. Displays the category and subcategory hierarchy used to organize transactions and financial commitments.<br><br>2. Allows users to create, update, and remove custom categories and subcategories.<br><br>3. Applies Flexible, Minimum, and Fixed spending restrictions to Financial Plan allocations and recommendations.                                                                                                               |
+| 9   | [Billers and Remittances](11-billers-and-remittances.md)                                   | 1. Allows users to add and manage scheduled financial obligations such as bills and remittances.<br><br>2. Allows users to set obligation amounts, due dates, payment schedules, and categories.<br><br>3. Allows users to record payments and view whether each obligation is paid, partially paid, or overdue.                                                                                                                            |
+| 10  | [Cash Flow Management](12-cash-flow-management.md)                                         | 1. Allows users to record income, expense, and transfer transactions using their financial accounts.<br><br>2. Allows users to categorize, search, filter, update, and review transaction history.<br><br>3. Allows users to create recurring transactions and link a transaction to a savings contribution, debt payment, obligation payment, or credit-card statement payment.                                                            |
+| 11  | [Savings and Debt Profile Classification](17-savings-and-debt-profile-classification.md)   | 1. Guides users through a financial questionnaire and allows them to save, resume, and review answers before submission.<br><br>2. Uses questionnaire answers and recorded financial data to assess the user's initial financial condition.<br><br>3. Displays Emergency Fund Coverage, Debt-Service-to-Income, Financial Margin, and Credit Card Behavior results with an explanation and allows reassessment when financial data changes. |
+| 12  | [Financial Plan Management](18-financial-plan-management.md)                               | 1. Generates a monthly Financial Plan using income, expense forecasts, obligations, savings goals, debts, and the financial-condition assessment.<br><br>2. Combines a spending allocation plan, savings contribution schedule, and debt repayment plan.<br><br>3. Allows users to review, edit, accept, or reject a recommendation; an accepted plan is immutable for its plan period.                                                     |
+| 13  | [Financial Reports](15-financial-reports.md)                                               | 1. Generates weekly, monthly, and yearly financial reports.<br><br>2. Displays expense distribution, income, expenses, cash flow, account summaries, budget-versus-actual and forecast-versus-actual comparisons, savings progress, debt summaries, category breakdowns, and Financial Plan allocation results.<br><br>3. Displays spending forecasts and unusual-expense list.                                                             |
 
-[Offline Sync and Recovery](16-offline-sync-and-recovery.md) is a
-cross-cutting capability that supports all product modules.
+Budgeting will not be a standalone module. Financial Plan Management owns active
+monthly spending allocations and their health. Legacy budget records remain
+syncable historical data only and are not shown as an active planning workflow.
+
+[Offline Sync and Recovery](16-offline-sync-and-recovery.md) will serve as a
+cross-cutting capability that will support all product modules, including safe
+logout and account-deletion handling for unsynced changes.

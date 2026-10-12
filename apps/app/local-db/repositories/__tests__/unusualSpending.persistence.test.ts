@@ -34,4 +34,24 @@ describe("saveUnusualSpending", () => {
       payload: expect.objectContaining({ transaction_id: "transaction-1", subcategory_id: "subcategory-1" }),
     }));
   });
+
+  it("lists only persisted evaluations instead of recalculating transaction history", async () => {
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([{
+      id: "transaction-1", transaction_date: "2026-10-30", amount_centavos: 100_000,
+      subcategory_id: "subcategory-1", subcategory_label: "Groceries", account_name: "Cash",
+      usable_history_count: 6, usual_spending_centavos: 12_500,
+      lower_bound_centavos: 7_500, upper_bound_centavos: 20_000, severity: 1.2,
+    }]);
+    mockInitDatabase.mockResolvedValue({ getAllAsync });
+    const { _resetDbCacheForTesting, listPersistedUnusualSpendings } = await import("../unusualSpending");
+    _resetDbCacheForTesting();
+
+    await expect(listPersistedUnusualSpendings("user-1")).resolves.toEqual([{
+      transactionId: "transaction-1", transactionDate: "2026-10-30", amountCentavos: 100_000,
+      subcategoryId: "subcategory-1", subcategoryLabel: "Groceries", accountName: "Cash",
+      usableHistoryCount: 6, usualSpendingCentavos: 12_500,
+      lowerBoundCentavos: 7_500, upperBoundCentavos: 20_000, severity: 1.2,
+    }]);
+    expect(getAllAsync.mock.calls[0]?.[0]).toContain("FROM anomaly_evaluations");
+  });
 });

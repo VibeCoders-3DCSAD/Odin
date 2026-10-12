@@ -8,6 +8,12 @@ ALTER TABLE public.anomaly_evaluations
 CREATE UNIQUE INDEX IF NOT EXISTS anomaly_evaluations_user_transaction_active_unique_idx
   ON public.anomaly_evaluations (user_id, transaction_id) WHERE deleted = false;
 
+-- The October 2 remote snapshot was generated after this wrapper existed.
+-- Remove that out-of-order copy so the current wrapper can be preserved below.
+DROP FUNCTION IF EXISTS public.apply_sync_operation_before_local_anomaly_evaluations(
+  uuid, text, text, uuid, text, integer, text[], jsonb
+);
+
 ALTER FUNCTION public.apply_sync_operation(uuid, text, text, uuid, text, integer, text[], jsonb)
   RENAME TO apply_sync_operation_before_local_anomaly_evaluations;
 

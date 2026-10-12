@@ -16,8 +16,8 @@ const SEASONAL_MONTHS: Record<string, number[]> = { rainy_season: [6, 7, 8, 9, 1
 type Subcategory = { id: string; category_id: string | null; label: string; minimum_amount_centavos: number | null; fixed_amount_centavos: number | null; always_in_budget: boolean };
 type Category = { id: string; slug: string; label: string; minimum_amount_centavos: number | null; fixed_amount_centavos: number | null };
 type Timestamped = { updated_at: string };
-type Debt = Timestamped & { id: string; current_balance_centavos: number; minimum_payment_centavos: number; next_due_date: string | null; annual_interest_rate_bps: number; allows_extra_payments: boolean };
-type Goal = Timestamped & { id: string; planned_contribution_amount_centavos: number | null; next_contribution_date: string | null; goal_type: string; target_amount_centavos: number; current_amount_centavos: number };
+type Debt = Timestamped & { id: string; current_balance_centavos: number; minimum_payment_centavos: number; payment_frequency: string; payment_schedule: { semiMonthlyDays?: [number, number]; customIntervalDays?: number } | null; next_due_date: string | null; annual_interest_rate_bps: number; allows_extra_payments: boolean };
+type Goal = Timestamped & { id: string; planned_contribution_amount_centavos: number | null; contribution_frequency: string | null; contribution_interval_count: number | null; contribution_day_of_month: number | null; contribution_second_day_of_month: number | null; custom_interval_days: number | null; next_contribution_date: string | null; goal_type: string; target_amount_centavos: number; current_amount_centavos: number };
 type Obligation = { id: string; amount_centavos: number; due_day_of_month: number | null };
 type Statement = { id: string; minimum_due_centavos: number; due_date: string };
 type FinancialAccount = Timestamped & { kind: string; current_balance_centavos: number };
@@ -87,8 +87,55 @@ export function nextCalendarMonth(now = new Date()): { start: string; end: strin
   return { start: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10), end: new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10) };
 }
 
-function inPeriod(date: string | null, period: { start: string; end: string }): date is string {
-  return date !== null && date >= period.start && date <= period.end;
+function addScheduleDays(date: string, days: number): string {
+  const next = new Date(`${date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+
+function addScheduleMonths(date: string, months: number): string {
+  const next = new Date(`${date}T00:00:00Z`);
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
+  return next.toISOString().slice(0, 10);
+}
+
+function dateAtScheduleDay(year: number, month: number, day: number): string {
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
+}
+
+type RecurrenceSchedule = { intervalCount?: number | null; customIntervalDays?: number | null; semiMonthlyDays?: [number, number] | null };
+
+function advanceReservationDate(date: string, frequency: string, schedule: RecurrenceSchedule): string | null {
+  const interval = schedule.intervalCount && schedule.intervalCount > 0 ? schedule.intervalCount : 1;
+  if (frequency === "daily") return addScheduleDays(date, interval);
+  if (frequency === "weekly") return addScheduleDays(date, 7 * interval);
+  if (frequency === "biweekly") return addScheduleDays(date, 14 * interval);
+  if (frequency === "monthly") return addScheduleMonths(date, interval);
+  if (frequency === "quarterly") return addScheduleMonths(date, 3 * interval);
+  if (frequency === "yearly") return addScheduleMonths(date, 12 * interval);
+  if (frequency === "custom") return schedule.customIntervalDays && schedule.customIntervalDays > 0 ? addScheduleDays(date, schedule.customIntervalDays) : null;
+  if (frequency !== "semi_monthly") return null;
+
+  const days = [...(schedule.semiMonthlyDays ?? [1, 15])].sort((left, right) => left - right);
+  const current = new Date(`${date}T00:00:00Z`);
+  const candidates = days.map((day) => dateAtScheduleDay(current.getUTCFullYear(), current.getUTCMonth(), day));
+  return candidates.find((candidate) => candidate > date) ?? dateAtScheduleDay(current.getUTCFullYear(), current.getUTCMonth() + interval, days[0]!);
+}
+
+export function scheduledReservationDates(nextDate: string | null, frequency: string | null, period: { start: string; end: string }, schedule: RecurrenceSchedule = {}): string[] {
+  if (!nextDate || !frequency) return [];
+  const dates: string[] = [];
+  let date: string | null = nextDate;
+  for (let index = 0; date && date <= period.end && index < 10_000; index += 1) {
+    if (date >= period.start) dates.push(date);
+    date = advanceReservationDate(date, frequency, schedule);
+  }
+  return dates;
 }
 
 function fallbackForecast(period: { start: string; end: string }, categories: MlPlanCategory[]): MlExpenseForecastSnapshot {
@@ -128,6 +175,7 @@ function mapPlanForecast(
     const amount = totalWeight > 0
       ? Math.floor(total * (precedingWeight + category.forecastCentavos) / totalWeight) - Math.floor(total * precedingWeight / totalWeight)
       : Math.floor(total * (index + 1) / orderedTargets.length) - Math.floor(total * index / orderedTargets.length);
+    const finalForecastCentavos = Math.round(Math.max(category.floorCentavos, amount) / 100) * 100;
     console.info("financial plan forecast decision", {
       user_id: userId,
       hfce_category: slug ?? null,
@@ -142,9 +190,9 @@ function mapPlanForecast(
        allocation_method: totalWeight > 0 ? "twelve_month_spend_weighted" : "even_split_no_spend_history",
       allocated_centavos: amount,
       floor_centavos: category.floorCentavos,
-      final_forecast_centavos: Math.max(category.floorCentavos, amount),
+       final_forecast_centavos: finalForecastCentavos,
     });
-    return { category: category.id, amountCentavos: Math.max(category.floorCentavos, amount) };
+    return { category: category.id, amountCentavos: finalForecastCentavos };
   });
   return { month: mlForecast.snapshot.month, totalAmountCentavos: categoryForecasts.reduce((sum, point) => sum + point.amountCentavos, 0), categoryForecasts, modelVersion: mlForecast.snapshot.modelVersion, generatedAt: mlForecast.snapshot.generatedAt, quality: mlForecast.snapshot.quality };
 }
@@ -180,8 +228,8 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos, updated_at").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("financial_accounts").select("kind, current_balance_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
-    supabase.from("debt_accounts").select("id, current_balance_centavos, minimum_payment_centavos, next_due_date, annual_interest_rate_bps, allows_extra_payments, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
-    supabase.from("savings_goals").select("id, planned_contribution_amount_centavos, next_contribution_date, goal_type, target_amount_centavos, current_amount_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
+    supabase.from("debt_accounts").select("id, current_balance_centavos, minimum_payment_centavos, payment_frequency, payment_schedule, next_due_date, annual_interest_rate_bps, allows_extra_payments, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
+    supabase.from("savings_goals").select("id, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, custom_interval_days, next_contribution_date, goal_type, target_amount_centavos, current_amount_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("financial_obligations").select("id, amount_centavos, due_day_of_month").eq("user_id", userId).eq("status", "active").limit(100),
     supabase.from("credit_card_statements").select("id, minimum_due_centavos, due_date").eq("user_id", userId).eq("authoritative", true).eq("deleted", false).gte("due_date", period.start).lte("due_date", period.end).limit(100),
     supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id, updated_at, anomaly_evaluations!anomaly_evaluations_transaction_id_fkey(transaction_id, is_anomaly)").eq("user_id", userId).eq("status", "posted").eq("deleted", false).eq("anomaly_evaluations.is_anomaly", true).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
@@ -219,9 +267,9 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     .reduce((sum, account) => sum + account.current_balance_centavos, 0);
   if (availableMoney <= 0) throw new FinancialPlanInputError("No eligible financial-account balance is available");
   if (!Number.isSafeInteger(plannedAmountCentavos) || plannedAmountCentavos <= 0 || plannedAmountCentavos > availableMoney) throw new FinancialPlanInputError("Planning amount exceeds available money");
-  const debtReservations = reservationSkips.skipDebtRepayments ? [] : ((debtsResult.data ?? []) as Debt[]).filter((debt) => debt.current_balance_centavos > 0 && inPeriod(debt.next_due_date, period)).map((debt) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos), dueDate: debt.next_due_date }));
+  const debtReservations = reservationSkips.skipDebtRepayments ? [] : ((debtsResult.data ?? []) as Debt[]).flatMap((debt) => debt.current_balance_centavos > 0 ? scheduledReservationDates(debt.next_due_date, debt.payment_frequency, period, debt.payment_schedule ?? {}).map((dueDate) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos), dueDate })) : []);
   const statementReservations = reservationSkips.skipDebtRepayments ? [] : ((statementsResult.data ?? []) as Statement[]).map((statement) => ({ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos: statement.minimum_due_centavos, dueDate: statement.due_date }));
-  const savingsReservations = reservationSkips.skipSavingsContributions ? [] : ((goalsResult.data ?? []) as Goal[]).filter((goal) => inPeriod(goal.next_contribution_date, period)).map((goal) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos ?? 0, dueDate: goal.next_contribution_date }));
+  const savingsReservations = reservationSkips.skipSavingsContributions ? [] : ((goalsResult.data ?? []) as Goal[]).flatMap((goal) => (goal.planned_contribution_amount_centavos ?? 0) > 0 ? scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null }).map((dueDate) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos!, dueDate })) : []);
   const obligations = ((obligationsResult.data ?? []) as Obligation[]).flatMap((obligation) => obligation.due_day_of_month ? [{ id: obligation.id, amountCentavos: obligation.amount_centavos, dueDate: `${period.start.slice(0, 8)}${String(Math.min(obligation.due_day_of_month, Number(period.end.slice(8)))).padStart(2, "0")}` }] : []);
   const reserved = [...debtReservations, ...statementReservations, ...savingsReservations, ...obligations].reduce((sum, item) => sum + item.amountCentavos, 0);
   const available = plannedAmountCentavos - reserved;

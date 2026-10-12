@@ -1,6 +1,11 @@
 -- Preserve the active sync RPC and add back the local-only anomaly handler.
 -- A prior wrapper replacement dropped this branch, leaving queued local insights
 -- rejected even though anomaly_evaluations is a synced client entity.
+-- The October 2 remote snapshot was generated after this wrapper existed.
+DROP FUNCTION IF EXISTS public.apply_sync_operation_before_local_anomaly_evaluation_repair(
+  uuid, text, text, uuid, text, integer, text[], jsonb
+);
+
 ALTER FUNCTION public.apply_sync_operation(uuid, text, text, uuid, text, integer, text[], jsonb)
   RENAME TO apply_sync_operation_before_local_anomaly_evaluation_repair;
 

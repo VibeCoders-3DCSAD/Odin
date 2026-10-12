@@ -57,7 +57,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
     }
     setSaving(true); setMessage(null);
     try {
-      const input = { name, goalType, goalCategory: goalType, targetAmountCentavos, startingAmountCentavos, targetDate, priority, emergencyFundBaselineCentavos: goalType === "emergency_fund" ? baseline : null, autoSaveAmountCentavos: plannedContributionAmountCentavos, plannedContributionAmountCentavos, contributionFrequency, contributionIntervalCount: 1, contributionDayOfMonth, contributionSecondDayOfMonth, contributionDayOfWeek, customIntervalDays: parsedCustomIntervalDays, nextContributionDate, interestRateBps, notes };
+      const input = { name, goalType, targetAmountCentavos, startingAmountCentavos, targetDate, priority, emergencyFundBaselineCentavos: goalType === "emergency_fund" ? baseline : null, autoSaveAmountCentavos: plannedContributionAmountCentavos, plannedContributionAmountCentavos, contributionFrequency, contributionIntervalCount: 1, contributionDayOfMonth, contributionSecondDayOfMonth, contributionDayOfWeek, customIntervalDays: parsedCustomIntervalDays, nextContributionDate, interestRateBps, notes };
       const result = goal ? await updateSavingsGoal(userId, deviceId, goal.id, input) : await createSavingsGoal(userId, deviceId, input);
       onSaved(result.goal);
     } catch {

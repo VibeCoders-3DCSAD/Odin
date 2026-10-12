@@ -11,6 +11,7 @@ type CategoryRow = {
   label: string;
   short_label: string | null;
   description: string;
+  classification: "essential" | "non_essential";
   is_system: number;
   is_filipino_context: number;
   minimum_amount_centavos: number | null;
@@ -57,6 +58,7 @@ export type Category = {
   label: string;
   short_label: string | null;
   description: string;
+  classification: "essential" | "non_essential";
   is_system: boolean;
   is_filipino_context: boolean;
   minimum_amount_centavos?: number | null;
@@ -143,6 +145,7 @@ function mapCategory(row: CategoryRow): Category {
     label: row.label,
     short_label: row.short_label,
     description: row.description,
+    classification: row.classification,
     is_system: row.is_system === 1,
     is_filipino_context: row.is_filipino_context === 1,
     minimum_amount_centavos: row.minimum_amount_centavos,

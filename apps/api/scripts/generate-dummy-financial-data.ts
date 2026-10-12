@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
+import { assertSeedConfirmation, parseUserSelector, resolveSeedUserId } from "./resolve-seed-user.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 dotenv.config({ path: fileURLToPath(new URL("../.env.local", import.meta.url)), override: true });
@@ -59,13 +60,7 @@ function parseArgs() {
     return index === -1 ? undefined : args[index + 1];
   };
 
-  const userId = valueFor("--user-id");
-  if (!userId) {
-    throw new Error("Usage: pnpm dummy-data:financial -- --user-id <uuid> [--end-date YYYY-MM-DD] [--seed number] [--dry-run] [--confirm <uuid>]");
-  }
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
-    throw new Error("--user-id must be a UUID");
-  }
+  const user = parseUserSelector(args, "Usage: pnpm dummy-data:financial -- (--email <email> | --user-id <uuid>) [--end-date YYYY-MM-DD] [--seed number] [--dry-run] [--confirm <email-or-uuid>]");
 
   const endDate = valueFor("--end-date") ?? new Date().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || Number.isNaN(Date.parse(`${endDate}T00:00:00Z`))) {
@@ -77,10 +72,7 @@ function parseArgs() {
 
   const dryRun = args.includes("--dry-run");
   const confirmation = valueFor("--confirm");
-  if (!dryRun && confirmation !== userId) {
-    throw new Error("Seeding replaces prior dummy records for this user. Re-run with --confirm <the same user UUID> after using --dry-run.");
-  }
-  return { userId, endDate, seed, dryRun };
+  return { user, endDate, seed, dryRun, confirmation };
 }
 
 function createRandom(seed: number) {
@@ -271,12 +263,14 @@ function loadSeedSubcategories(supabase: ReturnType<typeof createClient>, userId
 }
 
 async function main() {
-  const { userId, endDate, seed, dryRun } = parseArgs();
+  const { user, endDate, seed, dryRun, confirmation } = parseArgs();
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
 
   const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  assertSeedConfirmation(user, confirmation, dryRun);
+  const userId = await resolveSeedUserId(supabase, user);
   const { data: profile, error: profileError } = await supabase.from("profiles").select("user_id").eq("user_id", userId).maybeSingle();
   if (profileError) throw profileError;
   if (!profile) throw new Error(`No profile exists for user ${userId}`);
@@ -330,8 +324,8 @@ async function main() {
   const debtIds = { personal: randomUUID(), auto: randomUUID() };
   const marker = { dummy_data_source: seedMarker, generated_seed: seed };
   const { error: goalsInsertError } = await supabase.from("savings_goals").insert([
-    { id: goalIds.emergency, user_id: userId, name: "Emergency Fund", goal_type: "emergency_fund", goal_category: "emergency_fund", target_amount_centavos: centavos(180_000), starting_amount_centavos: centavos(45_000), target_date: formatDate(addMonths(referenceDate, 9), 30), priority: "high", emergency_fund_baseline_centavos: centavos(30_000), auto_save_amount_centavos: centavos(5_000), planned_contribution_amount_centavos: centavos(5_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "essential_expense_coverage", essential_expense_coverage_months: 6, status: "active", version: 1, deleted: false, metadata: marker },
-    { id: goalIds.laptop, user_id: userId, name: "New Laptop", goal_type: "custom", goal_category: "custom", target_amount_centavos: centavos(85_000), starting_amount_centavos: centavos(12_000), target_date: formatDate(addMonths(referenceDate, 6), 31), priority: "medium", auto_save_amount_centavos: centavos(3_000), planned_contribution_amount_centavos: centavos(3_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "fixed_amount", status: "active", version: 1, deleted: false, metadata: marker },
+    { id: goalIds.emergency, user_id: userId, name: "Emergency Fund", goal_type: "emergency_fund", target_amount_centavos: centavos(180_000), starting_amount_centavos: centavos(45_000), target_date: formatDate(addMonths(referenceDate, 9), 30), priority: "high", emergency_fund_baseline_centavos: centavos(30_000), auto_save_amount_centavos: centavos(5_000), planned_contribution_amount_centavos: centavos(5_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "essential_expense_coverage", essential_expense_coverage_months: 6, status: "active", version: 1, deleted: false, metadata: marker },
+    { id: goalIds.laptop, user_id: userId, name: "New Laptop", goal_type: "custom", target_amount_centavos: centavos(85_000), starting_amount_centavos: centavos(12_000), target_date: formatDate(addMonths(referenceDate, 6), 31), priority: "medium", auto_save_amount_centavos: centavos(3_000), planned_contribution_amount_centavos: centavos(3_000), contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: nextContributionDate, emergency_fund_target_method: "fixed_amount", status: "active", version: 1, deleted: false, metadata: marker },
   ]);
   if (goalsInsertError) throw goalsInsertError;
   const savingsTransfers = transactions.filter((transaction) => transaction.transaction_type === "transfer" && transaction.destination_account_id === accounts[2].id).slice(-4);

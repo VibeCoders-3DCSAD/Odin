@@ -131,6 +131,46 @@ export async function listUnusualSpendings(userId: string, now = new Date()): Pr
   return detectUnusualSpendings(await listTransactions(userId, unusualSpendingStartDate(now)));
 }
 
+export async function listPersistedUnusualSpendings(userId: string): Promise<UnusualSpendingInsight[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<SpendingTransactionRow & {
+    usable_history_count: number;
+    usual_spending_centavos: number;
+    lower_bound_centavos: number;
+    upper_bound_centavos: number;
+    severity: number;
+  }>(
+    `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id,
+            s.label AS subcategory_label, a.name AS account_name,
+            e.usable_history_count, e.usual_spending_centavos,
+            e.lower_bound_centavos, e.upper_bound_centavos, e.severity
+       FROM anomaly_evaluations e
+       JOIN transactions t ON t.id = e.transaction_id
+         AND t.user_id = e.user_id AND t.deleted = 0
+       JOIN subcategories s ON s.id = e.subcategory_id AND s.deleted = 0
+       LEFT JOIN financial_accounts a ON a.id = t.source_account_id
+         AND a.user_id = t.user_id AND a.deleted = 0
+      WHERE e.user_id = ? AND e.deleted = 0
+      ORDER BY t.transaction_date ASC, t.id ASC`,
+    userId,
+  );
+  return rows.flatMap((row) => row.subcategory_label
+    ? [{
+      transactionId: row.id,
+      amountCentavos: row.amount_centavos,
+      subcategoryLabel: row.subcategory_label,
+      accountName: row.account_name,
+      transactionDate: row.transaction_date,
+      usualSpendingCentavos: row.usual_spending_centavos,
+      lowerBoundCentavos: row.lower_bound_centavos,
+      upperBoundCentavos: row.upper_bound_centavos,
+      severity: row.severity,
+      usableHistoryCount: row.usable_history_count,
+      subcategoryId: row.subcategory_id,
+    }]
+    : []);
+}
+
 export async function getUnusualSpending(userId: string, transactionId: string): Promise<UnusualSpendingInsight | null> {
   const insights = await listUnusualSpendings(userId);
   return insights.find((insight) => insight.transactionId === transactionId) ?? null;

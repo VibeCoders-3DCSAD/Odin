@@ -14,7 +14,7 @@
 - View expense summaries
 - View cash-flow summaries
 - View account summaries
-- View budget-versus-actual results
+- View Financial Plan allocation-versus-actual results
 - View forecast-versus-actual results
 - View savings progress
 - View debt summaries
@@ -44,7 +44,7 @@
 - Income totals aggregate income transactions in the selected period
 - Expense totals aggregate expense transactions in the selected period
 - Net cash flow is income less expenses
-- Budget variance compares actual amounts with planned allocations
+- Financial Plan variance compares actual amounts with accepted Financial Plan allocations
 - Savings progress compares Goal Savings balances with target amounts
 - Debt summaries compare opening, paid, and remaining balances
 

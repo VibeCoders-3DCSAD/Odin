@@ -1,0 +1,131 @@
+// ERD view: financial foundation and cashflow (D1-D6).
+// Key columns are readability aliases; see supabase/public-schema.sql for live names.
+
+Table "auth"."users" {
+  "user_id" uuid [pk]
+}
+
+// D1: User Accounts and Settings
+Table "profiles" {
+  "profile_id" uuid [pk]
+  "user_id" uuid [not null, unique]
+  "display_name" text
+  "lifecycle_status" text [not null]
+}
+
+Table "user_privacy_settings" {
+  "user_id" uuid [pk]
+  "personalization_enabled" boolean [not null]
+  "notifications_opt_in" boolean [not null]
+  "data_retention_days" integer
+}
+
+// D2: Income Sources and Accounts
+Table "financial_accounts" {
+  "financial_account_id" uuid [pk]
+  "user_id" uuid [not null]
+  "name" text [not null]
+  "kind" text [not null]
+  "current_balance_centavos" bigint [not null]
+}
+
+Table "savings_account_details" {
+  "financial_account_id" uuid [pk]
+  "user_id" uuid [not null]
+  "account_type" text [not null]
+  "interest_rate_bps" integer
+}
+
+Table "credit_card_details" {
+  "financial_account_id" uuid [pk]
+  "user_id" uuid [not null]
+  "credit_limit_centavos" bigint [not null]
+  "available_credit_centavos" bigint
+}
+
+// D4: Income and Expense Categories
+Table "categories" {
+  "category_id" uuid [pk]
+  "user_id" uuid
+  "slug" text [not null]
+  "label" text [not null]
+}
+
+Table "subcategories" {
+  "subcategory_id" uuid [pk]
+  "category_id" uuid
+  "user_id" uuid
+  "slug" text [not null]
+  "kind" text [not null]
+}
+
+// D6: Bills and Remittances
+Table "recurring_transaction_templates" {
+  "recurring_transaction_template_id" uuid [pk]
+  "user_id" uuid [not null]
+  "subcategory_id" uuid
+  "source_financial_account_id" uuid
+  "destination_financial_account_id" uuid
+  "transaction_type" text [not null]
+  "amount_centavos" bigint [not null]
+}
+
+Table "income_sources" {
+  "income_source_id" uuid [pk]
+  "user_id" uuid [not null]
+  "recurring_transaction_template_id" uuid
+  "destination_financial_account_id" uuid
+  "subcategory_id" uuid
+  "name" text [not null]
+  "expected_amount_centavos" bigint
+}
+
+Table "financial_obligations" {
+  "financial_obligation_id" uuid [pk]
+  "user_id" uuid [not null]
+  "subcategory_id" uuid [not null]
+  "recurring_transaction_template_id" uuid
+  "name" text [not null]
+  "amount_centavos" bigint [not null]
+}
+
+// D3 and D5: Income Transactions and Expense Transactions
+Table "transactions" {
+  "transaction_id" uuid [pk]
+  "user_id" uuid [not null]
+  "category_id" uuid
+  "subcategory_id" uuid
+  "source_financial_account_id" uuid
+  "destination_financial_account_id" uuid
+  "recurring_transaction_template_id" uuid
+  "transaction_type" text [not null]
+  "amount_centavos" bigint [not null]
+}
+
+Ref: "auth"."users"."user_id" - "profiles"."user_id"
+Ref: "profiles"."user_id" -? "user_privacy_settings"."user_id"
+Ref: "profiles"."user_id" < "financial_accounts"."user_id"
+Ref: "financial_accounts"."financial_account_id" -? "savings_account_details"."financial_account_id"
+Ref: "profiles"."user_id" < "savings_account_details"."user_id"
+Ref: "financial_accounts"."financial_account_id" -? "credit_card_details"."financial_account_id"
+Ref: "profiles"."user_id" < "credit_card_details"."user_id"
+Ref: "profiles"."user_id" ?< "categories"."user_id"
+Ref: "categories"."category_id" ?< "subcategories"."category_id"
+Ref: "profiles"."user_id" ?< "subcategories"."user_id"
+Ref: "profiles"."user_id" < "recurring_transaction_templates"."user_id"
+Ref: "subcategories"."subcategory_id" ?< "recurring_transaction_templates"."subcategory_id"
+Ref: "financial_accounts"."financial_account_id" ?< "recurring_transaction_templates"."source_financial_account_id"
+Ref: "financial_accounts"."financial_account_id" ?< "recurring_transaction_templates"."destination_financial_account_id"
+Ref: "profiles"."user_id" < "income_sources"."user_id"
+Ref: "recurring_transaction_templates"."recurring_transaction_template_id" ?< "income_sources"."recurring_transaction_template_id"
+Ref: "financial_accounts"."financial_account_id" ?< "income_sources"."destination_financial_account_id"
+Ref: "subcategories"."subcategory_id" ?< "income_sources"."subcategory_id"
+Ref: "profiles"."user_id" < "financial_obligations"."user_id"
+Ref: "subcategories"."subcategory_id" < "financial_obligations"."subcategory_id"
+Ref: "recurring_transaction_templates"."recurring_transaction_template_id" ?< "financial_obligations"."recurring_transaction_template_id"
+Ref: "profiles"."user_id" < "transactions"."user_id"
+Ref: "categories"."category_id" ?< "transactions"."category_id"
+Ref: "subcategories"."subcategory_id" ?< "transactions"."subcategory_id"
+Ref: "financial_accounts"."financial_account_id" ?< "transactions"."source_financial_account_id"
+Ref: "financial_accounts"."financial_account_id" ?< "transactions"."destination_financial_account_id"
+Ref: "recurring_transaction_templates"."recurring_transaction_template_id" ?< "transactions"."recurring_transaction_template_id"

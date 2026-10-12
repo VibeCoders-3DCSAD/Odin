@@ -12,6 +12,11 @@ export function formatPeso(centavos: number): string {
   return `₱${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+export function formatForecastPeso(centavos: number): string {
+  const fractionDigits = centavos % 100 === 0 ? 0 : 2;
+  return `₱${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: fractionDigits, maximumFractionDigits: 2 })}`;
+}
+
 export function remainingUnallocatedCentavos(availableFundsCentavos: number, allocations: FinancialPlanAllocation[], debtSurplusCentavos = 0, savingsSurplusCentavos = 0): number {
   return availableFundsCentavos - allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0) - debtSurplusCentavos - savingsSurplusCentavos;
 }

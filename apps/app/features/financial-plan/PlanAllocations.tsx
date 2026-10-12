@@ -1,5 +1,5 @@
 import { Text, TextInput, View } from "react-native";
-import { allocationLabel, formatPeso } from "./financialPlanPresentation";
+import { allocationLabel, formatForecastPeso, formatPeso } from "./financialPlanPresentation";
 import type { FinancialPlanAllocation } from "./types";
 
 type Props = {
@@ -25,7 +25,7 @@ export function PlanAllocations({ allocations, showSpendingProgress, readOnly, o
             <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#1B1C1A" }}>{allocationLabel(allocation)}</Text>
-                {!readOnly ? <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: "#6B7A6F", marginTop: 2 }}>{allocation.allocationRule.toLowerCase()} {allocation.forecastAmountCentavos != null ? `· forecast ${formatPeso(allocation.forecastAmountCentavos)}` : ""}</Text> : null}
+                {!readOnly ? <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: "#6B7A6F", marginTop: 2 }}>{allocation.allocationRule.toLowerCase()} {allocation.forecastAmountCentavos != null ? `· forecast ${formatForecastPeso(allocation.forecastAmountCentavos)}` : ""}</Text> : null}
               </View>
               {editable ? <TextInput value={(allocation.allocatedAmountCentavos / 100).toFixed(2)} onChangeText={(amount) => onFlexibleAmountChange(index, amount)} accessibilityLabel={`${allocationLabel(allocation)} flexible amount in pesos`} keyboardType="decimal-pad" style={{ width: 94, height: 40, borderWidth: 1, borderColor: "#D6D8D4", borderRadius: 9, paddingHorizontal: 9, fontFamily: "Manrope", fontWeight: "700", color: "#1B1C1A", textAlign: "right", backgroundColor: "#FFFFFF" }} /> : <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 13, color: "#1B1C1A" }}>{formatPeso(allocation.allocatedAmountCentavos)}</Text>}
             </View>

@@ -12,6 +12,7 @@ const mockListFinancialAccounts = jest.fn();
 const mockListCategories = jest.fn();
 const mockListSubcategories = jest.fn();
 const mockRequestFinancialPlanRecommendation = jest.fn();
+const mockRunSync = jest.fn();
 
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   createFinancialPlan: jest.fn(),
@@ -38,6 +39,10 @@ jest.mock("../../../local-db/repositories/financialAccounts", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
 }));
 
+jest.mock("../../../local-db/sync/runSync", () => ({
+  runSync: (...args: unknown[]) => mockRunSync(...args),
+}));
+
 jest.mock("../api", () => ({ requestFinancialPlanRecommendation: (...args: unknown[]) => mockRequestFinancialPlanRecommendation(...args) }));
 
 describe("FinancialPlanScreen", () => {
@@ -62,6 +67,7 @@ describe("FinancialPlanScreen", () => {
     mockListCategories.mockResolvedValue([]);
     mockListSubcategories.mockResolvedValue([]);
     mockRequestFinancialPlanRecommendation.mockReset();
+    mockRunSync.mockResolvedValue({ successful: true });
   });
 
   it("opens the saved Financial Plan instead of the category selector", async () => {
@@ -140,6 +146,7 @@ describe("FinancialPlanScreen", () => {
 
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(2));
     expect(mockRequestFinancialPlanRecommendation.mock.calls[1][3]).toBe(100_000);
+    expect(mockRunSync).toHaveBeenCalledWith("user-1", "device-1", "token");
   });
 
   it("requires confirmation before skipping debt repayments and shows the warning", async () => {
@@ -171,6 +178,40 @@ describe("FinancialPlanScreen", () => {
 
     await waitFor(() => expect(view.getByText("Skipped plan commitments")).toBeTruthy());
     expect(mockRequestFinancialPlanRecommendation.mock.calls[1]![5]).toEqual({ debtRepayments: true, savingsContributions: false });
+    alert.mockRestore();
+  });
+
+  it("includes commitments by default and lets the user skip savings before generating a plan", async () => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    mockGetLatestFinancialPlan.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
+    mockRequestFinancialPlanRecommendation
+      .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
+        status: "RECOMMENDATION_READY", period: { start: "2026-11-01", end: "2026-11-30" }, inputSnapshot: {}, explanations: [],
+        recommendation: { availableFundsCentavos: 100_000, allocations: [], debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-11-12" }], savingsReservations: [{ savingsGoalId: "goal-1", amountCentavos: 5_000, dueDate: "2026-11-15" }] },
+      } } })
+      .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
+        status: "RECOMMENDATION_READY", period: { start: "2026-11-01", end: "2026-11-30" }, inputSnapshot: {}, explanations: [],
+        recommendation: { availableFundsCentavos: 100_000, allocations: [], debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-11-12" }], savingsReservations: [] },
+      } } });
+
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Create Financial Plan recommendation")).toBeTruthy());
+
+    expect(view.getByLabelText("Skip Savings Contributions").props.accessibilityState?.checked).toBe(false);
+    expect(view.getByLabelText("Skip Debt Repayments")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Skip Savings Contributions"));
+    expect(alert).toHaveBeenCalledWith("Skip savings contributions?", expect.stringContaining("delay"), expect.any(Array));
+    const actions = alert.mock.calls[0]![2] as { onPress?: () => void }[];
+    await act(async () => {
+      actions[1]!.onPress?.();
+    });
+
+    expect(view.getByLabelText("Skip Savings Contributions").props.accessibilityState?.checked).toBe(true);
+    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+    await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(1));
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[0]![5]).toEqual({ debtRepayments: false, savingsContributions: true });
     alert.mockRestore();
   });
 });

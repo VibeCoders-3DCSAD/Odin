@@ -1,0 +1,128 @@
+// ERD view: savings, debt, and credit-card repayment (D7-D10).
+// Anchor tables expose only the keys needed to draw cross-group relationships.
+
+Table "profiles" {
+  "user_id" uuid [pk]
+}
+
+Table "financial_accounts" {
+  "financial_account_id" uuid [pk]
+}
+
+Table "subcategories" {
+  "subcategory_id" uuid [pk]
+}
+
+Table "transactions" {
+  "transaction_id" uuid [pk]
+}
+
+// D7: Savings Goals
+Table "savings_goals" {
+  "savings_goal_id" uuid [pk]
+  "user_id" uuid [not null]
+  "linked_financial_account_id" uuid
+  "linked_subcategory_id" uuid
+  "name" text [not null]
+  "goal_type" text [not null]
+  "target_amount_centavos" bigint [not null]
+}
+
+// D8: Savings Contributions and Preferences
+Table "savings_goal_activities" {
+  "savings_goal_activity_id" uuid [pk]
+  "user_id" uuid [not null]
+  "savings_goal_id" uuid [not null]
+  "transaction_id" uuid [not null]
+  "activity_kind" text [not null]
+  "amount_centavos" bigint [not null]
+}
+
+Table "savings_allocation_preferences" {
+  "user_id" uuid [pk]
+  "strategy" text [not null]
+}
+
+// D9: Debt Accounts
+Table "debt_accounts" {
+  "debt_account_id" uuid [pk]
+  "user_id" uuid [not null]
+  "linked_financial_account_id" uuid
+  "name" text [not null]
+  "current_balance_centavos" bigint [not null]
+}
+
+// D10: Debt Payments and Repayment Preferences
+Table "debt_payments" {
+  "debt_payment_id" uuid [pk]
+  "debt_account_id" uuid [not null]
+  "user_id" uuid [not null]
+  "transaction_id" uuid
+  "amount_centavos" bigint [not null]
+}
+
+Table "debt_strategy_preferences" {
+  "user_id" uuid [pk]
+  "strategy" text [not null]
+  "extra_payment_centavos" bigint [not null]
+}
+
+Table "credit_card_repayment_preferences" {
+  "financial_account_id" uuid [pk]
+  "user_id" uuid [not null]
+  "strategy" text [not null]
+  "custom_amount_centavos" bigint
+  "percentage_bps" integer
+}
+
+Table "credit_card_cycles" {
+  "credit_card_cycle_id" uuid [pk]
+  "user_id" uuid [not null]
+  "financial_account_id" uuid [not null]
+  "cycle_start_date" date [not null]
+  "cutoff_date" date [not null]
+}
+
+Table "credit_card_statements" {
+  "credit_card_statement_id" uuid [pk]
+  "user_id" uuid [not null]
+  "credit_card_cycle_id" uuid [not null]
+  "statement_balance_centavos" bigint [not null]
+  "minimum_due_centavos" bigint [not null]
+}
+
+Table "credit_card_payments" {
+  "credit_card_payment_id" uuid [pk]
+  "user_id" uuid [not null]
+  "credit_card_cycle_id" uuid [not null]
+  "credit_card_statement_id" uuid
+  "transaction_id" uuid
+  "source_financial_account_id" uuid
+  "payment_date" date [not null]
+  "amount_centavos" bigint [not null]
+}
+
+Ref: "profiles"."user_id" < "savings_goals"."user_id"
+Ref: "financial_accounts"."financial_account_id" ?< "savings_goals"."linked_financial_account_id"
+Ref: "subcategories"."subcategory_id" ?< "savings_goals"."linked_subcategory_id"
+Ref: "profiles"."user_id" < "savings_goal_activities"."user_id"
+Ref: "savings_goals"."savings_goal_id" < "savings_goal_activities"."savings_goal_id"
+Ref: "transactions"."transaction_id" < "savings_goal_activities"."transaction_id"
+Ref: "profiles"."user_id" -? "savings_allocation_preferences"."user_id"
+Ref: "profiles"."user_id" < "debt_accounts"."user_id"
+Ref: "financial_accounts"."financial_account_id" ?< "debt_accounts"."linked_financial_account_id"
+Ref: "debt_accounts"."debt_account_id" < "debt_payments"."debt_account_id"
+Ref: "profiles"."user_id" < "debt_payments"."user_id"
+Ref: "transactions"."transaction_id" ?< "debt_payments"."transaction_id"
+Ref: "profiles"."user_id" -? "debt_strategy_preferences"."user_id"
+Ref: "financial_accounts"."financial_account_id" -? "credit_card_repayment_preferences"."financial_account_id"
+Ref: "profiles"."user_id" < "credit_card_repayment_preferences"."user_id"
+Ref: "profiles"."user_id" < "credit_card_cycles"."user_id"
+Ref: "financial_accounts"."financial_account_id" < "credit_card_cycles"."financial_account_id"
+Ref: "profiles"."user_id" < "credit_card_statements"."user_id"
+Ref: "credit_card_cycles"."credit_card_cycle_id" < "credit_card_statements"."credit_card_cycle_id"
+Ref: "profiles"."user_id" < "credit_card_payments"."user_id"
+Ref: "credit_card_cycles"."credit_card_cycle_id" < "credit_card_payments"."credit_card_cycle_id"
+Ref: "credit_card_statements"."credit_card_statement_id" ?< "credit_card_payments"."credit_card_statement_id"
+Ref: "transactions"."transaction_id" ?< "credit_card_payments"."transaction_id"
+Ref: "financial_accounts"."financial_account_id" ?< "credit_card_payments"."source_financial_account_id"

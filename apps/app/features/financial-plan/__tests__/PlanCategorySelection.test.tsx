@@ -13,6 +13,7 @@ const food: Category = {
   label: "Food",
   short_label: null,
   description: "Food expenses",
+  classification: "essential",
   is_system: true,
   is_filipino_context: false,
   sort_order: 1,
@@ -140,5 +141,29 @@ describe("PlanCategorySelection", () => {
     expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy();
     expect(view.getByText("Your planning amount cannot exceed available money.")).toBeTruthy();
     expect(view.getByLabelText("Create Financial Plan recommendation").props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it("keeps plan commitments included by default and exposes skip choices", () => {
+    const onReservationSkipChange = jest.fn();
+    const view = render(<PlanCategorySelection
+      topLevelCategories={[food]}
+      subcategories={[groceries]}
+      includedIds={new Set(["groceries"])}
+      recommendedIds={new Set()}
+      onToggle={jest.fn()}
+      onToggleCategory={jest.fn()}
+      onSaveRule={jest.fn().mockResolvedValue(undefined)}
+      plannedAmount="1000.00"
+      availableMoneyCentavos={100_000}
+      planningAmountError={null}
+      onPlannedAmountChange={jest.fn()}
+      onContinue={jest.fn()}
+      onReservationSkipChange={onReservationSkipChange}
+    />);
+
+    expect(view.getByLabelText("Skip Debt Repayments").props.accessibilityState?.checked).toBe(false);
+    expect(view.getByLabelText("Skip Savings Contributions").props.accessibilityState?.checked).toBe(false);
+    fireEvent.press(view.getByLabelText("Skip Debt Repayments"));
+    expect(onReservationSkipChange).toHaveBeenCalledWith("debtRepayments", true);
   });
 });

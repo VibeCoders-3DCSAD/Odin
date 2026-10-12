@@ -252,7 +252,6 @@ CREATE TABLE public.applied_operations (
 
 CREATE TABLE public.categories (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    category_group_id uuid NOT NULL,
     user_id uuid,
     slug text NOT NULL,
     label text NOT NULL,
@@ -272,20 +271,6 @@ CREATE TABLE public.categories (
     CONSTRAINT categories_fixed_amount_minimum_chk CHECK (((fixed_amount_centavos IS NULL) OR (minimum_amount_centavos IS NULL) OR (fixed_amount_centavos >= minimum_amount_centavos))),
     CONSTRAINT categories_fixed_amount_nonnegative_chk CHECK (((fixed_amount_centavos IS NULL) OR (fixed_amount_centavos >= 0))),
     CONSTRAINT categories_owner_chk CHECK ((((is_system = true) AND (user_id IS NULL)) OR ((is_system = false) AND (user_id IS NOT NULL))))
-);
-
-CREATE TABLE public.category_groups (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    slug text NOT NULL,
-    label text NOT NULL,
-    short_label text,
-    description text NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    version integer DEFAULT 1 NOT NULL,
-    deleted boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE public.credit_card_cycles (
@@ -1020,7 +1005,6 @@ CREATE TABLE public.savings_goals (
     version integer DEFAULT 1 NOT NULL,
     deleted boolean DEFAULT false NOT NULL,
     last_synced_at timestamp with time zone,
-    goal_category text DEFAULT 'custom'::text NOT NULL,
     auto_save_amount_centavos bigint DEFAULT 0 NOT NULL,
     interest_rate_bps integer,
     emergency_fund_target_method text DEFAULT 'fixed_amount'::text NOT NULL,
@@ -1047,7 +1031,6 @@ CREATE TABLE public.savings_goals (
     CONSTRAINT savings_goals_emergency_fund_baseline_centavos_check CHECK ((emergency_fund_baseline_centavos >= 0)),
     CONSTRAINT savings_goals_emergency_fund_target_method_check CHECK ((emergency_fund_target_method = ANY (ARRAY['fixed_amount'::text, 'essential_expense_coverage'::text]))),
     CONSTRAINT savings_goals_essential_expense_coverage_months_check CHECK (((essential_expense_coverage_months >= 3) AND (essential_expense_coverage_months <= 6))),
-    CONSTRAINT savings_goals_goal_category_check CHECK ((goal_category = ANY (ARRAY['emergency_fund'::text, 'custom'::text]))),
     CONSTRAINT savings_goals_goal_type_check CHECK ((goal_type = ANY (ARRAY['emergency_fund'::text, 'custom'::text]))),
     CONSTRAINT savings_goals_interest_rate_bps_check CHECK ((interest_rate_bps >= 0)),
     CONSTRAINT savings_goals_next_contribution_target_check CHECK (((next_contribution_date IS NULL) OR (target_date IS NULL) OR (next_contribution_date <= target_date))),
@@ -1226,9 +1209,6 @@ ALTER TABLE ONLY public.applied_operations
 
 ALTER TABLE ONLY public.categories
     ADD CONSTRAINT categories_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.category_groups
-    ADD CONSTRAINT category_groups_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.credit_card_cycles
     ADD CONSTRAINT credit_card_cycles_pkey PRIMARY KEY (id);
@@ -1475,9 +1455,6 @@ ALTER TABLE ONLY public.anomaly_whitelist_rules
 
 ALTER TABLE ONLY public.applied_operations
     ADD CONSTRAINT applied_operations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(user_id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.categories
-    ADD CONSTRAINT categories_category_group_id_fkey FOREIGN KEY (category_group_id) REFERENCES public.category_groups(id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY public.categories
     ADD CONSTRAINT categories_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(user_id) ON DELETE CASCADE;
@@ -1796,4 +1773,3 @@ ALTER TABLE ONLY public.user_eligibility_profiles
 
 ALTER TABLE ONLY public.user_privacy_settings
     ADD CONSTRAINT user_privacy_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(user_id) ON DELETE CASCADE;
-

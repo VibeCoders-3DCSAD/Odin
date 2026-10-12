@@ -23,6 +23,37 @@ describe("credit-card cycle pull convergence", () => {
 });
 
 describe("legacy taxonomy pull convergence", () => {
+  it("retains a category's non-essential classification", async () => {
+    const row = normalizePullRow("categories", {
+      id: "alcohol-tobacco",
+      user_id: "user-1",
+      slug: "alcohol_tobacco",
+      label: "Alcoholic Beverages and Tobacco",
+      short_label: "Alcohol/Tobacco",
+      description: "Alcohol and tobacco products.",
+      classification: "non_essential",
+      is_system: false,
+      is_filipino_context: false,
+      minimum_amount_centavos: null,
+      always_in_budget: false,
+      fixed_amount_centavos: null,
+      sort_order: 110,
+      is_active: true,
+      metadata: {},
+      version: 2,
+      deleted: false,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-02T00:00:00.000Z",
+    }, "user-1");
+    expect(row.classification).toBe("non_essential");
+
+    const db = { getFirstAsync: jest.fn(async () => null), runAsync: jest.fn<(...args: any[]) => any>(async () => ({ changes: 1 })) };
+    await applyPullRow(db as never, "categories", row);
+
+    expect(String(db.runAsync.mock.calls[0]?.[0])).toContain("classification");
+    expect(db.runAsync.mock.calls[0]).toContain("non_essential");
+  });
+
   it("does not restore retired taxonomy rows", async () => {
     const db = { getFirstAsync: jest.fn(), runAsync: jest.fn() };
     await applyPullRow(db as never, "subcategories", { id: "legacy-1", slug: "essentials_food_groceries", version: 1, deleted: false });

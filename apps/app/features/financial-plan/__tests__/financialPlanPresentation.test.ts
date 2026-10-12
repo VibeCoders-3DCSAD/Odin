@@ -1,8 +1,10 @@
-import { allocationLabel, applyFinancialPlanLabels, formatPeso, remainingUnallocatedCentavos, reservationLabel, toCentavos } from "../financialPlanPresentation";
+import { allocationLabel, applyFinancialPlanLabels, formatForecastPeso, formatPeso, remainingUnallocatedCentavos, reservationLabel, toCentavos } from "../financialPlanPresentation";
 
 describe("financial plan presentation", () => {
   it("formats centavos and uses human-readable fallback labels", () => {
     expect(formatPeso(123456)).toBe("₱1,234.56");
+    expect(formatForecastPeso(123400)).toBe("₱1,234");
+    expect(formatForecastPeso(123456)).toBe("₱1,234.56");
     expect(allocationLabel({ allocationRule: "FLEXIBLE", allocatedAmountCentavos: 0, floorAmountCentavos: 0, subcategoryId: "food" })).toBe("Expense category");
     expect(reservationLabel({ savingsGoalId: "emergency", amountCentavos: 5000 })).toBe("Savings goal");
   });

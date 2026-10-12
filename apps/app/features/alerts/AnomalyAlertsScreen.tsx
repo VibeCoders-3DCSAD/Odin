@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ArrowLeft, BellRinging, Check } from "phosphor-react-native";
-import { listUnusualSpendings, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { listPersistedUnusualSpendings, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 
 type Props = { userId: string; onBack?: () => void };
 const P = { ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", card: "#F8EFDC", warning: "#C25E00" };
@@ -19,7 +19,7 @@ export default function AnomalyAlertsScreen({ userId, onBack }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const refreshed = (await listUnusualSpendings(userId)).reverse();
+      const refreshed = (await listPersistedUnusualSpendings(userId)).reverse();
       setAlerts(refreshed);
       setSelected((current) => current ? refreshed.find((alert) => alert.transactionId === current.transactionId) ?? null : null);
       setError(null);
@@ -42,10 +42,10 @@ export default function AnomalyAlertsScreen({ userId, onBack }: Props) {
 
   return <View>
     {onBack ? <Pressable accessibilityRole="button" accessibilityLabel="Back to financial reports" onPress={onBack} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}><ArrowLeft size={18} color={P.ink} weight="bold" /><Text style={{ color: P.muted }}>Financial Reports</Text></Pressable> : null}
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><BellRinging size={24} color={P.brand} weight="fill" /><View><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 21, color: P.ink }}>Spending alerts</Text><Text style={{ color: P.muted, marginTop: 2 }}>Based on your local spending history</Text></View></View>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><BellRinging size={24} color={P.brand} weight="fill" /><View><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 21, color: P.ink }}>Spending alerts</Text><Text style={{ color: P.muted, marginTop: 2 }}>Based on your saved local spending insights</Text></View></View>
     <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 14 }}><Pressable accessibilityRole="button" accessibilityLabel="Refresh spending alerts" onPress={refresh} disabled={refreshing}><Text style={{ color: P.brand, fontWeight: "700" }}>{refreshing ? "Refreshing..." : "Refresh"}</Text></Pressable></View>
     {error ? <View style={{ marginTop: 14, padding: 14, borderRadius: 14, backgroundColor: "#FFF0F2" }}><Text style={{ color: P.warning }}>{error}</Text></View> : null}
-    {loading ? <ActivityIndicator color={P.brand} style={{ marginTop: 44 }} /> : alerts.length === 0 ? <View style={{ marginTop: 36, alignItems: "center", padding: 22, borderRadius: 18, backgroundColor: P.card }}><Check size={30} color={P.brand} weight="bold" /><Text style={{ marginTop: 10, fontWeight: "800", color: P.ink }}>No unusual spending found</Text><Text style={{ marginTop: 5, textAlign: "center", color: P.muted }}>Odin will show an alert here when a local expense falls outside your usual range.</Text></View> : <View style={{ gap: 10, marginTop: 18 }}>{alerts.map((alert) => <AlertRow key={alert.transactionId} alert={alert} onPress={() => setSelected(alert)} />)}</View>}
+    {loading ? <ActivityIndicator color={P.brand} style={{ marginTop: 44 }} /> : alerts.length === 0 ? <View style={{ marginTop: 36, alignItems: "center", padding: 22, borderRadius: 18, backgroundColor: P.card }}><Check size={30} color={P.brand} weight="bold" /><Text style={{ marginTop: 10, fontWeight: "800", color: P.ink }}>No unusual spending found</Text><Text style={{ marginTop: 5, textAlign: "center", color: P.muted }}>Odin will show saved unusual-spending insights here.</Text></View> : <View style={{ gap: 10, marginTop: 18 }}>{alerts.map((alert) => <AlertRow key={alert.transactionId} alert={alert} onPress={() => setSelected(alert)} />)}</View>}
   </View>;
 }
 

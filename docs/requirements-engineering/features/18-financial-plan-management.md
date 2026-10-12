@@ -8,7 +8,8 @@
 - Use available income, forecast expenses, financial obligations, savings goals,
   debt targets, and Savings and Debt Profile Classification as plan inputs.
 - Keep recommendations separate from user-created plans until the user accepts them.
-- Allow the user to review, accept, edit, or reject a recommendation.
+- Allow the user to review, edit, accept, or reject a recommendation before it
+  becomes the plan for its period.
 - An accepted plan persists its immutable input snapshot locally and remains
   viewable while offline.
 
@@ -102,7 +103,7 @@
 - Recommendation-ready state: a plan is available for review
 - Stale state: a source input changed after the recommendation was generated
 - Accepted state: the user accepted the plan
-- Edited state: the user modified the accepted recommendation
+- Edited state: the user modified a recommendation before accepting it
 - Rejected state: the user rejected the recommendation
 - Skipped-commitments state: the user explicitly excluded debt repayments or
   savings contributions after reviewing the consequence

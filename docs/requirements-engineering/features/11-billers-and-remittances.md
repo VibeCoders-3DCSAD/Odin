@@ -9,8 +9,7 @@
 - Set due-date information
 - Add optional notes
 - Record an obligation payment or contribution
-- Record an obligation payment with or without a related transaction
-- Create a related transaction from an existing obligation payment
+- Record an obligation payment through a related expense transaction
 - Edit an obligation
 - Delete an obligation with confirmation
 - Archive an obligation
@@ -61,7 +60,7 @@
 - Payment date
 - Source account
 - Payment period or occurrence
-- Record related transaction option
+- Required related expense transaction
 - Payment notes
 
 ### 11.6 Obligation Payment Form Placeholders
@@ -70,7 +69,7 @@
 - Payment date: `Select payment date`
 - Source account: `Select source account`
 - Payment period or occurrence: `Select obligation period`
-- Related transaction option: `Record a transaction`
+- Related expense transaction: `Record payment transaction`
 - Payment notes: `Add payment notes`
 
 ### 11.7 Obligation Validation
@@ -84,7 +83,7 @@
 - Require an end date after the start date when provided
 - Require a positive obligation payment amount
 - Require a payment date
-- Require a source account when recording a related transaction
+- Require a source account for the related expense transaction
 - Prevent a payment from being assigned to an archived or deleted obligation
 - Display validation feedback beside the affected field
 - Preserve valid entries after validation failure
@@ -112,7 +111,7 @@
 - Payment-entry state: obligation payment form is open for input
 - Validation-failure state: obligation or payment inputs are invalid
 - Saving state: obligation or payment changes are being saved
-- Transaction-linking state: a related transaction is being created or linked
+- Transaction-linking state: the required related expense transaction is being created
 - Active state: obligation is included in current planning
 - Paid state: current obligation occurrence is fully paid
 - Partially-paid state: current obligation occurrence is partially paid

@@ -6,13 +6,25 @@ drop function if exists "private"."apply_subcategory_minimum_sync_operation"(p_o
 
 drop function if exists "public"."prevent_early_credit_card_statement"();
 
-alter table "public"."financial_plan_allocations" enable row level security;
-
-alter table "public"."financial_plan_debt_reservations" enable row level security;
-
-alter table "public"."financial_plan_forecast_points" enable row level security;
-
-alter table "public"."financial_plan_savings_reservations" enable row level security;
+-- This remote snapshot predates the migrations that create these tables in a
+-- clean replay. Preserve their remote RLS state without requiring that future
+-- schema to exist yet.
+DO $$
+BEGIN
+  IF to_regclass('public.financial_plan_allocations') IS NOT NULL THEN
+    ALTER TABLE public.financial_plan_allocations ENABLE ROW LEVEL SECURITY;
+  END IF;
+  IF to_regclass('public.financial_plan_debt_reservations') IS NOT NULL THEN
+    ALTER TABLE public.financial_plan_debt_reservations ENABLE ROW LEVEL SECURITY;
+  END IF;
+  IF to_regclass('public.financial_plan_forecast_points') IS NOT NULL THEN
+    ALTER TABLE public.financial_plan_forecast_points ENABLE ROW LEVEL SECURITY;
+  END IF;
+  IF to_regclass('public.financial_plan_savings_reservations') IS NOT NULL THEN
+    ALTER TABLE public.financial_plan_savings_reservations ENABLE ROW LEVEL SECURITY;
+  END IF;
+END
+$$;
 
 set check_function_bodies = off;
 
@@ -571,10 +583,24 @@ END;
 $function$
 ;
 
-CREATE TRIGGER protect_bucket_control_insert BEFORE INSERT ON storage.buckets FOR EACH ROW EXECUTE FUNCTION storage.protect_bucket_control_columns('service_role');
-
-CREATE TRIGGER protect_bucket_control_update BEFORE UPDATE OF lifecycle_configuration, lifecycle_configuration_generation ON storage.buckets FOR EACH ROW EXECUTE FUNCTION storage.protect_bucket_control_columns();
-
-CREATE TRIGGER protect_bucket_control_update_role AFTER UPDATE OF lifecycle_configuration, lifecycle_configuration_generation ON storage.buckets FOR EACH ROW EXECUTE FUNCTION storage.enforce_bucket_lifecycle_service_role('service_role');
-
-
+-- These Storage internals vary by local Supabase image version. They are
+-- already managed by Storage when available and must not block app migrations.
+DO $$
+BEGIN
+  IF to_regprocedure('storage.protect_bucket_control_columns(name)') IS NOT NULL THEN
+    CREATE TRIGGER protect_bucket_control_insert
+      BEFORE INSERT ON storage.buckets
+      FOR EACH ROW EXECUTE FUNCTION storage.protect_bucket_control_columns('service_role');
+  END IF;
+  IF to_regprocedure('storage.protect_bucket_control_columns()') IS NOT NULL THEN
+    CREATE TRIGGER protect_bucket_control_update
+      BEFORE UPDATE OF lifecycle_configuration, lifecycle_configuration_generation ON storage.buckets
+      FOR EACH ROW EXECUTE FUNCTION storage.protect_bucket_control_columns();
+  END IF;
+  IF to_regprocedure('storage.enforce_bucket_lifecycle_service_role(name)') IS NOT NULL THEN
+    CREATE TRIGGER protect_bucket_control_update_role
+      AFTER UPDATE OF lifecycle_configuration, lifecycle_configuration_generation ON storage.buckets
+      FOR EACH ROW EXECUTE FUNCTION storage.enforce_bucket_lifecycle_service_role('service_role');
+  END IF;
+END
+$$;

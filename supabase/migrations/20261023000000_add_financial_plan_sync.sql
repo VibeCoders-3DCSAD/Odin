@@ -50,6 +50,11 @@ CREATE TABLE IF NOT EXISTS public.financial_plan_savings_reservations (
   id uuid PRIMARY KEY, plan_id uuid NOT NULL REFERENCES public.financial_plans(id), savings_goal_id uuid NOT NULL REFERENCES public.savings_goals(id), amount_centavos bigint NOT NULL CHECK (amount_centavos >= 0), due_date date
 );
 
+ALTER TABLE public.financial_plan_forecast_points ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_plan_allocations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_plan_debt_reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_plan_savings_reservations ENABLE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION public.apply_financial_plan_sync_operation(
   p_operation_id uuid, p_device_id text, p_entity text, p_record_id uuid,
   p_operation_type text, p_base_version integer, p_changed_fields text[], p_payload jsonb

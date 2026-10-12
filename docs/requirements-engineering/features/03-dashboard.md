@@ -8,7 +8,7 @@
 - View balance and expense trends
 - View spending distribution
 - View recent expenses
-- View budget health
+- View Financial Plan allocation health
 
 ### 3.2 Personal Finance Summary
 
@@ -24,7 +24,7 @@
 - No financial accounts: prompt the user to add an account
 - No transactions: prompt the user to record an income or expense
 - No income sources: prompt the user to add an income source
-- No budget: prompt the user to create a budget
+- No Financial Plan: prompt the user to generate a Financial Plan
 - No savings goals: prompt the user to create a savings goal
 - No debts: show that no debts are currently recorded
 - No forecast: explain that forecast information is not yet available
@@ -63,33 +63,33 @@
 - No expenses: `No expenses were recorded this month. Record an expense to see spending data.`
 - No recent transactions: `No recent transactions are available. Record income or an expense to get started.`
 - No expenses recorded: `No expenses have been recorded yet. Record an expense to track spending.`
-- No budget: `Budget health is unavailable until a current status is calculated. Create a budget or refresh to try again.`
-- No budget spending: `No spending is recorded for this budget. Record an expense to see budget health.`
+- No Financial Plan: `Allocation health is unavailable until you accept a Financial Plan. Generate a plan or refresh to try again.`
+- No planned spending: `No spending is recorded for this Financial Plan period. Record an expense to see allocation health.`
 - No forecast: `Forecast information is not yet available. Keep recording transactions to unlock personalized insights.`
 - No savings goals: `No savings goals are available. Create a goal to start tracking progress.`
 - No debts: `No debts are currently recorded. Add a debt when you need to track one.`
 
 - Partial-data notice: `Some sections are unavailable right now, but your available information is still shown. Refresh to try loading the missing sections.`
-- Budget cached-data notice: `Cached budget data is being shown. Refresh to view the latest status.`
-- Budget-health stale notice: `Budget health may be out of date. Refresh to check the latest status.`
-- Budget on-track notice: `{amount} remains in this budget cycle. Continue reviewing your spending.`
-- Budget warning notice: `{amount} remains in this budget cycle. Consider slowing spending in these categories.`
-- Budget critical notice: `Only {amount} remains for the rest of this budget cycle. Review upcoming expenses and adjust your plan if needed.`
-- Budget reached notice: `This budget has reached its planned amount. Review upcoming expenses and adjust your plan if needed.`
+- Allocation cached-data notice: `Cached Financial Plan data is being shown. Refresh to view the latest status.`
+- Allocation-health stale notice: `Allocation health may be out of date. Refresh to check the latest status.`
+- Allocation on-track notice: `{amount} remains in this Financial Plan period. Continue reviewing your spending.`
+- Allocation warning notice: `{amount} remains in this Financial Plan period. Consider slowing spending in these categories.`
+- Allocation low notice: `Only {amount} remains for the rest of this Financial Plan period. Review upcoming expenses and adjust your plan if needed.`
+- Allocation reached notice: `This Financial Plan allocation has reached its planned amount. Review upcoming expenses and adjust your plan if needed.`
 
 #### Dashboard Progress and Success Messages
 
 - Refresh action: `Your dashboard needs fresh information. Refresh it to get the latest data.`
 - Retry action: `Your dashboard could not recover the unavailable information. Refresh it and try again.`
 
-### 3.6 Budget Health States
+### 3.6 Financial Plan Allocation Health States
 
-- Healthy: spending is within the current budget allocation
-- Warning: spending is approaching the current budget allocation
-- Low: spending has exceeded the current budget allocation or the remaining budget is insufficient for the rest of the cycle
-- No-budget state: explain that budget health is unavailable until a budget is created
-- No-spending state: show that budget health has no recorded spending to evaluate
-- Stale state: identify budget health based on cached information
+- Healthy: spending is within the accepted Financial Plan allocation
+- Warning: spending is approaching the accepted Financial Plan allocation
+- Low: spending has exceeded the accepted Financial Plan allocation or the remaining allocation is insufficient for the rest of the cycle
+- No-Financial-Plan state: explain that allocation health is unavailable until a Financial Plan is accepted
+- No-spending state: show that allocation health has no recorded spending to evaluate
+- Stale state: identify allocation health based on cached information
 - Display the current health state with plain-language guidance
 - Do not use shame-based language for the Low state
 
@@ -97,5 +97,5 @@
 
 - Available balance: included account balances minus applicable outflows
 - Net monthly cash flow: monthly income minus monthly expenses
-- Budget health: actual spending compared with budget allocation
+- Financial Plan allocation health: actual spending compared with the accepted Financial Plan allocation
 - Spending distribution: category or category-group expenses as a share of total expenses

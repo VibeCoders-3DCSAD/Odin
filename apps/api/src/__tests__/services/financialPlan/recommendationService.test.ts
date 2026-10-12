@@ -1,4 +1,4 @@
-import { applyFinancialPlanPriorityWeights, excludeUnusualTransactions, financialPlanPriorityGroup, isFinancialPlanInfeasible } from "../../../services/financialPlan/recommendationService.js";
+import { applyFinancialPlanPriorityWeights, excludeUnusualTransactions, financialPlanPriorityGroup, isFinancialPlanInfeasible, scheduledReservationDates } from "../../../services/financialPlan/recommendationService.js";
 
 describe("Financial Plan feasibility", () => {
   it("marks a 5,000-peso plan infeasible when required minimums exceed it", () => {
@@ -33,5 +33,15 @@ describe("Financial Plan allocation priority", () => {
     ], new Set(["unusual-food"]));
 
     expect(cleanTransactions).toEqual([{ id: "normal-food", amountCentavos: 8_000 }]);
+  });
+});
+
+describe("Financial Plan commitment reservations", () => {
+  it("rolls a stale monthly schedule forward into the plan month", () => {
+    expect(scheduledReservationDates("2026-09-15", "monthly", { start: "2026-11-01", end: "2026-11-30" })).toEqual(["2026-11-15"]);
+  });
+
+  it("includes every weekly contribution due in the plan month", () => {
+    expect(scheduledReservationDates("2026-10-28", "weekly", { start: "2026-11-01", end: "2026-11-30" })).toEqual(["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
   });
 });
