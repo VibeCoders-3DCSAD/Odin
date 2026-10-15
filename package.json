@@ -6,7 +6,8 @@
     "dev:app": "pnpm --filter app start",
     "dev:web": "pnpm --filter app web",
     "dev:api": "pnpm --filter api dev",
-    "test": "pnpm --filter api test && pnpm --filter app test"
+    "test": "pnpm --filter api test && pnpm --filter app test",
+    "eval:iqr": "esbuild scripts/evaluate-iqr-anomaly.ts --bundle --platform=node --format=esm --alias:expo-sqlite=./apps/app/test-mocks/expo-sqlite.ts --outfile=node_modules/.cache/evaluate-iqr-anomaly.mjs --log-level=warning && node node_modules/.cache/evaluate-iqr-anomaly.mjs"
   },
   "devDependencies": {
     "supabase": "^2.105.0"
