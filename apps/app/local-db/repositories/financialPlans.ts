@@ -4,6 +4,7 @@ import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 import type { FinancialPlanLabels } from "../../features/financial-plan/financialPlanPresentation";
+import type { CompletedFinancialPlanSummary } from "../../features/financial-plan/pastPlanTypes";
 
 export type AllocationRule = "FIXED" | "MINIMUM" | "FLEXIBLE";
 
@@ -279,7 +280,7 @@ export async function getAcceptedFinancialPlanForPeriod(userId: string, periodSt
   return row ? mapPlan(db, row) : null;
 }
 
-export async function getFinancialPlanLabels(userId: string, plan: Pick<AcceptedFinancialPlan, "recommendation">): Promise<FinancialPlanLabels> {
+export async function getFinancialPlanLabels(userId: string, plan: Pick<AcceptedFinancialPlan, "recommendation">, _options: { includeDeleted?: boolean } = {}): Promise<FinancialPlanLabels> {
   const recommendation = plan.recommendation as { allocations?: FinancialPlanAllocation[]; debtReservations?: FinancialPlanDebtReservation[]; savingsReservations?: FinancialPlanSavingsReservation[] };
   const categoryIds = [...new Set((recommendation.allocations ?? []).flatMap((allocation) => allocation.categoryId ? [allocation.categoryId] : []))];
   const subcategoryIds = [...new Set((recommendation.allocations ?? []).flatMap((allocation) => allocation.subcategoryId ? [allocation.subcategoryId] : []))];
@@ -301,4 +302,8 @@ export async function getFinancialPlanLabels(userId: string, plan: Pick<Accepted
     savingsGoals: Object.fromEntries(goals.map((goal) => [goal.id, goal.name])),
     creditCardStatements: Object.fromEntries(statements.map((statement) => [statement.id, `${statement.name} statement`])),
   };
+}
+
+export async function listCompletedFinancialPlans(_userId: string, _today: string): Promise<CompletedFinancialPlanSummary[]> {
+  throw new Error("listCompletedFinancialPlans is not implemented");
 }

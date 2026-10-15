@@ -6,6 +6,8 @@ export type FinancialPlanLabels = {
   debtAccounts: Record<string, string>;
   savingsGoals: Record<string, string>;
   creditCardStatements: Record<string, string>;
+  /** Ids of soft-deleted entities, populated when labels are loaded with includeDeleted (D8). */
+  removedIds?: string[];
 };
 
 export function formatPeso(centavos: number): string {
