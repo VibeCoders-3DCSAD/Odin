@@ -5,6 +5,7 @@ import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 import type { FinancialPlanLabels } from "../../features/financial-plan/financialPlanPresentation";
 import type { CompletedFinancialPlanSummary } from "../../features/financial-plan/pastPlanTypes";
+import { getPhilippineToday } from "../../features/debt-manager/debtTrendRange";
 
 export type AllocationRule = "FIXED" | "MINIMUM" | "FLEXIBLE";
 
@@ -99,24 +100,20 @@ function assertDate(value: string, field: string): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a valid YYYY-MM-DD date`);
 }
 
-function nextCalendarMonth(referenceDate = new Date()): { start: string; end: string } {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit" }).formatToParts(referenceDate);
-  const year = Number(parts.find((part) => part.type === "year")!.value);
-  const month = Number(parts.find((part) => part.type === "month")!.value);
-  const first = new Date(Date.UTC(year, month, 1));
-  const last = new Date(Date.UTC(year, month + 1, 0));
-  return { start: first.toISOString().slice(0, 10), end: last.toISOString().slice(0, 10) };
+function currentCalendarMonth(referenceDate = getPhilippineToday()): { start: string; end: string } {
+  const [year, month] = referenceDate.split("-").map(Number) as [number, number];
+  return { start: `${referenceDate.slice(0, 7)}-01`, end: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10) };
 }
 
-export function getNextFinancialPlanPeriod(referenceDate: string): { start: string; end: string } {
+export function getCurrentFinancialPlanPeriod(referenceDate: string): { start: string; end: string } {
   assertDate(referenceDate, "referenceDate");
-  return nextCalendarMonth(new Date(`${referenceDate}T00:00:00Z`));
+  return currentCalendarMonth(referenceDate);
 }
 
 function validate(input: CreateFinancialPlanInput): void {
   assertDate(input.periodStart, "periodStart"); assertDate(input.periodEnd, "periodEnd");
-  const nextMonth = nextCalendarMonth();
-  if (input.periodStart !== nextMonth.start || input.periodEnd !== nextMonth.end) throw new LocalDbError("VALIDATION_ERROR", "Financial Plans can only cover the next calendar month");
+  const currentMonth = currentCalendarMonth();
+  if (input.periodStart !== currentMonth.start || input.periodEnd !== currentMonth.end) throw new LocalDbError("VALIDATION_ERROR", "Financial Plans can only cover the current calendar month");
   if (!Number.isSafeInteger(input.inputSnapshot.plannedAmountCentavos) || input.inputSnapshot.plannedAmountCentavos <= 0) throw new LocalDbError("VALIDATION_ERROR", "planned amount snapshot must be a positive whole number");
   const { plannedAmountCentavos: _plannedAmountCentavos, ...nestedSnapshots } = input.inputSnapshot;
   for (const [name, snapshot] of Object.entries(nestedSnapshots)) {

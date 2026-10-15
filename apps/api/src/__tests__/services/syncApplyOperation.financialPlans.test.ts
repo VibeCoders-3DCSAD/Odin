@@ -1,17 +1,18 @@
+import { jest } from "@jest/globals";
 import { prepareOperation } from "../../services/syncApplyOperation.js";
 
-function nextMonthPeriod() {
+function currentMonthPeriod() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit" }).formatToParts(new Date());
   const year = Number(parts.find((part) => part.type === "year")!.value);
   const month = Number(parts.find((part) => part.type === "month")!.value);
   return {
-    start: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10),
-    end: new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10),
+    start: new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10),
+    end: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10),
   };
 }
 
 function financialPlanOperation() {
-  const period = nextMonthPeriod();
+  const period = currentMonthPeriod();
   return {
     operation_id: "operation-1", entity: "financial_plans", record_id: "plan-1", operation_type: "create" as const,
     base_version: null, changed_fields: [],
@@ -24,14 +25,26 @@ function financialPlanOperation() {
 }
 
 describe("Financial Plan sync payload", () => {
-  it("accepts a complete, next-month immutable plan document", async () => {
+  it("accepts a complete, current-month immutable plan document", async () => {
     const operation = financialPlanOperation();
     await expect(prepareOperation({} as never, "user-1", operation)).resolves.toMatchObject({ payload: operation.payload });
   });
 
-  it("rejects plans outside the next calendar month", async () => {
+  it("rejects plans outside the current calendar month", async () => {
     const operation = financialPlanOperation();
-    await expect(prepareOperation({} as never, "user-1", { ...operation, payload: { ...operation.payload, period_start: "2020-01-01", period_end: "2020-01-31" } })).rejects.toThrow("Financial Plans can only cover the next calendar month");
+    await expect(prepareOperation({} as never, "user-1", { ...operation, payload: { ...operation.payload, period_start: "2020-01-01", period_end: "2020-01-31" } })).rejects.toThrow("Financial Plans can only cover the current calendar month");
+  });
+
+  it("covers the whole Manila month when a plan is created mid-month", async () => {
+    jest.useFakeTimers({ now: new Date("2026-10-15T03:00:00.000Z") });
+    try {
+      const operation = financialPlanOperation();
+      expect(operation.payload).toMatchObject({ period_start: "2026-10-01", period_end: "2026-10-31" });
+      await expect(prepareOperation({} as never, "user-1", operation)).resolves.toMatchObject({ payload: operation.payload });
+      await expect(prepareOperation({} as never, "user-1", { ...operation, payload: { ...operation.payload, period_start: "2026-11-01", period_end: "2026-11-30" } })).rejects.toThrow("Financial Plans can only cover the current calendar month");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("rejects an incomplete immutable input snapshot", async () => {

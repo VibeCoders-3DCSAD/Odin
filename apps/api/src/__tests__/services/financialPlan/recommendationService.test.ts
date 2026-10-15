@@ -1,4 +1,4 @@
-import { applyFinancialPlanPriorityWeights, excludeUnusualTransactions, financialPlanPriorityGroup, isFinancialPlanInfeasible, scheduledReservationDates } from "../../../services/financialPlan/recommendationService.js";
+import { applyFinancialPlanPriorityWeights, currentCalendarMonth, excludeUnusualTransactions, financialPlanPriorityGroup, forecastCoversPlanPeriod, isFinancialPlanInfeasible, scheduledReservationDates } from "../../../services/financialPlan/recommendationService.js";
 
 describe("Financial Plan feasibility", () => {
   it("marks a 5,000-peso plan infeasible when required minimums exceed it", () => {
@@ -43,5 +43,19 @@ describe("Financial Plan commitment reservations", () => {
 
   it("includes every weekly contribution due in the plan month", () => {
     expect(scheduledReservationDates("2026-10-28", "weekly", { start: "2026-11-01", end: "2026-11-30" })).toEqual(["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
+  });
+});
+
+describe("Financial Plan period", () => {
+  it("covers the whole Manila calendar month containing now, including mid-month", () => {
+    expect(currentCalendarMonth(new Date("2026-10-15T03:00:00.000Z"))).toEqual({ start: "2026-10-01", end: "2026-10-31" });
+    expect(currentCalendarMonth(new Date("2026-10-31T16:30:00.000Z"))).toEqual({ start: "2026-11-01", end: "2026-11-30" });
+    expect(currentCalendarMonth(new Date("2028-02-10T00:00:00.000Z"))).toEqual({ start: "2028-02-01", end: "2028-02-29" });
+  });
+
+  it("uses an ML forecast only when it targets the plan month", () => {
+    const forecast = (month: string) => ({ snapshot: { month } }) as Parameters<typeof forecastCoversPlanPeriod>[0];
+    expect(forecastCoversPlanPeriod(forecast("2026-10"), { start: "2026-10-01" })).toBe(true);
+    expect(forecastCoversPlanPeriod(forecast("2026-11"), { start: "2026-10-01" })).toBe(false);
   });
 });

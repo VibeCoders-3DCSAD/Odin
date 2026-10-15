@@ -1615,8 +1615,8 @@ async function validateFinancialPlanPayload(
   for (const field of ["period_start", "period_end"]) requireDateString(sanitized, field);
   const start = sanitized.period_start as string;
   const end = sanitized.period_end as string;
-  const expectedPeriod = nextFinancialPlanPeriod();
-  if (start !== expectedPeriod.start || end !== expectedPeriod.end) throw new Error("Financial Plans can only cover the next calendar month");
+  const expectedPeriod = currentFinancialPlanPeriod();
+  if (start !== expectedPeriod.start || end !== expectedPeriod.end) throw new Error("Financial Plans can only cover the current calendar month");
   if (sanitized.status !== "accepted") throw new Error("only accepted Financial Plans can sync");
   const inputSnapshot = sanitized.input_snapshot;
   if (!inputSnapshot || typeof inputSnapshot !== "object" || Array.isArray(inputSnapshot)) throw new Error("input_snapshot must be an object");
@@ -1699,12 +1699,12 @@ function assertPlanAmount(payload: Record<string, unknown>, field: string): void
   if (!Number.isSafeInteger(payload[field]) || (payload[field] as number) < 0) throw new Error(`${field} must be a non-negative whole number`);
 }
 
-function nextFinancialPlanPeriod(now = new Date()): { start: string; end: string } {
+function currentFinancialPlanPeriod(now = new Date()): { start: string; end: string } {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit" }).formatToParts(now);
   const year = Number(parts.find((part) => part.type === "year")!.value);
   const month = Number(parts.find((part) => part.type === "month")!.value);
-  const start = new Date(Date.UTC(year, month, 1));
-  const end = new Date(Date.UTC(year, month + 1, 0));
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0));
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 

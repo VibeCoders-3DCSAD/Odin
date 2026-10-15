@@ -80,11 +80,16 @@ function latestSourceUpdate(...groups: unknown[][]): string | null {
   return updates.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
 }
 
-export function nextCalendarMonth(now = new Date()): { start: string; end: string } {
+export function currentCalendarMonth(now = new Date()): { start: string; end: string } {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: MANILA, year: "numeric", month: "2-digit" }).formatToParts(now);
   const year = Number(parts.find((part) => part.type === "year")!.value);
   const month = Number(parts.find((part) => part.type === "month")!.value);
-  return { start: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10), end: new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10) };
+  return { start: new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10), end: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10) };
+}
+
+// The budget optimizer rejects a forecast whose month differs from the plan period.
+export function forecastCoversPlanPeriod(forecast: ForecastPayload, period: { start: string }): boolean {
+  return forecast.snapshot.month === period.start.slice(0, 7);
 }
 
 function addScheduleDays(date: string, days: number): string {
@@ -223,7 +228,7 @@ function userFacingForecastRationale(value: string): string {
 }
 
 export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = [], reservationSkips: ReservationSkips = {}) {
-  const period = nextCalendarMonth();
+  const period = currentCalendarMonth();
   const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, obligationsResult, statementsResult, transactionsResult, classificationResult, onboardingResult] = await Promise.all([
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos, updated_at").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
@@ -347,8 +352,10 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     });
     if (forecastTransactions.length) {
       const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions });
-      forecast = mapPlanForecast(userId, mlForecast, categories, categorySlugBySubcategoryId);
-      forecastDetails = mlForecast.forecasts;
+      if (forecastCoversPlanPeriod(mlForecast, period)) {
+        forecast = mapPlanForecast(userId, mlForecast, categories, categorySlugBySubcategoryId);
+        forecastDetails = mlForecast.forecasts;
+      }
     }
   } catch (error) {
     if (!(error instanceof ForecastValidationError || error instanceof ForecastUpstreamError)) throw error;
