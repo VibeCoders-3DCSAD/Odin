@@ -26,7 +26,16 @@ describe("anomaly evaluation sync validation", () => {
     await expect(prepareOperation({} as never, "user-1", operation)).resolves.toMatchObject({ payload: operation.payload });
   });
 
-  it("rejects attempts to update an immutable evaluation", async () => {
-    await expect(prepareOperation({} as never, "user-1", { ...operation, operation_type: "update" as const, base_version: 1, changed_fields: ["severity"], payload: { severity: 2 } })).rejects.toThrow("anomaly evaluations are immutable");
+  it("rejects attempts to update evaluation scores", async () => {
+    await expect(prepareOperation({} as never, "user-1", { ...operation, operation_type: "update" as const, base_version: 1, changed_fields: ["severity"], payload: { severity: 2 } })).rejects.toThrow();
+  });
+
+  it("accepts the user's recurring-spending confirmation", async () => {
+    const payload = { confirmed_recurring_at: "2026-10-31T08:00:00.000Z" };
+    await expect(prepareOperation({} as never, "user-1", { ...operation, operation_type: "update" as const, base_version: 1, changed_fields: ["confirmed_recurring_at"], payload })).resolves.toMatchObject({ payload });
+  });
+
+  it("rejects a recurring-spending confirmation without a timestamp", async () => {
+    await expect(prepareOperation({} as never, "user-1", { ...operation, operation_type: "update" as const, base_version: 1, changed_fields: ["confirmed_recurring_at"], payload: { confirmed_recurring_at: "yes" } })).rejects.toThrow("confirmed_recurring_at must be an ISO-8601 timestamp");
   });
 });

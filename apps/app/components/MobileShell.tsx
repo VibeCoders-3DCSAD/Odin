@@ -879,7 +879,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "financial-reports") {
-      return <FinancialReportsScreen userId={userId} accessToken={accessToken} />;
+      return <FinancialReportsScreen userId={userId} deviceId={deviceId} accessToken={accessToken} />;
     }
 
     const meta = pageMeta[currentPage] ?? pageMeta.dashboard;

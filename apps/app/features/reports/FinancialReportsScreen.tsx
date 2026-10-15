@@ -15,7 +15,7 @@ import {
 } from "./ReportSections";
 import { cashFlowComparisonFor, rangeFor, type ReportPeriod } from "./reportRange";
 
-type Props = { userId: string; accessToken: string };
+type Props = { userId: string; deviceId: string; accessToken: string };
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", tint: "#EFFEF7" };
 
@@ -26,7 +26,7 @@ const PERIODS: { value: ReportPeriod; label: string }[] = [
   { value: "this_week", label: "This week" },
 ];
 
-export default function FinancialReportsScreen({ userId, accessToken }: Props) {
+export default function FinancialReportsScreen({ userId, deviceId, accessToken }: Props) {
   const [period, setPeriod] = useState<ReportPeriod>("this_month");
   const [refreshKey, setRefreshKey] = useState(0);
   const range = rangeFor(period);
@@ -64,6 +64,6 @@ export default function FinancialReportsScreen({ userId, accessToken }: Props) {
     </View>
 
     <View style={{ marginTop: 32 }}><SpendingForecastScreen userId={userId} accessToken={accessToken} embedded /></View>
-    <View style={{ marginTop: 32 }}><AnomalyAlertsScreen userId={userId} /></View>
+    <View style={{ marginTop: 32 }}><AnomalyAlertsScreen userId={userId} deviceId={deviceId} /></View>
   </View>;
 }

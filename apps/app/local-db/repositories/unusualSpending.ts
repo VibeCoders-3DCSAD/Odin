@@ -6,6 +6,7 @@ import { randomUUID } from "../uuid";
 const MINIMUM_HISTORY = 6;
 const IQR_MULTIPLIER = 1.5;
 const MAX_TRANSACTIONS = 5_000;
+const MODEL_VERSION = "personal-transaction-iqr-local-v2.4.0";
 
 type SpendingTransaction = {
   id: string;
@@ -37,6 +38,7 @@ export type UnusualSpendingInsight = {
   severity: number;
   usableHistoryCount: number;
   subcategoryId: string;
+  confirmedRecurring: boolean;
 };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -65,13 +67,17 @@ export function unusualSpendingStartDate(now = new Date()): string {
   return start.toISOString().slice(0, 10);
 }
 
-export function detectUnusualSpendings(transactions: SpendingTransaction[]): UnusualSpendingInsight[] {
+export function detectUnusualSpendings(
+  transactions: SpendingTransaction[],
+  confirmedRecurringIds: ReadonlySet<string> = new Set(),
+): UnusualSpendingInsight[] {
   const histories = new Map<string, SpendingTransaction[]>();
   const insights: UnusualSpendingInsight[] = [];
   const ordered = [...transactions].sort((first, second) => first.transactionDate.localeCompare(second.transactionDate) || first.id.localeCompare(second.id));
 
   for (const transaction of ordered) {
     const history = histories.get(transaction.subcategoryId) ?? [];
+    let flagged = false;
     if (history.length >= MINIMUM_HISTORY && spansThreeCalendarMonths(history[0]!.transactionDate, transaction.transactionDate)) {
       const values = history.map((item) => Math.log1p(item.amountCentavos / 100)).sort((first, second) => first - second);
       const q1 = percentile(values, 0.25);
@@ -82,6 +88,7 @@ export function detectUnusualSpendings(transactions: SpendingTransaction[]): Unu
         const upper = q3 + IQR_MULTIPLIER * iqr;
         const value = Math.log1p(transaction.amountCentavos / 100);
         if (value < lower || value > upper) {
+          flagged = true;
           const usualSpending = percentile(history.map((item) => item.amountCentavos).sort((first, second) => first - second), 0.5);
           insights.push({
             transactionId: transaction.id,
@@ -95,11 +102,13 @@ export function detectUnusualSpendings(transactions: SpendingTransaction[]): Unu
             severity: Math.max(lower - value, value - upper) / iqr,
             usableHistoryCount: history.length,
             subcategoryId: transaction.subcategoryId,
+            confirmedRecurring: confirmedRecurringIds.has(transaction.id),
           });
         }
       }
     }
-    history.push(transaction);
+    // Flagged expenses stay out of the baseline until the user confirms them as recurring.
+    if (!flagged || confirmedRecurringIds.has(transaction.id)) history.push(transaction);
     histories.set(transaction.subcategoryId, history);
   }
   return insights;
@@ -127,8 +136,22 @@ async function listTransactions(userId: string, fromDate: string): Promise<Spend
     : []);
 }
 
+async function listConfirmedRecurringIds(userId: string): Promise<Set<string>> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ transaction_id: string }>(
+    `SELECT transaction_id FROM anomaly_evaluations
+      WHERE user_id = ? AND deleted = 0 AND confirmed_recurring_at IS NOT NULL`,
+    userId,
+  );
+  return new Set(rows.map((row) => row.transaction_id));
+}
+
 export async function listUnusualSpendings(userId: string, now = new Date()): Promise<UnusualSpendingInsight[]> {
-  return detectUnusualSpendings(await listTransactions(userId, unusualSpendingStartDate(now)));
+  const [transactions, confirmedRecurringIds] = await Promise.all([
+    listTransactions(userId, unusualSpendingStartDate(now)),
+    listConfirmedRecurringIds(userId),
+  ]);
+  return detectUnusualSpendings(transactions, confirmedRecurringIds);
 }
 
 export async function listPersistedUnusualSpendings(userId: string): Promise<UnusualSpendingInsight[]> {
@@ -139,11 +162,13 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
     lower_bound_centavos: number;
     upper_bound_centavos: number;
     severity: number;
+    confirmed_recurring_at: string | null;
   }>(
     `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id,
             s.label AS subcategory_label, a.name AS account_name,
             e.usable_history_count, e.usual_spending_centavos,
-            e.lower_bound_centavos, e.upper_bound_centavos, e.severity
+            e.lower_bound_centavos, e.upper_bound_centavos, e.severity,
+            e.confirmed_recurring_at
        FROM anomaly_evaluations e
        JOIN transactions t ON t.id = e.transaction_id
          AND t.user_id = e.user_id AND t.deleted = 0
@@ -167,6 +192,7 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
       severity: row.severity,
       usableHistoryCount: row.usable_history_count,
       subcategoryId: row.subcategory_id,
+      confirmedRecurring: row.confirmed_recurring_at !== null,
     }]
     : []);
 }
@@ -186,18 +212,42 @@ export async function saveUnusualSpending(userId: string, deviceId: string, insi
        (id, user_id, transaction_id, subcategory_id, amount_centavos, usable_history_count,
         usual_spending_centavos, lower_bound_centavos, upper_bound_centavos, severity,
         model_version, evaluated_at, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'personal-transaction-iqr-local-v1', ?, 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
       id, userId, insight.transactionId, insight.subcategoryId, insight.amountCentavos,
       insight.usableHistoryCount, insight.usualSpendingCentavos, insight.lowerBoundCentavos,
-      insight.upperBoundCentavos, insight.severity, timestamp, timestamp, timestamp,
+      insight.upperBoundCentavos, insight.severity, MODEL_VERSION, timestamp, timestamp, timestamp,
     );
     const row = await db.getFirstAsync<{ id: string }>("SELECT id FROM anomaly_evaluations WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, insight.transactionId);
     if (row?.id !== id) return;
     await enqueueOperation(db, {
       userId, deviceId, entity: "anomaly_evaluations", recordId: id, operationType: "create",
       baseVersion: null, changedFields: [],
-      payload: { transaction_id: insight.transactionId, subcategory_id: insight.subcategoryId, amount_centavos: insight.amountCentavos, usable_history_count: insight.usableHistoryCount, usual_spending_centavos: insight.usualSpendingCentavos, lower_bound_centavos: insight.lowerBoundCentavos, upper_bound_centavos: insight.upperBoundCentavos, severity: insight.severity, model_version: "personal-transaction-iqr-local-v1", evaluated_at: timestamp },
+      payload: { transaction_id: insight.transactionId, subcategory_id: insight.subcategoryId, amount_centavos: insight.amountCentavos, usable_history_count: insight.usableHistoryCount, usual_spending_centavos: insight.usualSpendingCentavos, lower_bound_centavos: insight.lowerBoundCentavos, upper_bound_centavos: insight.upperBoundCentavos, severity: insight.severity, model_version: MODEL_VERSION, evaluated_at: timestamp },
       failureMessage: "This unusual spending insight could not be synchronized.",
+    });
+  });
+}
+
+/** Records the user's "I'll be making this spending frequently" response so the expense joins its baseline. */
+export async function confirmRecurringSpending(userId: string, deviceId: string, transactionId: string): Promise<void> {
+  const db = await getDb();
+  const timestamp = new Date().toISOString();
+  await db.withTransactionAsync(async () => {
+    const row = await db.getFirstAsync<{ id: string; version: number; confirmed_recurring_at: string | null }>(
+      "SELECT id, version, confirmed_recurring_at FROM anomaly_evaluations WHERE user_id = ? AND transaction_id = ? AND deleted = 0",
+      userId, transactionId,
+    );
+    if (!row) throw new Error("unusual spending insight not found");
+    if (row.confirmed_recurring_at !== null) return;
+    await db.runAsync(
+      "UPDATE anomaly_evaluations SET confirmed_recurring_at = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?",
+      timestamp, timestamp, row.id, userId,
+    );
+    await enqueueOperation(db, {
+      userId, deviceId, entity: "anomaly_evaluations", recordId: row.id, operationType: "update",
+      baseVersion: row.version, changedFields: ["confirmed_recurring_at"],
+      payload: { confirmed_recurring_at: timestamp },
+      failureMessage: "Your recurring spending confirmation could not be synchronized.",
     });
   });
 }
