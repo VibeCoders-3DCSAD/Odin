@@ -46,6 +46,7 @@ import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
 
 const TOOLBAR_MAX_WIDTH = 430;
+const CONTENT_GUTTER = 20;
 const SYNC_STATUS_POLL_MS = 5_000;
 const AUTO_SYNC_MS = 30_000;
 const MAX_SYNC_ATTEMPTS = 3;
@@ -962,7 +963,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         {/* Content */}
         <ScrollView
           className="flex-1"
-          contentContainerClassName={activeTab ? "px-5 pb-24" : "px-5 pb-8"}
+          contentContainerClassName={activeTab ? "pb-24" : "pb-8"}
+          contentContainerStyle={{ paddingHorizontal: CONTENT_GUTTER }}
           keyboardShouldPersistTaps="handled"
           onScroll={({ nativeEvent }) => {
             const distanceFromBottom = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
@@ -979,8 +981,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             </Text>
           ) : null}
           {activeHub ? (
-            // Bleeds into the 20px gutters so scrolled content never shows beside the pinned row.
-            <View style={{ backgroundColor: palette.shell, marginHorizontal: -20, paddingHorizontal: 20, paddingTop: 12, marginBottom: 16 }}>
+            // Bleeds into the content gutters so scrolled content never shows beside the pinned row.
+            <View style={{ backgroundColor: palette.shell, marginHorizontal: -CONTENT_GUTTER, paddingHorizontal: CONTENT_GUTTER, paddingTop: 12, marginBottom: 16 }}>
               <View accessibilityRole="tablist" style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: palette.line }}>
                 {activeHub.segments.map((segment) => {
                   const selected = currentPage === segment.page;
