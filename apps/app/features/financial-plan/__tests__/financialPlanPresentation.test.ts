@@ -1,4 +1,4 @@
-import { allocationLabel, applyFinancialPlanLabels, formatForecastPeso, formatPeso, remainingUnallocatedCentavos, reservationLabel, toCentavos } from "../financialPlanPresentation";
+import { allocationLabel, applyFinancialPlanLabels, commitmentStatusLabel, formatForecastPeso, formatPeso, formatPlanMonthLabel, labelWithRemovedSuffix, remainingUnallocatedCentavos, reservationLabel, toCentavos } from "../financialPlanPresentation";
 
 describe("financial plan presentation", () => {
   it("formats centavos and uses human-readable fallback labels", () => {
@@ -41,5 +41,26 @@ describe("financial plan presentation", () => {
     const categoryAllocations = [{ allocationRule: "FLEXIBLE" as const, allocatedAmountCentavos: 500_000, floorAmountCentavos: 0, subcategoryId: "fast-food" }];
 
     expect(remainingUnallocatedCentavos(plannedCentavos - debtAndSavingsReservationsCentavos, categoryAllocations)).toBe(-1_930_000);
+  });
+  it("formats a plan month label from an ISO date", () => {
+    expect(formatPlanMonthLabel("2026-10-01")).toBe("October 2026");
+    expect(formatPlanMonthLabel("2027-01-31")).toBe("January 2027");
+    expect(formatPlanMonthLabel("not-a-date")).toBe("not-a-date");
+  });
+
+  it("describes commitment statuses without calling them missed", () => {
+    expect(commitmentStatusLabel("met", "savings")).toBe("Met");
+    expect(commitmentStatusLabel("partial", "debt")).toBe("Partial");
+    expect(commitmentStatusLabel("not_recorded", "savings")).toBe("No contribution recorded");
+    expect(commitmentStatusLabel("not_recorded", "debt")).toBe("No payment recorded");
+    expect(commitmentStatusLabel("unplanned", "savings")).toBe("Additional contribution");
+    expect(commitmentStatusLabel("unplanned", "debt")).toBe("Additional payment");
+  });
+
+  it("marks labels of removed entities", () => {
+    expect(labelWithRemovedSuffix("Groceries", "sub-1", ["sub-1"])).toBe("Groceries (removed)");
+    expect(labelWithRemovedSuffix("Groceries", "sub-2", ["sub-1"])).toBe("Groceries");
+    expect(labelWithRemovedSuffix("Groceries", null, ["sub-1"])).toBe("Groceries");
+    expect(labelWithRemovedSuffix("Groceries", "sub-1")).toBe("Groceries");
   });
 });
