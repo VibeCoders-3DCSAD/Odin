@@ -35,8 +35,8 @@ BEGIN
   END IF;
 
   IF pg_get_functiondef('public.apply_financial_plan_sync_operation_base(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
-     NOT LIKE '%Financial Plans can only cover the current calendar month%' THEN
-    RAISE EXCEPTION 'Financial Plan sync must only accept the current calendar month';
+     NOT LIKE '%Financial Plans can only cover the current calendar month or the one that just ended%' THEN
+    RAISE EXCEPTION 'Financial Plan sync must only accept the current calendar month or the one that just ended';
   END IF;
 
   IF has_schema_privilege('authenticated', 'private', 'USAGE') THEN

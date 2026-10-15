@@ -47,6 +47,19 @@ describe("Financial Plan sync payload", () => {
     }
   });
 
+  it("accepts a plan for the month that just ended so offline plans still sync after month end", async () => {
+    jest.useFakeTimers({ now: new Date("2026-11-01T01:00:00.000Z") });
+    try {
+      const operation = financialPlanOperation();
+      const octoberPlan = { ...operation, payload: { ...operation.payload, period_start: "2026-10-01", period_end: "2026-10-31" } };
+      await expect(prepareOperation({} as never, "user-1", octoberPlan)).resolves.toMatchObject({ payload: octoberPlan.payload });
+      await expect(prepareOperation({} as never, "user-1", { ...operation, payload: { ...operation.payload, period_start: "2026-09-01", period_end: "2026-09-30" } })).rejects.toThrow("Financial Plans can only cover the current calendar month");
+      await expect(prepareOperation({} as never, "user-1", { ...operation, payload: { ...operation.payload, period_start: "2026-10-01", period_end: "2026-10-30" } })).rejects.toThrow("Financial Plans can only cover the current calendar month");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("rejects an incomplete immutable input snapshot", async () => {
     const operation = financialPlanOperation();
     await expect(prepareOperation({} as never, "user-1", { ...operation, payload: { ...operation.payload, input_snapshot: {} } })).rejects.toThrow("input_snapshot.forecast must contain plan input data");

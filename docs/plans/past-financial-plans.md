@@ -34,7 +34,7 @@ Implement section 18.8 of `docs/requirements-engineering/features/18-financial-p
 
 - **D0. Plan period = current calendar month (decided).** A plan always covers the first through the last day of the month containing "today" in Asia/Manila time, including when it is created mid-month (§18.1). The server already uses Manila time, and the app should use `getPhilippineToday()`, so the device and server always agree on which month is current.
 - **D1. Completed period:** `period_end < getPhilippineToday()`. The current-month plan is never listed as "past".
-- **D2. Actual spending:** posted, non-deleted `expense` transactions in `[period_start, period_end]` for the user. Exclude transactions linked to a live `debt_payments.transaction_id` or `credit_card_payments.transaction_id`, and exclude savings-goal transfers. Debt and savings actuals are reported in their own sections.
+- **D2. Actual spending:** (bill payments, i.e. transactions from an obligation's recurring template, are also excluded because bills are reserved separately from category allocations) posted, non-deleted `expense` transactions in `[period_start, period_end]` for the user. Exclude transactions linked to a live `debt_payments.transaction_id` or `credit_card_payments.transaction_id`, and exclude savings-goal transfers. Debt and savings actuals are reported in their own sections.
 - **D3. Category matching:** a category allocation matches transactions whose category, or the parent of their subcategory, equals the allocation's category. A subcategory allocation matches only that subcategory. Because a plan selects either a broad category or its subcategories, never both, nothing is double counted.
 - **D4. Unplanned spending (decided):** spending in categories with no allocation is shown as a separate "Unplanned" line. It counts toward total actual spending, and therefore toward "actual spending exceeded the plan", but not toward any per-allocation variance.
 - **D5. Savings actuals (decided):** only live `savings_goal_activities` with `activity_kind = 'contribution'` in the period count, grouped by goal. Withdrawals are ignored entirely: they are not netted and not displayed. Per goal: `actual − reserved > 0` is an **additional contribution**. A goal with contributions but no reservation is also additional.
@@ -74,7 +74,7 @@ main → fp-period/current-month → fp-history/repo-list → fp-history/actuals
 
 ### PR 1: `fp-history/repo-list`: list completed plans (~80 lines)
 - `financialPlans.ts`: add `listCompletedFinancialPlans(userId, today)`, which returns a summary for each accepted, non-deleted plan with `period_end < today`, sorted by `period_start DESC`. Each summary has `id`, `periodStart`, `periodEnd`, `availableFundsCentavos`, `shortfallCentavos` and the total allocated amount, computed with one aggregate query (no N+1).
-- Make `getFinancialPlanLabels` take `{ includeDeleted }` (D8) and return a `removed` flag for each label.
+- Make `getFinancialPlanLabels` take `{ includeDeleted }` (D8) and return `removedIds`, the ids of soft-deleted entities, so the UI can mark them as removed.
 - Tests in `local-db/repositories/__tests__/financialPlans.test.ts`:
   - only completed periods are listed
   - order is correct
@@ -83,7 +83,7 @@ main → fp-period/current-month → fp-history/repo-list → fp-history/actuals
   - labels resolve for soft-deleted categories
 
 ### PR 2: `fp-history/actuals-spending`: spending comparison (~150 lines)
-- New `local-db/repositories/financialPlanReview.ts` with `getPlanSpendingReview(userId, planId)`. It returns a row for each allocation (`planned`, `actual`, `variance = planned − actual`, `exceeded`), an `unplanned` row, and totals (`plannedTotal`, `actualTotal`, `exceeded`).
+- New `local-db/repositories/financialPlanSpendingReview.ts` with `getPlanSpendingReview(userId, planId)`. It returns a row for each allocation (`planned`, `actual`, `variance = planned − actual`, `exceeded`), an `unplanned` row, and totals (`plannedTotal`, `actualTotal`, `exceeded`).
 - Implement D2 (exclusions), D3 (category and subcategory parent matching) and D4.
 - Before writing the query, check how `transactions.category_id` and `subcategory_id` are populated (finding 4).
 - Tests:
@@ -97,7 +97,7 @@ main → fp-period/current-month → fp-history/repo-list → fp-history/actuals
   - user scoping
 
 ### PR 3: `fp-history/actuals-commitments`: savings and debt comparison (~170 lines)
-- In `financialPlanReview.ts`, add `getPlanCommitmentReview(userId, planId)`. It returns savings and debt rows with `reserved`, `actual`, `additional` and `status` (D5–D7), including `unplanned` rows for unreserved activity.
+- New `local-db/repositories/financialPlanCommitmentReview.ts` with `getPlanCommitmentReview(userId, planId)`. It returns savings and debt rows with `reserved`, `actual`, `additional` and `status` (D5–D7), including `unplanned` rows for unreserved activity.
 - Tests:
   - met, partial and not_recorded statuses
   - additional contribution and additional payment
@@ -148,3 +148,10 @@ main → fp-period/current-month → fp-history/repo-list → fp-history/actuals
 1. Savings withdrawals: only contributions count; withdrawals are ignored (D5).
 2. Unplanned spending counts toward "actual spending exceeded the plan" (D4).
 3. Plans cover the current month instead of next month; this is fixed first in PR 0 (D0).
+
+## Follow-up Changes (2026-10-15)
+
+- **Mid-month deductions.** The recommendation deducts commitments already paid this month: credit-card statement minimums (by `credit_card_payments.statement_id`) and bills linked to a recurring transaction. The optimizer funds only what remains of each category after month-to-date spending. Stored allocations and available funds add that spending back, so they still cover the whole month. Bills without a recurring link stay fully reserved. Deleted bills are no longer reserved.
+- **One spending rule.** Current-plan progress (`getFinancialPlanAllocationSpending`, `getFinancialPlanSpentAmount`) delegates to `getPlanSpendingReview`, so the main screen and the past-plan review count spending the same way. This also fixes broad-category progress, which matched the never-populated `transactions.category_id`.
+- **Sync grace month.** The server also accepts a plan for the month that just ended (`20261106000000_financial_plan_sync_grace_month.sql` and `syncApplyOperation.ts`), so a plan accepted offline near month end still syncs. The device still creates plans only for the current month.
+- **Forecasts.** odin-ml forecasts next month only, so current-month plans use the fallback forecast until odin-ml can forecast the current month.

@@ -1615,8 +1615,10 @@ async function validateFinancialPlanPayload(
   for (const field of ["period_start", "period_end"]) requireDateString(sanitized, field);
   const start = sanitized.period_start as string;
   const end = sanitized.period_end as string;
-  const expectedPeriod = currentFinancialPlanPeriod();
-  if (start !== expectedPeriod.start || end !== expectedPeriod.end) throw new Error("Financial Plans can only cover the current calendar month");
+  // A plan accepted offline near month end may sync after the month rolls over, so the month that just ended is also accepted.
+  const currentPeriod = currentFinancialPlanPeriod();
+  const previousPeriod = currentFinancialPlanPeriod(new Date(Date.parse(`${currentPeriod.start}T00:00:00Z`) - 86_400_000));
+  if (![currentPeriod, previousPeriod].some((period) => start === period.start && end === period.end)) throw new Error("Financial Plans can only cover the current calendar month or the one that just ended");
   if (sanitized.status !== "accepted") throw new Error("only accepted Financial Plans can sync");
   const inputSnapshot = sanitized.input_snapshot;
   if (!inputSnapshot || typeof inputSnapshot !== "object" || Array.isArray(inputSnapshot)) throw new Error("input_snapshot must be an object");
