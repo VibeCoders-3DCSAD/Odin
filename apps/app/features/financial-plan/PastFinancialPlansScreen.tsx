@@ -2,20 +2,13 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { listCompletedFinancialPlans } from "../../local-db/repositories/financialPlans";
-import { formatPeso } from "./financialPlanPresentation";
+import { formatPeso, formatPlanMonthLabel } from "./financialPlanPresentation";
 import type { CompletedFinancialPlanSummary } from "./pastPlanTypes";
 
 export type PastFinancialPlansScreenProps = {
   userId: string;
   onOpenPlan: (planId: string) => void;
 };
-
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-function planMonthLabel(periodStart: string): string {
-  const [year, month] = periodStart.split("-");
-  return `${MONTHS[Number(month) - 1] ?? month} ${year}`;
-}
 
 export default function PastFinancialPlansScreen({ userId, onOpenPlan }: PastFinancialPlansScreenProps) {
   const [plans, setPlans] = useState<CompletedFinancialPlanSummary[] | null>(null);
@@ -40,7 +33,7 @@ export default function PastFinancialPlansScreen({ userId, onOpenPlan }: PastFin
       <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 2 }}>Review how your completed Financial Plans turned out.</Text>
       {plans.length === 0 ? <View style={{ marginTop: 16, backgroundColor: "#F1F0EB", borderRadius: 16, padding: 16 }}><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F" }}>No completed plans yet</Text></View> : null}
       {plans.map((plan) => {
-        const month = planMonthLabel(plan.periodStart);
+        const month = formatPlanMonthLabel(plan.periodStart);
         const hasShortfall = (plan.shortfallCentavos ?? 0) > 0;
         return (
           <Pressable key={plan.id} accessibilityRole="button" accessibilityLabel={`Open ${month} plan`} onPress={() => onOpenPlan(plan.id)} style={{ marginTop: 12, backgroundColor: "#F1F0EB", borderRadius: 16, padding: 16 }}>

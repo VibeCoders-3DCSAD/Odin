@@ -317,7 +317,7 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
           onPress={budgetUnavailable ? refresh : () => onNavigate("financial-plan")}
           style={{ padding: 20, alignItems: "center", borderRadius: 32, backgroundColor: P.card }}
         >
-          <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.mut }}>{budgetUnavailable ? "Budget health is unavailable. Try refreshing." : "Create your next-month Financial Plan to review commitments and category allocations."}</Text>
+          <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.mut }}>{budgetUnavailable ? "Budget health is unavailable. Try refreshing." : "Create this month's Financial Plan to review commitments and category allocations."}</Text>
           <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.aqua700, marginTop: 6 }}>{budgetUnavailable ? "Refresh" : "Open Financial Plan"}</Text>
         </Pressable>
       )}

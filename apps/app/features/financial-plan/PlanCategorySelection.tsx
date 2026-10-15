@@ -78,7 +78,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
   return (
     <View style={{ paddingBottom: 28 }}>
       <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>Financial Plan</Text>
-       <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 4 }}>Choose broad categories or specific subcategories for your next-month plan. They are planned separately. Fixed and minimum categories are included automatically.</Text>
+       <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 4 }}>Choose broad categories or specific subcategories for this month's plan. They are planned separately. Fixed and minimum categories are included automatically.</Text>
        <View style={{ marginTop: 16 }}>
         <Text style={{ color: "#1B1C1A", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>How much should we plan?</Text>
         <TextInput accessibilityLabel="How much should we plan in pesos" value={plannedAmount} onChangeText={onPlannedAmountChange} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#8A938C" style={{ backgroundColor: "#FFFFFF", borderColor: planningAmountError ? "#D9001F" : "#D7DDD8", borderRadius: 13, borderWidth: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 16, marginTop: 7, padding: 13 }} />
