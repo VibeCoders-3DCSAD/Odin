@@ -64,6 +64,18 @@ function isStepComplete(step: StepConfig, answers: Record<string, unknown>) {
   return typeof value === "string" && value.trim() !== "";
 }
 
+function isStepVisible(step: StepConfig, answers: Record<string, unknown>) {
+  return !step.visibleWhen || answers[step.visibleWhen.questionKey] === step.visibleWhen.value;
+}
+
+function nextVisibleStepIndex(startIndex: number, direction: 1 | -1, answers: Record<string, unknown>) {
+  for (let index = startIndex + direction; index >= 0 && index < STEPS.length; index += direction) {
+    const step = STEPS[index];
+    if (step && isStepVisible(step, answers)) return index;
+  }
+  return -1;
+}
+
 export default function OnboardingFlow({
   accessToken,
   userId: _userId,
@@ -165,7 +177,6 @@ export default function OnboardingFlow({
 
   // ── Navigation ──
   const goNext = useCallback(() => {
-    if (stepIndex >= STEPS.length - 1) return;
     const currentStep = STEPS[stepIndex];
     if (!currentStep) return;
     if (!isStepComplete(currentStep, answersRef.current)) {
@@ -173,7 +184,7 @@ export default function OnboardingFlow({
       return;
     }
     setFieldErrors({});
-    const next = stepIndex + 1;
+    const next = nextVisibleStepIndex(stepIndex, 1, answersRef.current);
     const nextStep = STEPS[next];
     if (!nextStep) return;
     let nextAnswers = answersRef.current;
@@ -185,11 +196,11 @@ export default function OnboardingFlow({
     setStepIndex(next);
     if (sessionRef.current)
       persistStep(sessionRef.current, nextStep.key, nextAnswers);
-  }, [stepIndex, persistStep, incomeText]);
+  }, [stepIndex, persistStep]);
 
   const goBack = useCallback(() => {
-    if (stepIndex <= 0) return;
-    setStepIndex((p) => p - 1);
+    const previous = nextVisibleStepIndex(stepIndex, -1, answersRef.current);
+    if (previous >= 0) setStepIndex(previous);
   }, [stepIndex]);
 
   const saveAnswer = useCallback(
@@ -232,9 +243,7 @@ export default function OnboardingFlow({
   const handleSubmit = useCallback(async () => {
     const sid = sessionRef.current;
     if (!sid) return;
-    const firstIncomplete = STEPS.findIndex((item) => {
-      return !isStepComplete(item, answersRef.current);
-    });
+    const firstIncomplete = STEPS.findIndex((item) => isStepVisible(item, answersRef.current) && !isStepComplete(item, answersRef.current));
     if (firstIncomplete >= 0) {
       setStepIndex(firstIncomplete);
       const missingStep = STEPS[firstIncomplete];
@@ -349,6 +358,8 @@ export default function OnboardingFlow({
     return <ResultScreen accessToken={accessToken} result={submitResult} error={submitError} onContinue={onComplete} />;
   }
 
+  const visibleSteps = STEPS.filter((item) => isStepVisible(item, answers));
+  const visibleStepIndex = visibleSteps.indexOf(STEPS[stepIndex]!);
   const step = STEPS[stepIndex];
   if (!step) return null;
 
@@ -357,9 +368,9 @@ export default function OnboardingFlow({
     <View className="flex-1 bg-card">
       {/* Progress bar */}
       <View className="flex-row gap-1.5 px-5 pt-12 pb-4">
-        {STEPS.map((s, i) => {
-          const isDone = i < stepIndex;
-          const isCurrent = i === stepIndex;
+        {visibleSteps.map((s, i) => {
+          const isDone = i < visibleStepIndex;
+          const isCurrent = i === visibleStepIndex;
           const bg = isDone ? AQUA950 : isCurrent ? AQUA600 : LINE;
           return (
             <View
@@ -376,7 +387,7 @@ export default function OnboardingFlow({
       </View>
 
       {/* Back button */}
-      {stepIndex > 0 && (
+      {visibleStepIndex > 0 && (
         <Pressable
           onPress={goBack}
           hitSlop={8}

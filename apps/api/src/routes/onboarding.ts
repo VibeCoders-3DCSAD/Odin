@@ -4,13 +4,14 @@ import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { ONBOARDING_ERRORS, VALID_EMPLOYMENT_CLASSIFICATIONS, VALID_METRO_MANILA_PRESENCE } from "../lib/constants.js";
 import { getServiceRoleClient } from "../lib/supabase.js";
+import { createOnboardingFinancialConditionAssessment } from "../services/financialConditionAssessmentService.js";
 
 const router = Router();
 
 const ONBOARDING_ANSWER_KEYS = new Set([
   "display_name", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
   "primary_employment_classification", "employment_status", "monthly_income",
-  "monthly_deductions", "monthly_deduction_amounts", "emergency_savings_runway", "liquid_emergency_savings",
+  "monthly_deductions", "monthly_deduction_amounts", "emergency_savings_runway", "liquid_emergency_savings", "monthly_debt_payments",
   "monthly_essential_living_costs", "paying_off_debt", "credit_card_payment_behavior", "protected_categories",
   "protected_category_costs", "high_expense_seasons", "saving_seasons", "has_dependents",
 ]);
@@ -72,7 +73,7 @@ function validateOnboardingPayload(
       const options = ANSWER_OPTIONS[key];
       if (options && typeof value === "string" && value !== "" && !options.includes(value)) return `Invalid ${key}.`;
       if (options && Array.isArray(value) && value.some((item) => !options.includes(item))) return `Invalid ${key}.`;
-      if (["monthly_income", "liquid_emergency_savings", "monthly_essential_living_costs"].includes(key) && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
+      if (["monthly_income", "liquid_emergency_savings", "monthly_essential_living_costs", "monthly_debt_payments"].includes(key) && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
         return `${key} must be a non-negative whole number.`;
       }
     }
@@ -300,6 +301,15 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     return;
   }
 
+  if (rawAnswers.paying_off_debt === "true" && (typeof rawAnswers.monthly_debt_payments !== "string" || rawAnswers.monthly_debt_payments === "")) {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Enter your total required monthly debt payments.",
+      fields: ["monthly_debt_payments"],
+    });
+    return;
+  }
+
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   if (typeof rawAnswers.date_of_birth === "string") {
     if (!dateRegex.test(rawAnswers.date_of_birth)) {
@@ -353,10 +363,12 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     return;
   }
 
+  const assessment = await createOnboardingFinancialConditionAssessment(userId, rawAnswers, getServiceRoleClient());
+
   response.status(200).json({
     payload: {
       session: { id: sessionId, status: "submitted" },
-      classification_available: false,
+      classification_available: assessment != null,
     },
   });
 });
