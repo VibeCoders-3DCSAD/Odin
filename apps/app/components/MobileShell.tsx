@@ -1,12 +1,10 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ArrowsClockwise, CheckCircle, Cloud, SquaresFour, ClockCounterClockwise, Plus, Pulse, TrashSimple, Wallet } from "phosphor-react-native";
+import { ArrowsClockwise, CaretLeft, ChartLine, CheckCircle, Cloud, House, ListBullets, Plus, Target, TrashSimple, User, Wallet, type IconProps } from "phosphor-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   AppState,
-  Dimensions,
   Image,
   Modal,
   PanResponder,
@@ -47,8 +45,6 @@ import { initDatabase } from "../local-db/client";
 import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const DRAWER_WIDTH = Math.min(300, SCREEN_WIDTH * 0.8);
 const TOOLBAR_MAX_WIDTH = 430;
 const SYNC_STATUS_POLL_MS = 5_000;
 const AUTO_SYNC_MS = 30_000;
@@ -147,51 +143,59 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-type DrawerItem = {
-  page: Page;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap | "phosphor-wallet";
-  label: string;
-  badge?: string;
-  child?: boolean;
+type Tab = "home" | "money" | "activity" | "plan";
+
+type HubSegment = { page: Page; label: string };
+
+// Money and Plan group several existing pages behind one tab, switched by segments.
+const hubs: Record<"money" | "plan", { title: string; segments: HubSegment[] }> = {
+  money: {
+    title: "Money",
+    segments: [
+      { page: "financial-accounts", label: "Accounts" },
+      { page: "income-sources", label: "Income" },
+      { page: "financial-obligations", label: "Bills" },
+      { page: "recurring-transactions", label: "Scheduled" },
+    ],
+  },
+  plan: {
+    title: "Plan",
+    segments: [
+      { page: "financial-plan", label: "Budget" },
+      { page: "debt-manager", label: "Debts" },
+      { page: "savings-goals", label: "Goals" },
+    ],
+  },
 };
 
-type DrawerSection = {
-  label: string;
-  items: DrawerItem[];
-};
-
-const drawerSections: DrawerSection[] = [
-  {
-    label: "Overview",
-    items: [
-      { page: "dashboard", icon: "view-dashboard-outline", label: "Dashboard" },
-      { page: "financial-accounts", icon: "wallet-outline", label: "Financial Accounts" },
-      { page: "income-sources", icon: "cash-multiple", label: "Income Sources" },
-      { page: "financial-obligations", icon: "calendar-check-outline", label: "Obligations" },
-      { page: "debt-manager", icon: "credit-card-outline", label: "Debt Manager" },
-      { page: "categories", icon: "tag-outline", label: "Categories" },
-       { page: "transactions", icon: "swap-horizontal-bold", label: "Transactions" },
-        { page: "financial-plan", icon: "phosphor-wallet", label: "Financial Plan" },
-       { page: "recurring-transactions", icon: "repeat", label: "Recurring Transactions", child: true },
-      { page: "history", icon: "clock-outline", label: "History" },
-      { page: "settings", icon: "cog-outline", label: "Settings" },
-    ],
-  },
-  {
-    label: "Intelligence",
-    items: [
-      { page: "financial-reports", icon: "file-chart-outline", label: "Financial Reports" },
-      { page: "budget-advice", icon: "message-text-outline", label: "Budget Advice" },
-    ],
-  },
-  {
-    label: "Wealth",
-    items: [
-      { page: "savings-goals", icon: "wallet-outline", label: "Savings & Goals" },
-      { page: "insurance", icon: "shield-outline", label: "Insurance" },
-    ],
-  },
+const tabs: { tab: Tab; page: Page; label: string; Icon: React.ComponentType<IconProps> }[] = [
+  { tab: "home", page: "dashboard", label: "Home", Icon: House },
+  { tab: "money", page: "financial-accounts", label: "Money", Icon: Wallet },
+  { tab: "activity", page: "transactions", label: "Activity", Icon: ListBullets },
+  { tab: "plan", page: "financial-plan", label: "Plan", Icon: Target },
 ];
+
+function tabForPage(page: Page): Tab | null {
+  if (page === "dashboard") return "home";
+  if (page === "transactions") return "activity";
+  if (hubs.money.segments.some((segment) => segment.page === page)) return "money";
+  if (hubs.plan.segments.some((segment) => segment.page === page)) return "plan";
+  return null;
+}
+
+// Pages outside the tabs get a back header; anything unlisted goes back to Home.
+const parentPage: Partial<Record<Page, Page>> = {
+  categories: "settings",
+  "credit-cards": "debt-manager",
+  "credit-card-detail": "credit-cards",
+  "non-credit-card-debts": "debt-manager",
+  "non-credit-card-debt-detail": "non-credit-card-debts",
+  "financial-plan-history": "financial-plan",
+  "financial-plan-history-detail": "financial-plan-history",
+};
+
+// These screens draw their own header, so the shell adds no chrome around them.
+const fullScreenPages: Page[] = ["add-transaction", "add-recurring-transaction"];
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
@@ -233,7 +237,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
   const [savingsActivityContext, setSavingsActivityContext] = useState<{ savingsGoalId: string; kind: "contribution" | "withdrawal"; amountCentavos?: number } | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const online = useConnectivityStore(state => state.online);
@@ -254,9 +257,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [allowDiscardLogout, setAllowDiscardLogout] = useState(false);
   const [logoutAfterDiscard, setLogoutAfterDiscard] = useState(false);
   const [discardConfirmVisible, setDiscardConfirmVisible] = useState(false);
-  const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const overlayAnim = useRef(new Animated.Value(0)).current;
-  const hamburgerAnim = useRef(new Animated.Value(0)).current;
   const syncSheetPanResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
@@ -272,6 +272,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const lastObservedQueueCount = useRef<number | null>(null);
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transactionLoadMoreRef = useRef<(() => void) | null>(null);
+  const contentScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -545,28 +546,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     return () => clearInterval(interval);
   }, [userId, deviceId, accessToken, syncPending]);
 
-  function openDrawer() {
-    setDrawerOpen(true);
-    Animated.parallel([
-      Animated.timing(drawerAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-      Animated.timing(overlayAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.timing(hamburgerAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-    ]).start();
-  }
-
-  function closeDrawer() {
-    Animated.parallel([
-      Animated.timing(drawerAnim, { toValue: -DRAWER_WIDTH, duration: 250, useNativeDriver: true }),
-      Animated.timing(overlayAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
-      Animated.timing(hamburgerAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
-    ]).start(() => setDrawerOpen(false));
-  }
-
-  function navigate(page: Page) {
-    setCurrentPage(page);
-    closeDrawer();
-  }
-
   async function handleSync() {
     if (await countExhaustedSyncRows() > 0) {
       await openSyncDetails(true);
@@ -736,12 +715,49 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
   }
 
-  const isActive = (page: Page) => currentPage === page;
+  const activeTab = tabForPage(currentPage);
+  const activeHub = activeTab === "money" || activeTab === "plan" ? hubs[activeTab] : null;
+  const isFullScreen = fullScreenPages.includes(currentPage);
+
+  const syncIcon = syncing ? (
+    <ActivityIndicator size="small" color={palette.mut} />
+  ) : queueCount > 0 ? (
+    <ArrowsClockwise size={20} color="#C25E00" weight="bold" />
+  ) : (
+    <Cloud size={20} color="#0B8A55" weight="bold" />
+  );
+
+  const syncButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={queueCount > 0 ? `${queueCount} unsynced changes` : "Synced"}
+      onPress={handleSync}
+      disabled={syncing}
+      hitSlop={8}
+    >
+      {syncIcon}
+    </Pressable>
+  );
 
   function renderPage() {
     if (currentPage === "settings") {
       const syncSection = settingsSubPage ? null : (
         <View>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
+            Manage
+          </Text>
+          <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", marginBottom: 20 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Categories"
+              onPress={() => setCurrentPage("categories")}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 15, paddingVertical: 14 }}
+            >
+              <MaterialCommunityIcons color={palette.ink2} name="tag-outline" size={18} />
+              <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "600", color: palette.ink }}>Categories</Text>
+              <MaterialCommunityIcons color={palette.mut} name="chevron-right" size={20} />
+            </Pressable>
+          </View>
           <Text style={{ fontSize: 11, fontWeight: "700", color: palette.mut, textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 9 }}>
             Sync
           </Text>
@@ -862,7 +878,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "financial-plan-history") {
-      return <View><Pressable accessibilityRole="button" accessibilityLabel="Back to Financial Plan" onPress={() => setCurrentPage("financial-plan")}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: palette.mut }}>Back</Text></Pressable><View style={{ marginTop: 12 }}><PastFinancialPlansScreen userId={userId} onOpenPlan={(planId) => { setSelectedPastPlanId(planId); setCurrentPage("financial-plan-history-detail"); }} /></View></View>;
+      return <PastFinancialPlansScreen userId={userId} onOpenPlan={(planId) => { setSelectedPastPlanId(planId); setCurrentPage("financial-plan-history-detail"); }} />;
     }
 
     if (currentPage === "financial-plan-history-detail" && selectedPastPlanId) {
@@ -889,189 +905,161 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   return (
     <View className="flex-1">
       <SafeAreaView style={{ backgroundColor: palette.shell }} className="flex-1">
-        {currentPage === "add-transaction" ? (
+        {isFullScreen ? (
           <View style={{ flex: 1 }}>
             {renderPage()}
           </View>
         ) : (
           <>
-        {/* Top bar */}
-        <View style={{ backgroundColor: palette.shell }} className="px-5 py-3 flex-row items-center justify-between">
-          <View className="flex-row items-center gap-3">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open navigation menu"
-              onPress={drawerOpen ? closeDrawer : openDrawer}
-              className="w-10 h-10 items-center justify-center"
-            >
-              <View className="w-[18px] h-[18px] items-center justify-center gap-[3px]">
-                <Animated.View
-                  style={{
-                    width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                    transform: [
-                      { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) },
-                      { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] }) },
-                    ],
-                  }}
-                />
-                <Animated.View
-                  style={{
-                    width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                    opacity: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-                  }}
-                />
-                <Animated.View
-                  style={{
-                    width: 18, height: 2, borderRadius: 2, backgroundColor: palette.ink,
-                    transform: [
-                      { translateY: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
-                      { rotate: hamburgerAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-45deg"] }) },
-                    ],
-                  }}
-                />
-              </View>
-            </Pressable>
+        {activeTab ? (
+          /* Top bar: profile and sync, logo, notifications */
+          <View style={{ backgroundColor: palette.shell, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center" }}>
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 11 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Profile and settings"
+                onPress={() => setCurrentPage("settings")}
+                style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}
+              >
+                <User size={16} color="#FFFFFF" weight="bold" />
+              </Pressable>
+              {syncButton}
+            </View>
             <Image
               source={require("../assets/odin-logo.png")}
-              accessibilityLabel="Odin logo"
-              style={{ width: 68, height: 24, resizeMode: "contain" }}
+              accessibilityLabel="Budgie logo"
+              style={{ width: 68, height: 22, resizeMode: "contain" }}
             />
-          </View>
-          <View className="flex-row items-center gap-3">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={queueCount > 0 ? `${queueCount} unsynced changes` : "Synced"}
-              onPress={handleSync}
-              disabled={syncing}
-            >
-              {syncing ? (
-                <ActivityIndicator size="small" color={palette.mut} />
-              ) : queueCount > 0 ? (
-                <ArrowsClockwise size={20} color="#C25E00" weight="bold" />
-              ) : (
-                <Cloud size={20} color="#0B8A55" weight="bold" />
-              )}
-            </Pressable>
-            <View className="relative">
-              <MaterialCommunityIcons color={palette.ink2} name="bell-outline" size={20} />
-              <View className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#ba1a1a] rounded-full" />
+            <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end" }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Financial reports"
+                onPress={() => setCurrentPage("financial-reports")}
+                hitSlop={8}
+              >
+                <ChartLine size={20} color={palette.ink} />
+              </Pressable>
             </View>
           </View>
-        </View>
+        ) : (
+          /* Inner header: back, title, sync */
+          <View style={{ backgroundColor: palette.shell, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              onPress={() => setCurrentPage(parentPage[currentPage] ?? "dashboard")}
+              hitSlop={10}
+            >
+              <CaretLeft size={20} color={palette.ink2} weight="bold" />
+            </Pressable>
+            <Text numberOfLines={1} style={{ flex: 1, fontFamily: "Manrope", fontSize: 16.5, fontWeight: "800", letterSpacing: -0.16, color: palette.ink }}>
+              {(pageMeta[currentPage] ?? pageMeta.dashboard).title}
+            </Text>
+            {syncButton}
+          </View>
+        )}
 
         {/* Content */}
         <ScrollView
           className="flex-1"
-          contentContainerClassName="px-5 pb-24"
+          contentContainerClassName={activeTab ? "px-5 pb-24" : "px-5 pb-8"}
           keyboardShouldPersistTaps="handled"
           onScroll={({ nativeEvent }) => {
             const distanceFromBottom = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
             if (currentPage === "transactions" && distanceFromBottom < 200) transactionLoadMoreRef.current?.();
           }}
           scrollEventThrottle={16}
+          ref={contentScrollRef}
+          // The hub title scrolls away; the segment row (child 1) stays pinned.
+          stickyHeaderIndices={activeHub ? [1] : undefined}
         >
+          {activeHub ? (
+            <Text style={{ marginTop: 6, fontFamily: "Manrope", fontSize: 22, fontWeight: "800", letterSpacing: -0.22, color: palette.ink }}>
+              {activeHub.title}
+            </Text>
+          ) : null}
+          {activeHub ? (
+            // Bleeds into the 20px gutters so scrolled content never shows beside the pinned row.
+            <View style={{ backgroundColor: palette.shell, marginHorizontal: -20, paddingHorizontal: 20, paddingTop: 12, marginBottom: 16 }}>
+              <View accessibilityRole="tablist" style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: palette.line }}>
+                {activeHub.segments.map((segment) => {
+                  const selected = currentPage === segment.page;
+                  return (
+                    <Pressable
+                      key={segment.page}
+                      accessibilityRole="tab"
+                      accessibilityLabel={segment.label}
+                      accessibilityState={{ selected }}
+                      onPress={() => {
+                        contentScrollRef.current?.scrollTo({ y: 0, animated: false });
+                        setCurrentPage(segment.page);
+                      }}
+                      style={{ flex: 1, alignItems: "center", paddingVertical: 10, marginBottom: -1, borderBottomWidth: 2, borderBottomColor: selected ? palette.brand : "transparent" }}
+                    >
+                      <Text style={{ fontFamily: "Manrope", fontSize: 13, fontWeight: selected ? "700" : "600", color: selected ? palette.brand : palette.mut }}>
+                        {segment.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
           {renderPage()}
         </ScrollView>
 
-        {/* Bottom toolbar */}
-        <View className="absolute bottom-0 left-0 right-0 items-center px-4">
-          <View
-            style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell, paddingBottom: bottomInset + 6 }}
-            className="w-full px-6 pt-2 flex-row items-end justify-between border-t border-[#EAEAE6]"
-          >
-            <Pressable
-              onPress={() => setCurrentPage("dashboard")}
-              accessibilityRole="button"
-              accessibilityLabel="Home"
-              accessibilityState={{ selected: isActive("dashboard") }}
-              className="items-center gap-[3px]"
+        {/* Bottom tab bar */}
+        {activeTab ? (
+          <View className="absolute bottom-0 left-0 right-0 items-center">
+            <View
+              style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell, paddingBottom: bottomInset + 8, minHeight: 62 + bottomInset }}
+              className="w-full px-6 pt-[7px] flex-row items-start justify-between border-t border-[#EAEAE6]"
             >
-              <SquaresFour
-                size={21}
-                color={isActive("dashboard") ? palette.brand : palette.mut}
-                weight={isActive("dashboard") ? "fill" : "regular"}
-              />
-              <Text
-                style={{ fontSize: 9.5, fontWeight: isActive("dashboard") ? "600" : "500", color: isActive("dashboard") ? palette.brand : palette.mut }}
-              >
-                Home
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setCurrentPage("history")}
-              accessibilityRole="button"
-              accessibilityLabel="History"
-              accessibilityState={{ selected: isActive("history") }}
-              className="items-center gap-[3px]"
-            >
-              <ClockCounterClockwise
-                size={21}
-                color={isActive("history") ? palette.brand : palette.mut}
-                weight={isActive("history") ? "fill" : "regular"}
-              />
-              <Text
-                style={{ fontSize: 9.5, fontWeight: isActive("history") ? "600" : "500", color: isActive("history") ? palette.brand : palette.mut }}
-              >
-                History
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => { setTransactionReturnPage("dashboard"); setCurrentPage("add-transaction"); }}
-              accessibilityRole="button"
-              accessibilityLabel="Add transaction"
-              className="w-[50px] h-[50px] rounded-full items-center justify-center -mt-[22px]"
-              style={{
-                backgroundColor: palette.brand,
-                shadowColor: "#013220",
-                shadowOpacity: 0.3,
-                shadowRadius: 18,
-                shadowOffset: { width: 0, height: 8 },
-              }}
-            >
-              <Plus size={24} color="white" weight="bold" />
-            </Pressable>
-
-            <Pressable
-              onPress={() => setCurrentPage("assistant")}
-              accessibilityRole="button"
-              accessibilityLabel="Assistant"
-              accessibilityState={{ selected: isActive("assistant") }}
-              className="items-center gap-[3px]"
-            >
-              <Pulse
-                size={21}
-                color={isActive("assistant") ? palette.brand : palette.mut}
-                weight={isActive("assistant") ? "fill" : "regular"}
-              />
-              <Text
-                style={{ fontSize: 9.5, fontWeight: isActive("assistant") ? "600" : "500", color: isActive("assistant") ? palette.brand : palette.mut }}
-              >
-                Assistant
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setCurrentPage("savings-goals")}
-              accessibilityRole="button"
-              accessibilityLabel="Savings"
-              accessibilityState={{ selected: isActive("savings-goals") }}
-              className="items-center gap-[3px]"
-            >
-              <Wallet
-                size={21}
-                color={isActive("savings-goals") ? palette.brand : palette.mut}
-                weight={isActive("savings-goals") ? "fill" : "regular"}
-              />
-              <Text
-                style={{ fontSize: 9.5, fontWeight: isActive("savings-goals") ? "600" : "500", color: isActive("savings-goals") ? palette.brand : palette.mut }}
-              >
-                Savings
-              </Text>
-            </Pressable>
+              {tabs.flatMap(({ tab, page, label, Icon }, index) => {
+                const selected = activeTab === tab;
+                const button = (
+                  <Pressable
+                    key={tab}
+                    onPress={() => setCurrentPage(page)}
+                    accessibilityRole="tab"
+                    accessibilityLabel={label}
+                    accessibilityState={{ selected }}
+                    style={{ width: 44, height: 36, alignItems: "center", justifyContent: "center" }}
+                  >
+                    {selected ? (
+                      <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}>
+                        <Icon size={20} color="#FFFFFF" weight="fill" />
+                      </View>
+                    ) : (
+                      <Icon size={22} color={palette.mut} />
+                    )}
+                  </Pressable>
+                );
+                if (index !== 2) return [button];
+                return [
+                  <Pressable
+                    key="add"
+                    onPress={() => { setTransactionReturnPage(currentPage); setCurrentPage("add-transaction"); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add transaction"
+                    className="w-[50px] h-[50px] rounded-full items-center justify-center -mt-[22px]"
+                    style={{
+                      backgroundColor: palette.brand,
+                      shadowColor: "#013220",
+                      shadowOpacity: 0.3,
+                      shadowRadius: 18,
+                      shadowOffset: { width: 0, height: 8 },
+                      elevation: 6,
+                    }}
+                  >
+                    <Plus size={23} color="white" weight="bold" />
+                  </Pressable>,
+                  button,
+                ];
+              })}
+            </View>
           </View>
-        </View>
+        ) : null}
           </>
         )}
 
@@ -1257,106 +1245,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           </View>
         </Modal>
       </SafeAreaView>
-
-      {/* Drawer overlay - rendered last to sit above everything */}
-      {drawerOpen ? (
-        <Animated.View
-          style={{ opacity: overlayAnim }}
-          className="absolute inset-0 bg-black/40"
-        >
-          <Pressable className="flex-1" onPress={closeDrawer} />
-        </Animated.View>
-      ) : null}
-
-      {/* Drawer */}
-      {drawerOpen ? (
-        <Animated.View
-          style={{ transform: [{ translateX: drawerAnim }], backgroundColor: palette.brand }}
-          className="absolute top-0 left-0 bottom-0"
-        >
-          <ScrollView
-            style={{ width: DRAWER_WIDTH }}
-            className="flex-1"
-            contentContainerClassName="flex-grow px-6 pt-12 pb-8"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Drawer header */}
-            <View className="flex-row items-center gap-3 mb-10">
-              <Image
-                source={require("../assets/odin-logo.png")}
-                accessibilityLabel="Odin logo"
-                style={{ width: 32, height: 32, resizeMode: "contain" }}
-              />
-              <View>
-                <Text className="text-white text-xl font-semibold">Odin</Text>
-                <Text className="text-white/45 text-[10px] uppercase tracking-widest">Personal Finance</Text>
-              </View>
-            </View>
-
-            {/* Drawer sections */}
-            {drawerSections.map((section) => (
-              <View key={section.label} className="mb-8">
-                <Text className="text-white/30 text-[10px] font-medium uppercase tracking-widest px-4 mb-2">
-                  {section.label}
-                </Text>
-                <View className="gap-[2px]">
-                  {section.items.map((item) => {
-                    const active = currentPage === item.page;
-                    return (
-                      <Pressable
-                        key={item.page}
-                        onPress={() => navigate(item.page)}
-                        accessibilityRole="button"
-                        accessibilityLabel={item.label}
-                        accessibilityState={{ selected: active }}
-                        className={`flex-row items-center gap-3 px-4 py-3 rounded-xl ${
-                          active ? "bg-white/12" : ""
-                        }`}
-                        style={item.child ? { marginLeft: 16 } : undefined}
-                      >
-                        {item.icon === "phosphor-wallet" ? (
-                          <Wallet color={active ? "white" : "rgba(255,255,255,0.6)"} size={20} weight="regular" />
-                        ) : (
-                          <MaterialCommunityIcons
-                            color={active ? "white" : "rgba(255,255,255,0.6)"}
-                            name={item.icon}
-                            size={20}
-                          />
-                        )}
-                        <Text
-                          className={`flex-1 text-sm ${
-                            active ? "text-white font-medium" : "text-white/60"
-                          }`}
-                        >
-                          {item.label}
-                        </Text>
-                        {item.badge ? (
-                          <View className="bg-[#ba1a1a]/80 rounded-full px-[7px] py-[2px]">
-                            <Text className="text-white text-[10px] font-semibold">{item.badge}</Text>
-                          </View>
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-
-            {/* Drawer footer - profile */}
-            <View className="mt-auto pt-6">
-              <View className="flex-row items-center gap-3 px-4 py-3 rounded-xl">
-                <View className="w-9 h-9 rounded-full bg-[#0a7c5a] items-center justify-center">
-                  <Text className="text-white text-xs font-semibold">CT</Text>
-                </View>
-                <View>
-                  <Text className="text-white/90 text-xs font-medium">Charles Togle</Text>
-                  <Text className="text-white/40 text-[10px]">Stable-Obligated</Text>
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-        </Animated.View>
-      ) : null}
     </View>
   );
 }

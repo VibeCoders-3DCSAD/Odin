@@ -10,7 +10,7 @@ type Props = { userId: string; deviceId: string; onBack: () => void; onOpenDebt:
 const P = { shell: "#fcf8f0", brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#EAEAE6" } as const;
 const FILTERS: { value: DebtListVisibility; label: string }[] = [{ value: "active", label: "Active" }, { value: "finished", label: "Finished" }, { value: "archived", label: "Archived" }, { value: "deleted", label: "Deleted" }];
 
-export default function NonCreditDebtListScreen({ userId, deviceId, onBack, onOpenDebt }: Props) {
+export default function NonCreditDebtListScreen({ userId, deviceId, onOpenDebt }: Props) {
   const [debts, setDebts] = useState<DebtAccount[] | null>(null);
   const [visibility, setVisibility] = useState<DebtListVisibility>("active");
   const [strategy, setStrategy] = useState<DebtStrategy>("avalanche");
@@ -37,8 +37,7 @@ export default function NonCreditDebtListScreen({ userId, deviceId, onBack, onOp
   if (debts === null) return <ActivityIndicator color={P.brand} />;
 
   return <View>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to Debt Manager" onPress={onBack}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.muted }}>Back</Text></Pressable>
-    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink, marginTop: 12 }}>Non Credit Card Debts</Text>
+    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>Non Credit Card Debts</Text>
     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>Select a debt to view payments and repayment details.</Text>
     <View style={{ marginTop: 16, borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 14, backgroundColor: P.shell }}>
       <Text style={{ fontFamily: "Manrope", fontWeight: "800", color: P.ink }}>Global repayment strategy</Text>
