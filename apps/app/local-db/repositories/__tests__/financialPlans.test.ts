@@ -46,8 +46,8 @@ describe("financial plan repository", () => {
     );
   });
 
-  it("accepts the numeric planned amount in a recommendation input snapshot", async () => {
-    jest.useFakeTimers().setSystemTime(new Date("2026-10-01T00:00:00.000Z"));
+  it("accepts a current-month plan created mid-month with the numeric planned amount in its input snapshot", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-15T03:00:00.000Z"));
     const db = {
       withTransactionAsync: jest.fn(async (callback: () => Promise<void>) => callback()),
       getAllAsync: jest.fn(async () => []),
@@ -58,11 +58,11 @@ describe("financial plan repository", () => {
 
     const { createFinancialPlan } = await import("../financialPlans");
     const input = {
-      periodStart: "2026-11-01",
-      periodEnd: "2026-11-30",
+      periodStart: "2026-10-01",
+      periodEnd: "2026-10-31",
       inputSnapshot: {
         plannedAmountCentavos: 100_000,
-        forecast: { month: "2026-11", totalAmountCentavos: 0, modelVersion: "v1", generatedAt: "2026-10-01T00:00:00.000Z", quality: "FALLBACK", categoryForecasts: [] },
+        forecast: { month: "2026-10", totalAmountCentavos: 0, modelVersion: "v1", generatedAt: "2026-10-01T00:00:00.000Z", quality: "FALLBACK", categoryForecasts: [] },
         restrictions: { allocations: [] },
         obligations: { reservations: [] },
         debtRequirements: { reservations: [] },
@@ -77,6 +77,16 @@ describe("financial plan repository", () => {
 
     await expect(createFinancialPlan("user-1", "device-1", input)).resolves.toEqual(expect.objectContaining({ id: "plan-1" }));
     expect(db.runAsync).toHaveBeenCalled();
+    await expect(createFinancialPlan("user-1", "device-1", { ...input, periodStart: "2026-11-01", periodEnd: "2026-11-30" })).rejects.toThrow("Financial Plans can only cover the current calendar month");
+    await expect(createFinancialPlan("user-1", "device-1", { ...input, periodStart: "2026-09-01", periodEnd: "2026-09-30" })).rejects.toThrow("Financial Plans can only cover the current calendar month");
+  });
+
+  it("covers the whole calendar month containing the reference date", async () => {
+    const { getCurrentFinancialPlanPeriod } = await import("../financialPlans");
+    expect(getCurrentFinancialPlanPeriod("2026-10-15")).toEqual({ start: "2026-10-01", end: "2026-10-31" });
+    expect(getCurrentFinancialPlanPeriod("2026-10-01")).toEqual({ start: "2026-10-01", end: "2026-10-31" });
+    expect(getCurrentFinancialPlanPeriod("2028-02-29")).toEqual({ start: "2028-02-01", end: "2028-02-29" });
+    expect(getCurrentFinancialPlanPeriod("2026-12-31")).toEqual({ start: "2026-12-01", end: "2026-12-31" });
   });
 
   it("loads an accepted plan only for the requested user and period", async () => {

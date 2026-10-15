@@ -200,7 +200,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   history: { title: "History", subtitle: "Past activity" },
   "financial-reports": { title: "Financial Reports", subtitle: "Financial outlook and alerts" },
    "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
-    "financial-plan": { title: "Financial Plan", subtitle: "Plan next month's money" },
+    "financial-plan": { title: "Financial Plan", subtitle: "Plan this month's money" },
   "financial-plan-history": { title: "Past Plans", subtitle: "Completed Financial Plans" },
   "financial-plan-history-detail": { title: "Past Plan", subtitle: "How your plan turned out" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },

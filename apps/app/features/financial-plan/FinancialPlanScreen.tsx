@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkle } from "phosphor-react-native";
 import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from "react-native";
-import { createFinancialPlan, deleteFinancialPlan, getFinancialPlanAllocationSpending, getFinancialPlanLabels, getFinancialPlanSpentAmount, getLatestFinancialPlan } from "../../local-db/repositories/financialPlans";
+import { createFinancialPlan, deleteFinancialPlan, getAcceptedFinancialPlanForPeriod, getCurrentFinancialPlanPeriod, getFinancialPlanAllocationSpending, getFinancialPlanLabels, getFinancialPlanSpentAmount, type AcceptedFinancialPlan } from "../../local-db/repositories/financialPlans";
 import { listRecentExpenseCategoryIds, listRecentExpenseSubcategoryIds } from "../../local-db/repositories/forecastTransactions";
 import { listCategories, listSubcategories, updateCategory, updateSubcategory, type Category, type Subcategory } from "../../local-db/repositories/taxonomy";
 import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
 import { runSync } from "../../local-db/sync/runSync";
+import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { requestFinancialPlanRecommendation, type ManualPlanAllocation, type ReservationSkips } from "./api";
 import { PlanAllocations } from "./PlanAllocations";
 import { PlanCategorySelection } from "./PlanCategorySelection";
@@ -17,7 +18,12 @@ import type { PlanCategoryRuleUpdate } from "./PlanCategoryRuleEditor";
 type Props = { userId: string; deviceId: string; accessToken: string; syncVersion: number; onSyncRequested?: () => Promise<void>; onOpenPastPlans?: () => void };
 type State = "loading" | "selecting" | "ready" | "infeasible" | "stale" | "saving" | "saved" | "error";
 
-function savedPlanToRecommendation(savedPlan: NonNullable<Awaited<ReturnType<typeof getLatestFinancialPlan>>>): FinancialPlanRecommendation {
+function getCurrentPeriodPlan(userId: string): Promise<AcceptedFinancialPlan | null> {
+  const period = getCurrentFinancialPlanPeriod(getPhilippineToday());
+  return getAcceptedFinancialPlanForPeriod(userId, period.start, period.end);
+}
+
+function savedPlanToRecommendation(savedPlan: AcceptedFinancialPlan): FinancialPlanRecommendation {
   return {
     status: "RECOMMENDATION_READY",
     period: { start: savedPlan.periodStart, end: savedPlan.periodEnd },
@@ -74,7 +80,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       setState(body.payload.status === "INFEASIBLE" ? "infeasible" : "ready");
     } catch (cause) {
       if (cause instanceof Error && cause.name === "AbortError") return;
-      const savedPlan = await getLatestFinancialPlan(userId);
+      const savedPlan = await getCurrentPeriodPlan(userId);
       if (savedPlan) {
         const savedRecommendation = savedPlanToRecommendation(savedPlan);
         const [labels, spending, spentAmount] = await Promise.all([getFinancialPlanLabels(userId, savedPlan), getFinancialPlanAllocationSpending(userId, savedPlan.id), getFinancialPlanSpentAmount(userId, savedPlan.id)]);
@@ -93,7 +99,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
 
   useEffect(() => {
     let active = true;
-    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listRecentExpenseSubcategoryIds(userId), listRecentExpenseCategoryIds(userId), getLatestFinancialPlan(userId), listFinancialAccounts(userId, "active")]).then(async ([topLevelResult, result, recentIds, recentCategoryIds, savedPlan, accounts]) => {
+    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listRecentExpenseSubcategoryIds(userId), listRecentExpenseCategoryIds(userId), getCurrentPeriodPlan(userId), listFinancialAccounts(userId, "active")]).then(async ([topLevelResult, result, recentIds, recentCategoryIds, savedPlan, accounts]) => {
       if (!active) return;
       if (savedPlan) {
         const savedRecommendation = savedPlanToRecommendation(savedPlan);
@@ -138,7 +144,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       setState((current) => current === "ready" ? "stale" : current);
       return;
     }
-    void getLatestFinancialPlan(userId).then(async (savedPlan) => {
+    void getCurrentPeriodPlan(userId).then(async (savedPlan) => {
       if (!savedPlan) return;
       const savedRecommendation = savedPlanToRecommendation(savedPlan);
       const [labels, spending, spentAmount] = await Promise.all([getFinancialPlanLabels(userId, savedPlan), getFinancialPlanAllocationSpending(userId, savedPlan.id), getFinancialPlanSpentAmount(userId, savedPlan.id)]);

@@ -42,7 +42,7 @@ jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
 }));
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   getAcceptedFinancialPlanForPeriod: (...args: unknown[]) => mockGetAcceptedFinancialPlanForPeriod(...args),
-  getNextFinancialPlanPeriod: () => ({ start: "2026-10-01", end: "2026-10-31" }),
+  getCurrentFinancialPlanPeriod: () => ({ start: "2026-10-01", end: "2026-10-31" }),
 }));
 jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({
   getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args),

@@ -1,11 +1,11 @@
-import { getAcceptedFinancialPlanForPeriod, getNextFinancialPlanPeriod } from "../../local-db/repositories/financialPlans";
+import { getAcceptedFinancialPlanForPeriod, getCurrentFinancialPlanPeriod } from "../../local-db/repositories/financialPlans";
 import { getSavingsAllocationStrategy } from "../../local-db/repositories/savingsAllocationPreferences";
 import { listSavingsGoals } from "../../local-db/repositories/savingsGoals";
 import { getRequiredSavingsContributionsForPeriod } from "./requiredSavingsContributionQueries";
 import { allocateSavingsEnvelope, type SavingsEnvelopeAllocation } from "./savingsEnvelopeAllocation";
 
 export async function getCurrentSavingsEnvelopeAllocation(userId: string, asOfDate: string): Promise<SavingsEnvelopeAllocation | null> {
-  const period = getNextFinancialPlanPeriod(asOfDate);
+  const period = getCurrentFinancialPlanPeriod(asOfDate);
   const plan = await getAcceptedFinancialPlanForPeriod(userId, period.start, period.end);
   if (!plan) return null;
   const [requirements, strategy, savedGoals] = await Promise.all([

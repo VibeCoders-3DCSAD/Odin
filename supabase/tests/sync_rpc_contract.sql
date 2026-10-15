@@ -34,6 +34,11 @@ BEGIN
     RAISE EXCEPTION 'Financial Plan sync must accept a null inactive debt reservation target';
   END IF;
 
+  IF pg_get_functiondef('public.apply_financial_plan_sync_operation_base(uuid, text, text, uuid, text, integer, text[], jsonb)'::regprocedure)
+     NOT LIKE '%Financial Plans can only cover the current calendar month%' THEN
+    RAISE EXCEPTION 'Financial Plan sync must only accept the current calendar month';
+  END IF;
+
   IF has_schema_privilege('authenticated', 'private', 'USAGE') THEN
     RAISE EXCEPTION 'authenticated has USAGE on the private schema';
   END IF;
