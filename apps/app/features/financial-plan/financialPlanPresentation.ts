@@ -1,3 +1,4 @@
+import type { PlanCommitmentStatus } from "./pastPlanTypes";
 import type { FinancialPlanAllocation, FinancialPlanReservation } from "./types";
 
 export type FinancialPlanLabels = {
@@ -52,4 +53,23 @@ export function applyFinancialPlanLabels<T extends { allocations: FinancialPlanA
 export function toCentavos(value: string): number | null {
   const amount = Number(value.trim());
   return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : null;
+}
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+export function formatPlanMonthLabel(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})/.exec(isoDate);
+  const monthName = match ? MONTH_NAMES[Number(match[2]) - 1] : undefined;
+  return match && monthName ? `${monthName} ${match[1]}` : isoDate;
+}
+
+export function commitmentStatusLabel(status: PlanCommitmentStatus, kind: "savings" | "debt"): string {
+  if (status === "met") return "Met";
+  if (status === "partial") return "Partial";
+  if (status === "not_recorded") return kind === "savings" ? "No contribution recorded" : "No payment recorded";
+  return kind === "savings" ? "Additional contribution" : "Additional payment";
+}
+
+export function labelWithRemovedSuffix(label: string, id: string | null | undefined, removedIds: readonly string[] = []): string {
+  return id && removedIds.includes(id) ? `${label} (removed)` : label;
 }
