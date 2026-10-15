@@ -31,6 +31,29 @@ describe("detectUnusualSpendings", () => {
     ])).toEqual([]);
   });
 
+  it("keeps a flagged expense out of later baselines", () => {
+    const spike = { ...history[0]!, id: "spike", transactionDate: "2026-04-01", amountCentavos: 100_000 };
+    const repeat = { ...history[0]!, id: "repeat", transactionDate: "2026-04-02", amountCentavos: 100_000 };
+
+    const insights = detectUnusualSpendings([...history, spike, repeat]);
+
+    expect(insights.map((insight) => insight.transactionId)).toEqual(["spike", "repeat"]);
+    expect(insights[1]).toMatchObject({ usableHistoryCount: 6, confirmedRecurring: false });
+  });
+
+  it("adds a flagged expense to the baseline once the user confirms it as frequent", () => {
+    const spike = { ...history[0]!, id: "spike", transactionDate: "2026-04-01", amountCentavos: 100_000 };
+    const repeat = { ...history[0]!, id: "repeat", transactionDate: "2026-04-02", amountCentavos: 100_000 };
+
+    const unconfirmed = detectUnusualSpendings([...history, spike, repeat]);
+    const confirmed = detectUnusualSpendings([...history, spike, repeat], new Set(["spike"]));
+
+    expect(confirmed[0]).toMatchObject({ transactionId: "spike", confirmedRecurring: true });
+    expect(unconfirmed[1]).toMatchObject({ transactionId: "repeat", usableHistoryCount: 6 });
+    expect(confirmed[1]).toMatchObject({ transactionId: "repeat", usableHistoryCount: 7 });
+    expect(confirmed[1]!.upperBoundCentavos).toBeGreaterThan(unconfirmed[1]!.upperBoundCentavos);
+  });
+
   it("uses the previous twelve months as its history window", () => {
     expect(unusualSpendingStartDate(new Date("2026-09-23T12:00:00Z"))).toBe("2025-09-23");
   });

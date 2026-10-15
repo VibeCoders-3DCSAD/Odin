@@ -18,7 +18,7 @@ import { useToast } from "../../components/Toast";
 import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
-import type { UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { confirmRecurringSpending, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 
 const palette = {
   shell: "#fcf8f0",
@@ -82,6 +82,8 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [deleteBlockedTarget, setDeleteBlockedTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showUnusualSpending, setShowUnusualSpending] = useState(false);
+  const [confirmingRecurring, setConfirmingRecurring] = useState(false);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
   const requestId = useRef(0);
   const loadingMoreRef = useRef(false);
   const nextOffsetRef = useRef(0);
@@ -282,8 +284,22 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     else setCustomToDate(formatIsoDate(date));
   }
 
+  async function confirmUnusualSpendingRecurring(): Promise<void> {
+    if (!unusualSpending) return;
+    setConfirmingRecurring(true);
+    try {
+      await confirmRecurringSpending(userId, deviceId, unusualSpending.transactionId);
+      dismissUnusualSpending();
+    } catch {
+      setRecurringError("Your answer could not be saved. Try again.");
+    } finally {
+      setConfirmingRecurring(false);
+    }
+  }
+
   function dismissUnusualSpending(): void {
     setShowUnusualSpending(false);
+    setRecurringError(null);
     onUnusualSpendingDismissed();
   }
 
@@ -713,7 +729,11 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
                 Your usual spending is {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. This is only a personal spending observation.
               </Text>
-              <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 22 }}>
+              {recurringError ? <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.error, marginTop: 10 }}>{recurringError}</Text> : null}
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 20, marginTop: 22 }}>
+                <Pressable onPress={() => void confirmUnusualSpendingRecurring()} disabled={confirmingRecurring} style={{ flexShrink: 1 }} accessibilityRole="button" accessibilityLabel="I'll be making this spending frequently">
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>{confirmingRecurring ? "Saving..." : "I'll be making this spending frequently"}</Text>
+                </Pressable>
                 <Pressable onPress={dismissUnusualSpending} accessibilityRole="button" accessibilityLabel="Close unusual spending insight">
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Got it</Text>
                 </Pressable>

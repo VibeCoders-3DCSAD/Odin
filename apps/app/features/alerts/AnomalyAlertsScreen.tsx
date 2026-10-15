@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ArrowLeft, BellRinging, Check } from "phosphor-react-native";
-import { listPersistedUnusualSpendings, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { confirmRecurringSpending, listPersistedUnusualSpendings, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 
-type Props = { userId: string; onBack?: () => void };
+type Props = { userId: string; deviceId: string; onBack?: () => void };
 const P = { ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", card: "#F8EFDC", warning: "#C25E00" };
 
 function formatCurrency(amountCentavos: number): string {
   return `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function AnomalyAlertsScreen({ userId, onBack }: Props) {
+export default function AnomalyAlertsScreen({ userId, deviceId, onBack }: Props) {
   const [alerts, setAlerts] = useState<UnusualSpendingInsight[]>([]);
   const [selected, setSelected] = useState<UnusualSpendingInsight | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +38,12 @@ export default function AnomalyAlertsScreen({ userId, onBack }: Props) {
     setRefreshing(false);
   }
 
-  if (selected) return <Detail alert={selected} onBack={() => setSelected(null)} />;
+  async function confirmRecurring(alert: UnusualSpendingInsight) {
+    await confirmRecurringSpending(userId, deviceId, alert.transactionId);
+    await load();
+  }
+
+  if (selected) return <Detail alert={selected} onBack={() => setSelected(null)} onConfirmRecurring={() => confirmRecurring(selected)} />;
 
   return <View>
     {onBack ? <Pressable accessibilityRole="button" accessibilityLabel="Back to financial reports" onPress={onBack} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}><ArrowLeft size={18} color={P.ink} weight="bold" /><Text style={{ color: P.muted }}>Financial Reports</Text></Pressable> : null}
@@ -59,6 +64,24 @@ function AlertRow({ alert, onPress }: { alert: UnusualSpendingInsight; onPress: 
   </Pressable>;
 }
 
-function Detail({ alert, onBack }: { alert: UnusualSpendingInsight; onBack: () => void }) {
-  return <View><Pressable accessibilityRole="button" accessibilityLabel="Back to alerts" onPress={onBack} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 16 }}><ArrowLeft size={18} color={P.ink} weight="bold" /><Text style={{ color: P.muted }}>All alerts</Text></Pressable><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: P.ink }}>Unusual {alert.subcategoryLabel} spending</Text><Text style={{ color: P.muted, marginTop: 5 }}>{new Date(alert.transactionDate).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}</Text><View style={{ marginTop: 18, padding: 18, borderRadius: 18, backgroundColor: P.card }}><Text style={{ color: P.ink, lineHeight: 21 }}>{formatCurrency(alert.amountCentavos)} is outside your usual spending range for {alert.subcategoryLabel}. Your usual spending is {formatCurrency(alert.usualSpendingCentavos)}, based on {alert.usableHistoryCount} earlier expenses.</Text><Text style={{ color: P.ink, fontWeight: "800", marginTop: 12 }}>{formatCurrency(alert.amountCentavos)}</Text>{alert.accountName ? <Text style={{ color: P.muted, marginTop: 5 }}>{alert.accountName}</Text> : null}</View></View>;
+function Detail({ alert, onBack, onConfirmRecurring }: { alert: UnusualSpendingInsight; onBack: () => void; onConfirmRecurring: () => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function confirm() {
+    setSaving(true);
+    try {
+      await onConfirmRecurring();
+      setError(null);
+    } catch {
+      setError("Your answer could not be saved. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return <View><Pressable accessibilityRole="button" accessibilityLabel="Back to alerts" onPress={onBack} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 16 }}><ArrowLeft size={18} color={P.ink} weight="bold" /><Text style={{ color: P.muted }}>All alerts</Text></Pressable><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: P.ink }}>Unusual {alert.subcategoryLabel} spending</Text><Text style={{ color: P.muted, marginTop: 5 }}>{new Date(alert.transactionDate).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}</Text><View style={{ marginTop: 18, padding: 18, borderRadius: 18, backgroundColor: P.card }}><Text style={{ color: P.ink, lineHeight: 21 }}>{formatCurrency(alert.amountCentavos)} is outside your usual spending range for {alert.subcategoryLabel}. Your usual spending is {formatCurrency(alert.usualSpendingCentavos)}, based on {alert.usableHistoryCount} earlier expenses.</Text><Text style={{ color: P.ink, fontWeight: "800", marginTop: 12 }}>{formatCurrency(alert.amountCentavos)}</Text>{alert.accountName ? <Text style={{ color: P.muted, marginTop: 5 }}>{alert.accountName}</Text> : null}</View>
+    {alert.confirmedRecurring
+      ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 }}><Check size={18} color={P.brand} weight="bold" /><Text style={{ color: P.muted, flex: 1 }}>You marked this as frequent spending. Future {alert.subcategoryLabel} expenses are compared with it included.</Text></View>
+      : <Pressable accessibilityRole="button" accessibilityLabel="I'll be making this spending frequently" onPress={() => void confirm()} disabled={saving} style={{ marginTop: 16, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: P.brand, alignItems: "center" }}><Text style={{ color: P.brand, fontWeight: "700" }}>{saving ? "Saving..." : "I'll be making this spending frequently"}</Text></Pressable>}
+    {error ? <Text style={{ color: P.warning, marginTop: 10 }}>{error}</Text> : null}
+  </View>;
 }

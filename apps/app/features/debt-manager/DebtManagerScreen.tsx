@@ -178,7 +178,6 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
     <View>
       <View style={{ marginBottom: 12 }}>
         <View style={{ alignSelf: "flex-end", flexDirection: "row", gap: 14, marginBottom: 12 }}>
-          {onBack ? <Pressable accessibilityRole="button" accessibilityLabel="Back to Debt Manager" onPress={onBack}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.muted }}>Back</Text></Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Refresh credit-card information" onPress={() => load().catch(() => {})}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.brand }}>Refresh</Text></Pressable>
         </View>
         <View style={{ flexShrink: 1 }}>

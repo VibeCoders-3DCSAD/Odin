@@ -39,6 +39,7 @@ export type StepConfig = {
   inputSuffix?: string;
   amountSourceKey?: string;
   amountOptions?: StepOption[];
+  visibleWhen?: { questionKey: string; value: string };
 };
 
 export const STEPS: StepConfig[] = [
@@ -206,6 +207,16 @@ export const STEPS: StepConfig[] = [
       { key: "true", label: "Yes" },
       { key: "false", label: "No" },
     ],
+  },
+  {
+    key: "monthly_debt_payments",
+    title: "Monthly Debt Payments",
+    subtitle: "Enter the total required payment across all debts each month, including payroll-deducted loans and credit-card minimums.",
+    kind: "input",
+    questionKey: "monthly_debt_payments",
+    inputLabel: "Total Required Monthly Debt Payments",
+    inputSuffix: "PHP",
+    visibleWhen: { questionKey: "paying_off_debt", value: "true" },
   },
   {
     key: "credit_card_payment_behavior",

@@ -21,6 +21,10 @@ jest.mock("../../lib/supabase.js", () => {
   };
 });
 
+jest.mock("../../services/financialConditionAssessmentService.js", () => ({
+  createOnboardingFinancialConditionAssessment: jest.fn().mockResolvedValue(null),
+}));
+
 import app from "../../app.js";
 import { supabase, getServiceRoleClient } from "../../lib/supabase.js";
 import { createMockQuery } from "../helpers/supabase.js";
@@ -30,10 +34,34 @@ import {
   authHeader,
 } from "../helpers/fixtures.js";
 import { ONBOARDING_ERRORS } from "../../lib/constants.js";
+import { createOnboardingFinancialConditionAssessment } from "../../services/financialConditionAssessmentService.js";
 
 const mockGetUser = supabase.auth.getUser as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
 const mockRpc = getServiceRoleClient().rpc as jest.Mock;
+const mockCreateOnboardingAssessment = createOnboardingFinancialConditionAssessment as jest.Mock;
+
+const validRawAnswers = {
+  display_name: "Juan",
+  date_of_birth: "1995-06-15",
+  is_filipino: "true",
+  metro_manila_presence: "lives_in_metro_manila",
+  metro_manila_locality_code: "makati",
+  primary_employment_classification: "full_time_employee",
+  employment_status: "employed_full_time",
+  monthly_income: "50000",
+  monthly_deductions: ["none"],
+  monthly_deduction_amounts: {},
+  emergency_savings_runway: "1_to_3_months",
+  liquid_emergency_savings: "20000",
+  monthly_essential_living_costs: "30000",
+  paying_off_debt: "false",
+  credit_card_payment_behavior: "never",
+  protected_categories: ["none"],
+  protected_category_costs: {},
+  high_expense_seasons: ["christmas_ber_months"],
+  saving_seasons: ["summer"],
+};
 
 function mockAuth() {
   mockGetUser.mockResolvedValue({
@@ -47,27 +75,7 @@ function mockInProgressSession() {
     data: {
       id: "session-1",
       status: "in_progress",
-      raw_answers: {
-        display_name: "Juan",
-        date_of_birth: "1995-06-15",
-        is_filipino: "true",
-        metro_manila_presence: "lives_in_metro_manila",
-        metro_manila_locality_code: "makati",
-        primary_employment_classification: "full_time_employee",
-        employment_status: "employed_full_time",
-        monthly_income: "50000",
-        monthly_deductions: ["none"],
-        monthly_deduction_amounts: {},
-        emergency_savings_runway: "1_to_3_months",
-        liquid_emergency_savings: "20000",
-        monthly_essential_living_costs: "30000",
-        paying_off_debt: "false",
-        credit_card_payment_behavior: "never",
-        protected_categories: ["none"],
-        protected_category_costs: {},
-        high_expense_seasons: ["christmas_ber_months"],
-        saving_seasons: ["summer"],
-      },
+      raw_answers: validRawAnswers,
     },
     error: null,
   }));
@@ -86,7 +94,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
 
   const sessionId = "session-1";
 
-  it("returns 200 with assessment and assignment on successful submit", async () => {
+  it("returns 200 when submission completes without an available assessment", async () => {
     mockAuth();
     mockInProgressSession();
     mockRpcSuccess();
@@ -100,7 +108,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
     expect(response.body.payload).toEqual({ session: { id: sessionId, status: "submitted" }, classification_available: false });
   });
 
-  it("does not create a classification during onboarding", async () => {
+  it("reports no available assessment when the classifier cannot produce one", async () => {
     mockAuth();
     mockInProgressSession();
     mockRpcSuccess();
@@ -112,6 +120,45 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.payload.classification_available).toBe(false);
+  });
+
+  it("reports an available self-reported assessment", async () => {
+    mockAuth();
+    mockInProgressSession();
+    mockRpcSuccess();
+    mockCreateOnboardingAssessment.mockResolvedValueOnce({ id: "assessment-1" });
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload.classification_available).toBe(true);
+    expect(mockCreateOnboardingAssessment).toHaveBeenCalledWith(validUserId, expect.objectContaining({ monthly_income: "50000" }), expect.anything());
+  });
+
+  it("requires total debt payments when the user is paying off debt", async () => {
+    mockAuth();
+    mockFrom.mockReturnValueOnce(createMockQuery({
+      data: {
+        id: sessionId,
+        status: "in_progress",
+        raw_answers: {
+          ...validRawAnswers,
+          paying_off_debt: "true",
+        },
+      },
+      error: null,
+    }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.fields).toEqual(["monthly_debt_payments"]);
   });
 
   it("returns 400 when confirm_data_use is missing", async () => {

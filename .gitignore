@@ -54,3 +54,4 @@ yarn-debug.*
 yarn-error.*
 supabase/.branches/
 *.keystore
+scripts/out/

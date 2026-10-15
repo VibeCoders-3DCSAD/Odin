@@ -52,6 +52,7 @@ const ANOMALY_WHITELIST_UPDATE_FIELDS = new Set(["status", "notes"]);
 const ALERT_SUPPRESSION_CREATE_FIELDS = new Set(["category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata"]);
 const ALERT_SUPPRESSION_UPDATE_FIELDS = new Set(["status", "ends_at", "reason"]);
 const ANOMALY_EVALUATION_CREATE_FIELDS = new Set(["transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "model_version", "evaluated_at"]);
+const ANOMALY_EVALUATION_UPDATE_FIELDS = new Set(["confirmed_recurring_at"]);
 
 const SERVER_COLUMNS = new Set([
   "id",
@@ -1070,7 +1071,11 @@ async function validateUpdatePayload(
     assertOnlyAllowed(payload, fields);
     return sanitizePayload(payload, fields);
   } else if (entity === "anomaly_evaluations") {
-    throw new Error("anomaly evaluations are immutable");
+    // Scores stay immutable; only the user's recurring-spending confirmation may be recorded.
+    assertOnlyAllowed(payload, ANOMALY_EVALUATION_UPDATE_FIELDS);
+    const sanitized = sanitizePayload(payload, ANOMALY_EVALUATION_UPDATE_FIELDS);
+    requireIsoTimestamp(sanitized, "confirmed_recurring_at");
+    return sanitized;
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);
   }
