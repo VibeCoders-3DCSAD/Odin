@@ -3,24 +3,25 @@
 ### 18.1 Financial Plan
 
 - Generate a user-reviewable monthly Financial Plan.
-- Generate plans only for the next calendar month.
+- Generate plans for the current calendar month, from its first day through its
+  final day, including when the user creates the plan mid-month.
 - Combine a Budget Plan, Savings Contribution Plan, and Debt Repayment Plan.
 - Use available income, forecast expenses, financial obligations, savings goals,
-  debt targets, and Savings and Debt Profile Classification as plan inputs.
+  and Savings and Debt Profile Classification as plan inputs.
 - Keep recommendations separate from user-created plans until the user accepts them.
-- Allow the user to review, edit, accept, or reject a recommendation before it
-  becomes the plan for its period.
+- Allow the user to review, edit, or accept a recommendation before it becomes
+  the plan for its period.
 - An accepted plan persists its immutable input snapshot locally and remains
   viewable while offline.
 
 ### 18.2 Plan Inputs
 
-- Monthly total spendable amount
-- Available income
-- Next-month total and category-level expense forecast
+- Monthly total spendable amount, derived from active cash and bank account
+  balances plus available income
+- Plan-period total and category-level expense forecast
 - Financial obligations due during the plan period
 - Active savings goals and Emergency Fund requirements
-- Active debt payment requirements and target payoff dates
+- Active debt payment requirements
 - Savings and Debt Profile Classification, including EFC, DSTI, FM, and CCB
 - Current category restriction snapshots, including fixed amounts and minimum
   floors
@@ -40,12 +41,13 @@
 ### 18.3 Budget Plan
 
 - Generate a monthly budget recommendation using Linear Programming.
-- Use the next-month expense forecast for each selected category or
+- Use the plan-period expense forecast for each selected category or
   subcategory as an input to the recommendation.
 - Build forecasts from non-anomalous expense history. When an ML forecast is
   unavailable, use the selected category or subcategory's recorded spending as
   a fallback forecast.
-- Respect available income, the total spendable amount, financial obligations, savings goals, debt targets, and user preferences.
+- Respect available income, the total spendable amount, financial obligations,
+  savings goals, and user preferences.
 - Treat Fixed category amounts and Minimum category floors as hard allocation
   constraints.
 - Do not reduce a Fixed or Minimum category below its required amount.
@@ -58,10 +60,10 @@
 ### 18.4 Savings Contribution Plan
 
 - Recommend contributions toward active savings goals.
-- Include Emergency Fund requirements and goal target dates.
+- Include Emergency Fund requirements.
 - Use Savings and Debt Profile Classification as an input to contribution
   prioritization.
-- Show recommended contribution schedules and any projected goal shortfalls.
+- Show recommended contribution schedules.
 - Reserve scheduled contributions for active savings goals that are due during
   the plan period.
 - When a plan is infeasible, allow users to skip savings contributions only
@@ -70,9 +72,10 @@
 ### 18.5 Debt Repayment Plan
 
 - Include required payments for active debts and credit-card statement targets.
-- Use target payoff dates and Savings and Debt Profile Classification as plan
-  inputs.
-- Show the payment schedule, projected payoff timeline, and any payment shortfall.
+- Use Savings and Debt Profile Classification as an input to optional surplus
+  guidance without reducing or bypassing other required debt payments.
+- Show the payment schedule and any payment shortfall. Projected payoff
+  timelines remain in Debt Management and are not displayed by Financial Plan.
 - Keep credit-card repayment strategies and non-credit-card repayment strategies subject to the Debt Management Module rules.
 - Reserve each active debt's next in-period minimum payment and each in-period
   authoritative credit-card statement minimum due.
@@ -104,7 +107,6 @@
 - Stale state: a source input changed after the recommendation was generated
 - Accepted state: the user accepted the plan
 - Edited state: the user modified a recommendation before accepting it
-- Rejected state: the user rejected the recommendation
 - Skipped-commitments state: the user explicitly excluded debt repayments or
   savings contributions after reviewing the consequence
 - Error state: the Financial Plan could not be generated
