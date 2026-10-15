@@ -151,5 +151,96 @@ describe("financial plan repository", () => {
     });
     expect(db.getAllAsync).toHaveBeenCalledTimes(5);
     for (const call of db.getAllAsync.mock.calls) expect(call.slice(1)).toContain("user-1");
+    for (const call of db.getAllAsync.mock.calls) expect(call[0]).toMatch(/deleted = 0/);
+    expect(db.getAllAsync.mock.calls[4]![0]).toContain("s.deleted = 0 AND c.deleted = 0 AND a.deleted = 0");
+  });
+
+  it("resolves soft-deleted references and reports them as removed when includeDeleted is set", async () => {
+    const db = {
+      getAllAsync: jest.fn<(...args: any[]) => Promise<any>>()
+        .mockResolvedValueOnce([{ id: "category-1", label: "Household", deleted: 1 }])
+        .mockResolvedValueOnce([{ id: "subcategory-1", label: "Groceries", deleted: 0 }])
+        .mockResolvedValueOnce([{ id: "debt-1", name: "Car loan", deleted: 1 }])
+        .mockResolvedValueOnce([{ id: "goal-1", name: "Emergency fund", deleted: 0 }])
+        .mockResolvedValueOnce([{ id: "statement-1", name: "Visa", deleted: 1 }]),
+    };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { getFinancialPlanLabels } = await import("../financialPlans");
+    await expect(getFinancialPlanLabels("user-1", {
+      recommendation: {
+        allocations: [{ categoryId: "category-1" }, { subcategoryId: "subcategory-1" }],
+        debtReservations: [{ debtAccountId: "debt-1" }, { creditCardStatementId: "statement-1" }],
+        savingsReservations: [{ savingsGoalId: "goal-1" }],
+      },
+    }, { includeDeleted: true })).resolves.toStrictEqual({
+      categories: { "category-1": "Household" }, subcategories: { "subcategory-1": "Groceries" }, debtAccounts: { "debt-1": "Car loan" }, savingsGoals: { "goal-1": "Emergency fund" }, creditCardStatements: { "statement-1": "Visa statement" },
+      removedIds: ["category-1", "debt-1", "statement-1"],
+    });
+    expect(db.getAllAsync).toHaveBeenCalledTimes(5);
+    for (const call of db.getAllAsync.mock.calls) {
+      expect(call[0]).toContain("user_id = ?");
+      expect(call[0]).not.toMatch(/deleted = 0/);
+      expect(call.slice(1)).toContain("user-1");
+    }
+    expect(db.getAllAsync.mock.calls[4]![0]).toContain("MAX(s.deleted, c.deleted, a.deleted) AS deleted");
+  });
+
+  it("omits removedIds when includeDeleted is not set", async () => {
+    const db = { getAllAsync: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValueOnce([{ id: "category-1", label: "Household", deleted: 0 }]) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { getFinancialPlanLabels } = await import("../financialPlans");
+    const labels = await getFinancialPlanLabels("user-1", { recommendation: { allocations: [{ categoryId: "category-1" }] } }, { includeDeleted: false });
+    expect(labels).toStrictEqual({ categories: { "category-1": "Household" }, subcategories: {}, debtAccounts: {}, savingsGoals: {}, creditCardStatements: {} });
+    expect(db.getAllAsync).toHaveBeenCalledWith(expect.stringContaining("WHERE user_id = ? AND deleted = 0 AND id IN"), "user-1", "category-1");
+  });
+
+  describe("listCompletedFinancialPlans", () => {
+    it("lists the user's accepted, non-deleted completed plans newest first with summed planned totals in one query", async () => {
+      const db = { getAllAsync: jest.fn(async () => [
+        { id: "plan-sep", period_start: "2026-09-01", period_end: "2026-09-30", available_funds_centavos: 50_000, shortfall_centavos: null, planned_total_centavos: 42_500 },
+        { id: "plan-aug", period_start: "2026-08-01", period_end: "2026-08-31", available_funds_centavos: 40_000, shortfall_centavos: 1_000, planned_total_centavos: 0 },
+      ]) };
+      mockInitDatabase.mockResolvedValue(db);
+
+      const { listCompletedFinancialPlans } = await import("../financialPlans");
+      await expect(listCompletedFinancialPlans("user-1", "2026-10-15")).resolves.toEqual([
+        { id: "plan-sep", periodStart: "2026-09-01", periodEnd: "2026-09-30", availableFundsCentavos: 50_000, shortfallCentavos: null, plannedTotalCentavos: 42_500 },
+        { id: "plan-aug", periodStart: "2026-08-01", periodEnd: "2026-08-31", availableFundsCentavos: 40_000, shortfallCentavos: 1_000, plannedTotalCentavos: 0 },
+      ]);
+
+      expect(db.getAllAsync).toHaveBeenCalledTimes(1);
+      const [sql, ...params] = db.getAllAsync.mock.calls[0] as unknown as [string, ...unknown[]];
+      expect(params).toEqual(["user-1", "2026-10-15"]);
+      expect(sql).toContain("p.user_id = ?");
+      expect(sql).toContain("p.status = 'accepted'");
+      expect(sql).toContain("p.deleted = 0");
+      expect(sql).toContain("p.period_end < ?");
+      expect(sql).toContain("COALESCE(SUM(a.allocated_amount_centavos), 0) AS planned_total_centavos");
+      expect(sql).toContain("LEFT JOIN financial_plan_allocations a ON a.plan_id = p.id");
+      expect(sql).toContain("GROUP BY p.id");
+      expect(sql).toContain("ORDER BY p.period_start DESC");
+    });
+
+    it("excludes the current-month plan because its period has not ended", async () => {
+      const db = { getAllAsync: jest.fn<(...args: any[]) => Promise<any>>(async () => []) };
+      mockInitDatabase.mockResolvedValue(db);
+
+      const { listCompletedFinancialPlans } = await import("../financialPlans");
+      await expect(listCompletedFinancialPlans("user-1", "2026-10-31")).resolves.toEqual([]);
+      // period_end is strictly less than today, so a plan ending 2026-10-31 is not listed on 2026-10-31.
+      expect(db.getAllAsync).toHaveBeenCalledWith(expect.stringMatching(/p\.period_end < \?/), "user-1", "2026-10-31");
+      expect(db.getAllAsync.mock.calls[0]![0]).not.toMatch(/period_end <= \?/);
+    });
+
+    it("rejects an invalid today date without querying", async () => {
+      const db = { getAllAsync: jest.fn<(...args: any[]) => Promise<any>>(async () => []) };
+      mockInitDatabase.mockResolvedValue(db);
+
+      const { listCompletedFinancialPlans } = await import("../financialPlans");
+      await expect(listCompletedFinancialPlans("user-1", "2026-13-01")).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      expect(db.getAllAsync).not.toHaveBeenCalled();
+    });
   });
 });
