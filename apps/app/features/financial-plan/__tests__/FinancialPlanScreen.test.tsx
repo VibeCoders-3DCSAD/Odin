@@ -107,6 +107,21 @@ describe("FinancialPlanScreen", () => {
     alert.mockRestore();
   });
 
+  it("opens past plans from both the saved plan and the selection flow", async () => {
+    const onOpenPastPlans = jest.fn();
+    const saved = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} onOpenPastPlans={onOpenPastPlans} />);
+    await waitFor(() => expect(saved.getByLabelText("View past Financial Plans")).toBeTruthy());
+    fireEvent.press(saved.getByText("Past plans"));
+    expect(onOpenPastPlans).toHaveBeenCalledTimes(1);
+    saved.unmount();
+
+    mockGetLatestFinancialPlan.mockResolvedValue(null);
+    const selecting = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} onOpenPastPlans={onOpenPastPlans} />);
+    await waitFor(() => expect(selecting.getByLabelText("Create Financial Plan recommendation")).toBeTruthy());
+    fireEvent.press(selecting.getByLabelText("View past Financial Plans"));
+    expect(onOpenPastPlans).toHaveBeenCalledTimes(2);
+  });
+
   it("uses active non-savings, non-credit-card account balances as available money", async () => {
     mockGetLatestFinancialPlan.mockResolvedValue(null);
     mockListFinancialAccounts.mockResolvedValue([

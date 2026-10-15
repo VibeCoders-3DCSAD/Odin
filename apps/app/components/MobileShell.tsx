@@ -31,6 +31,8 @@ import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import FinancialPlanScreen from "../features/financial-plan/FinancialPlanScreen";
+import PastFinancialPlansScreen from "../features/financial-plan/PastFinancialPlansScreen";
+import PastFinancialPlanDetailScreen from "../features/financial-plan/PastFinancialPlanDetailScreen";
 import DebtManagerScreen from "../features/debt-manager/DebtManagerScreen";
 import SavingsGoalsScreen from "../features/savings-goals/SavingsGoalsScreen";
 import type { CreditCardPayment, StatementPaymentContext } from "../local-db/repositories/creditCardPayments";
@@ -77,6 +79,8 @@ type Page =
   | "history"
    | "financial-reports"
    | "financial-plan"
+  | "financial-plan-history"
+  | "financial-plan-history-detail"
    | "budget-advice"
    | "savings-goals"
   | "insurance"
@@ -197,6 +201,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   "financial-reports": { title: "Financial Reports", subtitle: "Financial outlook and alerts" },
    "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
     "financial-plan": { title: "Financial Plan", subtitle: "Plan next month's money" },
+  "financial-plan-history": { title: "Past Plans", subtitle: "Completed Financial Plans" },
+  "financial-plan-history-detail": { title: "Past Plan", subtitle: "How your plan turned out" },
   "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
@@ -223,6 +229,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [statementPaymentContext, setStatementPaymentContext] = useState<StatementPaymentContext | null>(null);
   const [selectedCreditCardId, setSelectedCreditCardId] = useState<string | null>(null);
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
+  const [selectedPastPlanId, setSelectedPastPlanId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
   const [savingsActivityContext, setSavingsActivityContext] = useState<{ savingsGoalId: string; kind: "contribution" | "withdrawal"; amountCentavos?: number } | null>(null);
@@ -851,7 +858,15 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "financial-plan") {
-      return <FinancialPlanScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} onSyncRequested={handleSync} />;
+      return <FinancialPlanScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} onSyncRequested={handleSync} onOpenPastPlans={() => setCurrentPage("financial-plan-history")} />;
+    }
+
+    if (currentPage === "financial-plan-history") {
+      return <View><Pressable accessibilityRole="button" accessibilityLabel="Back to Financial Plan" onPress={() => setCurrentPage("financial-plan")}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: palette.mut }}>Back</Text></Pressable><View style={{ marginTop: 12 }}><PastFinancialPlansScreen userId={userId} onOpenPlan={(planId) => { setSelectedPastPlanId(planId); setCurrentPage("financial-plan-history-detail"); }} /></View></View>;
+    }
+
+    if (currentPage === "financial-plan-history-detail" && selectedPastPlanId) {
+      return <PastFinancialPlanDetailScreen userId={userId} planId={selectedPastPlanId} onBack={() => setCurrentPage("financial-plan-history")} />;
     }
 
     if (currentPage === "savings-goals") {
