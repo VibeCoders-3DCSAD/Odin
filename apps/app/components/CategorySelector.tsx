@@ -1,18 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { CaretLeft, CaretRight } from "phosphor-react-native";
+import { ArrowLeft, CaretLeft, CaretRight, Check, Tag } from "phosphor-react-native";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { styles as ui, tileTints, v4, v4Font } from "./BudgieForm";
 import { listCategories, listSubcategories, type Category, type Subcategory } from "../local-db/repositories/taxonomy";
-
-const palette = {
-  ink: "#1B1C1A",
-  ink2: "#414942",
-  mut: "#6B7A6F",
-  line: "#EAEAE6",
-  card: "#fff9ee",
-  successTint: "#20c277",
-  successCard: "#effff6",
-  accent: "#f5b57d",
-} as const;
 
 export type CategorySelection = {
   tier: "category" | "subcategory" | null;
@@ -68,19 +58,32 @@ export function CategorySelectorTree({ categories, subcategories, selection, onS
     }
   }, [selection.categoryId]);
 
-  function renderSelectableRow({ label, selected, onPress, onCaretPress, id }: {
+  function tintFor(categoryId: string) {
+    const index = availableCategories.findIndex((category) => category.id === categoryId);
+    return tileTints[Math.max(index, 0) % tileTints.length]!;
+  }
+
+  function renderSelectableRow({ label, subtitle, tint, selected, onPress, onCaretPress, id, index }: {
     label: string;
+    subtitle?: string;
+    tint: (typeof tileTints)[number];
     selected: boolean;
     onPress: () => void;
     onCaretPress?: () => void;
     id: string;
+    index: number;
   }) {
     return (
-      <View key={id} style={{ borderRadius: 14, borderWidth: 1, borderColor: selected ? palette.successTint : palette.line, backgroundColor: selected ? palette.successCard : palette.card, flexDirection: "row", alignItems: "stretch" }}>
-        <Pressable onPress={onPress} style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 12 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: selected ? "700" : "600", fontSize: 14, color: palette.ink }}>{label}</Text>
+      <View key={id} style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}>
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Select ${label}`} accessibilityState={{ selected }} style={ui.listRowMain}>
+          <View style={[ui.listTile, { backgroundColor: tint.bg }]}><Tag color={tint.fg} size={16} weight="bold" /></View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={[ui.listTitle, selected ? { fontWeight: "700" } : null]}>{label}</Text>
+            {subtitle ? <Text numberOfLines={1} style={ui.listSubtitle}>{subtitle}</Text> : null}
+          </View>
+          {selected && !onCaretPress ? <Check color={v4.brandMid} size={16} weight="bold" /> : null}
         </Pressable>
-        {onCaretPress ? <Pressable onPress={onCaretPress} accessibilityRole="button" accessibilityLabel={`Open ${label}`} style={{ width: 44, alignItems: "center", justifyContent: "center" }}><CaretRight color={palette.mut} size={16} weight="bold" /></Pressable> : null}
+        {onCaretPress ? <Pressable onPress={onCaretPress} accessibilityRole="button" accessibilityLabel={`Open ${label}`} style={ui.listCaret}><CaretRight color={v4.mut} size={16} weight="bold" /></Pressable> : null}
       </View>
     );
   }
@@ -89,30 +92,59 @@ export function CategorySelectorTree({ categories, subcategories, selection, onS
     if (view.level === "categories") return null;
     const title = categories.find((category) => category.id === view.categoryId)?.label ?? "Subcategories";
     return (
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
-        <Pressable onPress={() => setView({ level: "categories" })} accessibilityRole="button" accessibilityLabel="Back" style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center" }}><CaretLeft color={palette.ink2} size={16} weight="bold" /></Pressable>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>{title}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+        <Pressable onPress={() => setView({ level: "categories" })} accessibilityRole="button" accessibilityLabel="Back to categories" hitSlop={8} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}><CaretLeft color={v4.ink} size={18} weight="bold" /></Pressable>
+        <Text numberOfLines={1} style={{ flex: 1, fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>{title}</Text>
       </View>
     );
   }
 
+  function renderEmpty() {
+    return <Text style={{ fontFamily: v4Font, fontSize: 13, color: v4.mut, textAlign: "center", paddingVertical: 20 }}>{emptyMessage}</Text>;
+  }
+
   function renderCategories() {
-    if (availableCategories.length === 0 && uncategorizedSubcategories.length === 0) {
-      return <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut }}>{emptyMessage}</Text>;
-    }
-    return <>
-      {uncategorizedSubcategories.map((subcategory) => renderSelectableRow({ label: subcategory.label, selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId: null, subcategoryId: subcategory.id }), id: subcategory.id }))}
-      {availableCategories.map((category) => renderSelectableRow({ label: category.label, selected: selection.tier === "category" && selection.categoryId === category.id, onPress: () => onSelect({ tier: "category", categoryId: category.id, subcategoryId: null }), onCaretPress: () => setView({ level: "subcategories", categoryId: category.id }), id: category.id }))}
-    </>;
+    if (availableCategories.length === 0 && uncategorizedSubcategories.length === 0) return renderEmpty();
+    const rows = [
+      ...uncategorizedSubcategories.map((subcategory) => ({ kind: "subcategory" as const, subcategory })),
+      ...availableCategories.map((category) => ({ kind: "category" as const, category })),
+    ];
+    return (
+      <View style={ui.list}>
+        {rows.map((row, index) => {
+          if (row.kind === "subcategory") {
+            const { subcategory } = row;
+            return renderSelectableRow({ label: subcategory.label, subtitle: subcategory.description || undefined, tint: tileTints[4], selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId: null, subcategoryId: subcategory.id }), id: subcategory.id, index });
+          }
+          const { category } = row;
+          const count = subcategoriesByCategory.get(category.id)?.length ?? 0;
+          return renderSelectableRow({ label: category.label, subtitle: `${count} ${count === 1 ? "subcategory" : "subcategories"}`, tint: tintFor(category.id), selected: selection.tier === "category" && selection.categoryId === category.id, onPress: () => onSelect({ tier: "category", categoryId: category.id, subcategoryId: null }), onCaretPress: () => setView({ level: "subcategories", categoryId: category.id }), id: category.id, index });
+        })}
+      </View>
+    );
   }
 
   function renderSubcategories(categoryId: string) {
     const items = subcategoriesByCategory.get(categoryId) ?? [];
-    if (items.length === 0) return <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut }}>{emptyMessage}</Text>;
-    return items.map((subcategory) => renderSelectableRow({ label: subcategory.label, selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId, subcategoryId: subcategory.id }), id: subcategory.id }));
+    if (items.length === 0) return renderEmpty();
+    const tint = tintFor(categoryId);
+    const category = categories.find((item) => item.id === categoryId);
+    return (
+      <View style={{ gap: 14 }}>
+        <View style={ui.list}>
+          {items.map((subcategory, index) => renderSelectableRow({ label: subcategory.label, subtitle: subcategory.description || undefined, tint, selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId, subcategoryId: subcategory.id }), id: subcategory.id, index }))}
+        </View>
+        {category ? (
+          <Pressable onPress={() => onSelect({ tier: "category", categoryId, subcategoryId: null })} accessibilityRole="button" accessibilityLabel={`Use ${category.label}`} accessibilityState={{ selected: selection.tier === "category" && selection.categoryId === categoryId }} style={[ui.button, ui.buttonGhost]}>
+            <Text style={[ui.buttonText, ui.buttonGhostText]}>Use {category.label}</Text>
+          </Pressable>
+        ) : null}
+        <Text style={ui.note}>Tap a name to select it. Tap the arrow to open the level below.</Text>
+      </View>
+    );
   }
 
-  return <View>{renderHeader()}<View style={{ gap: 12 }}>{view.level === "categories" ? renderCategories() : renderSubcategories(view.categoryId)}</View></View>;
+  return <View>{renderHeader()}{view.level === "categories" ? renderCategories() : renderSubcategories(view.categoryId)}</View>;
 }
 
 function CategorySelectorPage({ userId, kind, initialSubcategoryId, initialCategoryId, allowCategorySelection = false, onSelect, onClose }: PageProps) {
@@ -141,10 +173,15 @@ function CategorySelectorPage({ userId, kind, initialSubcategoryId, initialCateg
   const selectedSubcategory = selection.subcategoryId ? subcategories.find((item) => item.id === selection.subcategoryId) ?? null : null;
   const selectedCategory = selection.categoryId ? categories.find((item) => item.id === selection.categoryId) ?? null : null;
 
-  return <View style={{ flex: 1, backgroundColor: "#fcf8f0", padding: 22 }}>
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 18 }}><Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back" style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}><CaretLeft color={palette.ink2} size={18} weight="bold" /></Pressable><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>{allowCategorySelection ? "Select category or subcategory" : "Select subcategory"}</Text></View>
-    {loading ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator color={palette.ink2} /></View> : <ScrollView contentContainerStyle={{ paddingBottom: 18 }} showsVerticalScrollIndicator={false}><CategorySelectorTree categories={categories} subcategories={subcategories} selection={selection} onSelect={setSelection} emptyMessage="No categories found." /></ScrollView>}
-    <Pressable onPress={() => { if (selectedSubcategory) onSelect(selectedSubcategory); else if (allowCategorySelection && selectedCategory) onSelect(selectedCategory); }} disabled={!selectedSubcategory && !(allowCategorySelection && selectedCategory)} style={{ height: 50, borderRadius: 14, backgroundColor: palette.successTint, alignItems: "center", justifyContent: "center", opacity: selectedSubcategory || (allowCategorySelection && selectedCategory) ? 1 : 0.5, marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: "#fff" }}>Use selection</Text></Pressable>
+  const canUseSelection = Boolean(selectedSubcategory || (allowCategorySelection && selectedCategory));
+
+  return <View style={{ flex: 1, backgroundColor: v4.shell, padding: 20 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
+      <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}><ArrowLeft color={v4.ink} size={20} weight="bold" /></Pressable>
+      <Text numberOfLines={1} style={{ flex: 1, fontFamily: v4Font, fontWeight: "800", fontSize: 16.5, color: v4.ink }}>{allowCategorySelection ? "Select category or subcategory" : "Select subcategory"}</Text>
+    </View>
+    {loading ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator color={v4.brand} /></View> : <ScrollView contentContainerStyle={{ paddingBottom: 18 }} showsVerticalScrollIndicator={false}><CategorySelectorTree categories={categories} subcategories={subcategories} selection={selection} onSelect={setSelection} emptyMessage="No categories found." /></ScrollView>}
+    <Pressable onPress={() => { if (selectedSubcategory) onSelect(selectedSubcategory); else if (allowCategorySelection && selectedCategory) onSelect(selectedCategory); }} disabled={!canUseSelection} accessibilityRole="button" accessibilityLabel="Use selection" accessibilityState={{ disabled: !canUseSelection }} style={[ui.button, { marginTop: 12, opacity: canUseSelection ? 1 : 0.5 }]}><Text style={ui.buttonText}>Use selection</Text></Pressable>
   </View>;
 }
 
