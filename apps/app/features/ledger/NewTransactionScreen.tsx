@@ -12,7 +12,8 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { CalendarBlank, CaretLeft, CaretRight, Repeat, Wallet, X } from "phosphor-react-native";
+import { ArrowLeft, Bank, Check, CreditCard, Money, Tag, Wallet } from "phosphor-react-native";
+import { AmountHero, Banner, Chip, FieldError, FieldLabel, FormCard, Note, PickerField, Segment, Switch, TextField, styles as ui, tileTints, v4, v4Font } from "../../components/BudgieForm";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
@@ -28,22 +29,9 @@ import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
+import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
 import CreditCardInstallmentFields, { type InstallmentFieldErrors, type InstallmentFormValue } from "./components/CreditCardInstallmentFields";
-
-const palette = {
-  shell: "#fcf8f0",
-  brand: "#013220",
-  ink: "#1B1C1A",
-  ink2: "#414942",
-  mut: "#6B7A6F",
-  line: "#EAEAE6",
-  error: "#D9001F",
-  card: "#F1F0EB",
-  softCard: "#f7eed9",
-  successTint: "#20c277",
-  successCard: "#effff6",
-} as const;
 
 const QUICK_AMOUNTS = [100, 250, 500, 1000];
 
@@ -293,7 +281,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const amount = account.kind === "credit_card" && account.creditCardDetails
       ? account.creditCardDetails.availableCreditCentavos ?? account.creditCardDetails.creditLimitCentavos
       : account.currentBalanceCentavos;
-    return `P${(amount / 100).toLocaleString()}`;
+    return `PHP ${(amount / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   function getSelectedSubcategory(): Subcategory | null {
@@ -323,6 +311,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     if (categorySelection.tier === "subcategory") return getSelectedSubcategory()?.label ?? "Select category";
     if (categorySelection.tier === "category") return getSelectedCategory()?.label ?? "Select category";
     return "Select category";
+  }
+
+  function getCategoryFieldLabel(): string {
+    const subcategory = categorySelection.tier === "subcategory" ? getSelectedSubcategory() : null;
+    const category = getSelectedCategory();
+    if (subcategory && category) return `${category.label} · ${subcategory.label}`;
+    return getCategorySummaryLabel();
   }
 
   function getAccountName(id: string): string {
@@ -373,14 +368,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
   function getScreenTitle(): string {
     return isEdit ? "Edit Transaction" : "New Transaction";
-  }
-
-  function renderFieldLabel(label: string) {
-    return (
-      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 11, color: palette.mut, letterSpacing: 0.4, marginBottom: 8 }}>
-        {label}
-      </Text>
-    );
   }
 
   async function handleSave(confirmed = false) {
@@ -641,54 +628,55 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   function renderAccountPicker() {
     if (!accountPickerMode) return null;
     const isSource = accountPickerMode === "source";
+    const pickable = accounts.filter((a) => !isStatementPayment || a.kind !== "credit_card");
 
     return (
       <Modal visible transparent animationType="slide" onRequestClose={() => setAccountPickerMode(null)}>
         <Pressable onPress={() => setAccountPickerMode(null)} style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
+          <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
               <Pressable onPress={() => {}}>
-                <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
-                  <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
-                  <ScrollView contentContainerStyle={{ padding: 22, paddingBottom: 40, gap: 16 }} keyboardShouldPersistTaps="handled" bounces={false}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.ink }}>
+                <View style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
+                  <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
+                  <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 12 }} keyboardShouldPersistTaps="handled" bounces={false}>
+                    <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>
                       {isSource ? "From account" : "To account"}
                     </Text>
                     {accounts.length === 0 ? (
-                      <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut, textAlign: "center", paddingVertical: 20 }}>
+                      <Text style={{ fontFamily: v4Font, fontSize: 13, color: v4.mut, textAlign: "center", paddingVertical: 20 }}>
                         No financial accounts available
                       </Text>
                     ) : (
-                       accounts.filter((a) => !isStatementPayment || a.kind !== "credit_card").map((a) => {
-                        const selected = isSource ? sourceAccountId === a.id : destAccountId === a.id;
-                        return (
-                          <Pressable
-                            key={a.id}
-                            onPress={() => {
-                              if (isSource) setSourceAccountId(a.id);
-                              else setDestAccountId(a.id);
-                              setAccountPickerMode(null);
-                            }}
-                            accessibilityRole="button"
-                            accessibilityLabel={a.name}
-                            accessibilityState={{ selected }}
-                            style={{
-                              padding: 14,
-                              borderRadius: 12,
-                              borderWidth: 1,
-                              borderColor: selected ? palette.brand : palette.line,
-                              backgroundColor: selected ? palette.successCard : palette.card,
-                            }}
-                          >
-                            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.ink }}>
-                              {a.name}
-                            </Text>
-                            <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
-                               {a.kind.replace("_", " ")} · {formatAccountAmount(a)}
-                            </Text>
-                          </Pressable>
-                        );
-                      }))}
+                      <View style={ui.list}>
+                        {pickable.map((a, index) => {
+                          const selected = isSource ? sourceAccountId === a.id : destAccountId === a.id;
+                          const tint = accountTint(a.kind);
+                          return (
+                            <Pressable
+                              key={a.id}
+                              onPress={() => {
+                                if (isSource) setSourceAccountId(a.id);
+                                else setDestAccountId(a.id);
+                                setAccountPickerMode(null);
+                              }}
+                              accessibilityRole="button"
+                              accessibilityLabel={a.name}
+                              accessibilityState={{ selected }}
+                              style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}
+                            >
+                              <View style={ui.listRowMain}>
+                                <View style={[ui.listTile, { backgroundColor: tint.bg }]}><AccountKindIcon kind={a.kind} color={tint.fg} /></View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text numberOfLines={1} style={ui.listTitle}>{a.name}</Text>
+                                  <Text numberOfLines={1} style={ui.listSubtitle}>{formatAccountKind(a.kind)} · {formatAccountAmount(a)}</Text>
+                                </View>
+                                {selected ? <Check color={v4.brandMid} size={16} weight="bold" /> : null}
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
                   </ScrollView>
                 </View>
               </Pressable>
@@ -730,20 +718,21 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     return (
       <Modal visible transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
         <Pressable onPress={close} style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
+          <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingTop: 14 }}>
-                  <Pressable onPress={close}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.mut }}>
+              <View style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 }}>
+                <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 10 }}>
+                  <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Cancel" hitSlop={8}>
+                    <Text style={{ fontFamily: v4Font, fontWeight: "600", fontSize: 14, color: v4.mut }}>
                       Cancel
                     </Text>
                   </Pressable>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.ink }}>
-                    Select date
+                  <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>
+                    {posting ? "Posting date" : "Select date"}
                   </Text>
-                  <Pressable onPress={close}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.brand }}>
+                  <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Done" hitSlop={8}>
+                    <Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 14, color: v4.brandMid }}>
                       Done
                     </Text>
                   </Pressable>
@@ -770,85 +759,75 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const selectedSubcategory = getSelectedSubcategory();
 
     return (
-               <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut, marginBottom: 16 }}>
-          Pick from your full {txType} category list.
-        </Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 14 }} showsVerticalScrollIndicator={false}>
+        <Note>Pick from your full {txType} category list.</Note>
 
         {(selectedCategory || selectedSubcategory) ? (
-          <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.successTint, backgroundColor: palette.successCard, padding: 14, marginBottom: 18 }}>
-            <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: "600", color: palette.successTint, letterSpacing: 0.4, marginBottom: 4 }}>
+          <View style={{ borderRadius: 16, borderWidth: 1, borderColor: v4.okBorder, backgroundColor: v4.okBg, paddingHorizontal: 15, paddingVertical: 14, gap: 4 }}>
+            <Text style={{ fontFamily: v4Font, fontSize: 10.5, fontWeight: "700", color: v4.okInk, letterSpacing: 0.6 }}>
               CURRENT SELECTION
             </Text>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: palette.ink }}>
-              {getCategorySummaryLabel()}
+            <Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 14, color: v4.ink }}>
+              {getCategoryFieldLabel()}
             </Text>
           </View>
         ) : null}
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-          {txType === "income" ? (
-            subcategories.length === 0 ? (
-              <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut, textAlign: "center", paddingVertical: 20 }}>
-                No income categories found.
-              </Text>
-            ) : (
-              <View style={{ gap: 10 }}>
-                {subcategories.map((sub) => {
-                  const selected = categorySelection.subcategoryId === sub.id;
-                  return (
-                    <Pressable
-                      key={sub.id}
-                      onPress={() => {
-                        setCategorySelection({ tier: "subcategory", categoryId: null, subcategoryId: sub.id });
-                        setShowCategoryPicker(false);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={sub.label}
-                      accessibilityState={{ selected }}
-                      style={{
-                        padding: 14,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: selected ? palette.brand : palette.line,
-                        backgroundColor: selected ? palette.successCard : palette.card,
-                      }}
-                    >
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.ink }}>
-                        {sub.label}
-                      </Text>
-                      {sub.description ? (
-                        <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
-                          {sub.description}
-                        </Text>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )
+        {txType === "income" ? (
+          subcategories.length === 0 ? (
+            <Text style={{ fontFamily: v4Font, fontSize: 13, color: v4.mut, textAlign: "center", paddingVertical: 20 }}>
+              No income categories found.
+            </Text>
           ) : (
-            <CategorySelectorTree
-              categories={categories}
-              subcategories={subcategories}
-              selection={categorySelection}
-              onSelect={(nextSelection) => {
-                setCategorySelection(nextSelection);
-                setShowCategoryPicker(false);
-              }}
-              emptyMessage="No categories found for this transaction type."
-            />
-          )}
-        </ScrollView>
-      </View>
+            <View style={ui.list}>
+              {subcategories.map((sub, index) => {
+                const selected = categorySelection.subcategoryId === sub.id;
+                return (
+                  <Pressable
+                    key={sub.id}
+                    onPress={() => {
+                      setCategorySelection({ tier: "subcategory", categoryId: null, subcategoryId: sub.id });
+                      setShowCategoryPicker(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={sub.label}
+                    accessibilityState={{ selected }}
+                    style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}
+                  >
+                    <View style={ui.listRowMain}>
+                      <View style={[ui.listTile, { backgroundColor: tileTints[3].bg }]}><Tag color={tileTints[3].fg} size={16} weight="bold" /></View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text numberOfLines={1} style={[ui.listTitle, selected ? { fontWeight: "700" } : null]}>{sub.label}</Text>
+                        {sub.description ? <Text numberOfLines={1} style={ui.listSubtitle}>{sub.description}</Text> : null}
+                      </View>
+                      {selected ? <Check color={v4.brandMid} size={16} weight="bold" /> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )
+        ) : (
+          <CategorySelectorTree
+            categories={categories}
+            subcategories={subcategories}
+            selection={categorySelection}
+            onSelect={(nextSelection) => {
+              setCategorySelection(nextSelection);
+              setShowCategoryPicker(false);
+            }}
+            emptyMessage="No categories found for this transaction type."
+          />
+        )}
+      </ScrollView>
     );
   }
 
   if (loading) {
     return (
-      <View style={{ alignItems: "center", paddingVertical: 60 }}>
-        <ActivityIndicator color={palette.brand} />
-        <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.mut, marginTop: 10 }}>
+      <View style={{ alignItems: "center", paddingVertical: 60, gap: 10 }}>
+        <ActivityIndicator color={v4.brand} />
+        <Text style={{ fontFamily: v4Font, fontSize: 13, color: v4.mut }}>
           Loading...
         </Text>
       </View>
@@ -857,198 +836,148 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
   if (dataError) {
     return (
-      <View style={{ alignItems: "center", paddingVertical: 60 }}>
-        <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.error, marginBottom: 14 }}>
-          {dataError}
-        </Text>
-        <Pressable onPress={onClose} style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: palette.line }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: palette.ink2 }}>
-            Go back
-          </Text>
+      <View style={{ paddingHorizontal: 18, paddingVertical: 24, gap: 14 }}>
+        <Banner tone="error">{dataError}</Banner>
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Go back" style={[ui.button, ui.buttonGhost]}>
+          <Text style={[ui.buttonText, ui.buttonGhostText]}>Go back</Text>
         </Pressable>
       </View>
     );
   }
 
-  const descriptionLabel = txType === "income" ? "PAYER" : "DESCRIPTION";
+  const descriptionLabel = txType === "income" ? "Payer" : "Description";
   const descriptionPlaceholder = txType === "income" ? "Who paid you?" : txType === "transfer" ? "What's this for?" : "Jollibee - Lunch";
   const needsCategory = txType !== "transfer";
-  const selectedSubcategory = getSelectedSubcategory();
+  const debtLocked = Boolean(debtPaymentDebtId || debtPaymentContext);
+  const showRecurring = !isEdit && !isStatementPayment && !(selectedSourceIsCreditCard() && creditCardPurchaseType === "installment");
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: palette.shell }}>
-      <View style={{ flex: 1, paddingHorizontal: 18, paddingTop: 8 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, paddingBottom: 14 }}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: v4.shell }}>
+      <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44, paddingBottom: 8 }}>
           <Pressable
             onPress={showCategoryPicker ? () => setShowCategoryPicker(false) : onClose}
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel={showCategoryPicker ? "Back to transaction form" : "Close transaction form"}
+            style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}
           >
-            {showCategoryPicker ? <CaretLeft color={palette.ink} size={22} weight="bold" /> : <X color={palette.ink} size={22} weight="bold" />}
+            <ArrowLeft color={v4.ink} size={20} weight="bold" />
           </Pressable>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: palette.ink }}>
+          <Text accessibilityRole="header" numberOfLines={1} style={{ flex: 1, fontFamily: v4Font, fontWeight: "800", fontSize: 16.5, letterSpacing: -0.2, color: v4.ink }}>
             {showCategoryPicker ? "Select Category" : getScreenTitle()}
           </Text>
-          <View style={{ width: 22 }} />
         </View>
 
         {!online && !showCategoryPicker ? (
-          <View style={{ backgroundColor: "#fff4d7", borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 14 }}>
-            <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#8D6E00" }}>
-              You're offline. Changes will sync when you reconnect.
-            </Text>
+          <View style={{ marginBottom: 12 }}>
+            <Banner tone="warn">You're offline. Changes will sync when you reconnect.</Banner>
           </View>
         ) : null}
 
         {showCategoryPicker ? renderCategoryPickerPage() : (
-          <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 18 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-             {!isEdit && !isStatementPayment && !savingsActivityContext ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
-             {savingsActivityContext ? <View style={{ borderRadius: 14, backgroundColor: palette.card, padding: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>{savingsActivityContext.kind === "contribution" ? "Savings contribution" : "Savings withdrawal"}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>This transfer is linked to the selected savings goal.</Text></View> : null}
-             {isStatementPayment ? <View style={{ borderRadius: 14, backgroundColor: palette.card, padding: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>Credit-card statement payment</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut, marginTop: 3 }}>{statementPayment ? `Statement due ${statementPayment.due_date} · Balance ${formatCurrency(statementPayment.statement_balance_centavos)}` : "Checking the selected statement..."}</Text></View> : null}
+          <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 14 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {savingsActivityContext ? (
+              <FormCard title={savingsActivityContext.kind === "contribution" ? "Savings contribution" : "Savings withdrawal"}>
+                <Note>This transfer is linked to the selected savings goal.</Note>
+              </FormCard>
+            ) : null}
+            {isStatementPayment ? (
+              <FormCard title="Credit-card statement payment">
+                <Note>{statementPayment ? `Statement due ${statementPayment.due_date} · Balance ${formatCurrency(statementPayment.statement_balance_centavos)}` : "Checking the selected statement..."}</Note>
+              </FormCard>
+            ) : null}
 
-            <View style={{ alignItems: "center", paddingTop: 6, paddingBottom: 2 }}>
-              <Text style={{ fontFamily: "Manrope", fontSize: 15, color: palette.mut, marginBottom: 2 }}>PHP</Text>
-              <TextInput
-                accessibilityLabel="Payment amount"
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="0"
-                placeholderTextColor="#b9b39f"
-                keyboardType="decimal-pad"
-                style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 54, color: palette.ink, textAlign: "center", minWidth: 180, paddingVertical: 0 }}
-              />
-              <View style={{ width: 138, height: 2, borderRadius: 999, backgroundColor: palette.successTint, marginTop: 6 }} />
-            </View>
+            <AmountHero>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 5 }}>
+                <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 30, letterSpacing: -0.6, color: "#FFFFFF" }}>PHP</Text>
+                <TextInput
+                  accessibilityLabel="Payment amount"
+                  value={amount}
+                  onChangeText={setAmount}
+                  placeholder="0.00"
+                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  keyboardType="decimal-pad"
+                  selectionColor="#41EDA4"
+                  style={{ flex: 1, fontFamily: v4Font, fontWeight: "800", fontSize: 30, letterSpacing: -0.6, color: "#FFFFFF", paddingVertical: 0, fontVariant: ["tabular-nums"] }}
+                />
+              </View>
+            </AmountHero>
 
-            <View style={{ flexDirection: "row", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
-              {QUICK_AMOUNTS.map((quickAmount) => {
-                const selected = amount === String(quickAmount);
-                return (
-                  <Pressable
+            <FormCard>
+              {!isEdit && !isStatementPayment && !savingsActivityContext ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+
+              <View style={ui.chips}>
+                {QUICK_AMOUNTS.map((quickAmount) => (
+                  <Chip
                     key={quickAmount}
+                    label={quickAmount.toLocaleString()}
+                    selected={amount === String(quickAmount)}
                     onPress={() => setAmount(String(quickAmount))}
-                    style={{
-                      minWidth: 52,
-                      paddingHorizontal: 14,
-                      paddingVertical: 9,
-                      borderRadius: 999,
-                      borderWidth: 1,
-                      borderColor: selected ? palette.successTint : "#e6dcc7",
-                      backgroundColor: selected ? "#cbffe8" : palette.card,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ fontFamily: "Manrope", fontWeight: selected ? "700" : "600", fontSize: 13, color: palette.ink2 }}>
-                      {quickAmount.toLocaleString()}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+                    accessibilityLabel={`Set amount to ${quickAmount.toLocaleString()}`}
+                  />
+                ))}
+              </View>
 
-            <View>
-              {renderFieldLabel(descriptionLabel)}
-              <TextInput
+              <TextField
+                label={descriptionLabel}
                 value={description}
                 onChangeText={setDescription}
                 placeholder={descriptionPlaceholder}
-                editable
-                placeholderTextColor={palette.mut}
-                style={{ height: 58, borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", paddingHorizontal: 16, fontFamily: "Manrope", fontSize: 16, color: palette.ink, backgroundColor: palette.softCard }}
+                accessibilityLabel={descriptionLabel}
               />
-            </View>
 
-            {txType === "transfer" ? (
-              <View style={{ gap: 14 }}>
-                <View>
-                  {renderFieldLabel("DATE")}
-                  <Pressable onPress={() => setShowDatePicker(true)} style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                      <CalendarBlank color={palette.mut} size={18} weight="regular" />
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: palette.ink }}>{formatDate(date)}</Text>
-                    </View>
-                  </Pressable>
-                </View>
-                <View>
-                  {renderFieldLabel("FROM ACCOUNT")}
-                  <Pressable onPress={() => setAccountPickerMode("source")} style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                      <Wallet color={palette.mut} size={18} weight="regular" />
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: sourceAccountId ? palette.ink : palette.mut }}>
-                        {sourceAccountId ? getAccountName(sourceAccountId) : "Select account"}
-                      </Text>
-                    </View>
-                    <CaretRight color={palette.mut} size={16} weight="bold" />
-                  </Pressable>
-                </View>
-                <View>
-                  {renderFieldLabel("TO ACCOUNT")}
-                  <Pressable onPress={() => setAccountPickerMode("dest")} style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                      <Wallet color={palette.mut} size={18} weight="regular" />
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: destAccountId ? palette.ink : palette.mut }}>
-                        {destAccountId ? getAccountName(destAccountId) : "Select account"}
-                      </Text>
-                    </View>
-                    <CaretRight color={palette.mut} size={16} weight="bold" />
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <View style={{ flexDirection: "row", gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  {renderFieldLabel("DATE")}
-                  <Pressable onPress={() => setShowDatePicker(true)} style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                      <CalendarBlank color={palette.mut} size={18} weight="regular" />
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: palette.ink }}>{formatDate(date)}</Text>
-                    </View>
-                  </Pressable>
-                </View>
-                <View style={{ flex: 1 }}>
-                  {renderFieldLabel("ACCOUNT")}
-                  <Pressable accessibilityLabel="Select account" onPress={() => setAccountPickerMode(txType === "income" ? "dest" : "source")} style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
-                      <Wallet color={palette.mut} size={18} weight="regular" />
-                      <Text numberOfLines={1} style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: (sourceAccountId || destAccountId) ? palette.ink : palette.mut, flex: 1 }}>
-                        {getPrimaryAccountLabel()}
-                      </Text>
-                    </View>
-                    <CaretRight color={palette.mut} size={16} weight="bold" />
-                  </Pressable>
-               </View>
-             </View>
-            )}
+              <PickerField label="Date" value={formatDate(date)} onPress={() => setShowDatePicker(true)} />
 
-             {selectedSourceIsCreditCard() && !isStatementPayment ? (
-              <>
+              {txType === "transfer" ? (
+                <>
+                  <PickerField
+                    label="From account"
+                    value={sourceAccountId ? getAccountName(sourceAccountId) : "Select account"}
+                    placeholder={!sourceAccountId}
+                    error={formError === "Select a source account"}
+                    onPress={() => setAccountPickerMode("source")}
+                  />
+                  <PickerField
+                    label="To account"
+                    value={destAccountId ? getAccountName(destAccountId) : "Select account"}
+                    placeholder={!destAccountId}
+                    error={formError === "Select a destination account"}
+                    onPress={() => setAccountPickerMode("dest")}
+                  />
+                </>
+              ) : (
+                <PickerField
+                  label={txType === "income" ? "Destination account" : "Account"}
+                  value={getPrimaryAccountLabel()}
+                  placeholder={txType === "income" ? !destAccountId : !sourceAccountId}
+                  error={formError === "Select a source account" || formError === "Select a destination account"}
+                  accessibilityLabel="Select account"
+                  onPress={() => setAccountPickerMode(txType === "income" ? "dest" : "source")}
+                />
+              )}
+            </FormCard>
+
+            {selectedSourceIsCreditCard() && !isStatementPayment ? (
+              <FormCard title="This is a credit card">
+                <Segment
+                  options={[{ key: "regular", label: "Regular purchase" }, { key: "installment", label: "Installment" }]}
+                  value={creditCardPurchaseType}
+                  onChange={setCreditCardPurchaseType}
+                  disabled={isEdit}
+                />
+                {isEdit ? <Note>Purchase type is locked after creation. Installment transactions cannot be converted or edited once billing-cycle amortizations may exist.</Note> : null}
                 <View>
-                  {renderFieldLabel("PURCHASE TYPE")}
-                  <View style={{ flexDirection: "row", gap: 10 }}>
-                    {(["regular", "installment"] as const).map((type) => {
-                      const selected = creditCardPurchaseType === type;
-                      const purchaseTypeLocked = isEdit;
-                      return <Pressable key={type} disabled={purchaseTypeLocked} onPress={() => setCreditCardPurchaseType(type)} accessibilityRole="radio" accessibilityState={{ selected, disabled: purchaseTypeLocked }} style={{ flex: 1, borderWidth: 1, borderColor: selected ? palette.brand : "#e8deca", backgroundColor: selected ? palette.successCard : palette.softCard, borderRadius: 14, padding: 13, opacity: purchaseTypeLocked && !selected ? 0.55 : 1 }}>
-                        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.ink }}>{type === "regular" ? "Regular Purchase" : "Installment Purchase"}</Text>
-                      </Pressable>;
-                    })}
-                  </View>
-                  {isEdit ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 6 }}>Purchase type is locked after creation. Installment transactions cannot be converted or edited once billing-cycle amortizations may exist.</Text> : null}
-                </View>
-                <View>
-                {renderFieldLabel("POSTING DATE (OPTIONAL)")}
-                <Pressable
-                  accessibilityLabel="Credit-card posting date"
-                  onPress={() => setShowPostingDatePicker(true)}
-                  style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", backgroundColor: palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-                >
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 15, color: postingDate ? palette.ink : palette.mut }}>{formatPostingDate()}</Text>
-                  <CalendarBlank color={palette.mut} size={18} weight="regular" />
-                </Pressable>
-                <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 5 }}>
-                  Use YYYY-MM-DD when the issuer provides a posting date. Otherwise Odin uses the transaction date as an estimate.
-                </Text>
+                  <PickerField
+                    label="Posting date (optional)"
+                    value={formatPostingDate()}
+                    placeholder={!postingDate}
+                    accessibilityLabel="Credit-card posting date"
+                    onPress={() => setShowPostingDatePicker(true)}
+                  />
+                  <Text style={[ui.note, { marginTop: 5, color: v4.mut }]}>
+                    Use YYYY-MM-DD when the issuer provides a posting date. Otherwise Odin uses the transaction date as an estimate.
+                  </Text>
                 </View>
                 {creditCardPurchaseType === "installment" ? <CreditCardInstallmentFields value={installment} errors={installmentErrors} readOnly={editInstallmentLocked} onChange={(next) => {
                   const changed = (Object.keys(next) as (keyof InstallmentFormValue)[]).find((key) => next[key] !== installment[key]);
@@ -1059,49 +988,84 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     setInstallment(next);
                   }
                 }} /> : null}
-              </>
-             ) : null}
-
-              {txType === "expense" && !isStatementPayment && !selectedSourceIsCreditCard() ? <View><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: isDebtPayment, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => { setIsDebtPayment((current) => !current); setDebtPaymentId(""); setDebtPrincipal(""); setDebtInterestOrFees("0"); }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Record as a debt payment</Text></Pressable><Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>Choose this when this expense pays down one of your debts.</Text>{isDebtPayment ? <View style={{ gap: 8, marginTop: 8 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: palette.ink }}>Select the debt this payment applies to</Text>{activeDebts.length === 0 ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>No active debts are available. Add a debt before recording a debt payment.</Text> : activeDebts.map((debt) => <Pressable key={debt.id} accessibilityRole="radio" accessibilityState={{ selected: debtPaymentId === debt.id, disabled: Boolean(debtPaymentDebtId || debtPaymentContext) }} disabled={Boolean(debtPaymentDebtId || debtPaymentContext)} onPress={() => setDebtPaymentId(debt.id)} style={{ padding: 10, borderWidth: 1, borderColor: debtPaymentId === debt.id ? palette.brand : palette.line, borderRadius: 10 }}><Text style={{ color: palette.ink }}>{debt.name} · {formatCurrency(debt.currentBalanceCentavos)}</Text></Pressable>)}<TextInput accessibilityLabel="Principal amount" value={debtPrincipal} onChangeText={setDebtPrincipal} placeholder="Enter principal amount" keyboardType="decimal-pad" placeholderTextColor={palette.mut} style={{ borderRadius: 12, borderWidth: 1, borderColor: palette.line, padding: 12, color: palette.ink }} /><TextInput accessibilityLabel="Interest or fee amount" value={debtInterestOrFees} onChangeText={setDebtInterestOrFees} placeholder="Enter interest or fee amount" keyboardType="decimal-pad" placeholderTextColor={palette.mut} style={{ borderRadius: 12, borderWidth: 1, borderColor: palette.line, padding: 12, color: palette.ink }} /><Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut }}>Principal reduces the debt balance. Principal plus interest or fees cannot exceed the payment amount.</Text></View> : null}</View> : null}
-
-            {needsCategory ? (
-              <View>
-                {renderFieldLabel(categorySelection.tier ? `CATEGORY · ${categorySelection.tier.toUpperCase()}` : "CATEGORY")}
-                <Pressable onPress={() => setShowCategoryPicker(true)} style={{ borderRadius: 16, borderWidth: 1, borderColor: categorySelection.tier ? palette.successTint : "#e8deca", backgroundColor: categorySelection.tier ? palette.successCard : palette.softCard, paddingHorizontal: 16, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <View>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: palette.ink }}>{getCategorySummaryLabel()}</Text>
-                    <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 4 }}>Open full list to view everything</Text>
-                  </View>
-                  <CaretRight color={palette.mut} size={16} weight="bold" />
-                </Pressable>
-              </View>
+              </FormCard>
             ) : null}
 
-            <View>
-              {renderFieldLabel("NOTES")}
-              <TextInput
+            {txType === "expense" && !isStatementPayment && !selectedSourceIsCreditCard() ? (
+              <FormCard
+                title="Record as a debt payment"
+                right={<Switch value={isDebtPayment} disabled={debtLocked} accessibilityLabel="Record as a debt payment" onToggle={() => { setIsDebtPayment((current) => !current); setDebtPaymentId(""); setDebtPrincipal(""); setDebtInterestOrFees("0"); }} />}
+              >
+                <Note>Choose this when this expense pays down one of your debts.</Note>
+                {isDebtPayment ? (
+                  <>
+                    <FieldLabel>Debt</FieldLabel>
+                    {activeDebts.length === 0 ? (
+                      <Note>No active debts are available. Add a debt before recording a debt payment.</Note>
+                    ) : (
+                      <View accessibilityRole="radiogroup" accessibilityLabel="Select the debt this payment applies to" style={[ui.list, { marginTop: -7 }]}>
+                        {activeDebts.map((debt, index) => {
+                          const selected = debtPaymentId === debt.id;
+                          return (
+                            <Pressable
+                              key={debt.id}
+                              accessibilityRole="radio"
+                              accessibilityLabel={`${debt.name}, ${formatCurrency(debt.currentBalanceCentavos)}`}
+                              accessibilityState={{ selected, disabled: debtLocked }}
+                              disabled={debtLocked}
+                              onPress={() => setDebtPaymentId(debt.id)}
+                              style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}
+                            >
+                              <View style={ui.listRowMain}>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text numberOfLines={1} style={[ui.listTitle, selected ? { fontWeight: "700" } : null]}>{debt.name}</Text>
+                                  <Text numberOfLines={1} style={ui.listSubtitle}>Balance {formatCurrency(debt.currentBalanceCentavos)}</Text>
+                                </View>
+                                {selected ? <Check color={v4.brandMid} size={16} weight="bold" /> : null}
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                    <TextField label="Principal" suffix="PHP" accessibilityLabel="Principal amount" value={debtPrincipal} onChangeText={setDebtPrincipal} placeholder="Enter principal amount" keyboardType="decimal-pad" />
+                    <TextField label="Interest or fee" suffix="PHP" accessibilityLabel="Interest or fee amount" value={debtInterestOrFees} onChangeText={setDebtInterestOrFees} placeholder="Enter interest or fee amount" keyboardType="decimal-pad" />
+                    <Note>Principal reduces the debt balance. Principal plus interest or fees cannot exceed the payment amount.</Note>
+                  </>
+                ) : null}
+              </FormCard>
+            ) : null}
+
+            <FormCard>
+              {needsCategory ? (
+                <View>
+                  <PickerField
+                    label="Category"
+                    value={getCategoryFieldLabel()}
+                    placeholder={!categorySelection.tier}
+                    error={formError === "Select a category"}
+                    accessibilityLabel={`Category: ${getCategoryFieldLabel()}. Open full list`}
+                    onPress={() => setShowCategoryPicker(true)}
+                  />
+                  {formError === "Select a category" ? <FieldError>Select a category</FieldError> : null}
+                </View>
+              ) : null}
+              <TextField
+                label="Notes"
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Optional notes"
-                placeholderTextColor={palette.mut}
+                accessibilityLabel="Notes"
                 multiline
                 numberOfLines={3}
-                style={{ borderRadius: 16, borderWidth: 1, borderColor: "#e8deca", paddingHorizontal: 16, paddingTop: 14, fontFamily: "Manrope", fontSize: 15, color: palette.ink, backgroundColor: palette.softCard, minHeight: 92, textAlignVertical: "top" }}
               />
-            </View>
+            </FormCard>
 
-               {!isEdit && !isStatementPayment && !(selectedSourceIsCreditCard() && creditCardPurchaseType === "installment") ? (
-              <>
-                <View style={{ borderRadius: 18, backgroundColor: "#f4ead2", paddingHorizontal: 16, paddingVertical: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <Repeat color={palette.ink2} size={18} weight="regular" />
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: palette.ink }}>Recurring</Text>
-                  </View>
-                  <Pressable onPress={() => setIsRecurring(!isRecurring)} accessibilityRole="switch" accessibilityLabel="Recurring transaction" accessibilityState={{ checked: isRecurring }} style={{ width: 50, height: 30, borderRadius: 999, backgroundColor: isRecurring ? palette.successTint : "#e4dfd3", padding: 3, justifyContent: "center" }}>
-                    <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", alignSelf: isRecurring ? "flex-end" : "flex-start" }} />
-                  </Pressable>
-                </View>
-
+            {showRecurring ? (
+              <FormCard
+                title="Recurring"
+                right={<Switch value={isRecurring} onToggle={() => setIsRecurring(!isRecurring)} accessibilityLabel="Recurring transaction" />}
+              >
                 {isRecurring ? (
                   <RecurringScheduleFields
                     frequencies={["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly"]}
@@ -1109,25 +1073,24 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     onChange={setRecurringSchedule}
                     showIntervalCount
                   />
-                ) : null}
-              </>
+                ) : (
+                  <Note>Turn this on to repeat the transaction on a schedule.</Note>
+                )}
+              </FormCard>
             ) : null}
 
-            {formError ? (
-              <View style={{ backgroundColor: "#fff0f2", borderRadius: 14, padding: 12 }}>
-                <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error, fontWeight: "600" }}>{formError}</Text>
-              </View>
-            ) : null}
+            {formError ? <Banner tone="error">{formError}</Banner> : null}
 
-            {isEdit ? (
-              <Pressable onPress={() => handleSave()} disabled={saving} style={{ height: 54, borderRadius: 16, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.5 : 1 }} accessibilityRole="button" accessibilityLabel="Save changes">
-                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#fff" }}>Save Changes</Text>}
-              </Pressable>
-            ) : (
-              <Pressable onPress={() => handleSave()} disabled={saving} style={{ height: 54, borderRadius: 16, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", opacity: saving ? 0.5 : 1 }} accessibilityRole="button" accessibilityLabel="Save transaction">
-                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#fff" }}>Save</Text>}
-              </Pressable>
-            )}
+            <Pressable
+              onPress={() => handleSave()}
+              disabled={saving}
+              style={[ui.button, { opacity: saving ? 0.5 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel={isEdit ? "Save changes" : "Save transaction"}
+              accessibilityState={{ disabled: saving, busy: saving }}
+            >
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={ui.buttonText}>{isEdit ? "Save Changes" : "Save"}</Text>}
+            </Pressable>
           </ScrollView>
         )}
 
@@ -1135,21 +1098,21 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         {renderDatePicker("posting")}
         {renderAccountPicker()}
         <Modal visible={balanceWarning !== null} transparent animationType="fade" onRequestClose={() => setBalanceWarning(null)}>
-          <Pressable onPress={() => setBalanceWarning(null)} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <Pressable onPress={() => setBalanceWarning(null)} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(27,28,26,0.4)" }}>
             <Pressable onPress={() => {}}>
-              <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
-                <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>Insufficient available balance</Text>
-                <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 12 }}>
+              <View style={{ borderRadius: 20, padding: 20, backgroundColor: v4.surface, gap: 10 }}>
+                <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 17, color: v4.ink }}>Insufficient available balance</Text>
+                <Text style={{ fontFamily: v4Font, fontSize: 13.5, lineHeight: 20, color: v4.ink2 }}>
                   {balanceWarning?.isCreditCard
                     ? `This transaction exceeds ${balanceWarning.accountName}'s available credit by ${formatCurrency(balanceWarning.deficitCentavos)}.`
                     : `This transaction exceeds ${balanceWarning?.accountName}'s available balance by ${formatCurrency(balanceWarning?.deficitCentavos ?? 0)}.`}
                 </Text>
-                <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+                <Note>
                   Continue recording? The available {balanceWarning?.isCreditCard ? "credit" : "balance"} will be negative.
-                </Text>
-                <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 22 }}>
-                  <Pressable onPress={() => setBalanceWarning(null)} accessibilityRole="button" accessibilityLabel="Cancel transaction">
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.mut }}>Cancel</Text>
+                </Note>
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
+                  <Pressable onPress={() => setBalanceWarning(null)} accessibilityRole="button" accessibilityLabel="Cancel transaction" style={[ui.button, ui.buttonGhost, { flex: 1 }]}>
+                    <Text style={[ui.buttonText, ui.buttonGhostText]}>Cancel</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => {
@@ -1158,8 +1121,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     }}
                     accessibilityRole="button"
                     accessibilityLabel="Confirm record transaction"
+                    style={[ui.button, { flex: 1 }]}
                   >
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Continue</Text>
+                    <Text style={ui.buttonText}>Continue</Text>
                   </Pressable>
                 </View>
               </View>
@@ -1169,4 +1133,24 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+function accountTint(kind: FinancialAccount["kind"]) {
+  if (kind === "savings") return tileTints[3];
+  if (kind === "e_wallet") return tileTints[1];
+  if (kind === "cash") return tileTints[2];
+  if (kind === "credit_card") return tileTints[0];
+  return tileTints[4];
+}
+
+function AccountKindIcon({ kind, color }: { kind: FinancialAccount["kind"]; color: string }) {
+  if (kind === "bank" || kind === "savings") return <Bank color={color} size={16} weight="bold" />;
+  if (kind === "credit_card") return <CreditCard color={color} size={16} weight="bold" />;
+  if (kind === "cash") return <Money color={color} size={16} weight="bold" />;
+  return <Wallet color={color} size={16} weight="bold" />;
+}
+
+function formatAccountKind(kind: FinancialAccount["kind"]): string {
+  const label = kind.replace("_", " ");
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
