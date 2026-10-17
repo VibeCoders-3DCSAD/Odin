@@ -25,6 +25,8 @@ import FinancialAccountsScreen from "../features/financial-accounts/FinancialAcc
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
 import ScheduledPaymentsScreen from "../features/billers/ScheduledPaymentsScreen";
 import ScheduledPaymentFormScreen from "../features/billers/ScheduledPaymentFormScreen";
+import ScheduledPaymentDetailScreen from "../features/billers/ScheduledPaymentDetailScreen";
+import RecordScheduledPaymentScreen from "../features/billers/RecordScheduledPaymentScreen";
 import { postDueScheduledPayments } from "../local-db/repositories/scheduledPayments";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
@@ -89,6 +91,8 @@ type Page =
   | "income-sources"
   | "scheduled-payments"
   | "scheduled-payment-form"
+  | "scheduled-payment-detail"
+  | "scheduled-payment-record"
    | "debt-manager"
     | "credit-cards"
     | "credit-card-detail"
@@ -192,10 +196,11 @@ const parentPage: Partial<Record<Page, Page>> = {
   "non-credit-card-debt-detail": "non-credit-card-debts",
   "financial-plan-history": "financial-plan",
   "financial-plan-history-detail": "financial-plan-history",
+  "scheduled-payment-detail": "scheduled-payments",
 };
 
 // These screens draw their own header, so the shell adds no chrome around them.
-const fullScreenPages: Page[] = ["add-transaction", "scheduled-payment-form"];
+const fullScreenPages: Page[] = ["add-transaction", "scheduled-payment-form", "scheduled-payment-record"];
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
@@ -215,6 +220,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
   "scheduled-payments": { title: "Scheduled Payments", subtitle: "Bills and remittances" },
   "scheduled-payment-form": { title: "Scheduled Payment", subtitle: "Add or edit a scheduled payment" },
+  "scheduled-payment-detail": { title: "Scheduled Payment", subtitle: "Schedule and payments" },
+  "scheduled-payment-record": { title: "Record Payment", subtitle: "Pay a scheduled payment" },
   "debt-manager": { title: "Debt Manager", subtitle: "Credit-card billing cycles" },
   "credit-cards": { title: "Credit Cards", subtitle: "Billing cycles and statements" },
   "credit-card-detail": { title: "Credit Card", subtitle: "Billing cycles and statements" },
@@ -234,6 +241,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [selectedPastPlanId, setSelectedPastPlanId] = useState<string | null>(null);
   const [editingScheduledPaymentId, setEditingScheduledPaymentId] = useState<string | null>(null);
+  const [selectedScheduledPaymentId, setSelectedScheduledPaymentId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
   const [savingsActivityContext, setSavingsActivityContext] = useState<{ savingsGoalId: string; kind: "contribution" | "withdrawal"; amountCentavos?: number } | null>(null);
@@ -854,14 +862,36 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           syncVersion={syncVersion}
           onAdd={() => { setEditingScheduledPaymentId(null); setCurrentPage("scheduled-payment-form"); }}
           onEdit={(id) => { setEditingScheduledPaymentId(id); setCurrentPage("scheduled-payment-form"); }}
-          onOpen={(id) => { setEditingScheduledPaymentId(id); setCurrentPage("scheduled-payment-form"); }}
+          onOpen={(id) => { setSelectedScheduledPaymentId(id); setCurrentPage("scheduled-payment-detail"); }}
           onSyncRequested={handleSync}
         />
       );
     }
 
+    if (currentPage === "scheduled-payment-detail" && selectedScheduledPaymentId) {
+      return (
+        <ScheduledPaymentDetailScreen
+          userId={userId}
+          deviceId={deviceId}
+          scheduledPaymentId={selectedScheduledPaymentId}
+          syncVersion={syncVersion}
+          onEdit={() => { setEditingScheduledPaymentId(selectedScheduledPaymentId); setCurrentPage("scheduled-payment-form"); }}
+          onRecordPayment={() => setCurrentPage("scheduled-payment-record")}
+          onDeleted={() => { setSelectedScheduledPaymentId(null); setCurrentPage("scheduled-payments"); }}
+          onSyncRequested={handleSync}
+        />
+      );
+    }
+
+    if (currentPage === "scheduled-payment-record" && selectedScheduledPaymentId) {
+      const back = () => setCurrentPage("scheduled-payment-detail");
+      return <RecordScheduledPaymentScreen userId={userId} deviceId={deviceId} scheduledPaymentId={selectedScheduledPaymentId} onClose={back} onRecorded={(message) => { showToast(message, "success"); back(); handleSync(); }} />;
+    }
+
     if (currentPage === "scheduled-payment-form") {
-      const close = () => { setEditingScheduledPaymentId(null); setCurrentPage("scheduled-payments"); };
+      // Edits opened from a payment's detail return there; adds and list edits return to the list.
+      const returnPage: Page = editingScheduledPaymentId && editingScheduledPaymentId === selectedScheduledPaymentId ? "scheduled-payment-detail" : "scheduled-payments";
+      const close = () => { setEditingScheduledPaymentId(null); setCurrentPage(returnPage); };
       return <ScheduledPaymentFormScreen userId={userId} deviceId={deviceId} scheduledPaymentId={editingScheduledPaymentId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
     }
 

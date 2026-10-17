@@ -1,4 +1,4 @@
-import { currentOccurrence, dueDatesBetween, nextDueDate, occurrenceStatus, previousDueDate, type PaymentSchedule } from "../schedule";
+import { currentOccurrence, dueDatesBetween, nextDueDate, occurrenceChoices, occurrenceStatus, previousDueDate, type PaymentSchedule } from "../schedule";
 
 const base: PaymentSchedule = { frequency: "monthly", dueDayOfMonth: 5, dueSecondDayOfMonth: null, dueDayOfWeek: null, dueMonth: null, startsOn: "2026-09-01", endsOn: null };
 
@@ -68,5 +68,12 @@ describe("currentOccurrence", () => {
 
   it("returns null after the schedule has ended and been paid", () => {
     expect(currentOccurrence({ ...base, endsOn: "2026-09-30" }, 1000, new Map([["2026-09-05", 1000]]), "2026-10-17")).toBeNull();
+  });
+});
+
+describe("occurrenceChoices", () => {
+  it("offers recent unpaid due dates before the upcoming ones", () => {
+    const paid = new Map([["2026-08-05", 1000], ["2026-09-05", 400]]);
+    expect(occurrenceChoices({ ...base, startsOn: "2026-01-01" }, 1000, paid, "2026-10-17", 2)).toEqual(["2026-07-05", "2026-09-05", "2026-10-05", "2026-11-05", "2026-12-05"]);
   });
 });

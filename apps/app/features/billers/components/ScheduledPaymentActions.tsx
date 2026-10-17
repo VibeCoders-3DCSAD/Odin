@@ -28,13 +28,13 @@ export function RowMenuSheet({ payment, onPostNow, onAutoPost, onEdit, onDelete,
   );
 }
 
-export function DeleteConfirmDialog({ name, onConfirm, onCancel }: { name: string | null; onConfirm: () => void; onCancel: () => void }) {
+export function DeleteConfirmDialog({ name, message = "This scheduled payment will be permanently removed. Past transactions stay.", onConfirm, onCancel }: { name: string | null; message?: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <Modal visible={name !== null} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "center", padding: 28 }}>
         <View accessibilityRole="alert" style={{ backgroundColor: v4.surface, borderRadius: 20, padding: 20, gap: 10 }}>
           <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>Delete {name}?</Text>
-          <Text style={ui.note}>This scheduled payment will be permanently removed. Past transactions stay.</Text>
+          <Text style={ui.note}>{message}</Text>
           <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
             <Pressable onPress={onCancel} accessibilityRole="button" style={[ui.button, ui.buttonGhost, { flex: 1 }]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Cancel</Text></Pressable>
             <Pressable onPress={onConfirm} accessibilityRole="button" style={[ui.button, ui.buttonDanger, { flex: 1 }]}><Text style={ui.buttonText}>Delete</Text></Pressable>
