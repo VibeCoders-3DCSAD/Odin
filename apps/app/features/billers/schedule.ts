@@ -34,6 +34,11 @@ function toDate(time: number): string {
   return new Date(time).toISOString().slice(0, 10);
 }
 
+// Due dates follow the device's calendar day, not UTC.
+export function localToday(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 export function addDays(date: string, days: number): string {
   return toDate(toTime(date) + days * DAY_MS);
 }
