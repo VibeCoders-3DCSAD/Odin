@@ -2,15 +2,15 @@ import { Pressable, Text, View } from "react-native";
 import { Sparkle } from "phosphor-react-native";
 import type { ForecastContent } from "../dashboardSnapshotContent";
 
-type Props = { forecast: ForecastContent | null; stale?: boolean; unavailable?: boolean; refreshable?: boolean; onRefresh: () => void; onNavigate?: () => void; showRefresh?: boolean };
+type Props = { forecast: ForecastContent | null; stale?: boolean; unavailable?: boolean; refreshable?: boolean; onRefresh: () => void; onNavigate?: () => void; showRefresh?: boolean; emptyMessage?: string | null };
 
 function formatPeso(centavos: number): string {
   return `PHP ${(centavos / 100).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
 }
 
-export function ForecastPanel({ forecast, stale, unavailable, refreshable, onRefresh, onNavigate, showRefresh = true }: Props) {
+export function ForecastPanel({ forecast, stale, unavailable, refreshable, onRefresh, onNavigate, showRefresh = true, emptyMessage }: Props) {
   const amount = forecast?.forecasts.reduce((sum, point) => sum + point.amountCentavos, 0) ?? null;
-  const noForecastCopy = unavailable ? "Forecast information is unavailable. Refresh to try again." : "Record posted transactions to unlock a spending forecast.";
+  const noForecastCopy = emptyMessage ?? (unavailable ? "Forecast information is unavailable. Refresh to try again." : "Record posted transactions to unlock a spending forecast.");
   return (
     <View style={{ marginTop: 20, padding: 20, borderRadius: 32, backgroundColor: "#EFFEF7" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>

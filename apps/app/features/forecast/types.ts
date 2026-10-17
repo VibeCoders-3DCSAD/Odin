@@ -19,3 +19,5 @@ export type ForecastPayload = {
 };
 
 export type ForecastContent = ForecastPayload;
+
+export type ForecastUnavailableReason = "NO_COMPLETED_MONTH" | "NO_RECENT_SPENDING";

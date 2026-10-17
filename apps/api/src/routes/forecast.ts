@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
-import { ForecastUpstreamError, ForecastValidationError, getMlForecast, parseForecastRequest } from "../services/forecastService.js";
+import { ForecastUnavailableError, ForecastUpstreamError, ForecastValidationError, getMlForecast, parseForecastRequest } from "../services/forecastService.js";
 
 const router = Router();
 
@@ -12,6 +12,10 @@ router.post("/", requireAuth, async (request: AuthenticatedRequest, response: Re
     const payload = await getMlForecast(request.userId!, forecastRequest);
     response.status(200).json({ payload });
   } catch (error) {
+    if (error instanceof ForecastUnavailableError) {
+      response.status(200).json({ payload: null, reason: error.reason, message: error.message });
+      return;
+    }
     if (error instanceof ForecastValidationError) {
       response.status(400).json({ error: "Bad Request", message: "Invalid forecast request" });
       return;

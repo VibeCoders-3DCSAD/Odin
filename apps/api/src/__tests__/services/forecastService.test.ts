@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { jest } from "@jest/globals";
-import { ForecastUpstreamError, ForecastValidationError, getMlForecast, mapMlForecast, parseForecastRequest } from "../../services/forecastService";
+import { ForecastUnavailableError, ForecastUpstreamError, ForecastValidationError, getMlForecast, mapMlForecast, parseForecastRequest } from "../../services/forecastService";
 
 const transaction = {
   transactionId: "b9df3d82-b64a-4b25-b8aa-dd36f70a42be",
@@ -73,7 +73,18 @@ describe("forecast ML adapter", () => {
     const recentFood = { ...transaction, date: "2026-05-01" };
     await getMlForecast("user-1", { historicalTransactions: [staleHealth, recentFood] }, fetcher);
     expect(JSON.parse(fetcher.mock.calls[0]![1].body).categories).toEqual(["food"]);
-    await expect(getMlForecast("user-1", { historicalTransactions: [staleHealth] }, fetcher)).rejects.toThrow(ForecastValidationError);
+    await expect(getMlForecast("user-1", { historicalTransactions: [staleHealth] }, fetcher)).rejects.toMatchObject({ reason: "NO_RECENT_SPENDING" });
+  });
+
+  it("explains that a forecast needs a completed month when only current-month spend exists", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-07T12:00:00.000Z"));
+    process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
+    const fetcher = jest.fn();
+    const error = await getMlForecast("user-1", { historicalTransactions: [{ ...transaction, date: "2026-10-02" }] }, fetcher).catch((caught) => caught);
+    expect(error).toBeInstanceOf(ForecastUnavailableError);
+    expect(error).toMatchObject({ reason: "NO_COMPLETED_MONTH", message: expect.stringContaining("first full month") });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("rejects malformed upstream responses and upstream errors", async () => {

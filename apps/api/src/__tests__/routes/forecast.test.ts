@@ -42,6 +42,16 @@ describe("POST /odin/api/forecast", () => {
     expect((await request(app).post("/odin/api/forecast").send(body)).status).toBe(401);
   });
 
+  it("returns a no-recent-spending message instead of an error when every category is stale", async () => {
+    jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] }).setSystemTime(new Date("2026-10-07T12:00:00.000Z"));
+    const fetchSpy = jest.spyOn(global, "fetch");
+    const response = await request(app).post("/odin/api/forecast").set(authHeader()).send({ historicalTransactions: [{ ...body.historicalTransactions[0], date: "2026-03-04" }] });
+    jest.useRealTimers();
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ payload: null, reason: "NO_RECENT_SPENDING", message: expect.stringContaining("last 6 months") });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed caller input without contacting ML", async () => {
     const fetchSpy = jest.spyOn(global, "fetch");
     const response = await request(app).post("/odin/api/forecast").set(authHeader()).send({ historicalTransactions: [{ ...body.historicalTransactions[0], amount: 0 }] });

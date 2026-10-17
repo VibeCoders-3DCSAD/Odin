@@ -1,5 +1,5 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
-import type { ForecastPayload, ForecastRequest } from "./types";
+import type { ForecastPayload, ForecastRequest, ForecastUnavailableReason } from "./types";
 
 export async function requestForecast(accessToken: string, request: ForecastRequest, signal?: AbortSignal) {
   const controller = new AbortController();
@@ -13,7 +13,7 @@ export async function requestForecast(accessToken: string, request: ForecastRequ
       body: JSON.stringify(request),
       signal: controller.signal,
     });
-    let body: { payload?: ForecastPayload; error?: string; message?: string } = {};
+    let body: { payload?: ForecastPayload | null; reason?: ForecastUnavailableReason; error?: string; message?: string } = {};
     try { body = await response.json(); } catch {}
     return { response, body };
   } finally {

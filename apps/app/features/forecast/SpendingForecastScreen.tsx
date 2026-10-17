@@ -15,6 +15,7 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack, em
   const [snapshot, setSnapshot] = useState<DashboardSnapshotWithMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setSnapshot(await getSnapshot(userId, "forecast")); } catch { setError("Forecast information is unavailable."); } finally { setLoading(false); }
@@ -24,6 +25,7 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack, em
 
   const refresh = useCallback(async () => {
     setError(null);
+    setNotice(null);
     try {
       const historicalTransactions = await listForecastTransactions(userId, { fromDate: getForecastHistoryStartDate() });
       if (historicalTransactions.length === 0) {
@@ -31,6 +33,10 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack, em
         return;
       }
       const result = await requestForecast(accessToken, { historicalTransactions });
+      if (result.response.ok && result.body.payload === null && result.body.reason) {
+        setNotice(result.body.message ?? "A spending forecast isn't available yet.");
+        return;
+      }
       if (!result.response.ok || !result.body.payload) throw new Error("forecast_request_failed");
       await upsertSnapshot(userId, "forecast", result.body.payload);
       await load();
@@ -50,8 +56,9 @@ export default function SpendingForecastScreen({ userId, accessToken, onBack, em
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, backgroundColor: "#08B16A", justifyContent: "center", alignItems: "center" }}><Sparkle size={18} color="#FFFFFF" weight="fill" /></View><View style={{ flex: 1, flexShrink: 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>Monthly spending plan</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 2 }}>Personalized from completed months and HFCE category trends.</Text></View></View>
     {loading ? <ActivityIndicator color="#0B8A55" style={{ marginTop: 48 }} /> : <>
       {error ? <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 20, color: "#D9001F", marginTop: 14 }}>{error}</Text> : null}
+      {notice && forecast ? <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 20, color: "#6B7A6F", marginTop: 14 }}>{notice}</Text> : null}
       {forecast ? <ForecastLineChart forecast={forecast} /> : null}
-        <ForecastPanel forecast={forecast} stale={snapshot?.stale ?? false} unavailable={!!error} onRefresh={refresh} onNavigate={onBack} showRefresh={false} />
+        <ForecastPanel forecast={forecast} stale={snapshot?.stale ?? false} unavailable={!!error} onRefresh={refresh} onNavigate={onBack} showRefresh={false} emptyMessage={notice} />
     </>}
   </View>;
 

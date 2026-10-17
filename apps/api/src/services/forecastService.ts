@@ -34,6 +34,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const HFCE_CATEGORIES = new Set(["alcohol_tobacco", "clothing_footwear", "communication", "education", "food", "furnishings_household", "health", "housing_water_utilities", "miscellaneous_goods_services", "recreation_culture", "restaurants_hotels", "transport"]);
 
 export class ForecastValidationError extends Error {}
+export type ForecastUnavailableReason = "NO_COMPLETED_MONTH" | "NO_RECENT_SPENDING";
+const FORECAST_UNAVAILABLE_MESSAGES: Record<ForecastUnavailableReason, string> = {
+  NO_COMPLETED_MONTH: "Your spending forecast will be ready after your first full month of recorded expenses.",
+  NO_RECENT_SPENDING: "You haven't recorded expenses in the last 6 months. Add recent expenses to get a spending forecast.",
+};
+export class ForecastUnavailableError extends Error {
+  constructor(public readonly reason: ForecastUnavailableReason) {
+    super(FORECAST_UNAVAILABLE_MESSAGES[reason]);
+  }
+}
 export class ForecastUpstreamError extends Error {
   constructor(
     public readonly status: number,
@@ -83,7 +93,7 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
   const historicalTransactions = request.historicalTransactions;
   if (historicalTransactions.length === 0) throw new ForecastValidationError("No forecastable transactions remain");
   const categories = forecastableCategories(historicalTransactions);
-  if (categories.length === 0) throw new ForecastValidationError("No supported expense categories remain");
+  if (categories.length === 0) throw new ForecastUnavailableError(hasCompletedMonthSpend(historicalTransactions) ? "NO_RECENT_SPENDING" : "NO_COMPLETED_MONTH");
   const body = JSON.stringify({
     user_id: userId,
     historical_transactions: historicalTransactions.map((transaction) => ({
@@ -129,13 +139,22 @@ function monthsAgo(now: Date, months: number): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1)).toISOString().slice(0, 7);
 }
 
+function isSupportedExpense(transaction: ForecastTransaction): boolean {
+  return transaction.transactionType === "expense" && HFCE_CATEGORIES.has(transaction.category);
+}
+
+function hasCompletedMonthSpend(transactions: ForecastTransaction[], now = new Date()): boolean {
+  const currentMonth = monthsAgo(now, 0);
+  return transactions.some((transaction) => isSupportedExpense(transaction) && transaction.date.slice(0, 7) < currentMonth);
+}
+
 function forecastableCategories(transactions: ForecastTransaction[], now = new Date()): string[] {
   const currentMonth = monthsAgo(now, 0);
   const staleMonth = monthsAgo(now, STALE_CATEGORY_MONTHS);
   return [...new Set(transactions
     .filter((transaction) => {
       const month = transaction.date.slice(0, 7);
-      return transaction.transactionType === "expense" && month > staleMonth && month < currentMonth && HFCE_CATEGORIES.has(transaction.category);
+      return isSupportedExpense(transaction) && month > staleMonth && month < currentMonth;
     })
     .map((transaction) => transaction.category))];
 }
