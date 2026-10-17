@@ -12,7 +12,7 @@ const ONBOARDING_ANSWER_KEYS = new Set([
   "display_name", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
   "primary_employment_classification", "employment_status", "monthly_income",
   "monthly_deductions", "monthly_deduction_amounts", "emergency_savings_runway", "liquid_emergency_savings", "monthly_debt_payments",
-  "monthly_essential_living_costs", "paying_off_debt", "credit_card_payment_behavior", "protected_categories",
+  "monthly_essential_living_costs", "paying_off_debt", "credit_card_payment_behavior", "credit_card_revolving_months", "protected_categories",
   "protected_category_costs", "high_expense_seasons", "saving_seasons", "has_dependents",
 ]);
 
@@ -32,6 +32,7 @@ const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   emergency_savings_runway: ["less_than_1_month", "1_to_3_months", "3_to_6_months", "more_than_6_months", "not_sure"],
   paying_off_debt: ["true", "false"],
   credit_card_payment_behavior: ["no_credit_card", "never", "some_months", "every_month", "not_sure"],
+  credit_card_revolving_months: Array.from({ length: 13 }, (_, months) => String(months)),
   protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
   high_expense_seasons: ["rainy_season", "back_to_school", "undas", "christmas_ber_months", "new_year", "summer", "annual_payments", "family_celebrations", "other", "none"],
   saving_seasons: ["rainy_season", "back_to_school", "christmas_ber_months", "new_year", "summer", "other", "none"],
@@ -306,6 +307,18 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
       error: "Bad Request",
       message: "Enter your total required monthly debt payments.",
       fields: ["monthly_debt_payments"],
+    });
+    return;
+  }
+
+  if (
+    (rawAnswers.credit_card_payment_behavior === "some_months" || rawAnswers.credit_card_payment_behavior === "not_sure")
+    && (typeof rawAnswers.credit_card_revolving_months !== "string" || rawAnswers.credit_card_revolving_months === "")
+  ) {
+    response.status(400).json({
+      error: "Bad Request",
+      message: "Select how many of the last 12 months you had an unpaid credit-card balance.",
+      fields: ["credit_card_revolving_months"],
     });
     return;
   }

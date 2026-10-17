@@ -65,7 +65,10 @@ function isStepComplete(step: StepConfig, answers: Record<string, unknown>) {
 }
 
 function isStepVisible(step: StepConfig, answers: Record<string, unknown>) {
-  return !step.visibleWhen || answers[step.visibleWhen.questionKey] === step.visibleWhen.value;
+  if (!step.visibleWhen) return true;
+  const answer = answers[step.visibleWhen.questionKey];
+  const { value } = step.visibleWhen;
+  return typeof value === "string" ? answer === value : typeof answer === "string" && value.includes(answer);
 }
 
 function nextVisibleStepIndex(startIndex: number, direction: 1 | -1, answers: Record<string, unknown>) {
@@ -1077,6 +1080,8 @@ function ReviewStep({
   if (typeof essentialCosts === "string") rows.push({ label: "Monthly Essential Costs", value: `PHP ${Number(essentialCosts).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_essential_living_costs") });
   addOptionRow("Currently Paying Off Debt", "paying_off_debt");
   addOptionRow("Credit Card Payments", "credit_card_payment_behavior");
+  const revolvingMonthsStep = stepFor("credit_card_revolving_months");
+  if (revolvingMonthsStep && isStepVisible(revolvingMonthsStep, answers)) addOptionRow("Months With a Card Balance", "credit_card_revolving_months");
 
   const protectedCats = (answers.protected_categories as string[] | undefined) ?? [];
   const catLabels = protectedCats

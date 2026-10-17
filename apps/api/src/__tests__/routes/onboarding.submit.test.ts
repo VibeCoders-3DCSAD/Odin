@@ -338,6 +338,62 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
     expect(mockRpc).toHaveBeenCalledWith("submit_onboarding_session_v2", expect.any(Object));
   });
 
+  it("requires the revolving-months follow-up when credit-card payments vary", async () => {
+    mockAuth();
+    mockFrom.mockReturnValueOnce(createMockQuery({
+      data: { id: "session-1", status: "in_progress", raw_answers: { ...validRawAnswers, credit_card_payment_behavior: "some_months" } },
+      error: null,
+    }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(400);
+    expect(response.body.fields).toEqual(["credit_card_revolving_months"]);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("accepts the revolving-months follow-up answer", async () => {
+    mockAuth();
+    mockRpcSuccess();
+    mockFrom.mockReturnValueOnce(createMockQuery({
+      data: {
+        id: "session-1",
+        status: "in_progress",
+        raw_answers: { ...validRawAnswers, credit_card_payment_behavior: "some_months", credit_card_revolving_months: "4" },
+      },
+      error: null,
+    }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects a revolving-months answer outside the last 12 months", async () => {
+    mockAuth();
+    mockFrom.mockReturnValueOnce(createMockQuery({
+      data: {
+        id: "session-1",
+        status: "in_progress",
+        raw_answers: { ...validRawAnswers, credit_card_payment_behavior: "some_months", credit_card_revolving_months: "13" },
+      },
+      error: null,
+    }));
+
+    const response = await request(app)
+      .post(`${basePath}/sessions/${sessionId}/submit`)
+      .set(authHeader())
+      .send({ payload: { confirm_data_use: true } });
+
+    expect(response.status).toBe(400);
+  });
+
   it("accepts zero income without a profile heuristic", async () => {
     mockAuth();
     mockRpcSuccess();

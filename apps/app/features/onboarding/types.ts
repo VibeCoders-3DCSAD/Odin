@@ -39,7 +39,7 @@ export type StepConfig = {
   inputSuffix?: string;
   amountSourceKey?: string;
   amountOptions?: StepOption[];
-  visibleWhen?: { questionKey: string; value: string };
+  visibleWhen?: { questionKey: string; value: string | readonly string[] };
 };
 
 export const STEPS: StepConfig[] = [
@@ -231,6 +231,15 @@ export const STEPS: StepConfig[] = [
       { key: "every_month", label: "Every month" },
       { key: "not_sure", label: "Not sure" },
     ],
+  },
+  {
+    key: "credit_card_revolving_months",
+    title: "Months With a Card Balance",
+    subtitle: "In how many of the last 12 months did you have an unpaid credit-card balance after the due date?",
+    kind: "dropdown",
+    questionKey: "credit_card_revolving_months",
+    options: Array.from({ length: 13 }, (_, months) => ({ key: String(months), label: months === 1 ? "1 month" : `${months} months` })),
+    visibleWhen: { questionKey: "credit_card_payment_behavior", value: ["some_months", "not_sure"] },
   },
   {
     key: "dependents_protected",
