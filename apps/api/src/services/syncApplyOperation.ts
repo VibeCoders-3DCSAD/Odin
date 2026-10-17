@@ -42,6 +42,8 @@ const SYNCED_ENTITIES = new Set([
   "savings_goals",
   "savings_goal_activities",
   "savings_allocation_preferences",
+  "scheduled_payments",
+  "scheduled_payment_records",
 ]);
 
 const ALERT_PREFERENCE_CREATE_FIELDS = new Set(["category", "mode", "in_app_enabled", "push_enabled", "duplicate_cooldown_hours", "snoozed_until"]);
@@ -304,6 +306,9 @@ const CREDIT_CARD_SETTLEMENT_FIELDS = new Set(["installment_id", "settlement_dat
 const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy", "custom_amount_centavos", "percentage_bps"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
 const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "status", "archived_at"]);
+const SCHEDULED_PAYMENT_FIELDS = new Set(["name", "subcategory_id", "source_account_id", "amount_centavos", "frequency", "due_day_of_month", "due_second_day_of_month", "due_day_of_week", "due_month", "starts_on", "ends_on", "auto_post", "auto_post_from", "is_family_support", "is_dependent_support", "protected_by_default", "notes", "status"]);
+const SCHEDULED_PAYMENT_FREQUENCIES = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
+const SCHEDULED_PAYMENT_RECORD_FIELDS = new Set(["scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes"]);
 const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes"]);
 const SAVINGS_ALLOCATION_PREFERENCE_FIELDS = new Set(["strategy"]);
 const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
@@ -363,6 +368,8 @@ async function validateCreatePayload(
   if (entity === "categories" || entity === "subcategories" || entity === "transactions") {
     return validateTaxonomyCreatePayload(supabase, userId, entity, payload);
   }
+  if (entity === "scheduled_payments") return validateScheduledPaymentPayload(payload, true);
+  if (entity === "scheduled_payment_records") return validateScheduledPaymentRecordPayload(payload);
 
   if (entity === "financial_accounts") {
     assertOnlyAllowed(payload, FINANCIAL_ACCOUNT_CREATE_FIELDS);
@@ -918,6 +925,8 @@ async function validateUpdatePayload(
   recordId: string,
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  if (entity === "scheduled_payments") return validateScheduledPaymentPayload(payload, false);
+  if (entity === "scheduled_payment_records") throw new Error("payment records cannot be updated; delete and record again");
   let allowedFields: Set<string>;
   if (entity === "categories") {
     allowedFields = CATEGORY_UPDATE_FIELDS;
@@ -1719,6 +1728,43 @@ function requirePositiveInteger(payload: Record<string, unknown>, field: string)
   if (typeof v !== "number" || !Number.isInteger(v) || v <= 0) {
     throw new Error(`${field} must be a positive integer`);
   }
+}
+
+// Ownership of the subcategory, account, scheduled payment and transaction is checked by the sync RPC.
+function validateScheduledPaymentPayload(payload: Record<string, unknown>, creating: boolean): Record<string, unknown> {
+  assertOnlyAllowed(payload, SCHEDULED_PAYMENT_FIELDS);
+  const sanitized = sanitizePayload(payload, SCHEDULED_PAYMENT_FIELDS);
+  if (creating) {
+    for (const field of ["name", "subcategory_id", "source_account_id", "frequency", "starts_on"]) requireString(sanitized, field);
+    requirePositiveInteger(sanitized, "amount_centavos");
+    if (sanitized.status !== undefined) throw new Error("new scheduled payments are always active");
+  }
+  for (const field of ["name", "subcategory_id", "source_account_id", "frequency"]) if (sanitized[field] !== undefined) requireString(sanitized, field);
+  if (sanitized.amount_centavos !== undefined) requirePositiveInteger(sanitized, "amount_centavos");
+  if (sanitized.frequency !== undefined && !SCHEDULED_PAYMENT_FREQUENCIES.includes(sanitized.frequency as string)) throw new Error("frequency is not a supported schedule");
+  if (sanitized.status !== undefined && sanitized.status !== "active" && sanitized.status !== "archived") throw new Error("status must be active or archived");
+  for (const field of ["due_day_of_month", "due_second_day_of_month", "due_day_of_week", "due_month"]) optionalNumber(sanitized, field);
+  validateDayRange(sanitized, "due_day_of_month", 1, 31);
+  validateDayRange(sanitized, "due_second_day_of_month", 1, 31);
+  validateDayRange(sanitized, "due_day_of_week", 0, 6);
+  validateDayRange(sanitized, "due_month", 1, 12);
+  if (sanitized.starts_on !== undefined) requireDateString(sanitized, "starts_on");
+  for (const field of ["ends_on", "auto_post_from"]) if (sanitized[field] != null) requireDateString(sanitized, field);
+  validateDateOrdering(sanitized, "starts_on", "ends_on");
+  for (const field of ["auto_post", "is_family_support", "is_dependent_support", "protected_by_default"]) optionalBoolean(sanitized, field);
+  optionalString(sanitized, "notes");
+  return sanitized;
+}
+
+function validateScheduledPaymentRecordPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  assertOnlyAllowed(payload, SCHEDULED_PAYMENT_RECORD_FIELDS);
+  const sanitized = sanitizePayload(payload, SCHEDULED_PAYMENT_RECORD_FIELDS);
+  for (const field of ["scheduled_payment_id", "transaction_id"]) requireString(sanitized, field);
+  for (const field of ["occurrence_date", "payment_date"]) requireDateString(sanitized, field);
+  requirePositiveInteger(sanitized, "amount_centavos");
+  if (sanitized.source !== undefined && sanitized.source !== "manual" && sanitized.source !== "auto") throw new Error("source must be manual or auto");
+  optionalString(sanitized, "notes");
+  return sanitized;
 }
 
 function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: boolean): Record<string, unknown> {

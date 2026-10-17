@@ -65,6 +65,8 @@ export const SYNCED_TABLES = [
   "savings_goals",
   "savings_goal_activities",
   "savings_allocation_preferences",
+  "scheduled_payments",
+  "scheduled_payment_records",
 ] as const;
 
 const PULL_IDENTITY_COLUMNS: Record<string, string> = {
@@ -95,6 +97,8 @@ export async function pushOperations(
         ? "apply_alert_feedback_sync_operation"
         : prepared.entity === "financial_plans"
           ? "apply_financial_plan_sync_operation"
+        : prepared.entity === "scheduled_payments" || prepared.entity === "scheduled_payment_records"
+          ? "apply_scheduled_payment_sync_operation"
         : prepared.entity === "debt_accounts" || prepared.entity === "debt_payments" || prepared.entity === "user_debt_priorities" || prepared.entity === "debt_strategy_preferences"
           ? "apply_debt_sync_operation"
         : prepared.entity === "credit_card_cycles" || prepared.entity === "credit_card_details" || prepared.entity === "credit_card_repayment_preferences" || prepared.entity === "credit_card_installments" || prepared.entity === "credit_card_transactions" || prepared.entity === "credit_card_statements" || prepared.entity === "credit_card_payments" || prepared.entity === "credit_card_settlements" || prepared.entity === "credit_card_statement_strategies"
@@ -219,6 +223,8 @@ export async function pullChanges(
               || table === "savings_goals"
                || table === "savings_goal_activities"
                || table === "savings_allocation_preferences"
+               || table === "scheduled_payments"
+               || table === "scheduled_payment_records"
     ) {
       // user-scoped only — no system rows
       query.eq("user_id", userId);
