@@ -225,6 +225,8 @@ export async function listScheduledPaymentSummaries(userId: string, status: Sche
 }
 
 export type ScheduledPaymentEntry = {
+  // Generated once per payment form, so a repeated submit records nothing new.
+  id?: string;
   scheduledPaymentId: string;
   occurrenceDate: string;
   amountCentavos: number;
@@ -262,9 +264,10 @@ export async function recordScheduledPayment(userId: string, deviceId: string, e
   await prepareCreditCardCycle(userId, deviceId, entry.sourceAccountId, entry.paymentDate);
   const db = await getDb();
   await db.withTransactionAsync(async () => {
+    if (entry.id && await db.getFirstAsync("SELECT id FROM scheduled_payment_records WHERE id = ? AND user_id = ?", entry.id, userId)) return;
     const payment = await readRow(db, userId, entry.scheduledPaymentId);
     if (!payment || payment.status !== "active") throw new LocalDbError("VALIDATION_ERROR", "This obligation is no longer available for payments. Choose an active obligation instead.");
-    await writePayment(db, userId, deviceId, payment, { ...entry, notes: entry.notes?.trim() || null }, "manual", { recordId: randomUUID() });
+    await writePayment(db, userId, deviceId, payment, { ...entry, notes: entry.notes?.trim() || null }, "manual", { recordId: entry.id ?? randomUUID() });
   });
 }
 
