@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { ArrowLeft } from "phosphor-react-native";
 import { Banner, Chip, FieldError, FieldLabel, FormCard, Note, PickerField, TextField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import { LocalDbError } from "../../local-db/helpers";
+import { randomUUID } from "../../local-db/uuid";
 import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import { listPaidByOccurrence } from "../../local-db/repositories/scheduledPaymentRecords";
 import { getScheduledPayment, recordScheduledPayment, type ScheduledPayment } from "../../local-db/repositories/scheduledPayments";
@@ -28,6 +29,9 @@ export default function RecordScheduledPaymentScreen({ userId, deviceId, schedul
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pickingAccount, setPickingAccount] = useState(false);
+  // One id per form keeps a double tap or retry from recording the payment twice.
+  const recordId = useRef(randomUUID());
+  const inFlight = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +61,7 @@ export default function RecordScheduledPaymentScreen({ userId, deviceId, schedul
   }
 
   async function handleSave() {
-    if (!payment) return;
+    if (!payment || inFlight.current) return;
     const centavos = Math.round(Number(amount.replace(/,/g, "")) * 100);
     const next: Partial<Record<Field, string>> = {};
     if (!amount.trim() || !Number.isFinite(centavos) || centavos <= 0) next.amount = "Enter a positive payment amount.";
@@ -68,12 +72,14 @@ export default function RecordScheduledPaymentScreen({ userId, deviceId, schedul
     if (Object.keys(next).length) { setFormError("Some obligation details are not valid. Correct the marked fields and try again."); return; }
     setFormError(null);
     setSaving(true);
+    inFlight.current = true;
     try {
-      await recordScheduledPayment(userId, deviceId, { scheduledPaymentId: payment.id, occurrenceDate: occurrence!, amountCentavos: centavos, paymentDate: paymentDate!, sourceAccountId: sourceAccountId!, notes });
+      await recordScheduledPayment(userId, deviceId, { id: recordId.current, scheduledPaymentId: payment.id, occurrenceDate: occurrence!, amountCentavos: centavos, paymentDate: paymentDate!, sourceAccountId: sourceAccountId!, notes });
       onRecorded(`${formatPhp(centavos)} recorded for ${payment.name}.`);
     } catch (error) {
       setFormError(error instanceof LocalDbError ? error.message : "Your obligation data could not be loaded or saved. Try again.");
       setSaving(false);
+      inFlight.current = false;
     }
   }
 

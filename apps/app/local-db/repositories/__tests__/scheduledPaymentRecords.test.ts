@@ -54,6 +54,17 @@ describe("recording a scheduled payment", () => {
     expect(summary!.current).toMatchObject({ dueDate: "2026-11-01", paidCentavos: 500_000, remainingCentavos: 700_000, status: "partially_paid" });
   });
 
+  it("records a resubmitted payment only once", async () => {
+    const { createScheduledPayment, recordScheduledPayment } = await repos();
+    const payment = await createScheduledPayment("user-1", "device-1", rent);
+    const entry = { id: "record-fixed", scheduledPaymentId: payment.id, occurrenceDate: "2026-11-01", amountCentavos: 500_000, paymentDate: "2026-10-30", sourceAccountId: "acct-cash", notes: null };
+    await recordScheduledPayment("user-1", "device-1", entry);
+    await recordScheduledPayment("user-1", "device-1", entry);
+
+    expect(liveRecords()).toHaveLength(1);
+    expect(balance()).toBe(4_500_000);
+  });
+
   it("refuses payments against an archived scheduled payment", async () => {
     const { createScheduledPayment, setScheduledPaymentArchived, recordScheduledPayment } = await repos();
     const payment = await createScheduledPayment("user-1", "device-1", rent);
