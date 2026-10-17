@@ -9,7 +9,8 @@ type SpendingGroupRow = { category_id: string | null; subcategory_id: string | n
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
 
-// D2: posted, live expenses in the plan period, excluding debt payments, credit-card payments and savings transfers.
+// D2: posted, live expenses in the plan period, excluding debt payments, credit-card payments, savings transfers and
+// scheduled (bill and remittance) payments. Those are reserved separately from category allocations, so they are not category spending.
 // Grouped by (effective category, subcategory) so matching is done once per group, never once per allocation.
 // transactions.category_id is not written by the app or pulled by sync, so the subcategory's parent is the
 // authoritative category; t.category_id is only a fallback for rows without a resolvable subcategory.
@@ -22,6 +23,7 @@ const SPENDING_GROUPS_SQL = `
      AND t.source_savings_goal_id IS NULL AND t.destination_savings_goal_id IS NULL
      AND NOT EXISTS (SELECT 1 FROM debt_payments dp WHERE dp.transaction_id = t.id AND dp.user_id = t.user_id AND dp.deleted = 0)
      AND NOT EXISTS (SELECT 1 FROM credit_card_payments cp WHERE cp.transaction_id = t.id AND cp.user_id = t.user_id AND cp.deleted = 0)
+     AND NOT EXISTS (SELECT 1 FROM scheduled_payment_records sp WHERE sp.transaction_id = t.id AND sp.user_id = t.user_id AND sp.deleted = 0)
    GROUP BY COALESCE(s.category_id, t.category_id), t.subcategory_id`;
 
 export async function getPlanSpendingReview(userId: string, planId: string): Promise<PlanSpendingReview | null> {
