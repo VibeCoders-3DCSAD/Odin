@@ -7,6 +7,7 @@ import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
 import { createCreditCardInstallmentInTransaction, type CreateCreditCardInstallmentInput } from "./creditCardInstallments";
 import { validateIsoDate } from "./creditCardCycleDates";
 import { createSavingsGoalActivityInTransaction, deleteSavingsGoalActivityForTransactionInTransaction, updateSavingsGoalActivityForTransactionInTransaction } from "./savingsGoalActivities";
+import { deleteScheduledPaymentRecordForTransactionInTransaction } from "./scheduledPaymentRecords";
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
@@ -650,9 +651,10 @@ export async function createExpenseInTransaction(
   userId: string,
   deviceId: string,
   input: CreateExpenseInput,
+  options?: { id?: string },
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const ts = now();
-  const id = randomUUID();
+  const id = options?.id ?? randomUUID();
   const isCreditCard = await verifyExpenseAccountCanBeUsed(db, userId, input.source_account_id);
   await validateExpenseShape(db, userId, input);
   if (!isCreditCard) {
@@ -876,6 +878,9 @@ export async function updateTransaction(
     if (!options?.allowDebtPayment && await db.getFirstAsync<{ id: string }>(
       "SELECT id FROM debt_payments WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
     )) throw new LocalDbError("VALIDATION_ERROR", "Edit this transaction from its debt payment.");
+    if (await db.getFirstAsync<{ id: string }>(
+      "SELECT id FROM scheduled_payment_records WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
+    )) throw new LocalDbError("VALIDATION_ERROR", "This transaction pays a scheduled payment. Delete it and record the payment again.");
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
     const newAmount = input.amount_centavos ?? current.amount_centavos;
@@ -1135,6 +1140,7 @@ export async function deleteTransaction(
     );
 
     await deleteSavingsGoalActivityForTransactionInTransaction(db, userId, deviceId, id);
+    await deleteScheduledPaymentRecordForTransactionInTransaction(db, userId, deviceId, id);
 
     const operation = await enqueueOperation(db, {
       userId,

@@ -1,8 +1,11 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
-import { randomUUID } from "../uuid";
-import { localToday, type PaymentSchedule, type ScheduledPaymentFrequency } from "../../features/billers/schedule";
+import { deterministicUUID, randomUUID } from "../uuid";
+import { currentOccurrence, dueDatesBetween, localToday, type Occurrence, type PaymentSchedule, type ScheduledPaymentFrequency } from "../../features/billers/schedule";
+import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
+import { createExpenseInTransaction, deleteTransaction } from "./ledger";
+import { insertScheduledPaymentRecordInTransaction, listPaidByOccurrence } from "./scheduledPaymentRecords";
 
 export type ScheduledPaymentStatus = "active" | "archived";
 
@@ -212,6 +215,94 @@ export async function deleteScheduledPayment(userId: string, deviceId: string, i
     await db.runAsync("UPDATE scheduled_payments SET deleted = 1, auto_post = 0, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", new Date().toISOString(), id, userId);
     await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payments", recordId: id, operationType: "delete", baseVersion: existing.version, changedFields: [], payload: {}, failureMessage: `The scheduled payment "${existing.name}" could not be deleted.` });
   });
+}
+
+export type ScheduledPaymentSummary = ScheduledPayment & { current: Occurrence | null };
+
+export async function listScheduledPaymentSummaries(userId: string, status: ScheduledPaymentStatus = "active", today = localToday()): Promise<ScheduledPaymentSummary[]> {
+  const [payments, paid] = await Promise.all([listScheduledPayments(userId, status), listPaidByOccurrence(userId)]);
+  return payments.map((payment) => ({ ...payment, current: currentOccurrence(payment, payment.amountCentavos, paid.get(payment.id) ?? new Map(), today) }));
+}
+
+export type ScheduledPaymentEntry = {
+  scheduledPaymentId: string;
+  occurrenceDate: string;
+  amountCentavos: number;
+  paymentDate: string;
+  sourceAccountId: string;
+  notes: string | null;
+};
+
+async function prepareCreditCardCycle(userId: string, deviceId: string, accountId: string, date: string): Promise<void> {
+  const db = await getDb();
+  const card = await db.getFirstAsync<{ id: string }>("SELECT id FROM financial_accounts WHERE id = ? AND user_id = ? AND kind = 'credit_card' AND deleted = 0", accountId, userId);
+  if (card) await ensureCurrentCreditCardCycles(userId, deviceId, date);
+}
+
+async function writePayment(db: SQLite.SQLiteDatabase, userId: string, deviceId: string, payment: Row, entry: ScheduledPaymentEntry, source: "manual" | "auto", ids: { transactionId?: string; recordId: string }): Promise<void> {
+  const { transaction } = await createExpenseInTransaction(db, userId, deviceId, {
+    amount_centavos: entry.amountCentavos,
+    source_account_id: entry.sourceAccountId,
+    subcategory_id: payment.subcategory_id,
+    transaction_date: entry.paymentDate,
+    merchant_name: payment.name,
+    notes: entry.notes ?? undefined,
+  }, { id: ids.transactionId });
+  await insertScheduledPaymentRecordInTransaction(db, userId, deviceId, {
+    id: ids.recordId, scheduledPaymentId: payment.id, transactionId: transaction.id, occurrenceDate: entry.occurrenceDate,
+    paymentDate: entry.paymentDate, amountCentavos: entry.amountCentavos, source, notes: entry.notes,
+  });
+}
+
+// Records a payment against one occurrence, together with the expense transaction that moves the money.
+export async function recordScheduledPayment(userId: string, deviceId: string, entry: ScheduledPaymentEntry): Promise<void> {
+  if (!Number.isSafeInteger(entry.amountCentavos) || entry.amountCentavos <= 0) throw new LocalDbError("VALIDATION_ERROR", "Enter a positive payment amount.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.paymentDate)) throw new LocalDbError("VALIDATION_ERROR", "Select a payment date.");
+  if (!entry.sourceAccountId) throw new LocalDbError("VALIDATION_ERROR", "Select a source account.");
+  await prepareCreditCardCycle(userId, deviceId, entry.sourceAccountId, entry.paymentDate);
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    const payment = await readRow(db, userId, entry.scheduledPaymentId);
+    if (!payment || payment.status !== "active") throw new LocalDbError("VALIDATION_ERROR", "This obligation is no longer available for payments. Choose an active obligation instead.");
+    await writePayment(db, userId, deviceId, payment, { ...entry, notes: entry.notes?.trim() || null }, "manual", { recordId: randomUUID() });
+  });
+}
+
+// Deleting the transaction cascades to its payment record.
+export async function deleteScheduledPaymentRecord(userId: string, deviceId: string, transactionId: string): Promise<void> {
+  await deleteTransaction(userId, deviceId, transactionId);
+}
+
+// Most occurrences one catch-up run posts per scheduled payment, so a long-closed app cannot flood the ledger.
+const MAX_CATCH_UP = 12;
+
+// Posts each auto-post occurrence due by today that is still unpaid. Ids derive from the occurrence, so a
+// second device posting the same occurrence offline converges on the same transaction and record.
+export async function postDueScheduledPayments(userId: string, deviceId: string, today = localToday()): Promise<number> {
+  const db = await getDb();
+  const payments = await db.getAllAsync<Row>("SELECT * FROM scheduled_payments WHERE user_id = ? AND deleted = 0 AND status = 'active' AND auto_post = 1 AND auto_post_from IS NOT NULL", userId);
+  let posted = 0;
+  for (const payment of payments) {
+    const dueDates = dueDatesBetween(map(payment), payment.auto_post_from!, today).slice(-MAX_CATCH_UP);
+    if (!dueDates.length) continue;
+    try {
+      await prepareCreditCardCycle(userId, deviceId, payment.source_account_id, today);
+      await db.withTransactionAsync(async () => {
+        const paid = (await listPaidByOccurrence(userId, db)).get(payment.id) ?? new Map<string, number>();
+        for (const dueDate of dueDates) {
+          const remaining = payment.amount_centavos - (paid.get(dueDate) ?? 0);
+          const key = `scheduled-payment:${payment.id}:${dueDate}`;
+          if (remaining <= 0 || await db.getFirstAsync("SELECT id FROM scheduled_payment_records WHERE id = ?", deterministicUUID(`${key}:record`))) continue;
+          await writePayment(db, userId, deviceId, payment, { scheduledPaymentId: payment.id, occurrenceDate: dueDate, amountCentavos: remaining, paymentDate: dueDate, sourceAccountId: payment.source_account_id, notes: null }, "auto", { transactionId: deterministicUUID(`${key}:transaction`), recordId: deterministicUUID(`${key}:record`) });
+          posted += 1;
+        }
+      });
+    } catch (error) {
+      // One payment that cannot post (for example a closed account) must not block the others.
+      console.warn("[SCHEDULED-PAYMENTS] auto-post skipped", payment.id, error);
+    }
+  }
+  return posted;
 }
 
 export function _resetDbCacheForTesting(): void {
