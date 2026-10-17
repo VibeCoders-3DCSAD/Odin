@@ -118,7 +118,7 @@ export function Banner({ tone, children }: { tone: BannerTone; children: string 
   );
 }
 
-export function AmountHero({ children }: { children: ReactNode }) {
+export function AmountHero({ children, label = "AMOUNT" }: { children: ReactNode; label?: string }) {
   return (
     <View style={styles.hero}>
       <Svg style={StyleSheet.absoluteFill} preserveAspectRatio="none">
@@ -130,7 +130,7 @@ export function AmountHero({ children }: { children: ReactNode }) {
         </Defs>
         <Rect width="100%" height="100%" fill="url(#amountHero)" />
       </Svg>
-      <Text style={styles.heroLabel}>AMOUNT</Text>
+      <Text style={styles.heroLabel}>{label}</Text>
       {children}
     </View>
   );
