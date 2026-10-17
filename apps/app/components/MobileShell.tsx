@@ -23,6 +23,9 @@ import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen"
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
+import ScheduledPaymentsScreen from "../features/billers/ScheduledPaymentsScreen";
+import ScheduledPaymentFormScreen from "../features/billers/ScheduledPaymentFormScreen";
+import { postDueScheduledPayments } from "../local-db/repositories/scheduledPayments";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
@@ -84,6 +87,8 @@ type Page =
   | "categories"
   | "financial-accounts"
   | "income-sources"
+  | "scheduled-payments"
+  | "scheduled-payment-form"
    | "debt-manager"
     | "credit-cards"
     | "credit-card-detail"
@@ -150,6 +155,7 @@ const hubs: Record<"money" | "plan", { title: string; segments: HubSegment[] }> 
     segments: [
       { page: "financial-accounts", label: "Accounts" },
       { page: "income-sources", label: "Income" },
+      { page: "scheduled-payments", label: "Scheduled" },
     ],
   },
   plan: {
@@ -189,7 +195,7 @@ const parentPage: Partial<Record<Page, Page>> = {
 };
 
 // These screens draw their own header, so the shell adds no chrome around them.
-const fullScreenPages: Page[] = ["add-transaction"];
+const fullScreenPages: Page[] = ["add-transaction", "scheduled-payment-form"];
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
@@ -207,6 +213,8 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   categories: { title: "Categories", subtitle: "Manage your categories" },
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
+  "scheduled-payments": { title: "Scheduled Payments", subtitle: "Bills and remittances" },
+  "scheduled-payment-form": { title: "Scheduled Payment", subtitle: "Add or edit a scheduled payment" },
   "debt-manager": { title: "Debt Manager", subtitle: "Credit-card billing cycles" },
   "credit-cards": { title: "Credit Cards", subtitle: "Billing cycles and statements" },
   "credit-card-detail": { title: "Credit Card", subtitle: "Billing cycles and statements" },
@@ -225,6 +233,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [selectedCreditCardId, setSelectedCreditCardId] = useState<string | null>(null);
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [selectedPastPlanId, setSelectedPastPlanId] = useState<string | null>(null);
+  const [editingScheduledPaymentId, setEditingScheduledPaymentId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
   const [savingsActivityContext, setSavingsActivityContext] = useState<{ savingsGoalId: string; kind: "contribution" | "withdrawal"; amountCentavos?: number } | null>(null);
@@ -512,7 +521,12 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   useEffect(() => {
     if (!userId || !deviceId || !accessToken) return;
 
-    const sync = () => { syncNow(false).catch(() => {}); };
+    // Due auto-post payments are written first so they go out with this sync.
+    const sync = () => {
+      postDueScheduledPayments(userId, deviceId)
+        .catch((error) => { console.warn("[SCHEDULED-PAYMENTS] auto-post failed", error); })
+        .finally(() => { syncNow(false).catch(() => {}); });
+    };
 
     if (!initialSyncDone.current) {
       initialSyncDone.current = true;
@@ -830,6 +844,25 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "income-sources") {
       return <IncomeSourcesScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
+    }
+
+    if (currentPage === "scheduled-payments") {
+      return (
+        <ScheduledPaymentsScreen
+          userId={userId}
+          deviceId={deviceId}
+          syncVersion={syncVersion}
+          onAdd={() => { setEditingScheduledPaymentId(null); setCurrentPage("scheduled-payment-form"); }}
+          onEdit={(id) => { setEditingScheduledPaymentId(id); setCurrentPage("scheduled-payment-form"); }}
+          onOpen={(id) => { setEditingScheduledPaymentId(id); setCurrentPage("scheduled-payment-form"); }}
+          onSyncRequested={handleSync}
+        />
+      );
+    }
+
+    if (currentPage === "scheduled-payment-form") {
+      const close = () => { setEditingScheduledPaymentId(null); setCurrentPage("scheduled-payments"); };
+      return <ScheduledPaymentFormScreen userId={userId} deviceId={deviceId} scheduledPaymentId={editingScheduledPaymentId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
     }
 
     if (currentPage === "debt-manager") {
