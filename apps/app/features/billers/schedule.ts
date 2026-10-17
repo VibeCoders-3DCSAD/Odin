@@ -127,3 +127,11 @@ export function currentOccurrence(schedule: PaymentSchedule, scheduledCentavos: 
     status: occurrenceStatus(scheduledCentavos, paidCentavos, dueDate, today),
   };
 }
+
+// Occurrences a payment can be recorded against: up to three unpaid past due dates, then the next upcoming ones.
+export function occurrenceChoices(schedule: PaymentSchedule, scheduledCentavos: number, paidByDueDate: ReadonlyMap<string, number>, today: string, upcoming = 3): string[] {
+  const unpaidPast = dueDatesBetween(schedule, addDays(today, -SEARCH_WINDOW_DAYS), addDays(today, -1))
+    .filter((date) => (paidByDueDate.get(date) ?? 0) < scheduledCentavos)
+    .slice(-3);
+  return [...unpaidPast, ...dueDatesBetween(schedule, today, addDays(today, SEARCH_WINDOW_DAYS)).slice(0, upcoming)];
+}
