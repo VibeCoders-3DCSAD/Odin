@@ -12,6 +12,7 @@ const SCHEMA = `
   CREATE TABLE transactions (id text primary key, user_id text not null, transaction_type text not null, status text not null, transaction_date text not null, amount_centavos integer not null, subcategory_id text, category_id text, source_savings_goal_id text, destination_savings_goal_id text, deleted integer not null default 0, recurring_template_id text);
   CREATE TABLE debt_payments (id text primary key, user_id text not null, transaction_id text, deleted integer not null default 0);
   CREATE TABLE credit_card_payments (id text primary key, user_id text not null, transaction_id text, deleted integer not null default 0);
+  CREATE TABLE scheduled_payment_records (id text primary key, user_id text not null, transaction_id text, deleted integer not null default 0);
 `;
 
 type Tx = { id: string; amount: number; sub?: string | null; user?: string; type?: string; status?: string; date?: string; deleted?: number; category?: string | null; sourceGoal?: string | null; destinationGoal?: string | null; template?: string | null };
@@ -96,6 +97,21 @@ describe("getPlanSpendingReview", () => {
 
     expect(result?.rows[0]?.actualCentavos).toBe(1500);
     expect(result?.actualTotalCentavos).toBe(1500);
+  });
+
+  it("excludes scheduled payment transactions but counts them again once their payment record is deleted", async () => {
+    sqlite.exec(`
+      INSERT INTO scheduled_payment_records VALUES ('rec-rent', 'user-1', 'rent', 0);
+      INSERT INTO scheduled_payment_records VALUES ('rec-old', 'user-1', 'old-bill', 1);
+      INSERT INTO scheduled_payment_records VALUES ('rec-other-user', 'user-2', 'gym', 0);
+    `);
+    insertTx({ id: "rent", amount: 50000, sub: "sub-rent" });
+    insertTx({ id: "old-bill", amount: 1000, sub: "sub-groceries" });
+    insertTx({ id: "gym", amount: 700, sub: "sub-fun" });
+    const result = await review();
+    expect(result?.rows.find((row) => row.allocationId === "alloc-rent")?.actualCentavos).toBe(0);
+    expect(result?.rows.find((row) => row.allocationId === "alloc-food")?.actualCentavos).toBe(1000);
+    expect(result?.unplannedActualCentavos).toBe(700);
   });
 
   it("excludes out-of-period, pending, deleted and non-expense transactions and includes the period boundaries", async () => {
