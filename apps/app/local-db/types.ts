@@ -32,6 +32,8 @@ export type SyncableEntity =
   | "user_debt_priorities"
   | "credit_card_settlements"
   | "credit_card_statement_strategies"
+  | "scheduled_payments"
+  | "scheduled_payment_records"
   ;
 
 export type SyncOperation = {

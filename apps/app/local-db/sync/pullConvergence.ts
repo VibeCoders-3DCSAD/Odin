@@ -36,6 +36,8 @@ export const SYNCED_TABLES = [
   "anomaly_evaluations",
   "savings_goals",
   "savings_goal_activities",
+  "scheduled_payments",
+  "scheduled_payment_records",
   "savings_allocation_preferences",
 ] as const;
 
@@ -157,6 +159,16 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   anomaly_evaluations: new Set(["id", "user_id", "transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "confirmed_recurring_at", "model_version", "evaluated_at", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   savings_goals: new Set(["id", "user_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "archived_at", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   savings_goal_activities: new Set(["id", "user_id", "savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  scheduled_payments: new Set([
+    "id", "user_id", "name", "subcategory_id", "source_account_id", "amount_centavos", "frequency",
+    "due_day_of_month", "due_second_day_of_month", "due_day_of_week", "due_month", "starts_on", "ends_on",
+    "auto_post", "auto_post_from", "is_family_support", "is_dependent_support", "protected_by_default", "notes", "status",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
+  scheduled_payment_records: new Set([
+    "id", "user_id", "scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes",
+    "version", "deleted", "created_at", "updated_at", "last_synced_at",
+  ]),
   savings_allocation_preferences: new Set(["user_id", "strategy", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
 };
 
@@ -268,7 +280,7 @@ export async function applyPullRow(
         now,
         ...identityParams,
       );
-    } else if (table === "credit_card_cycles" || table === "credit_card_details" || table === "credit_card_payments" || table === "debt_payments" || table === "savings_account_details") {
+    } else if (table === "credit_card_cycles" || table === "credit_card_details" || table === "credit_card_payments" || table === "debt_payments" || table === "savings_account_details" || table === "scheduled_payments" || table === "scheduled_payment_records") {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, version = ?,
           updated_at = ? WHERE ${identityWhere}`,
