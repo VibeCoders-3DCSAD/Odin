@@ -23,8 +23,6 @@ import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen"
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
-import FinancialObligationsScreen from "../features/financial-obligations/FinancialObligationsScreen";
-import RecurringTransactionsScreen, { AddRecurringTransactionScreen } from "../features/recurring-transactions/RecurringTransactionsScreen";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
@@ -83,12 +81,9 @@ type Page =
   | "insurance"
   | "assistant"
   | "add-transaction"
-  | "add-recurring-transaction"
-  | "recurring-transactions"
   | "categories"
   | "financial-accounts"
   | "income-sources"
-  | "financial-obligations"
    | "debt-manager"
     | "credit-cards"
     | "credit-card-detail"
@@ -155,8 +150,6 @@ const hubs: Record<"money" | "plan", { title: string; segments: HubSegment[] }> 
     segments: [
       { page: "financial-accounts", label: "Accounts" },
       { page: "income-sources", label: "Income" },
-      { page: "financial-obligations", label: "Bills" },
-      { page: "recurring-transactions", label: "Scheduled" },
     ],
   },
   plan: {
@@ -196,12 +189,11 @@ const parentPage: Partial<Record<Page, Page>> = {
 };
 
 // These screens draw their own header, so the shell adds no chrome around them.
-const fullScreenPages: Page[] = ["add-transaction", "add-recurring-transaction"];
+const fullScreenPages: Page[] = ["add-transaction"];
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
   transactions: { title: "Transactions", subtitle: "Your transaction history" },
-  "recurring-transactions": { title: "Recurring Transactions", subtitle: "Manage recurring templates" },
   history: { title: "History", subtitle: "Past activity" },
   "financial-reports": { title: "Financial Reports", subtitle: "Financial outlook and alerts" },
    "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
@@ -212,11 +204,9 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },
-  "add-recurring-transaction": { title: "Add Recurring Transaction", subtitle: "Create a recurring template" },
   categories: { title: "Categories", subtitle: "Manage your categories" },
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
-  "financial-obligations": { title: "Obligations", subtitle: "Manage recurring obligations" },
   "debt-manager": { title: "Debt Manager", subtitle: "Credit-card billing cycles" },
   "credit-cards": { title: "Credit Cards", subtitle: "Billing cycles and statements" },
   "credit-card-detail": { title: "Credit Card", subtitle: "Billing cycles and statements" },
@@ -826,16 +816,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       return <NewTransactionScreen userId={userId} deviceId={deviceId} accessToken={accessToken} transaction={transactionToEdit ?? undefined} statementPaymentContext={statementPaymentContext ?? undefined} debtPaymentDebtId={debtPaymentDebtId ?? undefined} debtPaymentContext={debtPaymentContext ?? undefined} savingsActivityContext={savingsActivityContext ?? undefined} onClose={() => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setSavingsActivityContext(null); setCurrentPage(transactionReturnPage); }} onCreated={(unusualSpending) => { setTransactionToEdit(null); setStatementPaymentContext(null); setDebtPaymentDebtId(null); setDebtPaymentContext(null); setSavingsActivityContext(null); setPendingUnusualSpending(unusualSpending); setCurrentPage("transactions"); }} />;
     }
 
-    if (currentPage === "add-recurring-transaction") {
-      return <AddRecurringTransactionScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("recurring-transactions")} onSyncRequested={handleSync} />;
-    }
-
     if (currentPage === "transactions") {
       return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} />;
-    }
-
-    if (currentPage === "recurring-transactions") {
-      return <RecurringTransactionsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("transactions")} onSyncRequested={handleSync} onCreateRequested={() => setCurrentPage("add-recurring-transaction")} />;
     }
 
     if (currentPage === "categories") {
@@ -848,10 +830,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "income-sources") {
       return <IncomeSourcesScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
-    }
-
-    if (currentPage === "financial-obligations") {
-      return <FinancialObligationsScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
     }
 
     if (currentPage === "debt-manager") {

@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-nativ
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SAVINGS_GOAL_PLACEHOLDERS, SAVINGS_GOAL_PRIORITY_LABELS, SAVINGS_GOAL_PRIORITIES, SAVINGS_GOAL_TYPE_LABELS, SAVINGS_GOAL_TYPES, type SavingsGoalPriority, type SavingsGoalType } from "./constants";
 import { createSavingsGoal, getEmergencyFundBaseline, updateSavingsGoal, type SavingsGoal } from "../../local-db/repositories/savingsGoals";
-import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
+import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
 import { GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "./contributionSchedule";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF" } as const;

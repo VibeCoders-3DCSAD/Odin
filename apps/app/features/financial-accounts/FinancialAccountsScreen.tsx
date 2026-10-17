@@ -36,7 +36,7 @@ import {
 import KebabTooltip from "../../components/KebabTooltip";
 import AvailableBalanceCard from "../../components/AvailableBalanceCard";
 import { getSavingsAccountDetails, SAVINGS_ACCOUNT_TYPES, type HysaBalanceTier, type HysaInterestCalculationBasis, type HysaInterestCreditFrequency, type HysaQualificationPeriod, type SavingsAccountDetailsInput, type SavingsAccountType, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
-import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
+import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
 import { GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "../savings-goals/contributionSchedule";
 import HysaAccountFormSheet from "./HysaAccountFormSheet";
 

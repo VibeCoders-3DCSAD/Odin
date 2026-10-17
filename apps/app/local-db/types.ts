@@ -8,7 +8,6 @@ export type SyncableEntity =
   | "financial_accounts"
   | "savings_account_details"
   | "income_sources"
-  | "financial_obligations"
   | "transactions"
   | "recurring_transaction_templates"
   | "recurring_transaction_occurrences"
