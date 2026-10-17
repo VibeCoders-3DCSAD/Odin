@@ -42,7 +42,6 @@ export const SYNCED_TABLES = [
   "savings_account_details",
   "transactions",
   "income_sources",
-  "financial_obligations",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "financial_plans",
@@ -197,7 +196,6 @@ export async function pullChanges(
        table === "savings_account_details" ||
       table === "transactions" ||
        table === "income_sources" ||
-       table === "financial_obligations" ||
       table === "recurring_transaction_templates" ||
       table === "recurring_transaction_occurrences"
        || table === "financial_plans"

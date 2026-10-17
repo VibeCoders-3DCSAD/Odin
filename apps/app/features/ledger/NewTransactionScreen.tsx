@@ -23,14 +23,12 @@ import { getCreditCardStatementByCycle, type CreditCardStatement } from "../../l
 import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
 import { createTransactionDebtPayment, updateTransactionDebtPayment, type DebtPaymentContext } from "../../local-db/repositories/debtPayments";
 import { getCreditCardPurchaseMetadataForTransaction, type CreateCreditCardInstallmentInput } from "../../local-db/repositories/creditCardInstallments";
-import { createRecurringTemplate } from "../../local-db/repositories/recurringTransactions";
 import { getUnusualSpending, saveUnusualSpending, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
 import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
-import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
 import CreditCardInstallmentFields, { type InstallmentFieldErrors, type InstallmentFormValue } from "./components/CreditCardInstallmentFields";
 
 const QUICK_AMOUNTS = [100, 250, 500, 1000];
@@ -90,17 +88,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [formError, setFormError] = useState<string | null>(null);
   const [installmentErrors, setInstallmentErrors] = useState<InstallmentFieldErrors>({});
   const [accountPickerMode, setAccountPickerMode] = useState<"source" | "dest" | null>(null);
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringSchedule, setRecurringSchedule] = useState<RecurringScheduleValue>({
-    frequency: "monthly",
-    intervalCount: "1",
-    dayOfMonth: "",
-    secondDayOfMonth: "",
-    dayOfWeek: null,
-    secondDayOfWeek: null,
-    monthOfYear: null,
-    estimatedIntervalDays: "",
-  });
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [balanceWarning, setBalanceWarning] = useState<{
     accountName: string;
@@ -568,29 +555,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         });
       }
 
-      if (!isEdit && isRecurring && !isInstallmentPurchase) {
-        savePhase = "createRecurringTemplate";
-        console.log("[DEBUG-TX-SAVE] calling createRecurringTemplate");
-        const freqInterval = parseInt(recurringSchedule.intervalCount, 10);
-        const dom = parseInt(recurringSchedule.dayOfMonth, 10);
-        const secondDom = parseInt(recurringSchedule.secondDayOfMonth, 10);
-        await createRecurringTemplate(userId, deviceId, {
-          transaction_type: txType,
-          name: description.trim() || `${txType} recurring`,
-          amount_centavos: centavos,
-          frequency: recurringSchedule.frequency,
-          interval_count: Number.isInteger(freqInterval) && freqInterval > 0 ? freqInterval : undefined,
-          day_of_month: Number.isInteger(dom) && dom >= 1 && dom <= 31 ? dom : undefined,
-          second_day_of_month: Number.isInteger(secondDom) && secondDom >= 1 && secondDom <= 31 ? secondDom : undefined,
-          day_of_week: recurringSchedule.dayOfWeek != null ? recurringSchedule.dayOfWeek : undefined,
-          starts_on: dateStr,
-          subcategory_id: effectiveSubcategoryId || undefined,
-          source_account_id: sourceAccountId || undefined,
-          destination_account_id: destAccountId || undefined,
-          notes: notes.trim() || undefined,
-        });
-      }
-
       if (createdExpense) {
         try {
           const insight = await getUnusualSpending(userId, createdExpense.id);
@@ -849,7 +813,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const descriptionPlaceholder = txType === "income" ? "Who paid you?" : txType === "transfer" ? "What's this for?" : "Jollibee - Lunch";
   const needsCategory = txType !== "transfer";
   const debtLocked = Boolean(debtPaymentDebtId || debtPaymentContext);
-  const showRecurring = !isEdit && !isStatementPayment && !(selectedSourceIsCreditCard() && creditCardPurchaseType === "installment");
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: v4.shell }}>
@@ -1061,23 +1024,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               />
             </FormCard>
 
-            {showRecurring ? (
-              <FormCard
-                title="Recurring"
-                right={<Switch value={isRecurring} onToggle={() => setIsRecurring(!isRecurring)} accessibilityLabel="Recurring transaction" />}
-              >
-                {isRecurring ? (
-                  <RecurringScheduleFields
-                    frequencies={["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly"]}
-                    value={recurringSchedule}
-                    onChange={setRecurringSchedule}
-                    showIntervalCount
-                  />
-                ) : (
-                  <Note>Turn this on to repeat the transaction on a schedule.</Note>
-                )}
-              </FormCard>
-            ) : null}
 
             {formError ? <Banner tone="error">{formError}</Banner> : null}
 

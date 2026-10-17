@@ -19,7 +19,6 @@ const SYNCED_ENTITIES = new Set([
   "savings_account_details",
   "transactions",
   "income_sources",
-  "financial_obligations",
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "financial_plans",
@@ -265,44 +264,6 @@ const INCOME_SOURCE_UPDATE_FIELDS = new Set([
   "next_expected_date",
   "estimated_interval_days",
   "is_active",
-  "notes",
-]);
-
-const OBLIGATION_CREATE_FIELDS = new Set([
-  "subcategory_id",
-  "recurring_template_id",
-  "name",
-  "amount_centavos",
-  "frequency",
-  "due_day_of_month",
-  "due_second_day_of_month",
-  "due_day_of_week",
-  "due_second_day_of_week",
-  "due_month",
-  "is_family_support",
-  "is_dependent_support",
-  "protected_by_default",
-  "starts_on",
-  "ends_on",
-  "notes",
-]);
-
-const OBLIGATION_UPDATE_FIELDS = new Set([
-  "subcategory_id",
-  "recurring_template_id",
-  "name",
-  "amount_centavos",
-  "frequency",
-  "due_day_of_month",
-  "due_second_day_of_month",
-  "due_day_of_week",
-  "due_second_day_of_week",
-  "due_month",
-  "is_family_support",
-  "is_dependent_support",
-  "protected_by_default",
-  "starts_on",
-  "ends_on",
   "notes",
 ]);
 
@@ -689,65 +650,6 @@ async function validateCreatePayload(
     return Promise.resolve(sanitized);
   }
 
-  if (entity === "financial_obligations") {
-    assertOnlyAllowed(payload, OBLIGATION_CREATE_FIELDS);
-    const sanitized = sanitizePayload(payload, OBLIGATION_CREATE_FIELDS);
-    requireString(sanitized, "name");
-    requireString(sanitized, "subcategory_id");
-    requireString(sanitized, "frequency");
-    requireBigInt(sanitized, "amount_centavos");
-    const val = sanitized.amount_centavos as number;
-    if (val < 0) throw new Error("amount_centavos must be >= 0");
-    const validFrequencies = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
-    if (!validFrequencies.includes(sanitized.frequency as string)) {
-      throw new Error(`frequency must be one of: ${validFrequencies.join(", ")}`);
-    }
-    optionalNumber(sanitized, "due_day_of_month");
-    optionalNumber(sanitized, "due_second_day_of_month");
-    optionalNumber(sanitized, "due_day_of_week");
-    optionalNumber(sanitized, "due_second_day_of_week");
-    optionalNumber(sanitized, "due_month");
-    optionalString(sanitized, "recurring_template_id");
-    optionalBoolean(sanitized, "is_family_support");
-    optionalBoolean(sanitized, "is_dependent_support");
-    optionalBoolean(sanitized, "protected_by_default");
-    optionalString(sanitized, "starts_on");
-    optionalString(sanitized, "ends_on");
-    optionalString(sanitized, "notes");
-    validateNonNegative(sanitized, ["amount_centavos"]);
-    validateDayRange(sanitized, "due_day_of_month", 1, 31);
-    validateDayRange(sanitized, "due_second_day_of_month", 1, 31);
-    validateDayRange(sanitized, "due_day_of_week", 0, 6);
-    validateDayRange(sanitized, "due_second_day_of_week", 0, 6);
-    validateDayRange(sanitized, "due_month", 1, 12);
-    validateDateOrdering(sanitized, "starts_on", "ends_on");
-
-    const { data: subcategory, error } = await supabase
-      .from("subcategories")
-      .select("id")
-      .eq("id", sanitized.subcategory_id as string)
-      .eq("kind", "expense")
-      .eq("deleted", false)
-      .eq("is_active", true)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (error) throw new Error(`subcategory_id validation failed: ${error.message}`);
-    if (!subcategory) throw new Error("subcategory_id does not reference an accessible active expense subcategory");
-
-    if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
-      const { data: template, error: templateErr } = await supabase
-        .from("recurring_transaction_templates")
-        .select("id")
-        .eq("id", sanitized.recurring_template_id as string)
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
-      if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
-    }
-
-    return sanitized;
-  }
-
   if (entity === "financial_plans") {
     return validateFinancialPlanPayload(supabase, userId, payload);
   }
@@ -1039,8 +941,6 @@ async function validateUpdatePayload(
     allowedFields = TRANSACTION_UPDATE_FIELDS;
   } else if (entity === "income_sources") {
     allowedFields = INCOME_SOURCE_UPDATE_FIELDS;
-  } else if (entity === "financial_obligations") {
-    allowedFields = OBLIGATION_UPDATE_FIELDS;
   } else if (entity === "debt_accounts") {
     allowedFields = DEBT_ACCOUNT_FIELDS;
   } else if (entity === "savings_goals") {
@@ -1394,10 +1294,6 @@ async function validateUpdatePayload(
         if (!["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"].includes(value as string)) {
           throw new Error("frequency must be a valid income frequency");
         }
-      } else if (entity === "financial_obligations") {
-        if (!["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
-          throw new Error("frequency must be a valid obligation frequency");
-        }
       } else if (entity === "recurring_transaction_templates") {
         if (!["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"].includes(value as string)) {
           throw new Error("frequency must be a valid recurring frequency");
@@ -1544,30 +1440,6 @@ async function validateUpdatePayload(
         .maybeSingle();
       if (templateErr) throw new Error(`recurring_template_id validation failed: ${templateErr.message}`);
       if (!template) throw new Error("recurring_template_id does not reference an accessible recurring template");
-    }
-  } else if (entity === "financial_obligations") {
-    if (typeof sanitized.amount_centavos === "number" && (sanitized.amount_centavos as number) < 0) {
-      throw new Error("amount_centavos must be >= 0");
-    }
-    if (typeof sanitized.due_day_of_month === "number" && ((sanitized.due_day_of_month as number) < 1 || (sanitized.due_day_of_month as number) > 31)) {
-      throw new Error("due_day_of_month must be between 1 and 31");
-    }
-    if (typeof sanitized.due_second_day_of_month === "number" && ((sanitized.due_second_day_of_month as number) < 1 || (sanitized.due_second_day_of_month as number) > 31)) {
-      throw new Error("due_second_day_of_month must be between 1 and 31");
-    }
-    if (typeof sanitized.due_day_of_week === "number" && ((sanitized.due_day_of_week as number) < 0 || (sanitized.due_day_of_week as number) > 6)) {
-      throw new Error("due_day_of_week must be between 0 and 6");
-    }
-    if (typeof sanitized.due_second_day_of_week === "number" && ((sanitized.due_second_day_of_week as number) < 0 || (sanitized.due_second_day_of_week as number) > 6)) {
-      throw new Error("due_second_day_of_week must be between 0 and 6");
-    }
-    if (typeof sanitized.due_month === "number" && ((sanitized.due_month as number) < 1 || (sanitized.due_month as number) > 12)) {
-      throw new Error("due_month must be between 1 and 12");
-    }
-    const starts = sanitized.starts_on as string | undefined;
-    const ends = sanitized.ends_on as string | undefined;
-    if (starts !== undefined && ends !== undefined && starts > ends) {
-      throw new Error("starts_on must be <= ends_on");
     }
   }
 

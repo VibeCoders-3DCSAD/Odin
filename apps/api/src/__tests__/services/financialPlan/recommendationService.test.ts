@@ -73,18 +73,17 @@ describe("Financial Plan month-to-date deductions", () => {
     expect(remainingCommitmentCentavos(5_000, 6_000)).toBe(0);
   });
 
-  it("counts only this month's category spending, excluding payments, transfers and obligations", () => {
+  it("counts only this month's category spending, excluding payments and transfers", () => {
     const transactions = [
       expense("in-month", "2026-10-03", 1_000),
       expense("last-month", "2026-09-30", 9_000),
       expense("after-today", "2026-10-20", 9_000),
       expense("debt-payment", "2026-10-04", 9_000),
       expense("savings", "2026-10-05", 9_000, { destination_savings_goal_id: "goal" }),
-      expense("bill", "2026-10-06", 9_000, { recurring_template_id: "rent-template" }),
       expense("parent-rollup", "2026-10-07", 500, { subcategory_id: "dining" }),
       { ...expense("income", "2026-10-08", 9_000), transaction_type: "income" as const },
     ];
-    const spent = monthToDateSpendById(transactions, { start: "2026-10-01", end: "2026-10-15" }, [{ id: "groceries", target: "subcategory" }, { id: "food", target: "category" }], new Map([["groceries", "food"], ["dining", "food"]]), new Set(["debt-payment"]), new Set(["rent-template"]));
+    const spent = monthToDateSpendById(transactions, { start: "2026-10-01", end: "2026-10-15" }, [{ id: "groceries", target: "subcategory" }, { id: "food", target: "category" }], new Map([["groceries", "food"], ["dining", "food"]]), new Set(["debt-payment"]));
     expect(Object.fromEntries(spent)).toEqual({ groceries: 1_000, food: 500 });
   });
 

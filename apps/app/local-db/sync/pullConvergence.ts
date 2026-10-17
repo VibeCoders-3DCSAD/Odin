@@ -18,7 +18,6 @@ export const SYNCED_TABLES = [
   "recurring_transaction_templates",
   "recurring_transaction_occurrences",
   "income_sources",
-  "financial_obligations",
   "financial_plans",
   "credit_card_cycles",
   "credit_card_installments",
@@ -86,15 +85,6 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "destination_account_id", "subcategory_id", "recurring_template_id",
     "is_active", "notes", "metadata", "version",
     "deleted", "created_at", "updated_at", "last_synced_at",
-  ]),
-  financial_obligations: new Set([
-    "id", "user_id", "subcategory_id", "recurring_template_id", "name",
-    "status", "amount_centavos", "frequency", "due_day_of_month",
-    "due_second_day_of_month", "due_day_of_week", "due_second_day_of_week",
-    "due_month",
-    "is_family_support", "is_dependent_support", "protected_by_default",
-    "starts_on", "ends_on", "notes", "metadata", "version", "deleted",
-    "created_at", "updated_at", "last_synced_at",
   ]),
   transactions: new Set([
     "id", "user_id", "transaction_type", "status", "entry_source",
@@ -257,7 +247,6 @@ export async function applyPullRow(
   if (rowDeleted) {
     if (
       table === "financial_accounts" ||
-      table === "financial_obligations" ||
        table === "transactions" ||
         table === "debt_accounts" ||
         table === "savings_goals" ||

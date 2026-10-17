@@ -104,12 +104,6 @@ describe("applyPullRow — convergence", () => {
     expect((db.runAsync as jest.Mock).mock.calls[0][0]).toContain("status = 'deleted'");
   });
 
-  it("applies tombstone with status='deleted' for financial_obligations", async () => {
-    const db = mockDb({ version: 1 });
-    await applyPullRow(db, "financial_obligations", { id: "obl-1", user_id: validUserId, version: 2, deleted: 1 });
-    expect((db.runAsync as jest.Mock).mock.calls[0][0]).toContain("status = 'deleted'");
-  });
-
   it("applies tombstone with is_active=0 for taxonomy tables", async () => {
     const db = mockDb({ version: 1 });
     await applyPullRow(db, "categories", { id: "cat-1", user_id: validUserId, version: 2, deleted: 1 });

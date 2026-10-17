@@ -36,7 +36,7 @@ import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/
 import { getIncomeSummary } from "../../local-db/repositories/incomeSummary";
 import KebabTooltip from "../../components/KebabTooltip";
 import AvailableBalanceCard from "../../components/AvailableBalanceCard";
-import RecurringScheduleFields, { type RecurringScheduleValue } from "../recurring-transactions/components/RecurringScheduleFields";
+import RecurringScheduleFields, { type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
 
 const P = {
   shell: "#fcf8f0", brand: "#013220", brandMedium: "#0E6D46",

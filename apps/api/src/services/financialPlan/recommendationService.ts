@@ -18,11 +18,10 @@ type Category = { id: string; slug: string; label: string; minimum_amount_centav
 type Timestamped = { updated_at: string };
 type Debt = Timestamped & { id: string; current_balance_centavos: number; minimum_payment_centavos: number; payment_frequency: string; payment_schedule: { semiMonthlyDays?: [number, number]; customIntervalDays?: number } | null; next_due_date: string | null; annual_interest_rate_bps: number; allows_extra_payments: boolean };
 type Goal = Timestamped & { id: string; planned_contribution_amount_centavos: number | null; contribution_frequency: string | null; contribution_interval_count: number | null; contribution_day_of_month: number | null; contribution_second_day_of_month: number | null; custom_interval_days: number | null; next_contribution_date: string | null; goal_type: string; target_amount_centavos: number; current_amount_centavos: number };
-type Obligation = { id: string; amount_centavos: number; due_day_of_month: number | null; recurring_template_id: string | null };
 type CardPayment = { statement_id: string | null; transaction_id: string | null; amount_centavos: number };
 type Statement = { id: string; minimum_due_centavos: number; due_date: string };
 type FinancialAccount = Timestamped & { kind: string; current_balance_centavos: number };
-type Transaction = Timestamped & { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null; source_savings_goal_id?: string | null; destination_savings_goal_id?: string | null; recurring_template_id?: string | null };
+type Transaction = Timestamped & { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null; source_savings_goal_id?: string | null; destination_savings_goal_id?: string | null };
 type OnboardingSession = { raw_answers: Record<string, unknown> | null };
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
 type ReservationSkips = { skipDebtRepayments?: boolean; skipSavingsContributions?: boolean };
@@ -103,14 +102,14 @@ export function remainingCommitmentCentavos(amountCentavos: number, paidCentavos
 }
 
 // Spending already posted this month is gone from account balances, so the plan only funds what remains.
-// Debt and card payments, savings transfers and obligation payments are excluded; those are commitments, not category spending.
-export function monthToDateSpendById(transactions: Transaction[], window: { start: string; end: string }, plannedTargets: Pick<MlPlanCategory, "id" | "target">[], parentCategoryBySubcategory: Map<string, string | null>, excludedTransactionIds: Set<string>, obligationTemplateIds: Set<string>): Map<string, number> {
+// Debt and card payments and savings transfers are excluded; those are commitments, not category spending.
+export function monthToDateSpendById(transactions: Transaction[], window: { start: string; end: string }, plannedTargets: Pick<MlPlanCategory, "id" | "target">[], parentCategoryBySubcategory: Map<string, string | null>, excludedTransactionIds: Set<string>): Map<string, number> {
   const plannedSubcategoryIds = new Set(plannedTargets.flatMap((target) => target.target === "subcategory" ? [target.id] : []));
   const plannedCategoryIds = new Set(plannedTargets.flatMap((target) => target.target === "category" ? [target.id] : []));
   const spend = new Map<string, number>();
   for (const transaction of transactions) {
     if (transaction.transaction_type !== "expense" || transaction.transaction_date < window.start || transaction.transaction_date > window.end) continue;
-    if (excludedTransactionIds.has(transaction.id) || transaction.source_savings_goal_id || transaction.destination_savings_goal_id || (transaction.recurring_template_id && obligationTemplateIds.has(transaction.recurring_template_id))) continue;
+    if (excludedTransactionIds.has(transaction.id) || transaction.source_savings_goal_id || transaction.destination_savings_goal_id) continue;
     const parentCategoryId = (transaction.subcategory_id ? parentCategoryBySubcategory.get(transaction.subcategory_id) : null) ?? transaction.category_id;
     const targetId = transaction.subcategory_id && plannedSubcategoryIds.has(transaction.subcategory_id) ? transaction.subcategory_id : parentCategoryId && plannedCategoryIds.has(parentCategoryId) ? parentCategoryId : null;
     if (targetId) spend.set(targetId, (spend.get(targetId) ?? 0) + transaction.amount_centavos);
@@ -280,15 +279,14 @@ function userFacingForecastRationale(value: string): string {
 export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = [], reservationSkips: ReservationSkips = {}) {
   const period = currentCalendarMonth();
   const statementPaymentWindowStart = addScheduleMonths(period.start, -1);
-  const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, obligationsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, cardPaymentsResult, debtPaymentsResult] = await Promise.all([
+  const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, cardPaymentsResult, debtPaymentsResult] = await Promise.all([
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos, updated_at").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("financial_accounts").select("kind, current_balance_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("debt_accounts").select("id, current_balance_centavos, minimum_payment_centavos, payment_frequency, payment_schedule, next_due_date, annual_interest_rate_bps, allows_extra_payments, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("savings_goals").select("id, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, custom_interval_days, next_contribution_date, goal_type, target_amount_centavos, current_amount_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
-    supabase.from("financial_obligations").select("id, amount_centavos, due_day_of_month, recurring_template_id").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("credit_card_statements").select("id, minimum_due_centavos, due_date").eq("user_id", userId).eq("authoritative", true).eq("deleted", false).gte("due_date", period.start).lte("due_date", period.end).limit(100),
-    supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id, source_savings_goal_id, destination_savings_goal_id, recurring_template_id, updated_at, anomaly_evaluations!anomaly_evaluations_transaction_id_fkey(transaction_id, is_anomaly)").eq("user_id", userId).eq("status", "posted").eq("deleted", false).eq("anomaly_evaluations.is_anomaly", true).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
+    supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id, source_savings_goal_id, destination_savings_goal_id, updated_at, anomaly_evaluations!anomaly_evaluations_transaction_id_fkey(transaction_id, is_anomaly)").eq("user_id", userId).eq("status", "posted").eq("deleted", false).eq("anomaly_evaluations.is_anomaly", true).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
     supabase.from("financial_condition_assessments").select("id, assessed_at, rule_set_version, output_snapshot").eq("user_id", userId).order("assessed_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("onboarding_sessions").select("raw_answers").eq("user_id", userId).eq("status", "submitted").order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("credit_card_payments").select("statement_id, transaction_id, amount_centavos, payment_date").eq("user_id", userId).eq("deleted", false).gte("payment_date", statementPaymentWindowStart).lte("payment_date", period.end).limit(500),
@@ -300,7 +298,6 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     { source: "financial_accounts", error: accountsResult.error },
     { source: "debt_accounts", error: debtsResult.error },
     { source: "savings_goals", error: goalsResult.error },
-    { source: "financial_obligations", error: obligationsResult.error },
     { source: "credit_card_statements", error: statementsResult.error },
     { source: "transactions", error: transactionsResult.error },
     { source: "onboarding_sessions", error: onboardingResult.error },
@@ -338,18 +335,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     return amountCentavos > 0 ? [{ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos, dueDate: statement.due_date }] : [];
   });
   const savingsReservations = reservationSkips.skipSavingsContributions ? [] : ((goalsResult.data ?? []) as Goal[]).flatMap((goal) => (goal.planned_contribution_amount_centavos ?? 0) > 0 ? scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null }).map((dueDate) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos!, dueDate })) : []);
-  const obligationRows = (obligationsResult.data ?? []) as Obligation[];
-  const obligationTemplateIds = new Set(obligationRows.flatMap((obligation) => obligation.recurring_template_id ? [obligation.recurring_template_id] : []));
-  const paidByObligationTemplate = new Map<string, number>();
-  for (const transaction of (transactionsResult.data ?? []) as Transaction[]) {
-    if (transaction.transaction_type === "expense" && transaction.recurring_template_id && obligationTemplateIds.has(transaction.recurring_template_id) && transaction.transaction_date >= monthToDate.start && transaction.transaction_date <= monthToDate.end) paidByObligationTemplate.set(transaction.recurring_template_id, (paidByObligationTemplate.get(transaction.recurring_template_id) ?? 0) + transaction.amount_centavos);
-  }
-  const obligations = obligationRows.flatMap((obligation) => {
-    if (!obligation.due_day_of_month) return [];
-    const amountCentavos = remainingCommitmentCentavos(obligation.amount_centavos, obligation.recurring_template_id ? paidByObligationTemplate.get(obligation.recurring_template_id) ?? 0 : 0);
-    return amountCentavos > 0 ? [{ id: obligation.id, amountCentavos, dueDate: `${period.start.slice(0, 8)}${String(Math.min(obligation.due_day_of_month, Number(period.end.slice(8)))).padStart(2, "0")}` }] : [];
-  });
-  const reserved = [...debtReservations, ...statementReservations, ...savingsReservations, ...obligations].reduce((sum, item) => sum + item.amountCentavos, 0);
+  const reserved = [...debtReservations, ...statementReservations, ...savingsReservations].reduce((sum, item) => sum + item.amountCentavos, 0);
   const available = plannedAmountCentavos - reserved;
   const seasonalPreferences = seasonalPreferencesFromAnswers(((onboardingResult.data as OnboardingSession | null)?.raw_answers ?? {}), period.start);
   const transactions = (transactionsResult.data ?? []) as TransactionWithAnomalies[];
@@ -406,12 +392,12 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     ...cardPayments.flatMap((payment) => payment.transaction_id && payment.payment_date >= period.start ? [payment.transaction_id] : []),
     ...((debtPaymentsResult.data ?? []) as Array<{ transaction_id: string | null }>).flatMap((payment) => payment.transaction_id ? [payment.transaction_id] : []),
   ]);
-  const spentById = monthToDateSpendById(transactions, monthToDate, categories, new Map(subcategories.map((subcategory) => [subcategory.id, subcategory.category_id])), excludedSpendTransactionIds, obligationTemplateIds);
+  const spentById = monthToDateSpendById(transactions, monthToDate, categories, new Map(subcategories.map((subcategory) => [subcategory.id, subcategory.category_id])), excludedSpendTransactionIds);
   const monthToDateAddBack = (wholeMonthCategories: MlPlanCategory[]) => wholeMonthCategories.reduce((sum, category) => sum + monthToDateAddBackCentavos(category, spentById.get(category.id) ?? 0), 0);
   const minimumRequired = categories.reduce((sum, category) => sum + toRemainingPlanCategory(category, spentById.get(category.id) ?? 0, available).floorCentavos, 0);
   if (isFinancialPlanInfeasible(available, minimumRequired)) {
     const forecast = fallbackForecast(period, categories);
-    const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: classificationResult.data ?? { status: "unavailable" } };
+    const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: categories }, obligations: { reservations: [] }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: classificationResult.data ?? { status: "unavailable" } };
     const requiredFundsCentavos = reserved + minimumRequired;
     const shortfallCentavos = Math.max(0, requiredFundsCentavos - plannedAmountCentavos);
     const explanationEvidence: FinancialPlanEvidence = { planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, shortfall: { plannedAmountCentavos, requiredFundsCentavos, shortfallCentavos }, seasonalPreferences, forecastChanges: [] };
@@ -456,7 +442,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const strategy = strategyResult.data?.strategy === "snowball" ? "snowball" : "avalanche";
   const priorityIds = (prioritiesResult.data ?? []).map((priority) => priority.debt_account_id).filter((id): id is string => typeof id === "string");
   const eligibleDebtId = strategyResult.error || prioritiesResult.error ? null : selectEligibleDebt(debts, strategy, priorityIds);
-  const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
+  const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: [] }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
   const remainingPlannedCategories = plannedCategories.map((category) => toRemainingPlanCategory(category, spentById.get(category.id) ?? 0, available));
   const ml = await recommendPlanCategories(userId, period, available, remainingPlannedCategories, toRemainingForecast(forecast, spentById));
   const recommendation = ml.recommendation as { feasibility?: string; required_funds?: number; shortfall?: number; unallocated_surplus?: number; allocations?: unknown };
