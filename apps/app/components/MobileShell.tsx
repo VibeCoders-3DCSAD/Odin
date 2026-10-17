@@ -23,10 +23,10 @@ import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen"
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
-import ScheduledPaymentsScreen from "../features/billers/ScheduledPaymentsScreen";
-import ScheduledPaymentFormScreen from "../features/billers/ScheduledPaymentFormScreen";
-import ScheduledPaymentDetailScreen from "../features/billers/ScheduledPaymentDetailScreen";
-import RecordScheduledPaymentScreen from "../features/billers/RecordScheduledPaymentScreen";
+import BillersScreen from "../features/billers/BillersScreen";
+import BillerFormScreen from "../features/billers/BillerFormScreen";
+import BillerDetailScreen from "../features/billers/BillerDetailScreen";
+import RecordBillerPaymentScreen from "../features/billers/RecordBillerPaymentScreen";
 import { postDueScheduledPayments } from "../local-db/repositories/scheduledPayments";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
@@ -159,7 +159,7 @@ const hubs: Record<"money" | "plan", { title: string; segments: HubSegment[] }> 
     segments: [
       { page: "financial-accounts", label: "Accounts" },
       { page: "income-sources", label: "Income" },
-      { page: "scheduled-payments", label: "Scheduled" },
+      { page: "scheduled-payments", label: "Billers and\nRemittances" },
     ],
   },
   plan: {
@@ -218,10 +218,10 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   categories: { title: "Categories", subtitle: "Manage your categories" },
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
-  "scheduled-payments": { title: "Scheduled Payments", subtitle: "Bills and remittances" },
-  "scheduled-payment-form": { title: "Scheduled Payment", subtitle: "Add or edit a scheduled payment" },
-  "scheduled-payment-detail": { title: "Scheduled Payment", subtitle: "Schedule and payments" },
-  "scheduled-payment-record": { title: "Record Payment", subtitle: "Pay a scheduled payment" },
+  "scheduled-payments": { title: "Billers and Remittances", subtitle: "Scheduled bills and transfers" },
+  "scheduled-payment-form": { title: "Biller or Remittance", subtitle: "Add or edit a biller or remittance" },
+  "scheduled-payment-detail": { title: "Biller or Remittance", subtitle: "Schedule and payments" },
+  "scheduled-payment-record": { title: "Record Payment", subtitle: "Pay a biller or remittance" },
   "debt-manager": { title: "Debt Manager", subtitle: "Credit-card billing cycles" },
   "credit-cards": { title: "Credit Cards", subtitle: "Billing cycles and statements" },
   "credit-card-detail": { title: "Credit Card", subtitle: "Billing cycles and statements" },
@@ -856,7 +856,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "scheduled-payments") {
       return (
-        <ScheduledPaymentsScreen
+        <BillersScreen
           userId={userId}
           deviceId={deviceId}
           syncVersion={syncVersion}
@@ -870,7 +870,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "scheduled-payment-detail" && selectedScheduledPaymentId) {
       return (
-        <ScheduledPaymentDetailScreen
+        <BillerDetailScreen
           userId={userId}
           deviceId={deviceId}
           scheduledPaymentId={selectedScheduledPaymentId}
@@ -885,14 +885,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "scheduled-payment-record" && selectedScheduledPaymentId) {
       const back = () => setCurrentPage("scheduled-payment-detail");
-      return <RecordScheduledPaymentScreen userId={userId} deviceId={deviceId} scheduledPaymentId={selectedScheduledPaymentId} onClose={back} onRecorded={(message) => { showToast(message, "success"); back(); handleSync(); }} />;
+      return <RecordBillerPaymentScreen userId={userId} deviceId={deviceId} scheduledPaymentId={selectedScheduledPaymentId} onClose={back} onRecorded={(message) => { showToast(message, "success"); back(); handleSync(); }} />;
     }
 
     if (currentPage === "scheduled-payment-form") {
       // Edits opened from a payment's detail return there; adds and list edits return to the list.
       const returnPage: Page = editingScheduledPaymentId && editingScheduledPaymentId === selectedScheduledPaymentId ? "scheduled-payment-detail" : "scheduled-payments";
       const close = () => { setEditingScheduledPaymentId(null); setCurrentPage(returnPage); };
-      return <ScheduledPaymentFormScreen userId={userId} deviceId={deviceId} scheduledPaymentId={editingScheduledPaymentId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
+      return <BillerFormScreen userId={userId} deviceId={deviceId} scheduledPaymentId={editingScheduledPaymentId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
     }
 
     if (currentPage === "debt-manager") {
@@ -1031,15 +1031,15 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     <Pressable
                       key={segment.page}
                       accessibilityRole="tab"
-                      accessibilityLabel={segment.label}
+                      accessibilityLabel={segment.label.replace("\n", " ")}
                       accessibilityState={{ selected }}
                       onPress={() => {
                         contentScrollRef.current?.scrollTo({ y: 0, animated: false });
                         setCurrentPage(segment.page);
                       }}
-                      style={{ flex: 1, alignItems: "center", paddingVertical: 10, marginBottom: -1, borderBottomWidth: 2, borderBottomColor: selected ? palette.brand : "transparent" }}
+                      style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, marginBottom: -1, borderBottomWidth: 2, borderBottomColor: selected ? palette.brand : "transparent" }}
                     >
-                      <Text style={{ fontFamily: "Manrope", fontSize: 13, fontWeight: selected ? "700" : "600", color: selected ? palette.brand : palette.mut }}>
+                      <Text style={{ fontFamily: "Manrope", fontSize: 13, fontWeight: selected ? "700" : "600", color: selected ? palette.brand : palette.mut, textAlign: "center" }}>
                         {segment.label}
                       </Text>
                     </Pressable>

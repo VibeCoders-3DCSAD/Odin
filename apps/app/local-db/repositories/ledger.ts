@@ -880,7 +880,7 @@ export async function updateTransaction(
     )) throw new LocalDbError("VALIDATION_ERROR", "Edit this transaction from its debt payment.");
     if (await db.getFirstAsync<{ id: string }>(
       "SELECT id FROM scheduled_payment_records WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
-    )) throw new LocalDbError("VALIDATION_ERROR", "This transaction pays a scheduled payment. Delete it and record the payment again.");
+    )) throw new LocalDbError("VALIDATION_ERROR", "This transaction pays a biller or remittance. Delete it and record the payment again.");
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
     const newAmount = input.amount_centavos ?? current.amount_centavos;

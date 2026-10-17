@@ -87,7 +87,7 @@ describe("updating a scheduled payment", () => {
     await setScheduledPaymentArchived("user-1", "device-1", created.id, true);
 
     expect(await getScheduledPayment("user-1", created.id)).toMatchObject({ status: "archived", autoPost: false });
-    await expect(updateScheduledPayment("user-1", "device-1", created.id, meralco)).rejects.toThrow("Restore this scheduled payment before editing it.");
+    await expect(updateScheduledPayment("user-1", "device-1", created.id, meralco)).rejects.toThrow("Restore this biller or remittance before editing it.");
     await setScheduledPaymentArchived("user-1", "device-1", created.id, false);
     expect(await getScheduledPayment("user-1", created.id)).toMatchObject({ status: "active" });
   });

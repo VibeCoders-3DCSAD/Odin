@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import ScheduledPaymentDetailScreen from "../ScheduledPaymentDetailScreen";
-import RecordScheduledPaymentScreen from "../RecordScheduledPaymentScreen";
+import BillerDetailScreen from "../BillerDetailScreen";
+import RecordBillerPaymentScreen from "../RecordBillerPaymentScreen";
 import { addDays, localToday, previousDueDate } from "../schedule";
 
 const mockGet = jest.fn();
@@ -31,13 +31,13 @@ const meralco = {
 };
 const lastDue = previousDueDate(meralco as never, addDays(today, -1))!;
 
-describe("ScheduledPaymentDetailScreen", () => {
+describe("BillerDetailScreen", () => {
   const props = { userId: "user-1", deviceId: "device-1", scheduledPaymentId: "meralco", syncVersion: 0, onEdit: jest.fn(), onRecordPayment: jest.fn(), onDeleted: jest.fn(), onSyncRequested: jest.fn() };
   beforeEach(() => { jest.clearAllMocks(); mockGet.mockResolvedValue(meralco); });
 
   it("shows a partly paid past occurrence as overdue with what remains", async () => {
     mockRecords.mockResolvedValue([{ id: "r1", scheduledPaymentId: "meralco", transactionId: "t1", occurrenceDate: lastDue, paymentDate: lastDue, amountCentavos: 48_000, source: "manual", notes: null, version: 1 }]);
-    const view = render(<ScheduledPaymentDetailScreen {...props} />);
+    const view = render(<BillerDetailScreen {...props} />);
 
     expect(await view.findByText("This obligation occurrence is overdue and remains unpaid. Record a payment or review its schedule.")).toBeTruthy();
     expect(view.getByText("PHP 2,000.00")).toBeTruthy();
@@ -48,7 +48,7 @@ describe("ScheduledPaymentDetailScreen", () => {
   it("shows the empty payment history and archives after confirmation", async () => {
     mockRecords.mockResolvedValue([]);
     mockArchive.mockResolvedValue(undefined);
-    const view = render(<ScheduledPaymentDetailScreen {...props} />);
+    const view = render(<BillerDetailScreen {...props} />);
 
     expect(await view.findByText("This obligation has no recorded payments. Record a payment when one is made.")).toBeTruthy();
     fireEvent.press(view.getByText("Archive"));
@@ -60,7 +60,7 @@ describe("ScheduledPaymentDetailScreen", () => {
   it("explains that archived payments are out of planning", async () => {
     mockGet.mockResolvedValue({ ...meralco, status: "archived" });
     mockRecords.mockResolvedValue([]);
-    const view = render(<ScheduledPaymentDetailScreen {...props} />);
+    const view = render(<BillerDetailScreen {...props} />);
 
     expect(await view.findByText("This obligation is archived and excluded from current planning. Restore it before managing new payments.")).toBeTruthy();
     expect(view.queryByText("Record payment")).toBeNull();
@@ -68,12 +68,12 @@ describe("ScheduledPaymentDetailScreen", () => {
   });
 });
 
-describe("RecordScheduledPaymentScreen", () => {
+describe("RecordBillerPaymentScreen", () => {
   const props = { userId: "user-1", deviceId: "device-1", scheduledPaymentId: "meralco", onClose: jest.fn(), onRecorded: jest.fn() };
   beforeEach(() => { jest.clearAllMocks(); mockGet.mockResolvedValue(meralco); mockRecord.mockResolvedValue(undefined); });
 
   it("defaults to the current occurrence's full amount and the pay-from account", async () => {
-    const view = render(<RecordScheduledPaymentScreen {...props} />);
+    const view = render(<RecordBillerPaymentScreen {...props} />);
     await view.findByText("Pay Meralco");
     fireEvent.press(view.getByText("Record payment"));
 
@@ -82,7 +82,7 @@ describe("RecordScheduledPaymentScreen", () => {
   });
 
   it("requires a positive amount", async () => {
-    const view = render(<RecordScheduledPaymentScreen {...props} />);
+    const view = render(<RecordBillerPaymentScreen {...props} />);
     fireEvent.changeText(await view.findByLabelText("Payment amount"), "0");
     fireEvent.press(view.getByText("Record payment"));
 
@@ -92,7 +92,7 @@ describe("RecordScheduledPaymentScreen", () => {
 
   it("refuses an archived payment", async () => {
     mockGet.mockResolvedValue({ ...meralco, status: "archived" });
-    const view = render(<RecordScheduledPaymentScreen {...props} />);
+    const view = render(<RecordBillerPaymentScreen {...props} />);
     expect(await view.findByText("This obligation is no longer available for payments. Choose an active obligation instead.")).toBeTruthy();
   });
 });

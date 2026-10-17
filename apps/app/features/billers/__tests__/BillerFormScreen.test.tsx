@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import ScheduledPaymentFormScreen from "../ScheduledPaymentFormScreen";
+import BillerFormScreen from "../BillerFormScreen";
 
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
@@ -21,11 +21,11 @@ jest.mock("../../../local-db/repositories/taxonomy", () => ({
 
 const props = { userId: "user-1", deviceId: "device-1", onClose: jest.fn(), onSaved: jest.fn() };
 
-describe("ScheduledPaymentFormScreen", () => {
+describe("BillerFormScreen", () => {
   beforeEach(() => { mockCreate.mockReset(); mockUpdate.mockReset(); mockGet.mockReset(); });
 
   it("marks every missing required field and does not save", async () => {
-    const view = render(<ScheduledPaymentFormScreen {...props} />);
+    const view = render(<BillerFormScreen {...props} />);
     fireEvent.press(await view.findByText("Add payment"));
 
     expect(view.getByText("Some obligation details are not valid. Correct the marked fields and try again.")).toBeTruthy();
@@ -36,7 +36,7 @@ describe("ScheduledPaymentFormScreen", () => {
   });
 
   it("clears a field's error once it is corrected and keeps the other entries", async () => {
-    const view = render(<ScheduledPaymentFormScreen {...props} />);
+    const view = render(<BillerFormScreen {...props} />);
     fireEvent.changeText(await view.findByLabelText("Amount"), "1699");
     fireEvent.press(view.getByText("Add payment"));
     fireEvent.changeText(view.getByLabelText("Name"), "Globe fiber");
@@ -46,7 +46,7 @@ describe("ScheduledPaymentFormScreen", () => {
   });
 
   it("turns auto-post off and disables it for a one-time payment", async () => {
-    const view = render(<ScheduledPaymentFormScreen {...props} />);
+    const view = render(<BillerFormScreen {...props} />);
     fireEvent.press(await view.findByLabelText("Post automatically on the due date"));
     fireEvent.press(view.getByText("None"));
 
@@ -61,7 +61,7 @@ describe("ScheduledPaymentFormScreen", () => {
       autoPostFrom: "2026-09-01", isFamilySupport: false, isDependentSupport: false, protectedByDefault: true, notes: null, status: "active", version: 1,
     });
     mockUpdate.mockResolvedValue({});
-    const view = render(<ScheduledPaymentFormScreen {...props} scheduledPaymentId="payment-1" />);
+    const view = render(<BillerFormScreen {...props} scheduledPaymentId="payment-1" />);
     fireEvent.changeText(await view.findByLabelText("Amount"), "2480");
     fireEvent.press(view.getByText("Save changes"));
 

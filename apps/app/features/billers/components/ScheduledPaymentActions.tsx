@@ -28,7 +28,7 @@ export function RowMenuSheet({ payment, onPostNow, onAutoPost, onEdit, onDelete,
   );
 }
 
-export function DeleteConfirmDialog({ name, message = "This scheduled payment will be permanently removed. Past transactions stay.", onConfirm, onCancel }: { name: string | null; message?: string; onConfirm: () => void; onCancel: () => void }) {
+export function DeleteConfirmDialog({ name, message = "This biller or remittance will be permanently removed. Past transactions stay.", onConfirm, onCancel }: { name: string | null; message?: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <Modal visible={name !== null} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "center", padding: 28 }}>
