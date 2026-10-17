@@ -122,11 +122,21 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
   }
 }
 
-function forecastableCategories(transactions: ForecastTransaction[]): string[] {
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const currentYear = currentMonth.slice(0, 4);
+// Mirrors odin-ml: a category needs completed-month spend newer than this many months.
+const STALE_CATEGORY_MONTHS = 6;
+
+function monthsAgo(now: Date, months: number): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1)).toISOString().slice(0, 7);
+}
+
+function forecastableCategories(transactions: ForecastTransaction[], now = new Date()): string[] {
+  const currentMonth = monthsAgo(now, 0);
+  const staleMonth = monthsAgo(now, STALE_CATEGORY_MONTHS);
   return [...new Set(transactions
-    .filter((transaction) => transaction.transactionType === "expense" && transaction.date.startsWith(currentYear) && transaction.date.slice(0, 7) < currentMonth && HFCE_CATEGORIES.has(transaction.category))
+    .filter((transaction) => {
+      const month = transaction.date.slice(0, 7);
+      return transaction.transactionType === "expense" && month > staleMonth && month < currentMonth && HFCE_CATEGORIES.has(transaction.category);
+    })
     .map((transaction) => transaction.category))];
 }
 

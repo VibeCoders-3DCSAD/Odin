@@ -55,7 +55,29 @@ describe("forecast ML adapter", () => {
     expect(result).toEqual(expect.objectContaining({ status: "SUCCESS", forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 850025, userBaselineCentavos: 700000, hfceMultiplier: 1.214321, hfceForecastAmountMillionPhp: 12345.67, explanation: "Personalized food forecast." }] }));
   });
 
+  it("forecasts in January from last year's completed months", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2027-01-05T12:00:00.000Z"));
+    process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
+    const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => mlResponse });
+    await getMlForecast("user-1", { historicalTransactions: [{ ...transaction, date: "2026-12-04" }] }, fetcher);
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body).categories).toEqual(["food"]);
+  });
+
+  it("skips categories last bought six or more months ago", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-07T12:00:00.000Z"));
+    process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
+    const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => mlResponse });
+    const staleHealth = { ...currentOnlyCategoryTransaction, date: "2026-04-28" };
+    const recentFood = { ...transaction, date: "2026-05-01" };
+    await getMlForecast("user-1", { historicalTransactions: [staleHealth, recentFood] }, fetcher);
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body).categories).toEqual(["food"]);
+    await expect(getMlForecast("user-1", { historicalTransactions: [staleHealth] }, fetcher)).rejects.toThrow(ForecastValidationError);
+  });
+
   it("rejects malformed upstream responses and upstream errors", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-09-30T12:00:00.000Z"));
     expect(() => mapMlForecast({ ...mlResponse, status: "FAILURE" })).toThrow(ForecastUpstreamError);
     process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
     process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
