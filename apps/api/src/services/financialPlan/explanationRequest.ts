@@ -51,7 +51,7 @@ function text(value: unknown, max: number): string {
 }
 
 function centavos(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) invalid();
+  if (typeof value !== "number" || (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER)) invalid();
   return value;
 }
 

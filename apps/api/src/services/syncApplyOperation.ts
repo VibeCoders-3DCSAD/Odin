@@ -1584,7 +1584,7 @@ async function validateFinancialPlanPayload(
 }
 
 function assertPlanAmount(payload: Record<string, unknown>, field: string): void {
-  if (!Number.isSafeInteger(payload[field]) || (payload[field] as number) < 0) throw new Error(`${field} must be a non-negative whole number`);
+  if (typeof payload[field] !== "number" || !Number.isFinite(payload[field]) || (payload[field] as number) < 0 || (payload[field] as number) > Number.MAX_SAFE_INTEGER) throw new Error(`${field} must be a finite non-negative amount`);
 }
 
 function currentFinancialPlanPeriod(now = new Date()): { start: string; end: string } {

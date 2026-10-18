@@ -60,11 +60,16 @@ describe("financial plan explanation request", () => {
     expect(parsed.evidence).toEqual(evidence);
   });
 
+  it("keeps fractional-centavo evidence unchanged", () => {
+    const preciseEvidence = { ...evidence, surplusCentavos: 1.23456789 };
+    expect(parseFinancialPlanExplanationRequest({ leading: [], evidence: preciseEvidence }).evidence).toEqual(preciseEvidence);
+  });
+
   it.each([
     ["a missing evidence object", { leading: [] }],
     ["an oversized leading notice", { leading: ["x".repeat(401)], evidence }],
     ["too many forecast changes", { leading: [], evidence: { ...evidence, forecastChanges: Array.from({ length: 51 }, () => ({})) } }],
-    ["a fractional amount", { leading: [], evidence: { ...evidence, surplusCentavos: 1.5 } }],
+    ["a non-finite amount", { leading: [], evidence: { ...evidence, surplusCentavos: Infinity } }],
     ["an unknown seasonal preference", { leading: [], evidence: { ...evidence, seasonalPreferences: [{ evidenceId: "s", season: "Christmas", seasonWindow: "December", preference: "other" }] } }],
   ])("rejects %s", (_label, body) => {
     expect(() => parseFinancialPlanExplanationRequest(body)).toThrow(FinancialPlanExplanationRequestError);

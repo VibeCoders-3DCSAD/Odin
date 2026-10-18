@@ -50,6 +50,23 @@ describe("Financial Plan recommendations with recorded spending", () => {
     expect(result.recommendation.allocations[0]).toMatchObject({ allocatedAmountCentavos: 168_000, forecastAmountCentavos: 168_000 });
   });
 
+  it("preserves fractional centavos from the LP without rounding or redistributing them", async () => {
+    const subcategories = ["internet", "mobile", "postage"].map((id) => ({ id, category_id: "communication", label: id, minimum_amount_centavos: null, fixed_amount_centavos: null }));
+    (recommendPlanCategories as jest.Mock).mockResolvedValue({ recommendation: { feasibility: "FEASIBLE", allocations: subcategories.map(({ id }) => ({ category_id: id, amount: 1.006 })) } });
+    (getMlForecast as jest.Mock).mockResolvedValue({
+      snapshot: { month: "2026-10", categoryForecasts: [{ category: "communication", amountCentavos: 301.23456789 }], modelVersion: "test", generatedAt: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" },
+      forecasts: [],
+    });
+    const transactions = subcategories.map(({ id }) => ({ id: `past-${id}`, amount_centavos: 50_000, transaction_date: "2026-10-10", transaction_type: "expense", category_id: "communication", subcategory_id: id, anomaly_evaluations: [] }));
+    const result = await getFinancialPlanRecommendation("user", client(50_000, null, { subcategories, transactions }), 302, subcategories.map(({ id }) => id));
+
+    const allocated = result.recommendation.allocations.map((allocation) => allocation.allocatedAmountCentavos);
+    expect(allocated).toEqual([100.6, 100.6, 100.6]);
+    const optimizerCategories = (recommendPlanCategories as jest.Mock).mock.calls[0][3];
+    expect(optimizerCategories.map((category: { forecastCentavos: number }) => category.forecastCentavos)).toEqual(Array(3).fill(301.23456789 * 50_000 / 150_000));
+    expect(302 - allocated.reduce((sum, amount) => sum + amount, 0)).toBeCloseTo(0.2);
+  });
+
   it("does not apply a Christmas expense pattern to Communication or change the recommendation", async () => {
     (getMlForecast as jest.Mock).mockResolvedValue({
       snapshot: { month: "2026-10", categoryForecasts: [{ category: "communication", amountCentavos: 168_000 }], modelVersion: "test", generatedAt: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" },

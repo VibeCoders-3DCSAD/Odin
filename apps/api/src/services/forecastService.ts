@@ -212,7 +212,7 @@ export function mapMlForecast(value: unknown): ForecastPayload {
   }
   const cents = (amount: unknown) => {
     if (typeof amount !== "number" || !Number.isFinite(amount)) throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");
-    return Math.round(amount * 100);
+    return amount * 100;
   };
   const forecasts = response.forecasts.map((point) => {
       if (!point || typeof point !== "object" || Array.isArray(point)) throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");

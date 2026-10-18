@@ -30,6 +30,19 @@ describe("Financial Plan sync payload", () => {
     await expect(prepareOperation({} as never, "user-1", operation)).resolves.toMatchObject({ payload: operation.payload });
   });
 
+  it("preserves fractional-centavo allocations while checking their ownership", async () => {
+    const operation = financialPlanOperation();
+    const allocation = { subcategoryId: "subcategory-1", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 100.6, floorAmountCentavos: 0, ceilingAmountCentavos: 302 };
+    const payload = { ...operation.payload, recommendation: { ...operation.payload.recommendation, availableFundsCentavos: 302, allocations: [allocation] } };
+    const query = {
+      select: jest.fn(() => query), in: jest.fn(() => query), eq: jest.fn(() => query),
+      then: (resolve: (value: unknown) => void) => Promise.resolve({ data: [{ id: "subcategory-1", category_id: null }], error: null }).then(resolve),
+    };
+    const client = { from: jest.fn(() => query) };
+    await expect(prepareOperation(client as never, "user-1", { ...operation, payload })).resolves.toMatchObject({ payload });
+    expect(query.eq).toHaveBeenCalledWith("user_id", "user-1");
+  });
+
   it("rejects plans outside the current calendar month", async () => {
     const operation = financialPlanOperation();
     await expect(prepareOperation({} as never, "user-1", { ...operation, payload: { ...operation.payload, period_start: "2020-01-01", period_end: "2020-01-31" } })).rejects.toThrow("Financial Plans can only cover the current calendar month");

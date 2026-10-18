@@ -88,13 +88,13 @@ function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
 function now() { return new Date().toISOString(); }
 
 function assertCentavos(value: number, field: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a non-negative whole number`);
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a finite non-negative amount`);
 }
 
 function optionalRecommendationCentavos(recommendation: Record<string, unknown>, field: string): number {
   const value = recommendation[field];
   if (value === undefined) return 0;
-  if (!Number.isSafeInteger(value) || value < 0) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a non-negative whole number`);
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a finite non-negative amount`);
   return value;
 }
 
@@ -134,7 +134,7 @@ function validate(input: CreateFinancialPlanInput): void {
   const targets = input.allocations.map((allocation) => allocation.categoryId ? `category:${allocation.categoryId}` : `subcategory:${allocation.subcategoryId}`);
   if (new Set(targets).size !== targets.length) throw new LocalDbError("VALIDATION_ERROR", "Financial Plan allocations cannot target the same category or subcategory twice");
   const availableFunds = input.recommendation.availableFundsCentavos;
-  if (!Number.isSafeInteger(availableFunds) || availableFunds < 0) throw new LocalDbError("VALIDATION_ERROR", "recommendation available funds must be a non-negative whole number");
+  if (typeof availableFunds !== "number" || !Number.isFinite(availableFunds) || availableFunds < 0 || availableFunds > Number.MAX_SAFE_INTEGER) throw new LocalDbError("VALIDATION_ERROR", "recommendation available funds must be a finite non-negative amount");
   const debtSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "debtSurplusCentavos");
   const savingsSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "savingsSurplusCentavos");
   if (input.allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0) + debtSurplusCentavos + savingsSurplusCentavos > availableFunds) {
@@ -170,7 +170,7 @@ export async function createFinancialPlan(userId: string, deviceId: string, inpu
   const db = await getDb(); const id = randomUUID(); const timestamp = now();
   const forecast = input.inputSnapshot.forecast as { month?: unknown; totalAmountCentavos?: unknown; modelVersion?: unknown; generatedAt?: unknown; quality?: unknown; categoryForecasts?: unknown };
   const classification = input.inputSnapshot.classification as { status?: unknown; rule_set_version?: unknown; assessed_at?: unknown };
-  if (typeof forecast.month !== "string" || !Number.isSafeInteger(forecast.totalAmountCentavos) || typeof forecast.modelVersion !== "string" || typeof forecast.generatedAt !== "string" || typeof forecast.quality !== "string") throw new LocalDbError("VALIDATION_ERROR", "forecast snapshot is invalid");
+  if (typeof forecast.month !== "string" || typeof forecast.totalAmountCentavos !== "number" || !Number.isFinite(forecast.totalAmountCentavos) || forecast.totalAmountCentavos < 0 || typeof forecast.modelVersion !== "string" || typeof forecast.generatedAt !== "string" || typeof forecast.quality !== "string") throw new LocalDbError("VALIDATION_ERROR", "forecast snapshot is invalid");
   const debtSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "debtSurplusCentavos");
   const savingsSurplusCentavos = optionalRecommendationCentavos(input.recommendation, "savingsSurplusCentavos");
   const recommendation = { ...input.recommendation, debtSurplusCentavos, savingsSurplusCentavos, allocations: input.allocations, debtReservations: input.debtReservations, savingsReservations: input.savingsReservations };
@@ -178,11 +178,11 @@ export async function createFinancialPlan(userId: string, deviceId: string, inpu
   let operation!: SyncOperation;
   await db.withTransactionAsync(async () => {
     await validateReferences(db, userId, input);
-    await db.runAsync("INSERT INTO financial_plans (id, user_id, period_start, period_end, status, forecast_month, forecast_total_centavos, forecast_model_version, forecast_generated_at, forecast_quality, classification_status, classification_rule_set_version, classification_assessed_at, available_funds_centavos, required_funds_centavos, shortfall_centavos, debt_surplus_centavos, savings_surplus_centavos, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, 'accepted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)", id, userId, input.periodStart, input.periodEnd, forecast.month, forecast.totalAmountCentavos, forecast.modelVersion, forecast.generatedAt, forecast.quality, typeof classification.status === "string" ? classification.status : null, typeof classification.rule_set_version === "string" ? classification.rule_set_version : null, typeof classification.assessed_at === "string" ? classification.assessed_at : null, input.recommendation.availableFundsCentavos as number, input.recommendation.requiredFundsCentavos as number ?? null, input.recommendation.shortfallCentavos as number ?? null, debtSurplusCentavos, savingsSurplusCentavos, timestamp, timestamp);
+    await db.runAsync("INSERT INTO financial_plans (id, user_id, period_start, period_end, status, forecast_month, forecast_total_centavos, forecast_model_version, forecast_generated_at, forecast_quality, classification_status, classification_rule_set_version, classification_assessed_at, available_funds_centavos, required_funds_centavos, shortfall_centavos, debt_surplus_centavos, savings_surplus_centavos, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, 'accepted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)", id, userId, input.periodStart, input.periodEnd, forecast.month as string, forecast.totalAmountCentavos as number, forecast.modelVersion as string, forecast.generatedAt as string, forecast.quality as string, typeof classification.status === "string" ? classification.status : null, typeof classification.rule_set_version === "string" ? classification.rule_set_version : null, typeof classification.assessed_at === "string" ? classification.assessed_at : null, input.recommendation.availableFundsCentavos as number, input.recommendation.requiredFundsCentavos as number ?? null, input.recommendation.shortfallCentavos as number ?? null, debtSurplusCentavos, savingsSurplusCentavos, timestamp, timestamp);
     await db.runAsync("UPDATE financial_plans SET input_snapshot_json = ?, recommendation_json = ? WHERE id = ? AND user_id = ?", JSON.stringify(input.inputSnapshot), JSON.stringify(recommendation), id, userId);
     if (!Array.isArray(forecast.categoryForecasts)) throw new LocalDbError("VALIDATION_ERROR", "forecast points are invalid");
     for (const point of forecast.categoryForecasts) {
-      if (!point || typeof point !== "object" || typeof (point as { category?: unknown }).category !== "string" || !Number.isSafeInteger((point as { amountCentavos?: unknown }).amountCentavos)) throw new LocalDbError("VALIDATION_ERROR", "forecast point is invalid");
+      if (!point || typeof point !== "object" || typeof (point as { category?: unknown }).category !== "string" || typeof (point as { amountCentavos?: unknown }).amountCentavos !== "number" || !Number.isFinite((point as { amountCentavos: number }).amountCentavos) || (point as { amountCentavos: number }).amountCentavos < 0) throw new LocalDbError("VALIDATION_ERROR", "forecast point is invalid");
       await db.runAsync("INSERT INTO financial_plan_forecast_points (plan_id, category_key, amount_centavos) VALUES (?, ?, ?)", id, (point as { category: string }).category, (point as { amountCentavos: number }).amountCentavos);
     }
     for (const [index, allocation] of input.allocations.entries()) await db.runAsync("INSERT INTO financial_plan_allocations (id, plan_id, category_id, subcategory_id, allocation_rule, allocated_amount_centavos, floor_amount_centavos, ceiling_amount_centavos, forecast_amount_centavos, subcategory_weight_bps) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", `${id}:allocation:${index}`, id, allocation.categoryId ?? null, allocation.subcategoryId ?? null, allocation.allocationRule, allocation.allocatedAmountCentavos, allocation.floorAmountCentavos, allocation.ceilingAmountCentavos ?? null, allocation.forecastAmountCentavos ?? null, allocation.subcategoryWeightBps ?? null);

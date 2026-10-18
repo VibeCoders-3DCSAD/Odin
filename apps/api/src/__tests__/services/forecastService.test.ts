@@ -36,6 +36,17 @@ const mlResponse = {
 describe("forecast ML adapter", () => {
   afterEach(() => { delete process.env.FORECASTING_ML_BASE_URL; delete process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET; jest.useRealTimers(); });
 
+  it("preserves fractional-centavo forecast amounts for recommendations", () => {
+    const amount = 8500.123456789;
+    const result = mapMlForecast({ ...mlResponse,
+      forecasts: mlResponse.forecasts.map((point) => ({ ...point, amount })),
+      snapshot: { ...mlResponse.snapshot, total_amount: amount, category_forecasts: [{ category: "food", amount }] },
+    });
+    expect(result.forecasts[0]?.amountCentavos).toBe(amount * 100);
+    expect(result.snapshot.totalAmountCentavos).toBe(amount * 100);
+    expect(result.snapshot.categoryForecasts[0]?.amountCentavos).toBe(amount * 100);
+  });
+
   it("validates transaction history without the retired horizon and level controls", () => {
     expect(parseForecastRequest({ historicalTransactions: [transaction] })).toEqual({ historicalTransactions: [transaction] });
     expect(() => parseForecastRequest({ historicalTransactions: [] })).toThrow(ForecastValidationError);

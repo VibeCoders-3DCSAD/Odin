@@ -84,6 +84,30 @@ describe("financial plan repository", () => {
     await expect(createFinancialPlan("user-1", "device-1", { ...input, periodStart: "2026-09-01", periodEnd: "2026-09-30" })).rejects.toThrow("Financial Plans can only cover the current calendar month");
   });
 
+  it("saves fractional-centavo recommendations without rounding", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-15T03:00:00.000Z"));
+    const db = {
+      withTransactionAsync: jest.fn(async (callback: () => Promise<void>) => callback()),
+      getAllAsync: jest.fn(async () => [{ id: "subcategory-1", category_id: null }]),
+      runAsync: jest.fn(async () => ({})),
+    };
+    mockInitDatabase.mockResolvedValue(db);
+    mockEnqueueOperation.mockResolvedValue({ id: "operation-1" });
+    const { createFinancialPlan } = await import("../financialPlans");
+    const allocation = { subcategoryId: "subcategory-1", allocationRule: "FLEXIBLE" as const, allocatedAmountCentavos: 100.6, floorAmountCentavos: 0, forecastAmountCentavos: 123.456 };
+    await createFinancialPlan("user-1", "device-1", {
+      periodStart: "2026-10-01", periodEnd: "2026-10-31",
+      inputSnapshot: {
+        plannedAmountCentavos: 302,
+        forecast: { month: "2026-10", totalAmountCentavos: 123.456, modelVersion: "v1", generatedAt: "2026-10-01T00:00:00.000Z", quality: "FALLBACK", categoryForecasts: [{ category: "subcategory-1", amountCentavos: 123.456 }] },
+        restrictions: { allocations: [] }, obligations: { reservations: [] }, debtRequirements: { reservations: [] }, savingsRequirements: { reservations: [] }, classification: { status: "unavailable" },
+      },
+      recommendation: { availableFundsCentavos: 302 }, allocations: [allocation], debtReservations: [], savingsReservations: [],
+    });
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(db, expect.objectContaining({ payload: expect.objectContaining({ recommendation: expect.objectContaining({ allocations: [allocation] }) }) }));
+    expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO financial_plan_forecast_points"), "plan-1", "subcategory-1", 123.456);
+  });
+
   it("covers the whole calendar month containing the reference date", async () => {
     const { getCurrentFinancialPlanPeriod } = await import("../financialPlans");
     expect(getCurrentFinancialPlanPeriod("2026-10-15")).toEqual({ start: "2026-10-01", end: "2026-10-31" });

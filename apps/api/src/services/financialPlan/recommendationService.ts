@@ -193,15 +193,12 @@ function mapPlanForecast(
     const targets = slug ? targetsBySlug.get(slug) ?? [] : [];
     const total = slug ? forecastBySlug.get(slug) ?? 0 : 0;
     const totalWeight = targets.reduce((sum, target) => sum + target.forecastCentavos, 0);
-    const orderedTargets = [...targets].sort((left, right) => left.id.localeCompare(right.id));
-    const index = orderedTargets.findIndex((target) => target.id === category.id);
     const mlDetail = slug ? mlForecast.forecasts.find((point) => point.category === slug) : undefined;
     // If this top-level category has no twelve-month spend, split its forecast evenly.
-    const precedingWeight = orderedTargets.slice(0, index).reduce((sum, target) => sum + target.forecastCentavos, 0);
     const amount = totalWeight > 0
-      ? Math.floor(total * (precedingWeight + category.forecastCentavos) / totalWeight) - Math.floor(total * precedingWeight / totalWeight)
-      : Math.floor(total * (index + 1) / orderedTargets.length) - Math.floor(total * index / orderedTargets.length);
-    const finalForecastCentavos = Math.round(Math.max(category.floorCentavos, amount) / 100) * 100;
+      ? total * category.forecastCentavos / totalWeight
+      : total / targets.length;
+    const finalForecastCentavos = Math.max(category.floorCentavos, amount);
     console.info("financial plan forecast decision", {
       user_id: userId,
       hfce_category: slug ?? null,
@@ -209,10 +206,10 @@ function mapPlanForecast(
       ml_user_baseline_centavos: mlDetail?.userBaselineCentavos ?? null,
       ml_hfce_multiplier: mlDetail?.hfceMultiplier ?? null,
       parent_forecast_centavos: total,
-      target_count: orderedTargets.length,
+      target_count: targets.length,
       spend_weight_centavos: category.forecastCentavos,
       total_weight_centavos: totalWeight,
-      weight_percentage: totalWeight > 0 ? Number((category.forecastCentavos / totalWeight * 100).toFixed(4)) : null,
+      weight_percentage: totalWeight > 0 ? category.forecastCentavos / totalWeight * 100 : null,
        allocation_method: totalWeight > 0 ? "twelve_month_spend_weighted" : "even_split_no_spend_history",
       allocated_centavos: amount,
       floor_centavos: category.floorCentavos,
@@ -230,7 +227,7 @@ function mapRecommendation(categories: MlPlanCategory[], allocationAmounts: unkn
     if (!allocation || typeof allocation !== "object") throw new FinancialPlanUnavailableError("Budget optimizer returned an invalid recommendation");
     const value = allocation as { category_id?: unknown; amount?: unknown };
     if (typeof value.category_id !== "string" || typeof value.amount !== "number" || !Number.isFinite(value.amount) || value.amount < 0 || amounts.has(value.category_id)) throw new FinancialPlanUnavailableError("Budget optimizer returned an invalid recommendation");
-    amounts.set(value.category_id, Math.round(value.amount * 100));
+    amounts.set(value.category_id, value.amount * 100);
   }
   return categories.map((category) => {
     const amount = amounts.get(category.id);
@@ -353,7 +350,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     if (transaction.transaction_type === "expense" && parentCategoryId && transaction.transaction_date >= trailingTwelveMonthsStart) spendByCategory.set(parentCategoryId, (spendByCategory.get(parentCategoryId) ?? 0) + transaction.amount_centavos);
   }
   // Spend totals cover up to twelve months; a fallback forecast needs one month's worth.
-  const monthlySpend = (totalCentavos: number | undefined) => Math.round((totalCentavos ?? 0) / Math.max(spendMonths.size, 1));
+  const monthlySpend = (totalCentavos: number | undefined) => (totalCentavos ?? 0) / Math.max(spendMonths.size, 1);
   const slugByCategoryId = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.id, category.slug]));
   const categorySlugBySubcategoryId = new Map([
     ...subcategories.map((subcategory) => [subcategory.id, subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined] as const),
@@ -430,7 +427,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
         const forecastDeductions = new Map([...scheduledByTarget].map(([id, amount]) => {
           const detail = mlForecast.forecasts.find((point) => point.category === categorySlugBySubcategoryId.get(id));
           const factor = detail && detail.userBaselineCentavos > 0 ? detail.amountCentavos / detail.userBaselineCentavos : 1;
-          return [id, Math.round(amount * factor)];
+          return [id, amount * factor];
         }));
         forecast = subtractScheduledForecast(mapPlanForecast(userId, mlForecast, grossCategories, categorySlugBySubcategoryId), forecastDeductions, new Map(categories.map((category) => [category.id, category.floorCentavos])));
         forecastDetails = mlForecast.forecasts;
@@ -461,7 +458,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   // Recommendations use monthly targets; recorded spending is tracked separately.
   const ml = await recommendPlanCategories(userId, period, available, plannedCategories, forecast);
   const recommendation = ml.recommendation as { feasibility?: string; required_funds?: number; shortfall?: number; unallocated_surplus?: number; allocations?: unknown };
-  const surplusCentavos = typeof recommendation.unallocated_surplus === "number" && Number.isFinite(recommendation.unallocated_surplus) && recommendation.unallocated_surplus > 0 ? Math.round(recommendation.unallocated_surplus * 100) : 0;
+  const surplusCentavos = typeof recommendation.unallocated_surplus === "number" && Number.isFinite(recommendation.unallocated_surplus) && recommendation.unallocated_surplus > 0 ? recommendation.unallocated_surplus * 100 : 0;
   const surplusRecommendation = deriveSurplusRecommendation({ unallocatedSurplusCentavos: surplusCentavos, assessment, sourceUpdatedAt, eligibleEmergencyGoalId, eligibleDebtId });
   const debtSurplusCentavos = 0;
   const savingsSurplusCentavos = 0;
@@ -488,12 +485,12 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     const scheduledCentavos = categories.filter((target) => categorySlugBySubcategoryId.get(target.id) === detail.category).reduce((sum, target) => sum + (scheduledByTarget.get(target.id) ?? 0), 0);
     const baselineCentavos = Math.max(0, detail.userBaselineCentavos - scheduledCentavos);
     const factor = detail.userBaselineCentavos > 0 ? detail.amountCentavos / detail.userBaselineCentavos : 1;
-    const forecastCentavos = Math.max(0, detail.amountCentavos - Math.round(scheduledCentavos * factor));
+    const forecastCentavos = Math.max(0, detail.amountCentavos - scheduledCentavos * factor);
     const differenceCentavos = forecastCentavos - baselineCentavos;
-    return [{ evidenceId: `forecast:${detail.category}`, categoryName: category.label, categorySlug: detail.category, baselineCentavos, forecastCentavos, allocationCentavos, allocationForecastDifferenceCentavos: allocationCentavos - forecastCentavos, differenceCentavos, percentageChange: baselineCentavos > 0 ? Number((differenceCentavos / baselineCentavos * 100).toFixed(1)) : null, forecastRationale: userFacingForecastRationale(detail.explanation), possibleSeasonalContext: null }];
+    return [{ evidenceId: `forecast:${detail.category}`, categoryName: category.label, categorySlug: detail.category, baselineCentavos, forecastCentavos, allocationCentavos, allocationForecastDifferenceCentavos: allocationCentavos - forecastCentavos, differenceCentavos, percentageChange: baselineCentavos > 0 ? differenceCentavos / baselineCentavos * 100 : null, forecastRationale: userFacingForecastRationale(detail.explanation), possibleSeasonalContext: null }];
   });
   const explanationEvidence: FinancialPlanEvidence = { ...explanationContext, planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos, debtSurplusCentavos, savingsSurplusCentavos, seasonalPreferences, forecastChanges };
   // Groq explanations are fetched separately (POST /financial-plans/explanations) so the plan is not held up by them.
   const explanationRequest: FinancialPlanExplanationRequest = { evidence: explanationEvidence, leading: [...(forecastUnavailableMessage ? [forecastUnavailableMessage] : []), ...zeroAllocationInsights] };
-  return { status: recommendation.feasibility === "INFEASIBLE" ? "INFEASIBLE" as const : "RECOMMENDATION_READY" as const, period, inputSnapshot: { ...plannedInputSnapshot, spendingExplanationEvidence: explanationEvidence }, recommendation: { availableFundsCentavos: available, requiredFundsCentavos: typeof recommendation.required_funds === "number" ? Math.round(recommendation.required_funds * 100) : undefined, shortfallCentavos: typeof recommendation.shortfall === "number" ? Math.round(recommendation.shortfall * 100) : undefined, allocations, debtReservations: baseDebtReservations, debtSurplusCentavos, savingsReservations, savingsSurplusCentavos, surplusRecommendation }, explanations: deterministicFinancialPlanExplanations(explanationRequest), explanationRequest };
+  return { status: recommendation.feasibility === "INFEASIBLE" ? "INFEASIBLE" as const : "RECOMMENDATION_READY" as const, period, inputSnapshot: { ...plannedInputSnapshot, spendingExplanationEvidence: explanationEvidence }, recommendation: { availableFundsCentavos: available, requiredFundsCentavos: typeof recommendation.required_funds === "number" ? recommendation.required_funds * 100 : undefined, shortfallCentavos: typeof recommendation.shortfall === "number" ? recommendation.shortfall * 100 : undefined, allocations, debtReservations: baseDebtReservations, debtSurplusCentavos, savingsReservations, savingsSurplusCentavos, surplusRecommendation }, explanations: deterministicFinancialPlanExplanations(explanationRequest), explanationRequest };
 }
