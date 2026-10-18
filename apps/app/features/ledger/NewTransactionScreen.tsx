@@ -578,7 +578,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       });
 
       resetForm(true);
-      if (!isEdit) onCreated?.(unusualSpending);
+      // An edit returns to wherever it was opened from, which refreshes that list.
+      if (isEdit) onClose();
+      else onCreated?.(unusualSpending);
     } catch (error) {
       console.error("[DEBUG-TX-SAVE] failed", {
         phase: savePhase,

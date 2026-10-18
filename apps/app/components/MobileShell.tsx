@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ArrowsClockwise, CaretLeft, ChartLine, CheckCircle, Cloud, House, ListBullets, Plus, Target, TrashSimple, User, Wallet, type IconProps } from "phosphor-react-native";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -19,6 +19,7 @@ import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
 import { getTransaction, type Transaction } from "../local-db/repositories/ledger";
 import type { UnusualSpendingInsight } from "../local-db/repositories/unusualSpending";
 import TransactionHistoryScreen from "../features/ledger/TransactionHistoryScreen";
+import { clearTransactionCache } from "../features/ledger/transactionCache";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
@@ -286,6 +287,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transactionLoadMoreRef = useRef<(() => void) | null>(null);
   const contentScrollRef = useRef<ScrollView>(null);
+  const contentScrollY = useRef(0);
+  // Stable so the transactions screen can use them inside memoized row callbacks.
+  const getContentScrollY = useCallback(() => contentScrollY.current, []);
+  const scrollContentTo = useCallback((y: number) => contentScrollRef.current?.scrollTo({ y, animated: false }), []);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -589,6 +594,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       try { await signOut(); } catch {}
     }
 
+    clearTransactionCache();
     onLoggedOut();
   }
 
@@ -844,7 +850,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "transactions") {
-      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} />;
+      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} getScrollOffset={getContentScrollY} scrollTo={scrollContentTo} syncVersion={syncVersion} />;
     }
 
     if (currentPage === "categories") {
@@ -1027,6 +1033,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           contentContainerStyle={{ paddingHorizontal: CONTENT_GUTTER }}
           keyboardShouldPersistTaps="handled"
           onScroll={({ nativeEvent }) => {
+            contentScrollY.current = nativeEvent.contentOffset.y;
             const distanceFromBottom = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
             if (currentPage === "transactions" && distanceFromBottom < 200) transactionLoadMoreRef.current?.();
           }}
