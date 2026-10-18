@@ -1096,15 +1096,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     accessibilityRole="tab"
                     accessibilityLabel={label}
                     accessibilityState={{ selected }}
-                    style={{ width: 44, height: 36, alignItems: "center", justifyContent: "center" }}
+                    style={{ minWidth: 56, alignItems: "center", justifyContent: "flex-start", gap: 3 }}
                   >
-                    {selected ? (
-                      <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center" }}>
-                        <Icon size={20} color="#FFFFFF" weight="fill" />
-                      </View>
-                    ) : (
-                      <Icon size={22} color={palette.mut} />
-                    )}
+                    <View style={{ width: 44, height: 28, borderRadius: 10, backgroundColor: selected ? palette.brand : "transparent", alignItems: "center", justifyContent: "center" }}>
+                      <Icon size={selected ? 18 : 21} color={selected ? "#FFFFFF" : palette.mut} weight={selected ? "fill" : "regular"} />
+                    </View>
+                    <Text style={{ fontFamily: "Manrope", fontSize: 11, fontWeight: selected ? "700" : "600", color: selected ? palette.brand : palette.mut }}>
+                      {label}
+                    </Text>
                   </Pressable>
                 );
                 if (index !== 2) return [button];
