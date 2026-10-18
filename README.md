@@ -2,6 +2,20 @@
 
 Monorepo for the main Odin application.
 
+## Demo Financial History
+
+Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `apps/api/.env`
+or `apps/api/.env.local`. Preview the generated history without writing data:
+
+```bash
+pnpm --filter api seed -- --email <email> --password <password> --dry-run
+```
+
+To create the user if needed and replace that user's existing demo history, run
+the same command with `--confirm <email>` instead of `--dry-run`. Replacement
+deletes previous demo history and cannot be undone. Writes run in batches; a
+failure may leave partial demo data, so rerun after resolving the error.
+
 ## Repositories
 
 - `apps/app`: Expo app for React Native mobile
