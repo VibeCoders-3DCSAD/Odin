@@ -66,7 +66,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
   }
 
   const invalid = Boolean(message);
-  const scheduleValue: RecurringScheduleValue = { frequency: contributionFrequency, intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, secondDayOfWeek: null, monthOfYear: null, estimatedIntervalDays: "" };
+  const scheduleValue: RecurringScheduleValue = { frequency: contributionFrequency, intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, monthOfYear: null };
   return <View style={{ gap: 14 }}>
     <View><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 20, fontWeight: "800" }}>{goal ? "Edit savings goal" : "Add savings goal"}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 3 }}>Set a target and track the amount you have already saved.</Text></View>
     <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 14, padding: 14 }}>

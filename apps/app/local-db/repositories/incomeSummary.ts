@@ -3,6 +3,7 @@ import type { IncomeFrequency, IncomeSource } from "./financialFoundations";
 
 function monthlyMultiplier(frequency: IncomeFrequency | PaymentFrequency): number {
   switch (frequency) {
+    case "daily": return 365 / 12;
     case "weekly": return 52 / 12;
     case "biweekly": return 26 / 12;
     case "semi_monthly": return 2;

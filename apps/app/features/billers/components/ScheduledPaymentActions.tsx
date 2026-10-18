@@ -1,9 +1,8 @@
 import { Modal, Pressable, Text, View } from "react-native";
-import { FieldLabel, Note, Switch, styles as ui, v4, v4Font } from "../../../components/BudgieForm";
+import { BottomSheet, FieldLabel, Note, Switch, styles as ui, v4, v4Font } from "../../../components/BudgieForm";
 import type { ScheduledPaymentSummary } from "../../../local-db/repositories/scheduledPayments";
 import { formatDueDate, formatPhp } from "../presentation";
 import { localToday, nextDueDate } from "../schedule";
-import { BottomSheet } from "./BillerSheets";
 
 function MenuRow({ label, onPress, danger = false, divider }: { label: string; onPress: () => void; danger?: boolean; divider: boolean }) {
   return (
