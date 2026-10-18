@@ -3,12 +3,10 @@ import type { DebtAccount } from "../debtAccounts";
 import type { IncomeSource } from "../financialFoundations";
 
 const incomeSource: IncomeSource = {
-  id: "income-1", name: "Salary", incomeType: "stable", frequency: "semi_monthly",
+  id: "income-1", name: "Salary", frequency: "semi_monthly",
   recurringTemplateId: null, destinationAccountId: "account-1", subcategoryId: "income-category",
-  expectedAmountCentavos: 50_000, minAmountCentavos: null, maxAmountCentavos: null,
-  paydayDayOfMonth: 15, paydaySecondDayOfMonth: 30, paydayDayOfWeek: null,
-  paydaySecondDayOfWeek: null, nextExpectedDate: null, estimatedIntervalDays: null,
-  isActive: true, notes: null,
+  expectedAmountCentavos: 50_000, paydayDayOfMonth: 15, paydaySecondDayOfMonth: 30, paydayDayOfWeek: null,
+  nextExpectedDate: null, isActive: true, notes: null,
 };
 
 function salaryLoan(overrides: Partial<DebtAccount> = {}): DebtAccount {
@@ -42,5 +40,9 @@ describe("income summary", () => {
 
   it("normalizes weekly amounts to a monthly estimate", () => {
     expect(monthlyAmountCentavos(10_000, "weekly")).toBe(Math.round(10_000 * 52 / 12));
+  });
+
+  it("normalizes daily amounts to a monthly estimate", () => {
+    expect(monthlyAmountCentavos(10_000, "daily")).toBe(Math.round(10_000 * 365 / 12));
   });
 });

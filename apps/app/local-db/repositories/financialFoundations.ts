@@ -69,20 +69,15 @@ type IncomeSourceRow = {
   id: string;
   user_id: string;
   name: string;
-  income_type: string;
   frequency: string;
   recurring_template_id: string | null;
   destination_account_id: string | null;
   subcategory_id: string | null;
-  expected_amount_centavos: number | null;
-  min_amount_centavos: number | null;
-  max_amount_centavos: number | null;
+  expected_amount_centavos: number;
   payday_day_of_month: number | null;
   payday_second_day_of_month: number | null;
   payday_day_of_week: number | null;
-  payday_second_day_of_week: number | null;
   next_expected_date: string | null;
-  estimated_interval_days: number | null;
   is_active: number;
   notes: string | null;
   metadata: string;
@@ -150,33 +145,20 @@ export type CreditCardDetailsInput = {
   alertThresholdPercent: number;
 };
 
-export type IncomeType = "stable" | "variable";
-
-export type IncomeFrequency =
-  | "weekly"
-  | "biweekly"
-  | "semi_monthly"
-  | "monthly"
-  | "irregular"
-  | "custom";
+export type IncomeFrequency = "daily" | "weekly" | "semi_monthly" | "monthly";
 
 export type IncomeSource = {
   id: string;
   name: string;
-  incomeType: IncomeType;
   frequency: IncomeFrequency;
   recurringTemplateId: string | null;
   destinationAccountId: string | null;
   subcategoryId: string | null;
-  expectedAmountCentavos: number | null;
-  minAmountCentavos: number | null;
-  maxAmountCentavos: number | null;
+  expectedAmountCentavos: number;
   paydayDayOfMonth: number | null;
   paydaySecondDayOfMonth: number | null;
   paydayDayOfWeek: number | null;
-  paydaySecondDayOfWeek: number | null;
   nextExpectedDate: string | null;
-  estimatedIntervalDays: number | null;
   isActive: boolean;
   notes: string | null;
 };
@@ -212,39 +194,29 @@ export type UpdateFinancialAccountInput = {
 
 export type CreateIncomeSourceInput = {
   name: string;
-  incomeType: IncomeType;
   frequency: IncomeFrequency;
   destinationAccountId: string;
   subcategoryId: string;
-  expectedAmountCentavos?: number | null;
-  minAmountCentavos?: number | null;
-  maxAmountCentavos?: number | null;
+  expectedAmountCentavos: number;
   paydayDayOfMonth?: number | null;
   paydaySecondDayOfMonth?: number | null;
   paydayDayOfWeek?: number | null;
-  paydaySecondDayOfWeek?: number | null;
   nextExpectedDate?: string | null;
-  estimatedIntervalDays?: number | null;
   isActive?: boolean;
   notes?: string | null;
 };
 
 export type UpdateIncomeSourceInput = {
   name?: string;
-  incomeType?: IncomeType;
   frequency?: IncomeFrequency;
   recurringTemplateId?: string | null;
   destinationAccountId?: string | null;
   subcategoryId?: string | null;
-  expectedAmountCentavos?: number | null;
-  minAmountCentavos?: number | null;
-  maxAmountCentavos?: number | null;
+  expectedAmountCentavos?: number;
   paydayDayOfMonth?: number | null;
   paydaySecondDayOfMonth?: number | null;
   paydayDayOfWeek?: number | null;
-  paydaySecondDayOfWeek?: number | null;
   nextExpectedDate?: string | null;
-  estimatedIntervalDays?: number | null;
   isActive?: boolean;
   notes?: string | null;
 };
@@ -293,20 +265,15 @@ function mapIncomeSource(row: IncomeSourceRow): IncomeSource {
   return {
     id: row.id,
     name: row.name,
-    incomeType: row.income_type as IncomeType,
     frequency: row.frequency as IncomeFrequency,
     recurringTemplateId: row.recurring_template_id,
     destinationAccountId: row.destination_account_id,
     subcategoryId: row.subcategory_id,
     expectedAmountCentavos: row.expected_amount_centavos,
-    minAmountCentavos: row.min_amount_centavos,
-    maxAmountCentavos: row.max_amount_centavos,
     paydayDayOfMonth: row.payday_day_of_month,
     paydaySecondDayOfMonth: row.payday_second_day_of_month,
     paydayDayOfWeek: row.payday_day_of_week,
-    paydaySecondDayOfWeek: row.payday_second_day_of_week,
     nextExpectedDate: row.next_expected_date,
-    estimatedIntervalDays: row.estimated_interval_days,
     isActive: row.is_active === 1,
     notes: row.notes,
   };
@@ -316,24 +283,54 @@ function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function getIncomeRecurringFrequency(frequency: IncomeFrequency): import("./recurringTransactions").CreateRecurringInput["frequency"] {
-  return frequency === "irregular" ? "custom" : frequency;
+export type IncomeSchedule = {
+  frequency: IncomeFrequency;
+  paydayDayOfMonth: number | null;
+  paydaySecondDayOfMonth: number | null;
+  paydayDayOfWeek: number | null;
+};
+
+function isDayOfWeek(value: number | null): value is number {
+  return value !== null && Number.isInteger(value) && value >= 0 && value <= 6;
 }
 
-function resolveIncomeRecurringAmount(input: {
-  expectedAmountCentavos?: number | null;
-  minAmountCentavos?: number | null;
-  maxAmountCentavos?: number | null;
-}): number {
-  const amount = [
-    input.expectedAmountCentavos,
-    input.maxAmountCentavos,
-    input.minAmountCentavos,
-  ].find((value): value is number => value != null && value > 0);
-  if (amount === undefined) {
-    throw new LocalDbError("VALIDATION_ERROR", "income sources need an amount to create a linked recurring transaction");
+// Days past a month's end fall back to its last day. Twice-a-month paydays must still differ in
+// February, when every day past the 28th becomes the 28th.
+export function incomeScheduleError(schedule: IncomeSchedule): string | null {
+  const { frequency, paydayDayOfMonth: day1, paydaySecondDayOfMonth: day2 } = schedule;
+  if (frequency === "monthly" && (day1 === null || !isDayOfMonth(day1))) return "Enter a payday from 1 to 31.";
+  if (frequency === "semi_monthly") {
+    if (day1 === null || day2 === null || !isDayOfMonth(day1) || !isDayOfMonth(day2)) return "Enter Date 1 and Date 2, each from 1 to 31.";
+    if (day1 >= day2) return "Date 1 must come before Date 2.";
+    if (day1 >= Math.min(day2, 28)) return "Date 1 must be the 27th or earlier when Date 2 is after the 28th, so February still has two paydays.";
   }
-  return amount;
+  if (frequency === "weekly" && !isDayOfWeek(schedule.paydayDayOfWeek)) return "Select the payday of the week.";
+  return null;
+}
+
+// Keeps only the payday fields the frequency uses.
+function normalizeIncomeSchedule(schedule: IncomeSchedule): IncomeSchedule {
+  const usesDayOfMonth = schedule.frequency === "monthly" || schedule.frequency === "semi_monthly";
+  return {
+    frequency: schedule.frequency,
+    paydayDayOfMonth: usesDayOfMonth ? schedule.paydayDayOfMonth : null,
+    paydaySecondDayOfMonth: schedule.frequency === "semi_monthly" ? schedule.paydaySecondDayOfMonth : null,
+    paydayDayOfWeek: schedule.frequency === "weekly" ? schedule.paydayDayOfWeek : null,
+  };
+}
+
+function assertIncomeSchedule(schedule: IncomeSchedule): void {
+  if (!VALID_INCOME_FREQUENCIES.includes(schedule.frequency)) {
+    throw new LocalDbError("VALIDATION_ERROR", `frequency must be one of: ${VALID_INCOME_FREQUENCIES.join(", ")}`);
+  }
+  const error = incomeScheduleError(schedule);
+  if (error) throw new LocalDbError("VALIDATION_ERROR", error);
+}
+
+function assertIncomeAmount(amount: number | undefined): void {
+  if (amount === undefined || !Number.isSafeInteger(amount) || amount <= 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "Enter an expected income greater than zero.");
+  }
 }
 
 async function assertAccessibleIncomeDestinationAndCategory(
@@ -372,9 +369,7 @@ async function syncIncomeSourceRecurringTemplate(
     frequency: IncomeFrequency;
     destinationAccountId: string;
     subcategoryId: string;
-    expectedAmountCentavos: number | null;
-    minAmountCentavos: number | null;
-    maxAmountCentavos: number | null;
+    expectedAmountCentavos: number;
     paydayDayOfMonth: number | null;
     paydaySecondDayOfMonth: number | null;
     paydayDayOfWeek: number | null;
@@ -387,8 +382,8 @@ async function syncIncomeSourceRecurringTemplate(
   const recurringInput = {
     transaction_type: "income" as const,
     name: source.name,
-    amount_centavos: resolveIncomeRecurringAmount(source),
-    frequency: getIncomeRecurringFrequency(source.frequency),
+    amount_centavos: source.expectedAmountCentavos,
+    frequency: source.frequency,
     day_of_month: source.paydayDayOfMonth ?? undefined,
     second_day_of_month: source.paydaySecondDayOfMonth ?? undefined,
     day_of_week: source.paydayDayOfWeek ?? undefined,
@@ -560,16 +555,7 @@ const VALID_ACCOUNT_STATUSES: FinancialAccountStatus[] = [
   "archived",
 ];
 
-const VALID_INCOME_TYPES: IncomeType[] = ["stable", "variable"];
-
-const VALID_INCOME_FREQUENCIES: IncomeFrequency[] = [
-  "weekly",
-  "biweekly",
-  "semi_monthly",
-  "monthly",
-  "irregular",
-  "custom",
-];
+const VALID_INCOME_FREQUENCIES: IncomeFrequency[] = ["daily", "weekly", "semi_monthly", "monthly"];
 
 // ---------------------------------------------------------------------------
 // Financial Accounts
@@ -1019,42 +1005,17 @@ export async function createIncomeSource(
   deviceId: string,
   input: CreateIncomeSourceInput,
 ): Promise<{ source: IncomeSource; operation: SyncOperation }> {
-  if (!input.name || !input.incomeType || !input.frequency || !input.destinationAccountId || !input.subcategoryId) {
-    throw new LocalDbError("VALIDATION_ERROR", "name, incomeType, frequency, destinationAccountId, and subcategoryId are required");
+  if (!input.name || !input.frequency || !input.destinationAccountId || !input.subcategoryId) {
+    throw new LocalDbError("VALIDATION_ERROR", "name, frequency, destinationAccountId, and subcategoryId are required");
   }
-  if (!VALID_INCOME_TYPES.includes(input.incomeType)) {
-    throw new LocalDbError("VALIDATION_ERROR", `incomeType must be one of: ${VALID_INCOME_TYPES.join(", ")}`);
-  }
-  if (!VALID_INCOME_FREQUENCIES.includes(input.frequency)) {
-    throw new LocalDbError("VALIDATION_ERROR", `frequency must be one of: ${VALID_INCOME_FREQUENCIES.join(", ")}`);
-  }
-  if (input.expectedAmountCentavos !== undefined && input.expectedAmountCentavos !== null && input.expectedAmountCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "expectedAmountCentavos must be >= 0");
-  }
-  if (input.minAmountCentavos !== undefined && input.minAmountCentavos !== null && input.minAmountCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be >= 0");
-  }
-  if (input.maxAmountCentavos !== undefined && input.maxAmountCentavos !== null && input.maxAmountCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "maxAmountCentavos must be >= 0");
-  }
-  const minVal = input.minAmountCentavos;
-  const maxVal = input.maxAmountCentavos;
-  if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
-    throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be <= maxAmountCentavos");
-  }
-  resolveIncomeRecurringAmount(input);
-  if (input.paydayDayOfMonth !== undefined && input.paydayDayOfMonth !== null && (input.paydayDayOfMonth < 1 || input.paydayDayOfMonth > 31)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfMonth must be between 1 and 31");
-  }
-  if (input.paydaySecondDayOfMonth !== undefined && input.paydaySecondDayOfMonth !== null && (input.paydaySecondDayOfMonth < 1 || input.paydaySecondDayOfMonth > 31)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydaySecondDayOfMonth must be between 1 and 31");
-  }
-  if (input.paydayDayOfWeek !== undefined && input.paydayDayOfWeek !== null && (input.paydayDayOfWeek < 0 || input.paydayDayOfWeek > 6)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfWeek must be between 0 and 6");
-  }
-  if (input.paydaySecondDayOfWeek !== undefined && input.paydaySecondDayOfWeek !== null && (input.paydaySecondDayOfWeek < 0 || input.paydaySecondDayOfWeek > 6)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydaySecondDayOfWeek must be between 0 and 6");
-  }
+  assertIncomeAmount(input.expectedAmountCentavos);
+  const schedule = normalizeIncomeSchedule({
+    frequency: input.frequency,
+    paydayDayOfMonth: input.paydayDayOfMonth ?? null,
+    paydaySecondDayOfMonth: input.paydaySecondDayOfMonth ?? null,
+    paydayDayOfWeek: input.paydayDayOfWeek ?? null,
+  });
+  assertIncomeSchedule(schedule);
 
   const db = await getDb();
   const id = randomUUID();
@@ -1062,19 +1023,14 @@ export async function createIncomeSource(
   await assertAccessibleIncomeDestinationAndCategory(db, userId, input.destinationAccountId, input.subcategoryId);
   const payload: Record<string, unknown> = {
     name: input.name,
-    income_type: input.incomeType,
     frequency: input.frequency,
     destination_account_id: input.destinationAccountId,
     subcategory_id: input.subcategoryId,
-    expected_amount_centavos: input.expectedAmountCentavos ?? null,
-    min_amount_centavos: input.minAmountCentavos ?? null,
-    max_amount_centavos: input.maxAmountCentavos ?? null,
-    payday_day_of_month: input.paydayDayOfMonth ?? null,
-    payday_second_day_of_month: input.paydaySecondDayOfMonth ?? null,
-    payday_day_of_week: input.paydayDayOfWeek ?? null,
-    payday_second_day_of_week: input.paydaySecondDayOfWeek ?? null,
+    expected_amount_centavos: input.expectedAmountCentavos,
+    payday_day_of_month: schedule.paydayDayOfMonth,
+    payday_second_day_of_month: schedule.paydaySecondDayOfMonth,
+    payday_day_of_week: schedule.paydayDayOfWeek,
     next_expected_date: input.nextExpectedDate ?? null,
-    estimated_interval_days: input.estimatedIntervalDays ?? null,
     is_active: input.isActive ?? true,
     notes: input.notes ?? null,
   };
@@ -1086,15 +1042,10 @@ export async function createIncomeSource(
       id,
       recurringTemplateId: null,
       name: input.name,
-      frequency: input.frequency,
+      ...schedule,
       destinationAccountId: input.destinationAccountId,
       subcategoryId: input.subcategoryId,
-      expectedAmountCentavos: input.expectedAmountCentavos ?? null,
-      minAmountCentavos: input.minAmountCentavos ?? null,
-      maxAmountCentavos: input.maxAmountCentavos ?? null,
-      paydayDayOfMonth: input.paydayDayOfMonth ?? null,
-      paydaySecondDayOfMonth: input.paydaySecondDayOfMonth ?? null,
-      paydayDayOfWeek: input.paydayDayOfWeek ?? null,
+      expectedAmountCentavos: input.expectedAmountCentavos,
       nextExpectedDate: input.nextExpectedDate ?? null,
       notes: input.notes ?? null,
     });
@@ -1102,27 +1053,22 @@ export async function createIncomeSource(
     payload.recurring_template_id = recurringTemplateId;
     await db.runAsync(
       `INSERT INTO income_sources
-        (id, user_id, recurring_template_id, destination_account_id, subcategory_id, name, income_type, frequency, expected_amount_centavos, min_amount_centavos,
-          max_amount_centavos, payday_day_of_month, payday_second_day_of_month, payday_day_of_week,
-          next_expected_date, estimated_interval_days, payday_second_day_of_week, is_active, notes, metadata, version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+        (id, user_id, recurring_template_id, destination_account_id, subcategory_id, name, frequency, expected_amount_centavos,
+          payday_day_of_month, payday_second_day_of_month, payday_day_of_week,
+          next_expected_date, is_active, notes, metadata, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
       id,
       userId,
       recurringTemplateId,
       input.destinationAccountId,
       input.subcategoryId,
       input.name,
-      input.incomeType,
       input.frequency,
-      input.expectedAmountCentavos ?? null,
-      input.minAmountCentavos ?? null,
-      input.maxAmountCentavos ?? null,
-      input.paydayDayOfMonth ?? null,
-      input.paydaySecondDayOfMonth ?? null,
-      input.paydayDayOfWeek ?? null,
+      input.expectedAmountCentavos,
+      schedule.paydayDayOfMonth,
+      schedule.paydaySecondDayOfMonth,
+      schedule.paydayDayOfWeek,
       input.nextExpectedDate ?? null,
-      input.estimatedIntervalDays ?? null,
-      input.paydaySecondDayOfWeek ?? null,
       boolToInt(input.isActive ?? true),
       input.notes ?? null,
       ts,
@@ -1158,33 +1104,7 @@ export async function updateIncomeSource(
   id: string,
   input: UpdateIncomeSourceInput,
 ): Promise<{ source: IncomeSource; operation: SyncOperation }> {
-  if (input.incomeType && !VALID_INCOME_TYPES.includes(input.incomeType)) {
-    throw new LocalDbError("VALIDATION_ERROR", `incomeType must be one of: ${VALID_INCOME_TYPES.join(", ")}`);
-  }
-  if (input.frequency && !VALID_INCOME_FREQUENCIES.includes(input.frequency)) {
-    throw new LocalDbError("VALIDATION_ERROR", `frequency must be one of: ${VALID_INCOME_FREQUENCIES.join(", ")}`);
-  }
-  if (input.expectedAmountCentavos !== undefined && input.expectedAmountCentavos !== null && input.expectedAmountCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "expectedAmountCentavos must be >= 0");
-  }
-  if (input.minAmountCentavos !== undefined && input.minAmountCentavos !== null && input.minAmountCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be >= 0");
-  }
-  if (input.maxAmountCentavos !== undefined && input.maxAmountCentavos !== null && input.maxAmountCentavos < 0) {
-    throw new LocalDbError("VALIDATION_ERROR", "maxAmountCentavos must be >= 0");
-  }
-  if (input.paydayDayOfMonth !== undefined && input.paydayDayOfMonth !== null && (input.paydayDayOfMonth < 1 || input.paydayDayOfMonth > 31)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfMonth must be between 1 and 31");
-  }
-  if (input.paydaySecondDayOfMonth !== undefined && input.paydaySecondDayOfMonth !== null && (input.paydaySecondDayOfMonth < 1 || input.paydaySecondDayOfMonth > 31)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydaySecondDayOfMonth must be between 1 and 31");
-  }
-  if (input.paydayDayOfWeek !== undefined && input.paydayDayOfWeek !== null && (input.paydayDayOfWeek < 0 || input.paydayDayOfWeek > 6)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydayDayOfWeek must be between 0 and 6");
-  }
-  if (input.paydaySecondDayOfWeek !== undefined && input.paydaySecondDayOfWeek !== null && (input.paydaySecondDayOfWeek < 0 || input.paydaySecondDayOfWeek > 6)) {
-    throw new LocalDbError("VALIDATION_ERROR", "paydaySecondDayOfWeek must be between 0 and 6");
-  }
+  if (input.expectedAmountCentavos !== undefined) assertIncomeAmount(input.expectedAmountCentavos);
 
   const db = await getDb();
   const ts = now();
@@ -1192,20 +1112,15 @@ export async function updateIncomeSource(
   const payload: Record<string, unknown> = {};
 
   if (input.name !== undefined) { changedFields.push("name"); payload.name = input.name; }
-  if (input.incomeType !== undefined) { changedFields.push("income_type"); payload.income_type = input.incomeType; }
   if (input.frequency !== undefined) { changedFields.push("frequency"); payload.frequency = input.frequency; }
   if (input.recurringTemplateId !== undefined) { changedFields.push("recurring_template_id"); payload.recurring_template_id = input.recurringTemplateId; }
   if (input.destinationAccountId !== undefined) { changedFields.push("destination_account_id"); payload.destination_account_id = input.destinationAccountId; }
   if (input.subcategoryId !== undefined) { changedFields.push("subcategory_id"); payload.subcategory_id = input.subcategoryId; }
   if (input.expectedAmountCentavos !== undefined) { changedFields.push("expected_amount_centavos"); payload.expected_amount_centavos = input.expectedAmountCentavos; }
-  if (input.minAmountCentavos !== undefined) { changedFields.push("min_amount_centavos"); payload.min_amount_centavos = input.minAmountCentavos; }
-  if (input.maxAmountCentavos !== undefined) { changedFields.push("max_amount_centavos"); payload.max_amount_centavos = input.maxAmountCentavos; }
-  if (input.paydayDayOfMonth !== undefined) { changedFields.push("payday_day_of_month"); payload.payday_day_of_month = input.paydayDayOfMonth; }
-  if (input.paydaySecondDayOfMonth !== undefined) { changedFields.push("payday_second_day_of_month"); payload.payday_second_day_of_month = input.paydaySecondDayOfMonth; }
-  if (input.paydayDayOfWeek !== undefined) { changedFields.push("payday_day_of_week"); payload.payday_day_of_week = input.paydayDayOfWeek; }
-  if (input.paydaySecondDayOfWeek !== undefined) { changedFields.push("payday_second_day_of_week"); payload.payday_second_day_of_week = input.paydaySecondDayOfWeek; }
+  // The payday fields are written together once the existing schedule is known.
+  const scheduleChanged = input.frequency !== undefined || input.paydayDayOfMonth !== undefined || input.paydaySecondDayOfMonth !== undefined || input.paydayDayOfWeek !== undefined;
+  if (scheduleChanged) changedFields.push("payday_day_of_month", "payday_second_day_of_month", "payday_day_of_week");
   if (input.nextExpectedDate !== undefined) { changedFields.push("next_expected_date"); payload.next_expected_date = input.nextExpectedDate; }
-  if (input.estimatedIntervalDays !== undefined) { changedFields.push("estimated_interval_days"); payload.estimated_interval_days = input.estimatedIntervalDays; }
   if (input.isActive !== undefined) { changedFields.push("is_active"); payload.is_active = input.isActive; }
   if (input.notes !== undefined) { changedFields.push("notes"); payload.notes = input.notes; }
 
@@ -1226,13 +1141,20 @@ export async function updateIncomeSource(
     );
     if (!existing) throw new LocalDbError("NOT_FOUND", "income source not found");
 
-    const effectiveMin = input.minAmountCentavos !== undefined ? input.minAmountCentavos : existing.min_amount_centavos;
-    const effectiveMax = input.maxAmountCentavos !== undefined ? input.maxAmountCentavos : existing.max_amount_centavos;
+    const schedule = normalizeIncomeSchedule({
+      frequency: (input.frequency ?? existing.frequency) as IncomeFrequency,
+      paydayDayOfMonth: input.paydayDayOfMonth !== undefined ? input.paydayDayOfMonth : existing.payday_day_of_month,
+      paydaySecondDayOfMonth: input.paydaySecondDayOfMonth !== undefined ? input.paydaySecondDayOfMonth : existing.payday_second_day_of_month,
+      paydayDayOfWeek: input.paydayDayOfWeek !== undefined ? input.paydayDayOfWeek : existing.payday_day_of_week,
+    });
+    assertIncomeSchedule(schedule);
+    if (scheduleChanged) {
+      payload.payday_day_of_month = schedule.paydayDayOfMonth;
+      payload.payday_second_day_of_month = schedule.paydaySecondDayOfMonth;
+      payload.payday_day_of_week = schedule.paydayDayOfWeek;
+    }
     const effectiveDestinationAccountId = input.destinationAccountId !== undefined ? input.destinationAccountId : existing.destination_account_id;
     const effectiveSubcategoryId = input.subcategoryId !== undefined ? input.subcategoryId : existing.subcategory_id;
-    if (effectiveMin !== null && effectiveMax !== null && effectiveMin! > effectiveMax!) {
-      throw new LocalDbError("VALIDATION_ERROR", "minAmountCentavos must be <= maxAmountCentavos");
-    }
     if (!effectiveDestinationAccountId || !effectiveSubcategoryId) {
       throw new LocalDbError("VALIDATION_ERROR", "destinationAccountId and subcategoryId are required");
     }
@@ -1242,15 +1164,10 @@ export async function updateIncomeSource(
       id,
       recurringTemplateId: existing.recurring_template_id,
       name: input.name ?? existing.name,
-      frequency: (input.frequency ?? existing.frequency) as IncomeFrequency,
+      ...schedule,
       destinationAccountId: effectiveDestinationAccountId,
       subcategoryId: effectiveSubcategoryId,
-      expectedAmountCentavos: input.expectedAmountCentavos !== undefined ? input.expectedAmountCentavos : existing.expected_amount_centavos,
-      minAmountCentavos: input.minAmountCentavos !== undefined ? input.minAmountCentavos : existing.min_amount_centavos,
-      maxAmountCentavos: input.maxAmountCentavos !== undefined ? input.maxAmountCentavos : existing.max_amount_centavos,
-      paydayDayOfMonth: input.paydayDayOfMonth !== undefined ? input.paydayDayOfMonth : existing.payday_day_of_month,
-      paydaySecondDayOfMonth: input.paydaySecondDayOfMonth !== undefined ? input.paydaySecondDayOfMonth : existing.payday_second_day_of_month,
-      paydayDayOfWeek: input.paydayDayOfWeek !== undefined ? input.paydayDayOfWeek : existing.payday_day_of_week,
+      expectedAmountCentavos: input.expectedAmountCentavos ?? existing.expected_amount_centavos,
       nextExpectedDate: input.nextExpectedDate !== undefined ? input.nextExpectedDate : existing.next_expected_date,
       notes: input.notes !== undefined ? input.notes : existing.notes,
     });
@@ -1263,19 +1180,15 @@ export async function updateIncomeSource(
     const params: SQLite.SQLiteBindValue[] = [];
 
     if (input.name !== undefined) { setClauses.push("name = ?"); params.push(input.name); }
-    if (input.incomeType !== undefined) { setClauses.push("income_type = ?"); params.push(input.incomeType); }
     if (input.frequency !== undefined) { setClauses.push("frequency = ?"); params.push(input.frequency); }
     if (input.destinationAccountId !== undefined) { setClauses.push("destination_account_id = ?"); params.push(input.destinationAccountId); }
     if (input.subcategoryId !== undefined) { setClauses.push("subcategory_id = ?"); params.push(input.subcategoryId); }
     if (input.expectedAmountCentavos !== undefined) { setClauses.push("expected_amount_centavos = ?"); params.push(input.expectedAmountCentavos); }
-    if (input.minAmountCentavos !== undefined) { setClauses.push("min_amount_centavos = ?"); params.push(input.minAmountCentavos); }
-    if (input.maxAmountCentavos !== undefined) { setClauses.push("max_amount_centavos = ?"); params.push(input.maxAmountCentavos); }
-    if (input.paydayDayOfMonth !== undefined) { setClauses.push("payday_day_of_month = ?"); params.push(input.paydayDayOfMonth); }
-    if (input.paydaySecondDayOfMonth !== undefined) { setClauses.push("payday_second_day_of_month = ?"); params.push(input.paydaySecondDayOfMonth); }
-    if (input.paydayDayOfWeek !== undefined) { setClauses.push("payday_day_of_week = ?"); params.push(input.paydayDayOfWeek); }
-    if (input.paydaySecondDayOfWeek !== undefined) { setClauses.push("payday_second_day_of_week = ?"); params.push(input.paydaySecondDayOfWeek); }
+    if (scheduleChanged) {
+      setClauses.push("payday_day_of_month = ?", "payday_second_day_of_month = ?", "payday_day_of_week = ?");
+      params.push(schedule.paydayDayOfMonth, schedule.paydaySecondDayOfMonth, schedule.paydayDayOfWeek);
+    }
     if (input.nextExpectedDate !== undefined) { setClauses.push("next_expected_date = ?"); params.push(input.nextExpectedDate); }
-    if (input.estimatedIntervalDays !== undefined) { setClauses.push("estimated_interval_days = ?"); params.push(input.estimatedIntervalDays); }
     if (input.isActive !== undefined) { setClauses.push("is_active = ?"); params.push(boolToInt(input.isActive)); }
     if (input.notes !== undefined) { setClauses.push("notes = ?"); params.push(input.notes); }
     setClauses.push("recurring_template_id = ?"); params.push(recurringTemplateId);

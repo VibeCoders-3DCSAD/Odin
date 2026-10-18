@@ -23,6 +23,7 @@ import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen"
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
+import IncomeSourceFormScreen from "../features/income-sources/IncomeSourceFormScreen";
 import BillersScreen from "../features/billers/BillersScreen";
 import BillerFormScreen from "../features/billers/BillerFormScreen";
 import BillerDetailScreen from "../features/billers/BillerDetailScreen";
@@ -89,6 +90,7 @@ type Page =
   | "categories"
   | "financial-accounts"
   | "income-sources"
+  | "income-source-form"
   | "scheduled-payments"
   | "scheduled-payment-form"
   | "scheduled-payment-detail"
@@ -200,7 +202,7 @@ const parentPage: Partial<Record<Page, Page>> = {
 };
 
 // These screens draw their own header, so the shell adds no chrome around them.
-const fullScreenPages: Page[] = ["add-transaction", "scheduled-payment-form", "scheduled-payment-record"];
+const fullScreenPages: Page[] = ["add-transaction", "income-source-form", "scheduled-payment-form", "scheduled-payment-record"];
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
@@ -218,6 +220,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   categories: { title: "Categories", subtitle: "Manage your categories" },
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
+  "income-source-form": { title: "Income Source", subtitle: "Add or edit an income source" },
   "scheduled-payments": { title: "Billers and Remittances", subtitle: "Scheduled bills and transfers" },
   "scheduled-payment-form": { title: "Biller or Remittance", subtitle: "Add or edit a biller or remittance" },
   "scheduled-payment-detail": { title: "Biller or Remittance", subtitle: "Schedule and payments" },
@@ -241,6 +244,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [selectedPastPlanId, setSelectedPastPlanId] = useState<string | null>(null);
   const [editingScheduledPaymentId, setEditingScheduledPaymentId] = useState<string | null>(null);
+  const [editingIncomeSourceId, setEditingIncomeSourceId] = useState<string | null>(null);
   const [selectedScheduledPaymentId, setSelectedScheduledPaymentId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
@@ -851,7 +855,21 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "income-sources") {
-      return <IncomeSourcesScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
+      return (
+        <IncomeSourcesScreen
+          userId={userId}
+          deviceId={deviceId}
+          onBack={() => setCurrentPage("dashboard")}
+          onAdd={() => { setEditingIncomeSourceId(null); setCurrentPage("income-source-form"); }}
+          onEdit={(id) => { setEditingIncomeSourceId(id); setCurrentPage("income-source-form"); }}
+          onSyncRequested={handleSync}
+        />
+      );
+    }
+
+    if (currentPage === "income-source-form") {
+      const close = () => { setEditingIncomeSourceId(null); setCurrentPage("income-sources"); };
+      return <IncomeSourceFormScreen userId={userId} deviceId={deviceId} incomeSourceId={editingIncomeSourceId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
     }
 
     if (currentPage === "scheduled-payments") {
