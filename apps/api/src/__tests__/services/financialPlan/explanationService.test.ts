@@ -244,3 +244,16 @@ describe("Financial Plan explanation service", () => {
     expect(isUserFacingFinancialPlanExplanation("Food is forecast above baseline.")).toBe(true);
   });
 });
+
+it("applies calendar-period preferences only to months in the selected period", () => {
+  const answers = { high_expense_seasons: ["q4"], low_expense_seasons: ["q2"], saving_seasons: ["q1"] };
+  expect(seasonalPreferencesFromAnswers(answers, "2026-11-01")).toEqual([
+    { evidenceId: "high_expense_seasons:q4", season: "October–December", seasonWindow: "October to December", preference: "higher_expense" },
+  ]);
+  expect(seasonalPreferencesFromAnswers(answers, "2026-04-01")).toEqual([
+    { evidenceId: "low_expense_seasons:q2", season: "April–June", seasonWindow: "April to June", preference: "lower_expense" },
+  ]);
+  expect(seasonalPreferencesFromAnswers(answers, "2026-01-01")).toEqual([
+    { evidenceId: "saving_seasons:q1", season: "January–March", seasonWindow: "January to March", preference: "saving" },
+  ]);
+});

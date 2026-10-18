@@ -8,10 +8,16 @@ type RuleAssessment = {
   value?: number | null;
 };
 
-type Classification = {
+type CreditCardAssessment = RuleAssessment & {
+  account_id?: string;
+  source?: "observed_history" | "self_reported";
+};
+
+export type Classification = {
   emergency_savings?: RuleAssessment;
   debt_burden?: RuleAssessment;
   financial_margin?: RuleAssessment;
+  credit_card_behavior?: CreditCardAssessment[];
 };
 
 type LatestAssessment = { output_snapshot?: Classification };
@@ -47,6 +53,26 @@ function describe(label: string, assessment?: RuleAssessment): { title: string; 
   return { title: assessment.label === "NEGATIVE_FINANCIAL_MARGIN" ? "Spending is too tight" : "You have breathing room", detail: amount, color: assessment.label === "NEGATIVE_FINANCIAL_MARGIN" ? P.red : P.aqua700 };
 }
 
+function describeCard(assessment: CreditCardAssessment): { title: string; detail: string; color: string } {
+  if (assessment.status !== "SUCCESS") {
+    return { title: "Still learning", detail: "Record twelve months of credit card statements to check how you use this card.", color: P.muted };
+  }
+  const months = typeof assessment.value === "number" ? assessment.value : null;
+  const basis = assessment.source === "self_reported" ? " Based on what you shared during setup." : "";
+  if (assessment.label === "TRANSACTOR") {
+    return { title: "Paid in full", detail: `You paid off the full balance every month in the last year.${basis}`, color: P.aqua700 };
+  }
+  if (assessment.label === "HEAVY_REVOLVER") {
+    return { title: "Balance carried monthly", detail: `You carried a balance every month in the last year, so interest is likely adding up.${basis}`, color: P.red };
+  }
+  if (assessment.label === "REVOLVER") {
+    const carried = months === null ? "You have carried a balance on this card." : `You carried a balance in ${months} of the months recorded so far.`;
+    return { title: "Carries a balance", detail: `${carried} We need twelve months of statements to see how often.`, color: P.sun };
+  }
+  const detail = months === null ? "You carried a balance in some months of the last year." : `You carried a balance in ${months} of the last 12 months.`;
+  return { title: "Sometimes carries a balance", detail: `${detail}${basis}`, color: P.sun };
+}
+
 async function request<T>(accessToken: string, path: string, method: "GET" | "POST"): Promise<T | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -65,50 +91,54 @@ async function request<T>(accessToken: string, path: string, method: "GET" | "PO
   }
 }
 
-export function FinancialHealthCard({ accessToken }: { accessToken: string }) {
-  const [classification, setClassification] = useState<Classification | null>(null);
-  const [loading, setLoading] = useState(true);
+export function FinancialHealthCard({ accessToken, initialClassification }: { accessToken: string; initialClassification?: Classification }) {
+  const [classification, setClassification] = useState<Classification | null>(initialClassification ?? null);
+  const [loading, setLoading] = useState(!initialClassification);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initialClassification) return;
     request<{ payload?: { assessment?: LatestAssessment | null } }>(accessToken, "/odin/api/financial-classification/v2/latest", "GET")
       .then((body) => setClassification(body?.payload?.assessment?.output_snapshot ?? null))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [accessToken]);
+  }, [accessToken, initialClassification]);
 
   async function refresh() {
     setRefreshing(true);
     setError(null);
     const body = await request<{ payload?: { assessment?: LatestAssessment } }>(accessToken, "/odin/api/financial-classification/v2/assess", "POST");
     if (!body?.payload?.assessment?.output_snapshot) {
-      setError("Could not refresh your financial health right now.");
+      setError("Could not refresh your check-in right now.");
     } else {
       setClassification(body.payload.assessment.output_snapshot);
     }
     setRefreshing(false);
   }
 
+  const cards = classification?.credit_card_behavior ?? [];
   const rows = [
-    ["Emergency fund", classification?.emergency_savings],
-    ["Debt burden", classification?.debt_burden],
-    ["Financial margin", classification?.financial_margin],
-  ] as const;
+    ...([
+      ["Emergency fund", classification?.emergency_savings],
+      ["Debt burden", classification?.debt_burden],
+      ["Financial margin", classification?.financial_margin],
+    ] as const).map(([label, assessment]) => ({ label, ...describe(label, assessment) })),
+    ...(cards.length === 0
+      ? [{ label: "Credit card", ...describeCard({ status: "INSUFFICIENT_HISTORY" }) }]
+      : cards.map((assessment, index) => ({ label: cards.length > 1 ? `Credit card ${index + 1}` : "Credit card", ...describeCard(assessment) }))),
+  ];
 
   return (
     <View style={{ marginTop: 24, padding: 20, borderRadius: 32, backgroundColor: P.aqua50 }}>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-        <View style={{ flex: 1, flexShrink: 1 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: P.ink }}>Financial health</Text>
-          <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 12, color: P.ink2, marginTop: 2 }}>A quick check-in using your income sources and recorded expenses</Text>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial health" onPress={refresh} disabled={refreshing} style={{ marginLeft: 12 }}>
+        <Text style={{ flex: 1, flexShrink: 1, fontFamily: "Manrope", fontSize: 12, color: P.ink2 }}>{initialClassification ? "Your financial classification, based on your questionnaire answers" : "A quick check-in using your income sources and recorded expenses"}</Text>
+        {!initialClassification && <Pressable accessibilityRole="button" accessibilityLabel="Refresh check-in" onPress={refresh} disabled={refreshing} style={{ marginLeft: 12 }}>
           {refreshing ? <ActivityIndicator color={P.aqua700} /> : <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.aqua700 }}>Update</Text>}
-        </Pressable>
+        </Pressable>}
       </View>
-      {loading ? <ActivityIndicator color={P.aqua700} /> : rows.map(([label, assessment], index) => {
-        const item = describe(label, assessment);
+      {loading ? <ActivityIndicator color={P.aqua700} /> : rows.map((item, index) => {
+        const { label } = item;
         return (
           <View key={label} style={{ borderTopWidth: index === 0 ? 0 : 1, borderTopColor: P.line, paddingTop: index === 0 ? 0 : 12, marginTop: index === 0 ? 0 : 12 }}>
             <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>

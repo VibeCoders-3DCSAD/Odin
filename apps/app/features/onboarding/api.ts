@@ -1,4 +1,5 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
+import type { Classification } from "../dashboard/components/FinancialHealthCard";
 import type { OnboardingSession, ProfileAssignment } from "./types";
 
 function apiFetch<T>(
@@ -61,6 +62,7 @@ export function submitSession(accessToken: string, sessionId: string) {
     payload?: {
       session: { id: string; status: string };
       classification_available: boolean;
+      assessment?: { output_snapshot?: Classification } | null;
     };
     error?: string;
     message?: string;

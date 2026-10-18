@@ -20,14 +20,13 @@ import { useConnectivityStore } from "../../services/connectivity";
 import { useToast } from "../../components/Toast";
 import {
   createSession,
-  getEligibilityProfile,
   getCurrentSession,
   submitSession,
   updateSession,
-  updateEligibilityProfile,
 } from "./api";
+import { FinancialHealthCard, type Classification } from "../dashboard/components/FinancialHealthCard";
 import { STEPS, type StepConfig } from "./types";
-import { availableOnboardingStep, withOnboardingAnswer } from "./helpers/seasonalAnswers";
+import { availableOnboardingStep, currentSeasonalAnswers, withOnboardingAnswer } from "./helpers/seasonalAnswers";
 
 const AQUA50 = "#EFFEF7";
 const AQUA600 = "#08B16A";
@@ -48,6 +47,7 @@ type OnboardingFlowProps = {
 
 type SubmitResult = {
   classification_available: boolean;
+  assessment?: { output_snapshot?: Classification } | null;
 };
 
 function isStepComplete(step: StepConfig, answers: Record<string, unknown>) {
@@ -135,7 +135,7 @@ export default function OnboardingFlow({
           } else {
             setSessionId(sess.id);
             if (sess.raw_answers) {
-              const raw = sess.raw_answers as Record<string, unknown>;
+              const raw = currentSeasonalAnswers(sess.raw_answers);
               setAnswers(raw);
               if (typeof raw.monthly_income === "string") setIncomeText(raw.monthly_income);
             }
@@ -218,31 +218,6 @@ export default function OnboardingFlow({
     [],
   );
 
-  const handleProtectedCategoriesToggle = useCallback(
-    (val: string) => {
-      setAnswers((prev) => {
-        const prior = (prev.protected_categories as string[]) ?? [];
-        const noneKey = "none";
-        let next: string[];
-        if (val === noneKey) {
-          next = [noneKey];
-        } else {
-          const withoutNone = prior.filter((k) => k !== noneKey);
-          next = withoutNone.includes(val)
-            ? withoutNone.filter((k) => k !== val)
-            : [...withoutNone, val];
-        }
-        const hasDeps = next.includes("dependents_children") || next.includes("dependents_elderly");
-        return { ...prev, protected_categories: next, has_dependents: hasDeps };
-      });
-      setFieldErrors((errors) => {
-        const { protected_categories: _, ...remaining } = errors;
-        return remaining;
-      });
-    },
-    [],
-  );
-
   // ── Submit ──
   const handleSubmit = useCallback(async () => {
     const sid = sessionRef.current;
@@ -268,15 +243,7 @@ export default function OnboardingFlow({
       }
       const { response, body } = await submitSession(accessToken, sid);
       if (response.ok && body.payload) {
-        const eligibility = await updateEligibilityProfile(accessToken, {
-          date_of_birth: answersRef.current.date_of_birth,
-          is_filipino: answersRef.current.is_filipino === "true",
-          metro_manila_presence: answersRef.current.metro_manila_presence,
-          metro_manila_locality_code: answersRef.current.metro_manila_locality_code,
-          primary_employment_classification: answersRef.current.primary_employment_classification,
-        });
-        if (!eligibility.response.ok) setSubmitError(eligibility.body.message ?? "Your research eligibility could not be saved.");
-        setSubmitResult({ classification_available: body.payload.classification_available });
+        setSubmitResult(body.payload);
       } else {
         setSubmitError(body.message ?? "Submission failed.");
       }
@@ -455,23 +422,19 @@ export default function OnboardingFlow({
           <CardMultiSelectStep
             step={availableOnboardingStep(step, answers)}
             selected={(answers[step.questionKey] as string[]) ?? []}
-            onToggle={
-              step.key === "dependents_protected"
-                ? handleProtectedCategoriesToggle
-                : (val) => {
-                    const prev = (answers[step.questionKey] as string[]) ?? [];
-                    const noneKey = step.options?.find((o) => o.key === "none")?.key;
-                    if (val === noneKey) {
-                      saveAnswer(step.questionKey, [noneKey]);
-                      return;
-                    }
-                    const withoutNone = prev.filter((k) => k !== noneKey);
-                    const next = withoutNone.includes(val)
-                      ? withoutNone.filter((k) => k !== val)
-                      : [...withoutNone, val];
-                    saveAnswer(step.questionKey, next);
-                  }
-            }
+            onToggle={(val) => {
+              const prev = (answers[step.questionKey] as string[]) ?? [];
+              const noneKey = step.options?.find((o) => o.key === "none")?.key;
+              if (val === noneKey) {
+                saveAnswer(step.questionKey, [noneKey]);
+                return;
+              }
+              const withoutNone = prev.filter((k) => k !== noneKey);
+              const next = withoutNone.includes(val)
+                ? withoutNone.filter((k) => k !== val)
+                : [...withoutNone, val];
+              saveAnswer(step.questionKey, next);
+            }}
           />
         )}
 
@@ -1060,11 +1023,6 @@ function ReviewStep({
 
   const dob = answers.date_of_birth;
   if (dob && dob !== "") rows.push({ label: "Date of Birth", value: dob as string, stepIndex: STEPS.findIndex((step) => step.questionKey === "date_of_birth") });
-  addOptionRow("Filipino Citizen", "is_filipino");
-  addOptionRow("Metro Manila", "metro_manila_presence");
-  addOptionRow("Locality", "metro_manila_locality_code");
-  addOptionRow("Employment", "primary_employment_classification");
-  addOptionRow("Employment Status", "employment_status");
 
   if (incomeText)
     rows.push({
@@ -1084,17 +1042,9 @@ function ReviewStep({
   const revolvingMonthsStep = stepFor("credit_card_revolving_months");
   if (revolvingMonthsStep && isStepVisible(revolvingMonthsStep, answers)) addOptionRow("Months With a Card Balance", "credit_card_revolving_months");
 
-  const protectedCats = (answers.protected_categories as string[] | undefined) ?? [];
-  const catLabels = protectedCats
-    .map((k) => stepFor("protected_categories")?.options?.find((o) => o.key === k)?.label)
-    .filter(Boolean)
-    .join(", ");
-  const protectedStep = stepFor("protected_categories");
-  if (catLabels && protectedStep) rows.push({ label: "Categories", value: catLabels, stepIndex: STEPS.indexOf(protectedStep) });
-  addAmountMapRows("protected_category_costs");
   addMultiOptionRow("Higher-Expense Seasons", "high_expense_seasons");
   addMultiOptionRow("Lower-Expense Seasons", "low_expense_seasons");
-  addMultiOptionRow("Saving Seasons", "saving_seasons");
+  addMultiOptionRow("Savings Seasons", "saving_seasons");
 
   return (
     <View>
@@ -1168,16 +1118,6 @@ function ResultScreen({
   error: string | null;
   onContinue: () => void;
 }) {
-  const [eligible, setEligible] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    getEligibilityProfile(accessToken)
-      .then((eligibility) => {
-        if (eligibility.response.ok) setEligible(eligibility.body.payload?.profile?.eligibility_confirmed_at != null);
-      })
-      .catch(() => {});
-  }, [accessToken]);
-
   return (
     <ScrollView
       className="flex-1 bg-card"
@@ -1225,27 +1165,15 @@ function ResultScreen({
           Your onboarding information has been saved.
         </Text>
 
-        <View
-          style={{
-            width: "100%",
-            borderRadius: 16,
-            padding: 16,
-            backgroundColor: eligible ? AQUA50 : CARD,
-            borderWidth: 1,
-            borderColor: eligible ? AQUA600 : LINE,
-            marginBottom: 20,
-          }}
-        >
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: INK, marginBottom: 4 }}>
-            Research eligibility
-          </Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 13, color: INK2, lineHeight: 19 }}>
-            {eligible === null ? "Checking your saved eligibility profile..." : eligible
-              ? "You are eligible for Odin research: ages 20–40 and living or working in Metro Manila. This does not affect access to the app."
-              : "You are not currently eligible for Odin research. This does not affect access to the app."}
-          </Text>
+        <View style={{ width: "100%", marginBottom: 20 }}>
+          {result.assessment?.output_snapshot ? (
+            <FinancialHealthCard accessToken={accessToken} initialClassification={result.assessment.output_snapshot} />
+          ) : (
+            <Text style={{ fontFamily: "Manrope", fontSize: 14, color: MUTED }}>
+              Your classification is unavailable right now. You can try again from the dashboard check-in.
+            </Text>
+          )}
         </View>
-
 
         {error ? (
           <View

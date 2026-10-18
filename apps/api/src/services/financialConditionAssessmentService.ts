@@ -75,7 +75,19 @@ export async function createFinancialConditionAssessment(userId: string, supabas
   const { data: input, error } = await supabase.rpc("get_financial_classification_v2_input", { p_user_id: userId });
   if (error || !input || typeof input !== "object" || Array.isArray(input)) return null;
 
-  return saveAssessment(userId, input as Record<string, unknown>, supabase);
+  // The ML service uses the onboarding self-report only when no card history exists,
+  // so refreshes keep a credit-card result for users without recorded statements.
+  const { data: onboarding } = await supabase
+    .from("onboarding_sessions")
+    .select("raw_answers")
+    .eq("user_id", userId)
+    .eq("status", "submitted")
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const answers = onboarding?.raw_answers && typeof onboarding.raw_answers === "object" ? onboarding.raw_answers as OnboardingAnswers : {};
+
+  return saveAssessment(userId, { ...input, self_reported_revolving_months: selfReportedRevolvingMonths(answers) }, supabase);
 }
 
 export function createOnboardingFinancialConditionAssessment(userId: string, answers: OnboardingAnswers, supabase: SupabaseClient) {

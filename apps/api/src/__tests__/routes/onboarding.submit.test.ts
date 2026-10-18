@@ -44,11 +44,6 @@ const mockCreateOnboardingAssessment = createOnboardingFinancialConditionAssessm
 const validRawAnswers = {
   display_name: "Juan",
   date_of_birth: "1995-06-15",
-  is_filipino: "true",
-  metro_manila_presence: "lives_in_metro_manila",
-  metro_manila_locality_code: "makati",
-  primary_employment_classification: "full_time_employee",
-  employment_status: "employed_full_time",
   monthly_income: "50000",
   monthly_deductions: ["none"],
   monthly_deduction_amounts: {},
@@ -57,11 +52,9 @@ const validRawAnswers = {
   monthly_essential_living_costs: "30000",
   paying_off_debt: "false",
   credit_card_payment_behavior: "never",
-  protected_categories: ["none"],
-  protected_category_costs: {},
-  high_expense_seasons: ["christmas_ber_months"],
-  low_expense_seasons: ["summer"],
-  saving_seasons: ["summer"],
+  high_expense_seasons: ["q4"],
+  low_expense_seasons: ["q2"],
+  saving_seasons: ["q2"],
 };
 
 function mockAuth() {
@@ -91,6 +84,7 @@ const basePath = "/odin/api/onboarding";
 describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCreateOnboardingAssessment.mockResolvedValue(null);
   });
 
   const sessionId = "session-1";
@@ -116,7 +110,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
       .send({ payload: { confirm_data_use: true } });
 
     expect(response.status).toBe(200);
-    expect(response.body.payload).toEqual({ session: { id: sessionId, status: "submitted" }, classification_available: false });
+    expect(response.body.payload).toEqual({ session: { id: sessionId, status: "submitted" }, classification_available: false, assessment: null });
   });
 
   it("reports no available assessment when the classifier cannot produce one", async () => {
@@ -146,6 +140,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.payload.classification_available).toBe(true);
+    expect(response.body.payload.assessment).toEqual({ id: "assessment-1" });
     expect(mockCreateOnboardingAssessment).toHaveBeenCalledWith(validUserId, expect.objectContaining({ monthly_income: "50000" }), expect.anything());
   });
 
@@ -333,9 +328,9 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
           credit_card_payment_behavior: "never",
           protected_categories: ["none"],
           protected_category_costs: {},
-          high_expense_seasons: ["christmas_ber_months"],
-          low_expense_seasons: ["summer"],
-          saving_seasons: ["summer"],
+          high_expense_seasons: ["q4"],
+          low_expense_seasons: ["q2"],
+          saving_seasons: ["q2"],
         },
       },
       error: null,

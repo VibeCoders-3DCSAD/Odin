@@ -23,7 +23,7 @@ const AMOUNT_MAP_OPTIONS: Record<string, readonly string[]> = {
   protected_category_costs: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous"],
 };
 const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && !AMOUNT_MAP_ANSWER_KEYS.has(key) && key !== "has_dependents"));
-const EXPENSE_SEASONS = ["rainy_season", "back_to_school", "undas", "christmas_ber_months", "new_year", "summer", "annual_payments", "family_celebrations", "other", "none"];
+const EXPENSE_SEASONS = ["q1", "q2", "q3", "q4", "rainy_season", "back_to_school", "undas", "christmas_ber_months", "new_year", "summer", "annual_payments", "family_celebrations", "other", "none"];
 const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   is_filipino: ["true", "false"],
   metro_manila_presence: VALID_METRO_MANILA_PRESENCE,
@@ -37,7 +37,7 @@ const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
   high_expense_seasons: EXPENSE_SEASONS,
   low_expense_seasons: EXPENSE_SEASONS,
-  saving_seasons: ["rainy_season", "back_to_school", "christmas_ber_months", "new_year", "summer", "other", "none"],
+  saving_seasons: EXPENSE_SEASONS,
 };
 
 function amountMapIsComplete(rawAnswers: Record<string, unknown>, selectionKey: string, amountKey: string) {
@@ -274,11 +274,6 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
   const requiredFields = [
     "display_name",
     "date_of_birth",
-    "is_filipino",
-    "metro_manila_presence",
-    "metro_manila_locality_code",
-    "primary_employment_classification",
-    "employment_status",
     "monthly_income",
     "monthly_deductions",
     "monthly_deduction_amounts",
@@ -287,8 +282,6 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     "monthly_essential_living_costs",
     "paying_off_debt",
     "credit_card_payment_behavior",
-    "protected_categories",
-    "protected_category_costs",
     "high_expense_seasons",
     "low_expense_seasons",
     "saving_seasons",
@@ -311,13 +304,10 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     });
     return;
   }
-  if (
-    !amountMapIsComplete(rawAnswers, "monthly_deductions", "monthly_deduction_amounts")
-    || !amountMapIsComplete(rawAnswers, "protected_categories", "protected_category_costs")
-  ) {
+  if (!amountMapIsComplete(rawAnswers, "monthly_deductions", "monthly_deduction_amounts")) {
     response.status(400).json({
       error: "Bad Request",
-      message: "Enter an amount for each selected deduction or household support cost.",
+      message: "Enter an amount for each selected deduction.",
     });
     return;
   }
@@ -402,6 +392,7 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     payload: {
       session: { id: sessionId, status: "submitted" },
       classification_available: assessment != null,
+      assessment: assessment ?? null,
     },
   });
 });
