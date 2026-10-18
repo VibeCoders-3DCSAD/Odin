@@ -12,7 +12,8 @@ import { DashboardPartialData } from "./components/DashboardPartialData";
 import { SpendingPie, TrendChart } from "./components/DashboardCharts";
 import { ForecastPanel } from "./components/ForecastPanel";
 import { FinancialHealthCard } from "./components/FinancialHealthCard";
-import { getBudgetContent, getForecastContent, getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
+import { SafeToSpendCard } from "./components/SafeToSpendCard";
+import { getForecastContent, getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
 import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getPreviousMonthName } from "./dashboardFormatting";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
@@ -82,12 +83,6 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
 
   if (isEmpty && !summaryUnavailable) return <DashboardEmptyState onNavigate={onNavigate} />;
 
-  // Budget health from snapshot
-  const budgetSnap = snapshots.budget_health;
-  const budgetContent = s.budgetCount > 0 ? getBudgetContent(budgetSnap) : { items: [], status: "unknown" as const };
-  const { items: budgetItems, status: budgetStatus } = budgetContent;
-  const budgetUnavailable = (snapshotsUnavailable && !budgetSnap) || (s.budgetCount > 0 && budgetStatus === "unknown");
-
   // Forecast from snapshot
    const forecastSnap = snapshots.forecast;
   const forecast = getForecastContent(forecastSnap);
@@ -98,7 +93,6 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
   const savingsUnavailable = (snapshotsUnavailable && !savingsSnap) || (!!savingsSnap && !savingsText && savingsCount === null);
   const forecastUnavailable = snapshotsUnavailable && !forecastSnap;
   const staleSnapshot = (snapshot: typeof savingsSnap) => !!snapshot && (snapshot.stale || snapshotsUnavailable);
-  const remainingBudget = budgetItems.reduce((total, item) => total + item.budget - item.spent, 0);
 
   return (
     <View>
@@ -272,53 +266,7 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
         {s.recentTransactions.length === 0 && s.transactionCount > 0 && <Text style={{ paddingVertical: 20, textAlign: "center", fontFamily: "Manrope", fontSize: 13, color: P.mut }}>No expenses recorded yet</Text>}
       </View>
 
-      {/* Budget Health */}
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24, marginBottom: 12 }}>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: P.ink }}>Budget Health</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          {staleSnapshot(budgetSnap) && <View style={{ alignItems: "flex-end" }}><Text style={{ fontFamily: "Manrope", fontSize: 14, color: P.ink2 }}>Cached data</Text><Pressable accessibilityRole="button" accessibilityLabel="Refresh budget health" onPress={refresh}><Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: P.aqua700, marginTop: 4 }}>Refresh</Text></Pressable></View>}
-          {budgetItems.length > 0 && budgetStatus !== "unknown" && (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 100, backgroundColor: P.aqua50 }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: P.aqua600 }} />
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: P.aqua800 }}>
-                {budgetStatus === "on_track" ? "Healthy" : budgetStatus === "warning" ? "Warning" : "Low"}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-      {budgetItems.length > 0 ? (
-        <View style={{ gap: 14 }}>
-          <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.ink2 }}>{budgetStatus === "on_track" ? `${formatPeso(remainingBudget)} remains in this budget cycle.` : budgetStatus === "warning" ? `${formatPeso(remainingBudget)} remains in this budget cycle. Consider slowing spending in these categories.` : budgetStatus === "critical" ? remainingBudget > 0 ? `Only ${formatPeso(remainingBudget)} remains for the rest of this budget cycle. Review upcoming expenses and adjust your plan if needed.` : "This budget has reached its planned amount. Review upcoming expenses and adjust your plan if needed." : "Budget health is unavailable until a current status is calculated."}</Text>
-          {budgetItems.map((item, i) => {
-            const pct = item.budget > 0 ? Math.min((item.spent / item.budget) * 100, 100) : 0;
-            const barColor = pct >= 100 ? P.monza600 : pct >= 85 ? P.sun400 : P.aqua600;
-            return (
-              <View key={i}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12.5, color: P.ink2 }}>{item.label}</Text>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.mut }}>
-                    {formatPesoCompact(item.spent)} / {formatPesoCompact(item.budget)}
-                  </Text>
-                </View>
-                <View style={{ height: 6, borderRadius: 6, backgroundColor: P.line, overflow: "hidden" }}>
-                  <View style={{ width: `${pct}%`, height: "100%", borderRadius: 6, backgroundColor: barColor }} />
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={budgetUnavailable ? "Refresh budget health" : "Open Financial Plan"}
-          onPress={budgetUnavailable ? refresh : () => onNavigate("financial-plan")}
-          style={{ padding: 20, alignItems: "center", borderRadius: 32, backgroundColor: P.card }}
-        >
-          <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.mut }}>{budgetUnavailable ? "Budget health is unavailable. Try refreshing." : "Create this month's Financial Plan to review commitments and category allocations."}</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.aqua700, marginTop: 6 }}>{budgetUnavailable ? "Refresh" : "Open Financial Plan"}</Text>
-        </Pressable>
-      )}
+      <SafeToSpendCard userId={userId} reloadKey={s} onNavigate={onNavigate} />
 
       <ForecastPanel forecast={forecast} stale={staleSnapshot(forecastSnap)} unavailable={forecastUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("spending-forecast")} />
        {refreshing ? <View style={{ alignItems: "center", marginTop: 12 }}><ActivityIndicator size="small" color={P.aqua700} /></View> : null}
