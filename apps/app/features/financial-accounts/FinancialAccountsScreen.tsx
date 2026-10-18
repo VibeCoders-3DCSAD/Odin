@@ -38,6 +38,7 @@ import { getSavingsAccountDetails, SAVINGS_ACCOUNT_TYPES, type HysaBalanceTier, 
 import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
 import { GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "../savings-goals/contributionSchedule";
 import HysaAccountFormSheet from "./HysaAccountFormSheet";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const P = {
   shell: "#fcf8f0",
@@ -303,13 +304,13 @@ function AccountActionsSheet({ account, onClose, onEdit, onDelete }: { account: 
   return (
     <Modal visible={account !== null} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable onPress={onClose} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(27,28,26,0.28)" }}>
-        <Pressable onPress={(event) => event.stopPropagation()} style={{ padding: 20, paddingBottom: Platform.OS === "ios" ? 34 : 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: P.white }}>
+        <BottomSheetSurface bottomSpacing={20} style={{ padding: 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: P.white }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18, backgroundColor: P.line }} />
           <Text numberOfLines={1} style={{ marginBottom: 16, fontFamily: "Manrope", fontSize: 17, fontWeight: "800", color: P.ink }}>{account?.name}</Text>
           <AccountAction label="Edit" onPress={onEdit} />
           <AccountAction label="Delete" destructive onPress={onDelete} />
           <AccountAction label="Cancel" onPress={onClose} />
-        </Pressable>
+        </BottomSheetSurface>
       </Pressable>
     </Modal>
   );
@@ -578,7 +579,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
+              <BottomSheetSurface style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
                 <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: P.line, alignSelf: "center", marginTop: 10 }} />
                 <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled" bounces={false}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
@@ -749,7 +750,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                     </Pressable>
                   </View>
                 </ScrollView>
-              </View>
+              </BottomSheetSurface>
             </Pressable>
           </KeyboardAvoidingView>
         </View>

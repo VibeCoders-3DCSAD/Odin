@@ -30,6 +30,7 @@ import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
 import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import CreditCardInstallmentFields, { type InstallmentFieldErrors, type InstallmentFormValue } from "./components/CreditCardInstallmentFields";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const QUICK_AMOUNTS = [100, 250, 500, 1000];
 
@@ -600,7 +601,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
               <Pressable onPress={() => {}}>
-                <View style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
+                <BottomSheetSurface style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
                   <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
                   <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 12 }} keyboardShouldPersistTaps="handled" bounces={false}>
                     <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>
@@ -642,7 +643,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                       </View>
                     )}
                   </ScrollView>
-                </View>
+                </BottomSheetSurface>
               </Pressable>
             </KeyboardAvoidingView>
           </View>
@@ -684,7 +685,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         <Pressable onPress={close} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 }}>
+              <BottomSheetSurface bottomSpacing={30} style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
                 <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 10 }}>
                   <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Cancel" hitSlop={8}>
@@ -710,7 +711,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     if (nextDate) select(nextDate);
                   }}
                 />
-              </View>
+              </BottomSheetSurface>
             </Pressable>
           </View>
         </Pressable>

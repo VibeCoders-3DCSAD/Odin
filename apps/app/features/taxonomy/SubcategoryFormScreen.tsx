@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { createSubcategory, updateSubcategory } from "../../local-db/repositories/taxonomy";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 type SubcategoryFormScreenProps = {
   visible: boolean;
@@ -111,7 +112,7 @@ export default function SubcategoryFormScreen({
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
+              <BottomSheetSurface style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
                 <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
                 <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled">
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
@@ -223,7 +224,7 @@ export default function SubcategoryFormScreen({
                     </Pressable>
                   </View>
                 </ScrollView>
-              </View>
+              </BottomSheetSurface>
             </Pressable>
           </KeyboardAvoidingView>
         </View>

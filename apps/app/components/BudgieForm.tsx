@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { CaretRight, Check, Info, Warning, WarningCircle } from "phosphor-react-native";
+import { BottomSheetSurface } from "./BottomSheetSurface";
 
 // Budgie V4 form tokens (screens v4, "v3" overrides).
 export const v4 = {
@@ -233,13 +234,13 @@ export function BottomSheet({ visible, onClose, title, children }: { visible: bo
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable onPress={onClose} accessibilityLabel="Close" style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
-        <Pressable onPress={() => {}} style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
+        <BottomSheetSurface style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
           <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
           <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 12 }} bounces={false} keyboardShouldPersistTaps="handled">
             {title ? <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>{title}</Text> : null}
             {children}
           </ScrollView>
-        </Pressable>
+        </BottomSheetSurface>
       </Pressable>
     </Modal>
   );

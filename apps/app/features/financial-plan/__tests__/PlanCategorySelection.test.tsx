@@ -4,6 +4,7 @@ import { PlanCategorySelection } from "../PlanCategorySelection";
 import type { Category, Subcategory } from "../../../local-db/repositories/taxonomy";
 
 jest.mock("react-native-safe-area-context", () => ({
+  SafeAreaInsetsContext: jest.requireActual("react").createContext({ top: 0, right: 0, bottom: 0, left: 0 }),
   useSafeAreaInsets: () => ({ bottom: 0 }),
 }));
 

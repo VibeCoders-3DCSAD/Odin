@@ -19,6 +19,7 @@ import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
 import { confirmRecurringSpending, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const palette = {
   shell: "#fcf8f0",
@@ -455,11 +456,11 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}
           onPress={() => setShowFilters(false)}
         >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
+          <BottomSheetSurface
+            bottomSpacing={32}
             style={{
               backgroundColor: palette.shell, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              padding: 20, paddingBottom: 32,
+              padding: 20,
             }}
           >
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginBottom: 16 }} />
@@ -650,7 +651,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                 </Text>
               </Pressable>
             </View>
-          </Pressable>
+          </BottomSheetSurface>
         </Pressable>
       </Modal>
 

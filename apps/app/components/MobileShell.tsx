@@ -48,6 +48,7 @@ import { runSync } from "../local-db/sync/runSync";
 import { initDatabase } from "../local-db/client";
 import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
+import { BottomSheetSurface } from "./BottomSheetSurface";
 
 const TOOLBAR_MAX_WIDTH = 430;
 const CONTENT_GUTTER = 20;
@@ -1167,7 +1168,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         <Modal visible={syncDetailsVisible} transparent animationType="slide" presentationStyle="overFullScreen" onDismiss={() => setSyncDetailsVisible(false)} onRequestClose={() => setSyncDetailsVisible(false)}>
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Close sync details" onPress={() => setSyncDetailsVisible(false)} style={{ flex: 1 }} />
-            <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
+            <BottomSheetSurface bottomSpacing={22} style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
               <View {...syncSheetPanResponder.panHandlers} style={{ paddingVertical: 8, marginTop: -8, marginBottom: 10 }}>
                 <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center" }} />
               </View>
@@ -1264,7 +1265,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>Close</Text>
                 </Pressable>
               </View>
-            </View>
+            </BottomSheetSurface>
           </View>
         </Modal>
 
