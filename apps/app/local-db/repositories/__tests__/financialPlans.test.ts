@@ -21,6 +21,7 @@ describe("financial plan repository", () => {
     jest.resetModules();
     mockInitDatabase.mockReset();
     mockEnqueueOperation.mockReset();
+    mockGetPlanSpendingReview.mockReset();
   });
 
   afterEach(() => {
@@ -112,18 +113,17 @@ describe("financial plan repository", () => {
       { allocationId: "a2", categoryId: null, subcategoryId: "transport", actualCentavos: 1_250 },
     ], actualTotalCentavos: 9_000 });
 
-    const { getFinancialPlanAllocationSpending, getFinancialPlanSpentAmount } = await import("../financialPlans");
-    await expect(getFinancialPlanAllocationSpending("user-1", "plan-1")).resolves.toEqual({ "category:food": 4_500, "subcategory:transport": 1_250 });
-    await expect(getFinancialPlanSpentAmount("user-1", "plan-1")).resolves.toBe(9_000);
+    const { getFinancialPlanSpending } = await import("../financialPlans");
+    await expect(getFinancialPlanSpending("user-1", "plan-1")).resolves.toEqual({ allocationSpending: { "category:food": 4_500, "subcategory:transport": 1_250 }, spentCentavos: 9_000 });
+    expect(mockGetPlanSpendingReview).toHaveBeenCalledTimes(1);
     expect(mockGetPlanSpendingReview).toHaveBeenCalledWith("user-1", "plan-1");
   });
 
   it("reports no progress for a plan that is not accessible", async () => {
     mockGetPlanSpendingReview.mockResolvedValue(null);
 
-    const { getFinancialPlanAllocationSpending, getFinancialPlanSpentAmount } = await import("../financialPlans");
-    await expect(getFinancialPlanAllocationSpending("user-2", "plan-1")).resolves.toEqual({});
-    await expect(getFinancialPlanSpentAmount("user-2", "plan-1")).resolves.toBe(0);
+    const { getFinancialPlanSpending } = await import("../financialPlans");
+    await expect(getFinancialPlanSpending("user-2", "plan-1")).resolves.toEqual({ allocationSpending: {}, spentCentavos: 0 });
   });
 
   it("resolves plan references to owned display names in bounded queries", async () => {

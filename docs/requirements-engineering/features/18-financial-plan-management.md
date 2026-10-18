@@ -16,6 +16,24 @@
 
 ### 18.2 Plan Inputs
 
+- Match reported higher- and lower-expense seasons to the plan month. Use them
+  as possible reasons only when their direction matches the estimated spending
+  change. Saving preferences remain separate from expense patterns.
+- Show a review notice when a category's spending forecast disagrees with a
+  reported seasonal expense direction. Preserve these notices when AI insights
+  arrive. Different seasons may overlap within the same month.
+- Seasonal answers explain estimates; they do not change forecast amounts,
+  budget allocations, minimums, or payment reservations.
+- Select monthly reasons using canonical HFCE categories and the
+  [Philippine monthly spending reference](../../philippine-monthly-spending-reference.md).
+  Suppress unverified purchases, weather effects, movable holidays, and completed
+  events. Match confirmed payments to their exact month/year and category.
+- Compare forecast percentages with usual category spending, independently of
+  the recommended allocation. Explain actual available funds and reservations
+  separately when a budget is below estimated expenses.
+- Render AI-selected insights from supported evidence and preserve the original
+  explanation evidence in the accepted plan's input snapshot.
+
 - Monthly total spendable amount, derived from active cash and bank account
   balances plus available income
 - Plan-period total and category-level expense forecast
@@ -56,6 +74,17 @@
   inventing a reduced allocation.
 - Show each recommendation's allocation rule, forecast amount, allocated amount,
   and any unfunded or constrained allocation.
+- Write plan insights in simple English for everyday Filipino readers, using
+  short sentences and peso amounts such as ₱1,200. Use "budget", "money left",
+  and "we estimate" instead of technical terms. Use "usual spending" only when
+  the plan includes a positive spending baseline.
+- Phrase plan insights as neutral recommendations with an evidence-backed reason.
+  Recommend considering the calculated allocation or reviewing a constraint;
+  preserve the user's choice and avoid pressure, urgency, or promised outcomes.
+- Distinguish spending forecasts from price changes. Mention seasonal preferences
+  as possible context only, and never invent percentages or population-wide claims.
+- Apply the same wording to generated insights and fallback recommendations;
+  do not display raw model explanations that bypass these requirements.
 
 ### 18.4 Savings Contribution Plan
 
@@ -106,6 +135,22 @@
 - Recommendation-ready state: a plan is available for review
 - Stale state: a source input changed after the recommendation was generated
 - Accepted state: the user accepted the plan
+- In accepted plans, show locally calculated spending insights instead of the
+  recommendation-time explanation: actual spending versus accepted category
+  budgets, percentage used, remaining or overspent amounts, and the category
+  with the most pressure on its budget.
+- Include eligible expenses outside planned categories in total actual spending
+  and identify their amount and share separately. Continue excluding debt,
+  savings, credit-card, and scheduled payments reserved outside category budgets.
+- Use the sum of accepted category allocations as the utilization denominator,
+  independently of the plan's available funds and unassigned money. Show
+  overspending above 100%; omit percentages where the relevant budget is zero.
+- Refresh spending insights immediately after acceptance and when transactions
+  sync. Calculate them offline without requiring Groq. Do not replace them with
+  late AI explanations of the original recommendation.
+- Show period progress as calendar-day context, without predicting future
+  expenses or asserting the user is on track. Treat unavailable spending data
+  as unknown, and preserve the accepted plan if a spending read fails.
 - Edited state: the user modified a recommendation before accepting it
 - Skipped-commitments state: the user explicitly excluded debt repayments or
   savings contributions after reviewing the consequence

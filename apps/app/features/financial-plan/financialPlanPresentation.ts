@@ -12,7 +12,7 @@ export type FinancialPlanLabels = {
 };
 
 export function formatPeso(centavos: number): string {
-  return `₱${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${centavos < 0 ? "-" : ""}₱${(Math.abs(centavos) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatForecastPeso(centavos: number): string {
