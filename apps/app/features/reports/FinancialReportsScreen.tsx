@@ -10,7 +10,6 @@ import {
   CashFlowSection,
   DebtSummarySection,
   ExpenseDistributionSection,
-  ForecastActualSection,
   SavingsProgressSection,
 } from "./ReportSections";
 import { cashFlowComparisonFor, rangeFor, type ReportPeriod } from "./reportRange";
@@ -56,7 +55,6 @@ export default function FinancialReportsScreen({ userId, deviceId, accessToken }
       <CashFlowSection userId={userId} range={range} comparison={cashFlowComparison} refreshKey={refreshKey} />
       <AccountSummarySection userId={userId} comparison={cashFlowComparison} refreshKey={refreshKey} />
       <BudgetActualSection userId={userId} range={range} refreshKey={refreshKey} />
-       <ForecastActualSection userId={userId} refreshKey={refreshKey} />
       <SavingsProgressSection userId={userId} refreshKey={refreshKey} />
       <DebtSummarySection userId={userId} refreshKey={refreshKey} />
       <CategoryBreakdownSection userId={userId} range={range} refreshKey={refreshKey} />

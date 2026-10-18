@@ -9,7 +9,7 @@ export type BudgetActualSummary = { plannedCentavos: number; actualCentavos: num
 export type SavingsSummary = { currentCentavos: number; targetCentavos: number };
 export type DebtSummary = { openingCentavos: number; paidCentavos: number; remainingCentavos: number };
 export type CategoryBreakdown = { label: string; amountCentavos: number };
-export type AllocationSummary = { categoryCentavos: number; debtCentavos: number; savingsCentavos: number; unallocatedCentavos: number } | null;
+export type AllocationSummary = { categoryCentavos: number; debtCentavos: number; savingsCentavos: number; spentCentavos: number } | null;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -196,11 +196,16 @@ export async function getCashOutflowDistribution(userId: string, range: ReportRa
 
 export async function getAllocationSummary(userId: string, range: ReportRange): Promise<AllocationSummary> {
   const db = await getDb();
-  const row = await db.getFirstAsync<{ total: number; debt: number; savings: number; category: number | null }>(
-    `SELECT p.available_funds_centavos AS total,
-            (SELECT COALESCE(SUM(amount_centavos), 0) FROM financial_plan_debt_reservations WHERE plan_id = p.id) AS debt,
-            (SELECT COALESCE(SUM(amount_centavos), 0) FROM financial_plan_savings_reservations WHERE plan_id = p.id) AS savings,
-            (SELECT COALESCE(SUM(allocated_amount_centavos), 0) FROM financial_plan_allocations WHERE plan_id = p.id) AS category
+  const row = await db.getFirstAsync<{ debt: number; savings: number; category: number | null; spent: number }>(
+    // The plan's leftover money is already directed to debt or savings, so it counts toward those totals.
+    `SELECT p.debt_surplus_centavos + (SELECT COALESCE(SUM(amount_centavos), 0) FROM financial_plan_debt_reservations WHERE plan_id = p.id) AS debt,
+            p.savings_surplus_centavos + (SELECT COALESCE(SUM(amount_centavos), 0) FROM financial_plan_savings_reservations WHERE plan_id = p.id) AS savings,
+            (SELECT COALESCE(SUM(allocated_amount_centavos), 0) FROM financial_plan_allocations WHERE plan_id = p.id) AS category,
+            -- Spent counts the same outflow as cash flow: expenses and savings contributions, across the whole cycle.
+            (SELECT COALESCE(SUM(amount_centavos), 0) FROM transactions t
+              WHERE t.user_id = p.user_id AND t.deleted = 0 AND t.status = 'posted'
+                AND (t.transaction_type = 'expense' OR t.destination_savings_goal_id IS NOT NULL)
+                AND t.transaction_date >= p.period_start AND t.transaction_date <= p.period_end) AS spent
        FROM financial_plans p
       WHERE p.user_id = ? AND p.deleted = 0 AND p.status = 'accepted'
         AND p.period_start <= ? AND p.period_end >= ?
@@ -209,7 +214,7 @@ export async function getAllocationSummary(userId: string, range: ReportRange): 
   );
   if (!row) return null;
   const categoryCentavos = row.category ?? 0;
-  return { categoryCentavos, debtCentavos: row.debt, savingsCentavos: row.savings, unallocatedCentavos: row.total - categoryCentavos - row.debt - row.savings };
+  return { categoryCentavos, debtCentavos: row.debt, savingsCentavos: row.savings, spentCentavos: row.spent };
 }
 
 export function _resetDbCacheForTesting(): void {

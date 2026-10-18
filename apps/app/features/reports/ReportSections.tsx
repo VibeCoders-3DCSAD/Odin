@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { ArrowDownLeft, ArrowUpRight } from "phosphor-react-native";
 import Svg, { Path } from "react-native-svg";
-import { getSnapshot } from "../../local-db/repositories/dashboardSnapshots";
 import {
   getAccountSummary,
   getAccountBalanceAt,
@@ -16,7 +15,6 @@ import {
   listCategoryBreakdown,
   type ReportRange,
 } from "../../local-db/repositories/financialReports";
-import { getForecastContent } from "../dashboard/dashboardSnapshotContent";
 import type { CashFlowComparison } from "./reportRange";
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", positive: "#087A4A", negative: "#B42318" };
@@ -110,20 +108,6 @@ export function BudgetActualSection({ userId, range, refreshKey }: { userId: str
   </View> : <LoadingValue>No budget overlaps this reporting period.</LoadingValue>}</State></Section>;
 }
 
-export function ForecastActualSection({ userId, refreshKey }: { userId: string } & RefreshProps) {
-  const { data, loading, error } = useReportData(async () => {
-    const snapshot = await getSnapshot(userId, "forecast");
-    const forecast = getForecastContent(snapshot);
-    const forecastCentavos = forecast?.forecasts.reduce((total, point) => total + point.amountCentavos, 0) ?? null;
-    return { forecastCentavos, month: forecast?.forecasts[0]?.month ?? null, categoryCount: new Set(forecast?.forecasts.map((point) => point.category)).size, stale: snapshot?.stale ?? false };
-  }, [userId, refreshKey]);
-  return <Section title="Next-month spending plan"><State loading={loading} error={error}>{data?.forecastCentavos != null ? <View style={{ marginTop: 14, gap: 8 }}>
-    <Metric label={`${data.month ?? "Next month"} projected spending`} value={money(data.forecastCentavos)} />
-    <Metric label="Forecasted categories" value={String(data.categoryCount)} />
-    {data.stale ? <LoadingValue>Forecast data may be out of date.</LoadingValue> : null}
-  </View> : <LoadingValue>Refresh to generate a category plan for next month.</LoadingValue>}</State></Section>;
-}
-
 export function SavingsProgressSection({ userId, refreshKey }: { userId: string } & RefreshProps) {
   const { data, loading, error } = useReportData(() => getSavingsSummary(userId), [userId, refreshKey]);
   const percent = data && data.targetCentavos > 0 ? Math.min(100, Math.round(data.currentCentavos / data.targetCentavos * 100)) : 0;
@@ -154,7 +138,7 @@ export function AllocationSummarySection({ userId, range, refreshKey }: { userId
     <Metric label="Categories" value={money(data.categoryCentavos)} />
     <Metric label="Debt" value={money(data.debtCentavos)} />
     <Metric label="Savings" value={money(data.savingsCentavos)} />
-    <Metric label="Unallocated" value={money(data.unallocatedCentavos)} strong />
+    <Metric label="Total spent" value={money(data.spentCentavos)} strong />
   </View> : <LoadingValue>No budget overlaps this reporting period.</LoadingValue>}</State></Section>;
 }
 

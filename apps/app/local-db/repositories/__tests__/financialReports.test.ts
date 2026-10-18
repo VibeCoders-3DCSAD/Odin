@@ -12,6 +12,7 @@ jest.mock("../../client", () => ({ initDatabase: jest.fn() }));
 import {
   _resetDbCacheForTesting,
   getAccountBalanceAt,
+  getAllocationSummary,
   getCashFlowComparisonSummary,
   getCashFlowSummary,
   getCashOutflowDistribution,
@@ -101,5 +102,18 @@ describe("cash outflow breakdowns", () => {
     expect(cashOutflowSql).toContain("'Debt repayments'");
     expect(cashOutflowSql).toContain("t.destination_savings_goal_id IS NOT NULL");
     expect(cashOutflowSql).toContain("LEFT JOIN debt_payments dp");
+  });
+});
+
+describe("getAllocationSummary", () => {
+  it("counts the plan's leftover money toward debt and savings and reports what the cycle has spent", async () => {
+    mockGetFirstAsync.mockResolvedValue({ category: 30_000, debt: 12_000, savings: 8_000, spent: 21_500 });
+
+    await expect(getAllocationSummary("user-1", { startDate: "2026-10-01", endDate: "2026-10-18" })).resolves.toEqual({ categoryCentavos: 30_000, debtCentavos: 12_000, savingsCentavos: 8_000, spentCentavos: 21_500 });
+    const [sql, ...params] = mockGetFirstAsync.mock.calls[0]!;
+    expect(sql).toContain("p.debt_surplus_centavos +");
+    expect(sql).toContain("p.savings_surplus_centavos +");
+    expect(sql).toContain("t.transaction_date >= p.period_start AND t.transaction_date <= p.period_end");
+    expect(params).toEqual(["user-1", "2026-10-18", "2026-10-01"]);
   });
 });
