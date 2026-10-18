@@ -11,6 +11,8 @@ export type ForecastTransaction = {
 
 export type ForecastRequest = {
   historicalTransactions: ForecastTransaction[];
+  // YYYY-MM month to forecast; odin-ml defaults to the next calendar month.
+  targetMonth?: string;
 };
 
 export type ForecastPayload = {
@@ -105,6 +107,7 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
       ...(transaction.description ? { description: transaction.description } : {}),
     })),
     categories,
+    ...(request.targetMonth ? { target_month: request.targetMonth } : {}),
   });
   const headers = trustedMlHeaders(userId, body);
   if (!headers) throw new ForecastUpstreamError(503, "Forecast service is unavailable", "configuration");

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ForecastUpstreamError, ForecastValidationError, getMlForecast, type ForecastPayload } from "../forecastService.js";
+import { ForecastUnavailableError, ForecastUpstreamError, ForecastValidationError, getMlForecast, type ForecastPayload } from "../forecastService.js";
 import { recommendPlanCategories, type MlExpenseForecastSnapshot, type MlPlanCategory } from "./mlAdapter.js";
 import { explainFinancialPlan, fallbackFinancialPlanExplanations, isUserFacingFinancialPlanExplanation, zeroAllocationExplanations, type FinancialPlanEvidence } from "./explanationService.js";
 import { deriveSurplusRecommendation } from "./classificationPolicy.js";
@@ -355,12 +355,16 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const trailingTwelveMonthsStart = trailingTwelveMonths.toISOString().slice(0, 10);
   const spendBySubcategory = new Map<string, number>();
   const spendByCategory = new Map<string, number>();
+  const spendMonths = new Set<string>();
   for (const transaction of cleanTransactions) {
+    if (transaction.transaction_type === "expense" && transaction.transaction_date >= trailingTwelveMonthsStart) spendMonths.add(transaction.transaction_date.slice(0, 7));
     if (transaction.transaction_type === "expense" && transaction.subcategory_id && transaction.transaction_date >= trailingTwelveMonthsStart) {
       spendBySubcategory.set(transaction.subcategory_id, (spendBySubcategory.get(transaction.subcategory_id) ?? 0) + transaction.amount_centavos);
     }
     if (transaction.transaction_type === "expense" && transaction.category_id && !transaction.subcategory_id && transaction.transaction_date >= trailingTwelveMonthsStart) spendByCategory.set(transaction.category_id, (spendByCategory.get(transaction.category_id) ?? 0) + transaction.amount_centavos);
   }
+  // Spend totals cover up to twelve months; a fallback forecast needs one month's worth.
+  const monthlySpend = (totalCentavos: number | undefined) => Math.round((totalCentavos ?? 0) / Math.max(spendMonths.size, 1));
   const slugByCategoryId = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.id, category.slug]));
   const categorySlugBySubcategoryId = new Map([
     ...subcategories.map((subcategory) => [subcategory.id, subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined] as const),
@@ -382,7 +386,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
       if (fixed === null && category.minimum_amount_centavos === null && !includedTopLevelIds.has(category.id)) return [];
       const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (category.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
       const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`category:${category.id}`) ?? 0);
-      return [{ id: category.id, target: "category" as const, priorityGroup: financialPlanPriorityGroup(category.slug), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendByCategory.get(category.id) ?? 0 }];
+      return [{ id: category.id, target: "category" as const, priorityGroup: financialPlanPriorityGroup(category.slug), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: monthlySpend(spendByCategory.get(category.id)) }];
     }),
     ...subcategories.flatMap((subcategory) => {
     const fixed = subcategory.fixed_amount_centavos;
@@ -391,7 +395,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     if (!automaticallyIncluded && !includedIds.has(subcategory.id)) return [];
     const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (subcategory.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
     const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`subcategory:${subcategory.id}`) ?? 0);
-    return [{ id: subcategory.id, target: "subcategory" as const, priorityGroup: financialPlanPriorityGroup(subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendBySubcategory.get(subcategory.id) ?? 0 }];
+    return [{ id: subcategory.id, target: "subcategory" as const, priorityGroup: financialPlanPriorityGroup(subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: monthlySpend(spendBySubcategory.get(subcategory.id)) }];
   }),
   ];
   if (!categories.length) throw new FinancialPlanInputError("Choose at least one expense category");
@@ -415,6 +419,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   }
   let forecast = fallbackForecast(period, categories);
   let forecastDetails: ForecastPayload["forecasts"] = [];
+  let forecastUnavailableMessage: string | null = null;
   try {
     const plannedSubcategoryIds = new Set(categories.map((category) => category.id));
     const forecastTransactions = cleanTransactions.flatMap((transaction) => {
@@ -425,14 +430,18 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
         : [];
     });
     if (forecastTransactions.length) {
-      const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions });
+      const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions, targetMonth: period.start.slice(0, 7) });
       if (forecastCoversPlanPeriod(mlForecast, period)) {
         forecast = mapPlanForecast(userId, mlForecast, categories, categorySlugBySubcategoryId);
         forecastDetails = mlForecast.forecasts;
+      } else {
+        console.warn("financial plan forecast month mismatch; using spend fallback", { user_id: userId, forecast_month: mlForecast.snapshot.month, plan_month: period.start.slice(0, 7) });
       }
     }
   } catch (error) {
-    if (!(error instanceof ForecastValidationError || error instanceof ForecastUpstreamError)) throw error;
+    if (!(error instanceof ForecastValidationError || error instanceof ForecastUpstreamError || error instanceof ForecastUnavailableError)) throw error;
+    console.warn("financial plan forecast unavailable; using spend fallback", { user_id: userId, error: error.message });
+    if (error instanceof ForecastUnavailableError) forecastUnavailableMessage = error.message;
   }
   const plannedCategories = applyFinancialPlanPriorityWeights(categories.map((category) => ({ ...category, forecastCentavos: forecast.categoryForecasts.find((point) => point.category === category.id)?.amountCentavos ?? category.floorCentavos })), new Map([...spendByCategory, ...spendBySubcategory]));
   const freshAssessment = await createFinancialConditionAssessment(userId, getServiceRoleClient());
@@ -484,6 +493,6 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const explanationEvidence: FinancialPlanEvidence = { planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos, debtSurplusCentavos, savingsSurplusCentavos, seasonalPreferences, forecastChanges };
   const deterministicExplanations = fallbackFinancialPlanExplanations(explanationEvidence);
   const aiExplanations = await explainFinancialPlan(explanationEvidence, fetch, userId);
-  const uniqueExplanations = [...zeroAllocationInsights, ...deterministicExplanations, ...aiExplanations, ...(Array.isArray(ml.explanations) ? ml.explanations.map((explanation) => typeof explanation === "object" && explanation !== null && "reason" in explanation ? String((explanation as { reason: unknown }).reason) : String(explanation)) : [])].filter(isUserFacingFinancialPlanExplanation).filter((explanation, index, all) => all.findIndex((item) => item.replace(/\s+/g, " ").trim().toLocaleLowerCase() === explanation.replace(/\s+/g, " ").trim().toLocaleLowerCase()) === index).slice(0, 3);
+  const uniqueExplanations = [...(forecastUnavailableMessage ? [forecastUnavailableMessage] : []), ...zeroAllocationInsights, ...deterministicExplanations, ...aiExplanations, ...(Array.isArray(ml.explanations) ? ml.explanations.map((explanation) => typeof explanation === "object" && explanation !== null && "reason" in explanation ? String((explanation as { reason: unknown }).reason) : String(explanation)) : [])].filter(isUserFacingFinancialPlanExplanation).filter((explanation, index, all) => all.findIndex((item) => item.replace(/\s+/g, " ").trim().toLocaleLowerCase() === explanation.replace(/\s+/g, " ").trim().toLocaleLowerCase()) === index).slice(0, 3);
   return { status: recommendation.feasibility === "INFEASIBLE" ? "INFEASIBLE" as const : "RECOMMENDATION_READY" as const, period, inputSnapshot: plannedInputSnapshot, recommendation: { availableFundsCentavos: available + monthToDateAddBack(plannedCategories), requiredFundsCentavos: typeof recommendation.required_funds === "number" ? Math.round(recommendation.required_funds * 100) : undefined, shortfallCentavos: typeof recommendation.shortfall === "number" ? Math.round(recommendation.shortfall * 100) : undefined, allocations, debtReservations: baseDebtReservations, debtSurplusCentavos, savingsReservations, savingsSurplusCentavos, surplusRecommendation }, explanations: uniqueExplanations };
 }
