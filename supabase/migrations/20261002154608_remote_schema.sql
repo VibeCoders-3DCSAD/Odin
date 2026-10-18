@@ -584,20 +584,23 @@ $function$
 ;
 
 -- These Storage internals vary by local Supabase image version. They are
--- already managed by Storage when available and must not block app migrations.
+-- already managed by Storage when available (hosted projects ship them) and must not block app migrations.
 DO $$
 BEGIN
-  IF to_regprocedure('storage.protect_bucket_control_columns(name)') IS NOT NULL THEN
+  IF to_regprocedure('storage.protect_bucket_control_columns(name)') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'storage.buckets'::regclass AND tgname = 'protect_bucket_control_insert') THEN
     CREATE TRIGGER protect_bucket_control_insert
       BEFORE INSERT ON storage.buckets
       FOR EACH ROW EXECUTE FUNCTION storage.protect_bucket_control_columns('service_role');
   END IF;
-  IF to_regprocedure('storage.protect_bucket_control_columns()') IS NOT NULL THEN
+  IF to_regprocedure('storage.protect_bucket_control_columns()') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'storage.buckets'::regclass AND tgname = 'protect_bucket_control_update') THEN
     CREATE TRIGGER protect_bucket_control_update
       BEFORE UPDATE OF lifecycle_configuration, lifecycle_configuration_generation ON storage.buckets
       FOR EACH ROW EXECUTE FUNCTION storage.protect_bucket_control_columns();
   END IF;
-  IF to_regprocedure('storage.enforce_bucket_lifecycle_service_role(name)') IS NOT NULL THEN
+  IF to_regprocedure('storage.enforce_bucket_lifecycle_service_role(name)') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'storage.buckets'::regclass AND tgname = 'protect_bucket_control_update_role') THEN
     CREATE TRIGGER protect_bucket_control_update_role
       AFTER UPDATE OF lifecycle_configuration, lifecycle_configuration_generation ON storage.buckets
       FOR EACH ROW EXECUTE FUNCTION storage.enforce_bucket_lifecycle_service_role('service_role');
