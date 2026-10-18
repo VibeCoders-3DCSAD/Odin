@@ -2,6 +2,7 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
+import { localToday } from "../../features/billers/schedule";
 import type { SyncOperation } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -279,9 +280,6 @@ function mapIncomeSource(row: IncomeSourceRow): IncomeSource {
   };
 }
 
-function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export type IncomeSchedule = {
   frequency: IncomeFrequency;
@@ -387,7 +385,8 @@ async function syncIncomeSourceRecurringTemplate(
     day_of_month: source.paydayDayOfMonth ?? undefined,
     second_day_of_month: source.paydaySecondDayOfMonth ?? undefined,
     day_of_week: source.paydayDayOfWeek ?? undefined,
-    starts_on: source.nextExpectedDate ?? todayDate(),
+    // Saving starts the schedule over from today (Asia/Manila), so an edit never back-posts missed paydays.
+    starts_on: source.nextExpectedDate ?? localToday(),
     subcategory_id: source.subcategoryId,
     destination_account_id: source.destinationAccountId,
     notes: source.notes ?? undefined,

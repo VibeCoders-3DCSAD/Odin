@@ -30,6 +30,7 @@ import BillerFormScreen from "../features/billers/BillerFormScreen";
 import BillerDetailScreen from "../features/billers/BillerDetailScreen";
 import RecordBillerPaymentScreen from "../features/billers/RecordBillerPaymentScreen";
 import { postDueScheduledPayments } from "../local-db/repositories/scheduledPayments";
+import { postDueRecurringIncome } from "../local-db/repositories/recurringIncome";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
@@ -539,11 +540,13 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   useEffect(() => {
     if (!userId || !deviceId || !accessToken) return;
 
-    // Due auto-post payments are written first so they go out with this sync.
+    // Due bills and paydays are posted first so they go out with this sync. The server posts them too;
+    // matching ids make whichever arrives second a no-op.
     const sync = () => {
-      postDueScheduledPayments(userId, deviceId)
-        .catch((error) => { console.warn("[SCHEDULED-PAYMENTS] auto-post failed", error); })
-        .finally(() => { syncNow(false).catch(() => {}); });
+      Promise.allSettled([
+        postDueScheduledPayments(userId, deviceId).catch((error) => { console.warn("[SCHEDULED-PAYMENTS] auto-post failed", error); }),
+        postDueRecurringIncome(userId, deviceId).catch((error) => { console.warn("[RECURRING-INCOME] auto-post failed", error); }),
+      ]).finally(() => { syncNow(false).catch(() => {}); });
     };
 
     if (!initialSyncDone.current) {
