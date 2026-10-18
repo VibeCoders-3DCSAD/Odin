@@ -229,42 +229,34 @@ const TRANSACTION_UPDATE_FIELDS = new Set([
 const VALID_ACCOUNT_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "other"];
 const VALID_TRANSACTION_TYPES = ["income", "expense", "transfer"];
 
+const INCOME_FREQUENCIES = ["daily", "weekly", "semi_monthly", "monthly"];
+
 const INCOME_SOURCE_CREATE_FIELDS = new Set([
   "name",
-  "income_type",
   "frequency",
   "recurring_template_id",
   "destination_account_id",
   "subcategory_id",
   "expected_amount_centavos",
-  "min_amount_centavos",
-  "max_amount_centavos",
   "payday_day_of_month",
   "payday_second_day_of_month",
   "payday_day_of_week",
-  "payday_second_day_of_week",
   "next_expected_date",
-  "estimated_interval_days",
   "is_active",
   "notes",
 ]);
 
 const INCOME_SOURCE_UPDATE_FIELDS = new Set([
   "name",
-  "income_type",
   "frequency",
   "recurring_template_id",
   "destination_account_id",
   "subcategory_id",
   "expected_amount_centavos",
-  "min_amount_centavos",
-  "max_amount_centavos",
   "payday_day_of_month",
   "payday_second_day_of_month",
   "payday_day_of_week",
-  "payday_second_day_of_week",
   "next_expected_date",
-  "estimated_interval_days",
   "is_active",
   "notes",
 ]);
@@ -612,36 +604,23 @@ async function validateCreatePayload(
     assertOnlyAllowed(payload, INCOME_SOURCE_CREATE_FIELDS);
     const sanitized = sanitizePayload(payload, INCOME_SOURCE_CREATE_FIELDS);
     requireString(sanitized, "name");
-    requireString(sanitized, "income_type");
     requireString(sanitized, "frequency");
     requireString(sanitized, "destination_account_id");
     requireString(sanitized, "subcategory_id");
-    const validTypes = ["stable", "variable"];
-    if (!validTypes.includes(sanitized.income_type as string)) {
-      throw new Error(`income_type must be one of: ${validTypes.join(", ")}`);
+    if (!INCOME_FREQUENCIES.includes(sanitized.frequency as string)) {
+      throw new Error(`frequency must be one of: ${INCOME_FREQUENCIES.join(", ")}`);
     }
-    const validFrequencies = ["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"];
-    if (!validFrequencies.includes(sanitized.frequency as string)) {
-      throw new Error(`frequency must be one of: ${validFrequencies.join(", ")}`);
-    }
-    optionalBigInt(sanitized, "expected_amount_centavos");
-    optionalBigInt(sanitized, "min_amount_centavos");
-    optionalBigInt(sanitized, "max_amount_centavos");
+    requirePositiveInteger(sanitized, "expected_amount_centavos");
     optionalNumber(sanitized, "payday_day_of_month");
     optionalNumber(sanitized, "payday_second_day_of_month");
     optionalNumber(sanitized, "payday_day_of_week");
-    optionalNumber(sanitized, "payday_second_day_of_week");
     optionalString(sanitized, "next_expected_date");
-    optionalNumber(sanitized, "estimated_interval_days");
     optionalBoolean(sanitized, "is_active");
     optionalString(sanitized, "notes");
     optionalString(sanitized, "recurring_template_id");
-    validateNonNegative(sanitized, ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"]);
-    validateMinMaxOrdering(sanitized, "min_amount_centavos", "max_amount_centavos");
     validateDayRange(sanitized, "payday_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_day_of_week", 0, 6);
-    validateDayRange(sanitized, "payday_second_day_of_week", 0, 6);
      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
     await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
     if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
@@ -1253,7 +1232,7 @@ async function validateUpdatePayload(
       continue;
     }
 
-    if (key === "payday_day_of_month" || key === "payday_second_day_of_month" || key === "payday_day_of_week" || key === "payday_second_day_of_week" || key === "estimated_interval_days") {
+    if (key === "payday_day_of_month" || key === "payday_second_day_of_month" || key === "payday_day_of_week") {
       if (value !== null && typeof value !== "number") throw new Error(`${key} must be a number or null`);
       continue;
     }
@@ -1273,16 +1252,10 @@ async function validateUpdatePayload(
       continue;
     }
 
-    if (key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "minimum_amount_centavos" || key === "fixed_amount_centavos") {
+    if (key === "expected_amount_centavos" || key === "minimum_amount_centavos" || key === "fixed_amount_centavos") {
       if (value !== null && value !== undefined && (typeof value !== "number" || !Number.isInteger(value) || value < 0)) {
         throw new Error(`${key} must be a non-negative integer or null`);
       }
-      continue;
-    }
-
-    if (key === "income_type") {
-      if (typeof value !== "string") throw new Error("income_type must be a string");
-      if (!["stable", "variable"].includes(value as string)) throw new Error(`income_type must be stable or variable`);
       continue;
     }
 
@@ -1300,7 +1273,7 @@ async function validateUpdatePayload(
     if (key === "frequency") {
       if (typeof value !== "string") throw new Error("frequency must be a string");
       if (entity === "income_sources") {
-        if (!["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"].includes(value as string)) {
+        if (!INCOME_FREQUENCIES.includes(value as string)) {
           throw new Error("frequency must be a valid income frequency");
         }
       } else if (entity === "recurring_transaction_templates") {
@@ -1411,17 +1384,7 @@ async function validateUpdatePayload(
   }
 
   if (entity === "income_sources") {
-    const centsFields = ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"] as const;
-    for (const f of centsFields) {
-      if (typeof sanitized[f] === "number" && (sanitized[f] as number) < 0) {
-        throw new Error(`${f} must be >= 0`);
-      }
-    }
-    const minVal = sanitized.min_amount_centavos as number | undefined;
-    const maxVal = sanitized.max_amount_centavos as number | undefined;
-    if (minVal !== undefined && maxVal !== undefined && minVal > maxVal) {
-      throw new Error("min_amount_centavos must be <= max_amount_centavos");
-    }
+    if (sanitized.expected_amount_centavos !== undefined) requirePositiveInteger(sanitized, "expected_amount_centavos");
     const dayFields = ["payday_day_of_month", "payday_second_day_of_month"] as const;
     for (const f of dayFields) {
       if (typeof sanitized[f] === "number" && ((sanitized[f] as number) < 1 || (sanitized[f] as number) > 31)) {
@@ -1430,9 +1393,6 @@ async function validateUpdatePayload(
     }
     if (typeof sanitized.payday_day_of_week === "number" && ((sanitized.payday_day_of_week as number) < 0 || (sanitized.payday_day_of_week as number) > 6)) {
       throw new Error("payday_day_of_week must be between 0 and 6");
-    }
-    if (typeof sanitized.payday_second_day_of_week === "number" && ((sanitized.payday_second_day_of_week as number) < 0 || (sanitized.payday_second_day_of_week as number) > 6)) {
-      throw new Error("payday_second_day_of_week must be between 0 and 6");
     }
     if (sanitized.destination_account_id && typeof sanitized.destination_account_id === "string") {
       await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id);
