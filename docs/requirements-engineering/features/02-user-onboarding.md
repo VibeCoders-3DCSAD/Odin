@@ -1,5 +1,20 @@
 ## 2. User Onboarding
 
+### Seasonal Spending Answers
+
+- Ask separately when expenses are usually higher, when they are usually lower,
+  and when the user is more likely to save.
+- Exclude seasons selected for higher expenses from the lower-expense choices.
+  Editing the higher-expense answer removes any conflicting lower selections;
+  an empty lower answer must be answered again before submission.
+- Validate the exclusion on the server, including updates merged with saved
+  answers. Each seasonal answer allows `none` only on its own.
+- Keep saving preferences independent: saving more does not establish that
+  expenses are lower. Previously submitted profiles without lower-expense
+  answers have an unknown pattern and need no migration.
+- Use seasonal answers in Financial Plan explanations and mismatch notices;
+  do not alter forecast amounts or allocations based only on these answers.
+
 ### 2.1 Application Orientation
 
 - Introduce newly registered users to Budgie's financial-management capabilities

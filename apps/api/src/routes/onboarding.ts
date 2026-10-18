@@ -13,16 +13,17 @@ const ONBOARDING_ANSWER_KEYS = new Set([
   "primary_employment_classification", "employment_status", "monthly_income",
   "monthly_deductions", "monthly_deduction_amounts", "emergency_savings_runway", "liquid_emergency_savings", "monthly_debt_payments",
   "monthly_essential_living_costs", "paying_off_debt", "credit_card_payment_behavior", "credit_card_revolving_months", "protected_categories",
-  "protected_category_costs", "high_expense_seasons", "saving_seasons", "has_dependents",
+  "protected_category_costs", "high_expense_seasons", "low_expense_seasons", "saving_seasons", "has_dependents",
 ]);
 
-const ARRAY_ANSWER_KEYS = new Set(["monthly_deductions", "protected_categories", "high_expense_seasons", "saving_seasons"]);
+const ARRAY_ANSWER_KEYS = new Set(["monthly_deductions", "protected_categories", "high_expense_seasons", "low_expense_seasons", "saving_seasons"]);
 const AMOUNT_MAP_ANSWER_KEYS = new Set(["monthly_deduction_amounts", "protected_category_costs"]);
 const AMOUNT_MAP_OPTIONS: Record<string, readonly string[]> = {
   monthly_deduction_amounts: ["tax", "sss", "philhealth", "pag_ibig", "salary_loan", "other"],
   protected_category_costs: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous"],
 };
 const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && !AMOUNT_MAP_ANSWER_KEYS.has(key) && key !== "has_dependents"));
+const EXPENSE_SEASONS = ["rainy_season", "back_to_school", "undas", "christmas_ber_months", "new_year", "summer", "annual_payments", "family_celebrations", "other", "none"];
 const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   is_filipino: ["true", "false"],
   metro_manila_presence: VALID_METRO_MANILA_PRESENCE,
@@ -34,7 +35,8 @@ const ANSWER_OPTIONS: Record<string, readonly string[]> = {
   credit_card_payment_behavior: ["no_credit_card", "never", "some_months", "every_month", "not_sure"],
   credit_card_revolving_months: Array.from({ length: 13 }, (_, months) => String(months)),
   protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
-  high_expense_seasons: ["rainy_season", "back_to_school", "undas", "christmas_ber_months", "new_year", "summer", "annual_payments", "family_celebrations", "other", "none"],
+  high_expense_seasons: EXPENSE_SEASONS,
+  low_expense_seasons: EXPENSE_SEASONS,
   saving_seasons: ["rainy_season", "back_to_school", "christmas_ber_months", "new_year", "summer", "other", "none"],
 };
 
@@ -77,6 +79,18 @@ function validateOnboardingPayload(
       if (["monthly_income", "liquid_emergency_savings", "monthly_essential_living_costs", "monthly_debt_payments"].includes(key) && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
         return `${key} must be a non-negative whole number.`;
       }
+    }
+  }
+  if (raw_answers && typeof raw_answers === "object" && !Array.isArray(raw_answers)) {
+    const answers = raw_answers as Record<string, unknown>;
+    for (const key of ["high_expense_seasons", "low_expense_seasons", "saving_seasons"]) {
+      const selections = answers[key];
+      if (Array.isArray(selections) && selections.includes("none") && selections.length > 1) return `${key} cannot combine none with other seasons.`;
+    }
+    const higher = answers.high_expense_seasons;
+    const lower = answers.low_expense_seasons;
+    if (Array.isArray(higher) && Array.isArray(lower) && lower.some((season) => season !== "none" && higher.includes(season))) {
+      return "A season cannot be selected for both higher and lower expenses.";
     }
   }
   if (current_step_key !== undefined && current_step_key !== null && typeof current_step_key !== "string") {
@@ -167,6 +181,11 @@ router.patch("/onboarding/sessions/:id", requireAuth, async (request: Authentica
 
   if (raw_answers !== undefined) {
     const mergedAnswers = { ...(existing.raw_answers as Record<string, unknown> | undefined), ...raw_answers };
+    const mergedError = validateOnboardingPayload(mergedAnswers, current_step_key);
+    if (mergedError) {
+      response.status(400).json({ error: "Bad Request", message: mergedError });
+      return;
+    }
     updateData.raw_answers = mergedAnswers;
   }
 
@@ -271,6 +290,7 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     "protected_categories",
     "protected_category_costs",
     "high_expense_seasons",
+    "low_expense_seasons",
     "saving_seasons",
   ];
   const missing = requiredFields.filter((f) => {

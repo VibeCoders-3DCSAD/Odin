@@ -60,6 +60,7 @@ const validRawAnswers = {
   protected_categories: ["none"],
   protected_category_costs: {},
   high_expense_seasons: ["christmas_ber_months"],
+  low_expense_seasons: ["summer"],
   saving_seasons: ["summer"],
 };
 
@@ -93,6 +94,16 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
   });
 
   const sessionId = "session-1";
+
+  it("requires lower-expense seasons before submitting an in-progress questionnaire", async () => {
+    mockAuth();
+    const { low_expense_seasons: omitted, ...answers } = validRawAnswers;
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: { id: sessionId, status: "in_progress", raw_answers: answers }, error: null }));
+    const response = await request(app).post(`${basePath}/sessions/${sessionId}/submit`).set(authHeader()).send({ payload: { confirm_data_use: true } });
+    expect(response.status).toBe(400);
+    expect(response.body.fields).toContain("low_expense_seasons");
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
 
   it("returns 200 when submission completes without an available assessment", async () => {
     mockAuth();
@@ -323,6 +334,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
           protected_categories: ["none"],
           protected_category_costs: {},
           high_expense_seasons: ["christmas_ber_months"],
+          low_expense_seasons: ["summer"],
           saving_seasons: ["summer"],
         },
       },
@@ -420,6 +432,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
           protected_categories: ["none"],
           protected_category_costs: {},
           high_expense_seasons: ["none"],
+          low_expense_seasons: ["none"],
           saving_seasons: ["none"],
         },
       },

@@ -27,6 +27,7 @@ import {
   updateEligibilityProfile,
 } from "./api";
 import { STEPS, type StepConfig } from "./types";
+import { availableOnboardingStep, withOnboardingAnswer } from "./helpers/seasonalAnswers";
 
 const AQUA50 = "#EFFEF7";
 const AQUA600 = "#08B16A";
@@ -208,7 +209,7 @@ export default function OnboardingFlow({
 
   const saveAnswer = useCallback(
     (key: string, value: unknown) => {
-      setAnswers((prev) => ({ ...prev, [key]: value }));
+      setAnswers((prev) => withOnboardingAnswer(prev, key, value));
       setFieldErrors((errors) => {
         const { [key]: _, ...remaining } = errors;
         return remaining;
@@ -452,7 +453,7 @@ export default function OnboardingFlow({
 
         {step.kind === "card_multi_select" && (
           <CardMultiSelectStep
-            step={step}
+            step={availableOnboardingStep(step, answers)}
             selected={(answers[step.questionKey] as string[]) ?? []}
             onToggle={
               step.key === "dependents_protected"
@@ -1092,6 +1093,7 @@ function ReviewStep({
   if (catLabels && protectedStep) rows.push({ label: "Categories", value: catLabels, stepIndex: STEPS.indexOf(protectedStep) });
   addAmountMapRows("protected_category_costs");
   addMultiOptionRow("Higher-Expense Seasons", "high_expense_seasons");
+  addMultiOptionRow("Lower-Expense Seasons", "low_expense_seasons");
   addMultiOptionRow("Saving Seasons", "saving_seasons");
 
   return (
