@@ -45,6 +45,8 @@ type Props = {
   dayOfMonthError?: boolean;
   secondDayOfMonthError?: boolean;
   hideYearlyDetails?: boolean;
+  showFrequencySelector?: boolean;
+  weekdayLabels?: readonly string[];
 };
 
 function renderLabel(label: string) {
@@ -69,13 +71,15 @@ export default function RecurringScheduleFields({
   dayOfMonthError = false,
   secondDayOfMonthError = false,
   hideYearlyDetails = false,
+  showFrequencySelector = true,
+  weekdayLabels = WEEKDAYS,
 }: Props) {
   const shouldShowInterval = showInterval || showIntervalCount;
   const showDayOfWeek = value.frequency === "weekly" || value.frequency === "biweekly";
 
   return (
     <View style={{ gap: 16 }}>
-      <FrequencySelector frequencies={frequencies} value={value.frequency} onChange={(frequency) => onChange(updateValue(value, { frequency }))} label={frequencyLabel} />
+      {showFrequencySelector ? <FrequencySelector frequencies={frequencies} value={value.frequency} onChange={(frequency) => onChange(updateValue(value, { frequency }))} label={frequencyLabel} /> : null}
 
       {shouldShowInterval && value.frequency !== "semi_monthly" && value.frequency !== "biweekly" ? (
         <View>
@@ -107,6 +111,7 @@ export default function RecurringScheduleFields({
         <View>
           {renderLabel("DAY OF MONTH")}
           <TextInput
+            accessibilityLabel="Day of month"
             value={value.dayOfMonth}
             onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
             placeholder="15"
@@ -122,6 +127,7 @@ export default function RecurringScheduleFields({
           <View>
             {renderLabel("1ST DAY OF MONTH")}
             <TextInput
+              accessibilityLabel="First day of month"
               value={value.dayOfMonth}
               onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
               placeholder="15"
@@ -133,6 +139,7 @@ export default function RecurringScheduleFields({
           <View>
             {renderLabel("2ND DAY OF MONTH")}
             <TextInput
+              accessibilityLabel="Second day of month"
               value={value.secondDayOfMonth}
               onChangeText={(secondDayOfMonth) => onChange(updateValue(value, { secondDayOfMonth }))}
               placeholder="30"
@@ -148,7 +155,7 @@ export default function RecurringScheduleFields({
         <View>
           {renderLabel("DAY OF WEEK")}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {WEEKDAYS.map((day, index) => {
+            {weekdayLabels.map((day, index) => {
               const selected = value.dayOfWeek === index;
               return (
                 <Pressable
@@ -171,6 +178,7 @@ export default function RecurringScheduleFields({
         <View>
           {renderLabel("DAY OF MONTH")}
           <TextInput
+            accessibilityLabel="Day of month"
             value={value.dayOfMonth}
             onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
             placeholder="15"
@@ -207,6 +215,7 @@ export default function RecurringScheduleFields({
           <View>
             {renderLabel("DAY OF MONTH")}
             <TextInput
+              accessibilityLabel="First day of month"
               value={value.dayOfMonth}
               onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
               placeholder="15"

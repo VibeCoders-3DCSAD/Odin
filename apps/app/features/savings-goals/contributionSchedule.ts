@@ -10,7 +10,8 @@ export const GOAL_CONTRIBUTION_FREQUENCIES = [
   "custom",
 ] as const;
 
-export type GoalContributionFrequency = typeof GOAL_CONTRIBUTION_FREQUENCIES[number];
+// Legacy frequencies remain readable; the goal form exposes the current product choices.
+export type GoalContributionFrequency = typeof GOAL_CONTRIBUTION_FREQUENCIES[number] | "daily";
 
 export type SavingsContributionSchedule = {
   plannedContributionAmountCentavos: number;
@@ -81,9 +82,29 @@ function validDay(value: number | null): value is number {
   return value !== null && Number.isInteger(value) && value >= 1 && value <= 31;
 }
 
+type ContributionTiming = Pick<SavingsContributionSchedule, "contributionFrequency" | "contributionDayOfWeek" | "contributionDayOfMonth" | "contributionSecondDayOfMonth">;
+
+export function deriveGoalContributionDate(timing: ContributionTiming, asOfDate: string): string | null {
+  if (!isIsoDate(asOfDate)) throw new Error("Invalid schedule reference date.");
+  const { contributionFrequency: frequency, contributionDayOfWeek: weekday, contributionDayOfMonth: first, contributionSecondDayOfMonth: second } = timing;
+  if (frequency === null) return null;
+  if (frequency === "daily") return asOfDate;
+  const current = new Date(`${asOfDate}T00:00:00Z`);
+  if (frequency === "weekly") {
+    if (weekday === null || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) throw new Error("Select a contribution day from Sunday to Saturday.");
+    return addDays(asOfDate, (weekday - current.getUTCDay() + 7) % 7);
+  }
+  if (frequency !== "monthly" && frequency !== "semi_monthly") throw new Error("Choose a contribution frequency.");
+  if (!validDay(first)) throw new Error("Enter a contribution date number from 1 to 31.");
+  if (frequency === "semi_monthly" && (!validDay(second) || first >= second)) throw new Error("Enter two date numbers from 1 to 31, with the first before the second.");
+  const days = frequency === "semi_monthly" ? [first, second!] : [first];
+  const dates = days.map((day) => dateAtDay(current.getUTCFullYear(), current.getUTCMonth(), day));
+  return dates.find((date) => date >= asOfDate) ?? dateAtDay(current.getUTCFullYear(), current.getUTCMonth() + 1, first);
+}
+
 export function validateContributionSchedule(schedule: SavingsContributionSchedule): string | null {
   if (!Number.isSafeInteger(schedule.plannedContributionAmountCentavos) || schedule.plannedContributionAmountCentavos < 0) return "planned contribution amount must be a non-negative whole number";
-  if (schedule.contributionFrequency === null || !GOAL_CONTRIBUTION_FREQUENCIES.includes(schedule.contributionFrequency)) return "contribution frequency is invalid";
+  if (schedule.contributionFrequency === null || !(schedule.contributionFrequency === "daily" || GOAL_CONTRIBUTION_FREQUENCIES.some((frequency) => frequency === schedule.contributionFrequency))) return "contribution frequency is invalid";
   if (!schedule.nextContributionDate || !isIsoDate(schedule.nextContributionDate)) return "next contribution date must use YYYY-MM-DD format";
   const interval = schedule.contributionIntervalCount ?? 1;
   if (!Number.isSafeInteger(interval) || interval <= 0) return "contribution interval must be a positive whole number";
@@ -99,9 +120,15 @@ export function validateContributionSchedule(schedule: SavingsContributionSchedu
 export function advanceContributionSchedule(date: string, schedule: SavingsContributionSchedule): string | null {
   const frequency = schedule.contributionFrequency;
   const interval = schedule.contributionIntervalCount ?? 1;
+  if (frequency === "daily") return addDays(date, interval);
   if (frequency === "weekly") return addDays(date, 7 * interval);
   if (frequency === "biweekly") return addDays(date, 14 * interval);
-  if (frequency === "monthly") return addMonths(date, interval);
+  if (frequency === "monthly") {
+    const next = addMonths(date, interval);
+    if (!validDay(schedule.contributionDayOfMonth)) return next;
+    const month = new Date(`${next}T00:00:00Z`);
+    return dateAtDay(month.getUTCFullYear(), month.getUTCMonth(), schedule.contributionDayOfMonth);
+  }
   if (frequency === "quarterly") return addMonths(date, 3 * interval);
   if (frequency === "yearly") return addMonths(date, 12 * interval);
   if (frequency === "custom") return addDays(date, schedule.customIntervalDays!);

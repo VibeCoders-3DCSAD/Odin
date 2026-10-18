@@ -335,7 +335,7 @@ const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id
 const SAVINGS_ALLOCATION_PREFERENCE_FIELDS = new Set(["strategy"]);
 const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
 const SAVINGS_GOAL_PRIORITIES = ["low", "medium", "high"];
-const SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
+const SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
 
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
   "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos", "forecast_recorded_at",
@@ -1794,13 +1794,15 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
   }
   if (sanitized.target_date !== undefined && sanitized.target_date !== null) requireDateString(sanitized, "target_date");
   if (sanitized.next_contribution_date !== undefined && sanitized.next_contribution_date !== null) requireDateString(sanitized, "next_contribution_date");
-  if (sanitized.contribution_frequency !== undefined && !SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES.includes(sanitized.contribution_frequency as string)) throw new Error("contribution_frequency is invalid");
+  if (sanitized.contribution_frequency !== undefined && sanitized.contribution_frequency !== null && !SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES.includes(sanitized.contribution_frequency as string)) throw new Error("contribution_frequency is invalid");
   if (sanitized.contribution_interval_count !== undefined && sanitized.contribution_interval_count !== null) requirePositiveInteger(sanitized, "contribution_interval_count");
   for (const field of ["contribution_day_of_month", "contribution_second_day_of_month"]) {
     if (sanitized[field] !== undefined && sanitized[field] !== null) requireNumberInRange(sanitized, field, 1, 31);
   }
   if (sanitized.contribution_day_of_week !== undefined && sanitized.contribution_day_of_week !== null) requireNumberInRange(sanitized, "contribution_day_of_week", 0, 6);
   if (sanitized.custom_interval_days !== undefined && sanitized.custom_interval_days !== null) requirePositiveInteger(sanitized, "custom_interval_days");
+  if (creating && sanitized.contribution_frequency != null && sanitized.next_contribution_date == null) throw new Error("next_contribution_date is required for scheduled contributions");
+  if (sanitized.contribution_frequency === null && (sanitized.next_contribution_date != null || (sanitized.planned_contribution_amount_centavos != null && sanitized.planned_contribution_amount_centavos !== 0))) throw new Error("unscheduled goals must have no next contribution date and zero planned contribution");
   if (creating && (sanitized.next_contribution_date as string) > (sanitized.target_date as string)) throw new Error("next_contribution_date must be on or before target_date");
   if (sanitized.notes !== undefined && sanitized.notes !== null && (typeof sanitized.notes !== "string" || sanitized.notes.length > 1_000)) throw new Error("notes must be 1000 characters or fewer");
   if (sanitized.emergency_fund_target_method !== undefined && !["fixed_amount", "essential_expense_coverage"].includes(sanitized.emergency_fund_target_method as string)) throw new Error("emergency_fund_target_method is invalid");

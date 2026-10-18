@@ -18,7 +18,7 @@
 - Create, view, edit, archive, and delete a Savings Account with confirmation
 - Select one Savings Account type: Personal Savings / HYSA / Goal Savings / Time
   Deposit
-- Categorize a Goal Savings account
+- Create and edit Goal Savings accounts without a category input
 - Set a target, target date, contribution schedule, and priority for a Goal
   Savings account
 - Treat a Goal Savings account as its own holding account; it is not linked to
@@ -36,7 +36,7 @@
 - Personal Savings: interest rate and minimum balance
 - HYSA: base and boosted interest rates, interest calculation basis, interest
   credit frequency, and optional yield conditions
-- Goal Savings: category, target amount, target date, contribution schedule,
+- Goal Savings: target amount, target date, contribution schedule,
   interest rate, and priority
 - Goal Savings: Emergency Fund is a category or purpose, not a Savings Account
   type and not a debt
@@ -107,14 +107,17 @@ HYSA inputs are progressive: show Account Details and Interest first, then revea
 
 Goal Savings inputs:
 
+Goal creation and editing do not ask for a Goal Category. Existing Emergency Fund
+goals retain their purpose and allocation priority.
+
 | Input | Control | Required | Handling |
 | --- | --- | --- | --- |
-| Category | Single-select picker | Yes | Classify the goal for display and allocation. Emergency Fund is a category, not an account type. |
 | Target amount | Currency amount input | Yes | Use as the goal completion threshold and to calculate remaining amount and progress. |
 | Target date | Date picker | Yes | Use to calculate the required contribution and projected completion status. |
-| Planned contribution amount | Currency amount input | Yes | Use as the planned contribution for each scheduled occurrence. It does not create a transaction without explicit user confirmation. |
-| Contribution frequency | Shared frequency selector | Yes | Select Weekly, Biweekly, Semi-Monthly, Monthly, Quarterly, Yearly, or Custom. Use the same frequency selector used for recurring financial schedules. |
-| Next contribution date | Date picker | Yes | Anchor the contribution schedule and determine the scheduled occurrences before the target date. |
+| Planned contribution amount | Currency amount input | When frequency is not None | Use as the planned contribution for each scheduled occurrence. It does not create a transaction without explicit user confirmation. |
+| Contribution frequency | Shared frequency selector | Yes | Select Daily, Weekly, Twice a Month, Monthly, or None. Twice a Month uses two selected calendar days. None disables scheduled contributions while allowing manual contributions; no planned amount is required. Daily needs no additional date inputs. Do not ask the user for a next contribution date. |
+| Weekly contribution day | Weekday selector: Sunday through Saturday | Weekly only | Schedule contributions on the selected weekday. |
+| Monthly contribution dates | Numeric date inputs, 1–31 | Twice a Month or Monthly | Twice a Month requires two ascending date numbers; Monthly requires one. In shorter months, use the last day when a selected date does not exist. |
 | Interest rate | Percentage amount input | No | When provided, use as the annual rate for projected and credited interest; otherwise project no interest. |
 | Priority | Single-select picker | Yes | Use for savings allocation after Emergency Fund priority. |
 | Target method | Single-select picker | Emergency Fund only | For Emergency Fund, select Fixed Amount or Essential-Expense Coverage. Fixed Amount uses the entered target. |
@@ -177,9 +180,8 @@ Time Deposit inputs:
 ### 8.5 Savings Selectors
 
 - Savings account type selector
-- Goal Savings category selector
 - Goal priority selector
-- Savings contribution frequency selector: Weekly / Biweekly / Semi-Monthly / Monthly / Quarterly / Yearly / Custom
+- Goal Savings contribution frequency selector: Daily / Weekly / Twice a Month / Monthly / None
 - Goal Savings account selector for contributions, withdrawals, and transaction
   links
 - Savings activity selector: Contribution / Withdrawal
@@ -266,11 +268,13 @@ transactions do not create or link to savings activities automatically.
 - Require a valid HYSA promotional rate and start and end dates when a
   promotional period is configured; the end date must be on or after the start
   date
-- Require a Goal Savings category, positive target amount, non-negative
-  planned contribution amount, contribution frequency, first or next
-  contribution date, and target date
-- Require the first or next contribution date to be on or before the target
-  date
+- Require a positive Goal Savings target amount, contribution frequency,
+  and target date. Require a non-negative planned contribution amount when the
+  frequency is not None
+- Require a contribution weekday for Weekly, two ascending date numbers from
+  1 to 31 for Twice a Month, and one date number from 1 to 31 for Monthly
+- Derive scheduled occurrences from the selected cadence and require an occurrence
+  on or before the target date; do not require a next contribution date input
 - Require a valid non-negative interest rate for Goal Savings when provided
 - Require a target method and coverage period from 3 to 6 months when an
   Emergency Fund uses Essential-Expense Coverage

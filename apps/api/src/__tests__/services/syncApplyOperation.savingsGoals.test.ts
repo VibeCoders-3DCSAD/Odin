@@ -12,6 +12,16 @@ describe("savings-goal sync validation", () => {
     await expect(prepareOperation({} as never, "user-1", createOperation)).resolves.toMatchObject({ payload: createOperation.payload });
   });
 
+  it("accepts daily contributions and unscheduled goals", async () => {
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: "daily" } })).resolves.toMatchObject({ payload: { contribution_frequency: "daily" } });
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: null, planned_contribution_amount_centavos: 0, next_contribution_date: null } })).resolves.toMatchObject({ payload: { contribution_frequency: null, next_contribution_date: null } });
+  });
+
+  it("rejects an incomplete daily schedule or an unscheduled goal with a planned amount", async () => {
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: "daily", next_contribution_date: null } })).rejects.toThrow("next_contribution_date is required");
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: null, next_contribution_date: null } })).rejects.toThrow("unscheduled goals");
+  });
+
   it("rejects malformed savings activity payloads before database access", async () => {
     await expect(prepareOperation({} as never, "user-1", {
       ...createOperation,
@@ -26,7 +36,7 @@ describe("savings-goal sync validation", () => {
   });
 
   it("rejects invalid contribution schedules", async () => {
-    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: "daily" } })).rejects.toThrow("contribution_frequency is invalid");
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: "invalid" } })).rejects.toThrow("contribution_frequency is invalid");
     await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, next_contribution_date: "2027-01-01" } })).rejects.toThrow("next_contribution_date must be on or before target_date");
   });
 

@@ -24,8 +24,12 @@ describe("savings account detail sync validation", () => {
     await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, raw_interest_rate: 5 } })).rejects.toThrow("raw_interest_rate is not syncable");
   });
 
+  it("accepts daily contribution schedules", async () => {
+    await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, contribution_frequency: "daily" } })).resolves.toMatchObject({ payload: { contribution_frequency: "daily" } });
+  });
+
   it("accepts legacy creates without a schedule but rejects partial schedules", async () => {
-    await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, contribution_frequency: "daily" } })).rejects.toThrow("contribution_frequency is invalid");
+    await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, contribution_frequency: "invalid" } })).rejects.toThrow("contribution_frequency is invalid");
     await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { account_type: "personal_savings", interest_rate_bps: 425, minimum_balance_centavos: 100_00 } })).resolves.toMatchObject({ payload: { account_type: "personal_savings" } });
     await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { account_type: "personal_savings", interest_rate_bps: 425, minimum_balance_centavos: 100_00, planned_contribution_amount_centavos: 10_000 } })).rejects.toThrow("Savings contribution schedule is incomplete");
   });
