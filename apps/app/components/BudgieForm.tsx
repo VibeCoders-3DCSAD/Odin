@@ -124,7 +124,14 @@ export function Banner({ tone, children }: { tone: BannerTone; children: string 
   );
 }
 
-export function AmountHero({ children, label = "AMOUNT" }: { children: ReactNode; label?: string }) {
+type AmountHeroProps = {
+  children?: ReactNode;
+  label?: string;
+  amountCentavos?: number;
+  detail?: string;
+};
+
+export function AmountHero({ children, label = "AMOUNT", amountCentavos, detail }: AmountHeroProps) {
   return (
     <View style={styles.hero}>
       <Svg style={StyleSheet.absoluteFill} preserveAspectRatio="none">
@@ -137,6 +144,13 @@ export function AmountHero({ children, label = "AMOUNT" }: { children: ReactNode
         <Rect width="100%" height="100%" fill="url(#amountHero)" />
       </Svg>
       <Text style={styles.heroLabel}>{label}</Text>
+      {amountCentavos !== undefined ? (
+        <Text style={styles.heroAmount}>
+          <Text style={styles.heroCurrency}>PHP </Text>
+          {(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+      ) : null}
+      {detail ? <Text style={styles.heroDetail}>{detail}</Text> : null}
       {children}
     </View>
   );
@@ -254,6 +268,9 @@ export const styles = StyleSheet.create({
   bannerText: { flex: 1, fontFamily: v4Font, fontSize: 11.5, lineHeight: 17, fontWeight: "500" },
   hero: { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 17, overflow: "hidden", backgroundColor: v4.brand },
   heroLabel: { fontFamily: v4Font, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.95, color: "rgba(255,255,255,0.62)" },
+  heroAmount: { marginTop: 6, fontFamily: v4Font, fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: "#FFFFFF", fontVariant: ["tabular-nums"] },
+  heroCurrency: { fontSize: 13, fontWeight: "600", letterSpacing: 0 },
+  heroDetail: { marginTop: 10, fontFamily: v4Font, fontSize: 12.5, fontWeight: "600", color: "#FFFFFF" },
   segment: { flexDirection: "row", backgroundColor: v4.surface, borderWidth: 1, borderColor: v4.border, borderRadius: 12, padding: 3, gap: 3 },
   segmentItem: { flex: 1, minHeight: 44, borderRadius: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 4 },
   segmentItemOn: { backgroundColor: v4.brand },

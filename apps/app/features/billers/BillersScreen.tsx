@@ -112,15 +112,11 @@ export default function BillersScreen({ userId, deviceId, syncVersion, onAdd, on
 
   const activePayments = payments ?? [];
   const header = (
-    <AmountHero label="DUE THIS MONTH">
-      <Text style={{ marginTop: 6, fontFamily: v4Font, fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: "#FFFFFF", fontVariant: ["tabular-nums"] }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", letterSpacing: 0 }}>PHP </Text>
-        {formatPhp(dueThisMonthCentavos(activePayments, today)).slice(4)}
-      </Text>
-      <Text style={{ marginTop: 10, fontFamily: v4Font, fontSize: 12.5, fontWeight: "600", color: "#FFFFFF" }}>
-        {activePayments.length} {activePayments.length === 1 ? "biller or remittance" : "billers and remittances"}
-      </Text>
-    </AmountHero>
+    <AmountHero
+      label="DUE THIS MONTH"
+      amountCentavos={dueThisMonthCentavos(activePayments, today)}
+      detail={`${activePayments.length} ${activePayments.length === 1 ? "biller or remittance" : "billers and remittances"}`}
+    />
   );
 
   function emptyState(title: string, body: string, action?: { label: string; onPress: () => void }) {
