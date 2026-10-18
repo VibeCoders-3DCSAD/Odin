@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CaretLeft, CaretRight, Check, Tag } from "phosphor-react-native";
+import { ArrowLeft, CaretLeft, CaretRight, Check } from "phosphor-react-native";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
-import { styles as ui, tileTints, v4, v4Font } from "./BudgieForm";
+import { styles as ui, v4, v4Font } from "./BudgieForm";
 import { listCategories, listSubcategories, type Category, type Subcategory } from "../local-db/repositories/taxonomy";
+import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../features/taxonomy/taxonomyVisuals";
 
 export type CategorySelection = {
   tier: "category" | "subcategory" | null;
@@ -58,15 +59,11 @@ export function CategorySelectorTree({ categories, subcategories, selection, onS
     }
   }, [selection.categoryId]);
 
-  function tintFor(categoryId: string) {
-    const index = availableCategories.findIndex((category) => category.id === categoryId);
-    return tileTints[Math.max(index, 0) % tileTints.length]!;
-  }
-
-  function renderSelectableRow({ label, subtitle, tint, selected, onPress, onCaretPress, id, index }: {
+  function renderSelectableRow({ label, subtitle, iconKey, colorHex, selected, onPress, onCaretPress, id, index }: {
     label: string;
     subtitle?: string;
-    tint: (typeof tileTints)[number];
+    iconKey?: string;
+    colorHex?: string;
     selected: boolean;
     onPress: () => void;
     onCaretPress?: () => void;
@@ -76,7 +73,7 @@ export function CategorySelectorTree({ categories, subcategories, selection, onS
     return (
       <View key={id} style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}>
         <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Select ${label}`} accessibilityState={{ selected }} style={ui.listRowMain}>
-          <View style={[ui.listTile, { backgroundColor: tint.bg }]}><Tag color={tint.fg} size={16} weight="bold" /></View>
+          <View style={[ui.listTile, { backgroundColor: colorHex ?? DEFAULT_TAXONOMY_COLOR }]}><TaxonomyIcon iconKey={iconKey} color="#fff" size={16} weight="fill" /></View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={[ui.listTitle, selected ? { fontWeight: "700" } : null]}>{label}</Text>
             {subtitle ? <Text numberOfLines={1} style={ui.listSubtitle}>{subtitle}</Text> : null}
@@ -114,11 +111,11 @@ export function CategorySelectorTree({ categories, subcategories, selection, onS
         {rows.map((row, index) => {
           if (row.kind === "subcategory") {
             const { subcategory } = row;
-            return renderSelectableRow({ label: subcategory.label, subtitle: subcategory.description || undefined, tint: tileTints[4], selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId: null, subcategoryId: subcategory.id }), id: subcategory.id, index });
+            return renderSelectableRow({ label: subcategory.label, subtitle: subcategory.description || undefined, iconKey: subcategory.icon_key, colorHex: subcategory.color_hex, selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId: null, subcategoryId: subcategory.id }), id: subcategory.id, index });
           }
           const { category } = row;
           const count = subcategoriesByCategory.get(category.id)?.length ?? 0;
-          return renderSelectableRow({ label: category.label, subtitle: `${count} ${count === 1 ? "subcategory" : "subcategories"}`, tint: tintFor(category.id), selected: selection.tier === "category" && selection.categoryId === category.id, onPress: () => onSelect({ tier: "category", categoryId: category.id, subcategoryId: null }), onCaretPress: () => setView({ level: "subcategories", categoryId: category.id }), id: category.id, index });
+          return renderSelectableRow({ label: category.label, subtitle: `${count} ${count === 1 ? "subcategory" : "subcategories"}`, iconKey: category.icon_key, colorHex: category.color_hex, selected: selection.tier === "category" && selection.categoryId === category.id, onPress: () => onSelect({ tier: "category", categoryId: category.id, subcategoryId: null }), onCaretPress: () => setView({ level: "subcategories", categoryId: category.id }), id: category.id, index });
         })}
       </View>
     );
@@ -127,12 +124,11 @@ export function CategorySelectorTree({ categories, subcategories, selection, onS
   function renderSubcategories(categoryId: string) {
     const items = subcategoriesByCategory.get(categoryId) ?? [];
     if (items.length === 0) return renderEmpty();
-    const tint = tintFor(categoryId);
     const category = categories.find((item) => item.id === categoryId);
     return (
       <View style={{ gap: 14 }}>
         <View style={ui.list}>
-          {items.map((subcategory, index) => renderSelectableRow({ label: subcategory.label, subtitle: subcategory.description || undefined, tint, selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId, subcategoryId: subcategory.id }), id: subcategory.id, index }))}
+          {items.map((subcategory, index) => renderSelectableRow({ label: subcategory.label, subtitle: subcategory.description || undefined, iconKey: subcategory.icon_key, colorHex: subcategory.color_hex ?? category?.color_hex, selected: selection.subcategoryId === subcategory.id, onPress: () => onSelect({ tier: "subcategory", categoryId, subcategoryId: subcategory.id }), id: subcategory.id, index }))}
         </View>
         {category ? (
           <Pressable onPress={() => onSelect({ tier: "category", categoryId, subcategoryId: null })} accessibilityRole="button" accessibilityLabel={`Use ${category.label}`} accessibilityState={{ selected: selection.tier === "category" && selection.categoryId === categoryId }} style={[ui.button, ui.buttonGhost]}>

@@ -12,7 +12,8 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { ArrowLeft, Bank, Check, CreditCard, Money, Tag, Wallet } from "phosphor-react-native";
+import { ArrowLeft, Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
+import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
 import { AmountHero, Banner, Chip, FieldError, FieldLabel, FormCard, Note, PickerField, Segment, Switch, TextField, styles as ui, tileTints, v4, v4Font } from "../../components/BudgieForm";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
@@ -722,6 +723,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   function renderCategoryPickerPage() {
     const selectedCategory = getSelectedCategory();
     const selectedSubcategory = getSelectedSubcategory();
+    const selectedVisual = categorySelection.tier === "subcategory" ? selectedSubcategory : selectedCategory;
 
     return (
       <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 14 }} showsVerticalScrollIndicator={false}>
@@ -732,9 +734,14 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             <Text style={{ fontFamily: v4Font, fontSize: 10.5, fontWeight: "700", color: v4.okInk, letterSpacing: 0.6 }}>
               CURRENT SELECTION
             </Text>
-            <Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 14, color: v4.ink }}>
-              {getCategoryFieldLabel()}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={[ui.listTile, { backgroundColor: selectedVisual?.color_hex ?? DEFAULT_TAXONOMY_COLOR }]}>
+                <TaxonomyIcon iconKey={selectedVisual?.icon_key} color="#fff" size={16} weight="fill" />
+              </View>
+              <Text style={{ flex: 1, fontFamily: v4Font, fontWeight: "700", fontSize: 14, color: v4.ink }}>
+                {getCategoryFieldLabel()}
+              </Text>
+            </View>
           </View>
         ) : null}
 
@@ -760,7 +767,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}
                   >
                     <View style={ui.listRowMain}>
-                      <View style={[ui.listTile, { backgroundColor: tileTints[3].bg }]}><Tag color={tileTints[3].fg} size={16} weight="bold" /></View>
+                      <View style={[ui.listTile, { backgroundColor: sub.color_hex ?? DEFAULT_TAXONOMY_COLOR }]}><TaxonomyIcon iconKey={sub.icon_key} color="#fff" size={16} weight="fill" /></View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text numberOfLines={1} style={[ui.listTitle, selected ? { fontWeight: "700" } : null]}>{sub.label}</Text>
                         {sub.description ? <Text numberOfLines={1} style={ui.listSubtitle}>{sub.description}</Text> : null}
@@ -1005,6 +1012,11 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                 <View>
                   <PickerField
                     label="Category"
+                    icon={
+                      <View style={[ui.listTile, { backgroundColor: (categorySelection.tier === "subcategory" ? getSelectedSubcategory()?.color_hex : getSelectedCategory()?.color_hex) ?? DEFAULT_TAXONOMY_COLOR }]}>
+                        <TaxonomyIcon iconKey={categorySelection.tier === "subcategory" ? getSelectedSubcategory()?.icon_key : getSelectedCategory()?.icon_key} color="#fff" size={16} weight="fill" />
+                      </View>
+                    }
                     value={getCategoryFieldLabel()}
                     placeholder={!categorySelection.tier}
                     error={formError === "Select a category"}

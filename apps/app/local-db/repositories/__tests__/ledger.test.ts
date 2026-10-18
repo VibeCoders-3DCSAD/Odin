@@ -202,6 +202,23 @@ describe("transaction list pagination", () => {
     );
   });
 
+  test("returns category icon and color, falling back to the parent category", async () => {
+    const db = { getAllAsync: jest.fn(async () => []) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { listTransactions } = await import("../ledger");
+    await listTransactions("user-1");
+
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("COALESCE(s.icon_key, c.icon_key) AS icon_key"),
+      "user-1",
+    );
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("LEFT JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id)"),
+      "user-1",
+    );
+  });
+
   test("filters transactions by their parent category", async () => {
     const db = { getAllAsync: jest.fn(async () => []) };
     mockInitDatabase.mockResolvedValue(db);

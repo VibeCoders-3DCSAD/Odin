@@ -44,13 +44,13 @@ export const SYNCED_TABLES = [
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
   categories: new Set([
     "id", "user_id", "slug", "label", "short_label",
-    "description", "classification", "is_system", "is_filipino_context", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos", "sort_order",
+    "description", "classification", "icon_key", "color_hex", "is_system", "is_filipino_context", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos", "sort_order",
     "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
   subcategories: new Set([
     "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "is_protected", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos",
+    "description", "icon_key", "color_hex", "is_system", "is_filipino_context", "is_protected", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos",
     "sort_order", "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),

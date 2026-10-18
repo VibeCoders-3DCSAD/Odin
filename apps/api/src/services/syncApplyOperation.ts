@@ -54,6 +54,28 @@ const ALERT_SUPPRESSION_CREATE_FIELDS = new Set(["category", "source_type", "sta
 const ALERT_SUPPRESSION_UPDATE_FIELDS = new Set(["status", "ends_at", "reason"]);
 const ANOMALY_EVALUATION_CREATE_FIELDS = new Set(["transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "model_version", "evaluated_at"]);
 const ANOMALY_EVALUATION_UPDATE_FIELDS = new Set(["confirmed_recurring_at"]);
+const TAXONOMY_ICON_KEYS = new Set([
+  "bowl-food", "wine", "t-shirt", "house", "armchair", "first-aid",
+  "car", "device-mobile", "game-controller", "graduation-cap", "fork-knife",
+  "sparkle", "tag", "airplane", "bank", "basket", "bus", "camera", "coffee",
+  "credit-card", "dog", "gift", "heart", "laptop", "music-note", "storefront",
+  "carrot", "fish", "bread", "egg", "cookie", "orange", "pill", "stethoscope", "tooth",
+  "eye", "test-tube", "hospital", "heartbeat", "shield-check",
+  "cake", "ice-cream", "hamburger", "pizza", "cooking-pot", "tea-bag",
+  "beer-bottle", "beer-stein", "martini", "cigarette", "champagne", "brandy",
+  "pants", "dress", "hoodie", "sock", "sneaker", "baseball-cap",
+  "handbag", "watch", "lightning", "drop", "flame", "wifi-high",
+  "key", "wrench", "plug", "bed", "washing-machine", "broom",
+  "fan", "oven", "potted-plant", "lightbulb", "toolbox", "syringe",
+  "thermometer", "wheelchair", "bandaids", "brain", "ambulance", "bicycle",
+  "train", "gas-pump", "motorcycle", "taxi", "steering-wheel", "truck",
+  "boat", "phone", "envelope", "globe", "sim-card", "chat-circle",
+  "headphones", "film-slate", "ticket", "palette", "barbell", "book-open",
+  "trophy", "tent", "pencil", "notebook", "calculator", "certificate",
+  "backpack", "student", "scissors", "paw-print", "baby", "diamond",
+  "scales", "identification-card", "wallet", "coat-hanger",
+]);
+const COLOR_HEX_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
 const SERVER_COLUMNS = new Set([
   "id",
@@ -72,6 +94,8 @@ const CATEGORY_CREATE_FIELDS = new Set([
   "label",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "minimum_amount_centavos",
   "always_in_budget",
@@ -83,6 +107,8 @@ const CATEGORY_UPDATE_FIELDS = new Set([
   "label",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "minimum_amount_centavos",
   "always_in_budget",
@@ -98,6 +124,8 @@ const SUBCATEGORY_CREATE_FIELDS = new Set([
   "label",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "is_protected",
   "minimum_amount_centavos",
@@ -111,6 +139,8 @@ const SUBCATEGORY_UPDATE_FIELDS = new Set([
   "slug",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "is_protected",
   "minimum_amount_centavos",
@@ -736,6 +766,7 @@ async function validateTaxonomyCreatePayload(
     requireString(sanitized, "label");
     requireString(sanitized, "description");
     optionalString(sanitized, "short_label");
+    validateTaxonomyVisuals(sanitized);
     optionalBoolean(sanitized, "is_filipino_context");
     optionalNumber(sanitized, "minimum_amount_centavos");
     optionalBoolean(sanitized, "always_in_budget");
@@ -823,6 +854,7 @@ async function validateTaxonomyCreatePayload(
     requireString(sanitized, "label");
     requireString(sanitized, "description");
     optionalString(sanitized, "short_label");
+    validateTaxonomyVisuals(sanitized);
     optionalBoolean(sanitized, "is_filipino_context");
     optionalBoolean(sanitized, "is_protected");
     optionalNumber(sanitized, "minimum_amount_centavos");
@@ -970,6 +1002,10 @@ async function validateUpdatePayload(
 
   assertOnlyAllowed(payload, allowedFields);
   const sanitized = sanitizePayload(payload, allowedFields);
+
+  if (entity === "categories" || entity === "subcategories") {
+    validateTaxonomyVisuals(sanitized);
+  }
 
   if (entity === "debt_strategy_preferences") {
     if (sanitized.strategy !== "snowball" && sanitized.strategy !== "avalanche") throw new Error("strategy must be snowball or avalanche");
@@ -1207,6 +1243,8 @@ async function validateUpdatePayload(
       if (typeof value !== "string") throw new Error(`${key} must be a string`);
       continue;
     }
+
+    if (key === "icon_key" || key === "color_hex") continue;
 
     if (key === "notes") {
       if (value !== null && typeof value !== "string") {
@@ -1558,6 +1596,15 @@ function currentFinancialPlanPeriod(now = new Date()): { start: string; end: str
 
 function requireString(payload: Record<string, unknown>, field: string): void {
   if (!payload[field] || typeof payload[field] !== "string") throw new Error(`${field} is required`);
+}
+
+function validateTaxonomyVisuals(payload: Record<string, unknown>): void {
+  if (payload.icon_key !== undefined && (typeof payload.icon_key !== "string" || !TAXONOMY_ICON_KEYS.has(payload.icon_key))) {
+    throw new Error("icon_key is invalid");
+  }
+  if (payload.color_hex !== undefined && (typeof payload.color_hex !== "string" || !COLOR_HEX_PATTERN.test(payload.color_hex))) {
+    throw new Error("color_hex must be a six-digit hex color");
+  }
 }
 
 async function validateDebtPreset(supabase: SupabaseClient, userId: string, presetKey: string | undefined, preset: Record<string, unknown>): Promise<void> {

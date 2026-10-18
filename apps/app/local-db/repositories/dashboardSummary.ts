@@ -2,7 +2,10 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 
 type CategorySpending = {
+  category_id: string | null;
   category_label: string;
+  icon_key: string | null;
+  color_hex: string | null;
   total_centavos: number;
 };
 
@@ -27,6 +30,9 @@ type DashboardTransaction = {
   transaction_date: string;
   merchant_name: string | null;
   counterparty_name: string | null;
+  category_label: string | null;
+  icon_key: string | null;
+  color_hex: string | null;
 };
 
 type DailyTrend = {
@@ -36,6 +42,12 @@ type DailyTrend = {
 };
 
 const RECENT_LIMIT = 10;
+
+// Resolve both broad-category transactions and subcategory transactions within the owner boundary.
+const TAXONOMY_JOINS = `
+  LEFT JOIN subcategories s ON t.subcategory_id = s.id AND s.user_id = t.user_id
+  LEFT JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id) AND c.user_id = t.user_id
+`;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -125,21 +137,25 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
       today,
     ),
     db.getAllAsync<DashboardTransaction>(
-       `SELECT id, transaction_type, amount_centavos, transaction_date, merchant_name, counterparty_name
-        FROM transactions
-        WHERE user_id = ? AND deleted = 0 AND status = 'posted' AND transaction_type = 'expense'
-        ORDER BY transaction_date DESC, created_at DESC
+       `SELECT t.id, t.transaction_type, t.amount_centavos, t.transaction_date, t.merchant_name, t.counterparty_name,
+               COALESCE(s.label, c.label) AS category_label,
+               COALESCE(s.icon_key, c.icon_key) AS icon_key,
+               COALESCE(s.color_hex, c.color_hex) AS color_hex
+        FROM transactions t
+        ${TAXONOMY_JOINS}
+        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
+        ORDER BY t.transaction_date DESC, t.created_at DESC
         LIMIT ${RECENT_LIMIT}`,
        userId,
      ),
     db.getAllAsync<CategorySpending>(
-      `SELECT COALESCE(c.label, 'Other') AS category_label, SUM(t.amount_centavos) AS total_centavos
+      `SELECT c.id AS category_id, COALESCE(c.label, 'Other') AS category_label,
+              c.icon_key, c.color_hex, SUM(t.amount_centavos) AS total_centavos
        FROM transactions t
-       LEFT JOIN subcategories s ON t.subcategory_id = s.id
-       LEFT JOIN categories c ON s.category_id = c.id
+       ${TAXONOMY_JOINS}
         WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
           AND t.transaction_date >= ? AND t.transaction_date <= ?
-        GROUP BY COALESCE(c.id, 'other'), COALESCE(c.label, 'Other')
+        GROUP BY c.id, c.label, c.icon_key, c.color_hex
        ORDER BY total_centavos DESC`,
       userId,
       currentMonth.start,

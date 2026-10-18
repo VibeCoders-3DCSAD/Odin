@@ -45,6 +45,8 @@ type TransactionListRow = {
   id: string;
   name: string;
   category_label: string | null;
+  icon_key: string | null;
+  color_hex: string | null;
   financial_account_name: string | null;
   amount_centavos: number;
   transaction_date: string;
@@ -495,13 +497,16 @@ export async function listTransactions(
   const parts: string[] = [`SELECT
     t.id,
     COALESCE(NULLIF(t.merchant_name, ''), NULLIF(t.counterparty_name, ''), NULLIF(t.notes, ''), s.label, 'Transaction') AS name,
-    s.label AS category_label,
+    COALESCE(s.label, c.label) AS category_label,
+    COALESCE(s.icon_key, c.icon_key) AS icon_key,
+    COALESCE(s.color_hex, c.color_hex) AS color_hex,
     a.name AS financial_account_name,
     t.amount_centavos,
     t.transaction_date,
     t.transaction_type
     FROM transactions t
     LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0 AND (s.user_id = t.user_id OR s.is_system = 1)
+    LEFT JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id) AND c.deleted = 0 AND (c.user_id = t.user_id OR c.is_system = 1)
     LEFT JOIN financial_accounts a ON a.id = CASE WHEN t.transaction_type = 'income' THEN t.destination_account_id ELSE t.source_account_id END AND a.user_id = t.user_id AND a.deleted = 0
     WHERE t.user_id = ? AND t.deleted = 0`];
   const params: SQLite.SQLiteBindValue[] = [userId];

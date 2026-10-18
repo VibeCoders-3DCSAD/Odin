@@ -3,6 +3,7 @@ import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
 import type { SyncOperation } from "../types";
+import { TAXONOMY_ICON_KEYS as taxonomyIconKeys } from "../../lib/taxonomyIconOptions";
 
 type CategoryRow = {
   id: string;
@@ -12,6 +13,8 @@ type CategoryRow = {
   short_label: string | null;
   description: string;
   classification: "essential" | "non_essential";
+  icon_key: string;
+  color_hex: string;
   is_system: number;
   is_filipino_context: number;
   minimum_amount_centavos: number | null;
@@ -36,6 +39,8 @@ type SubcategoryRow = {
   label: string;
   short_label: string | null;
   description: string;
+  icon_key: string;
+  color_hex: string;
   is_system: number;
   is_filipino_context: number;
   is_protected: number;
@@ -59,6 +64,8 @@ export type Category = {
   short_label: string | null;
   description: string;
   classification: "essential" | "non_essential";
+  icon_key?: string;
+  color_hex?: string;
   is_system: boolean;
   is_filipino_context: boolean;
   minimum_amount_centavos?: number | null;
@@ -76,6 +83,8 @@ export type Subcategory = {
   label: string;
   short_label: string | null;
   description: string;
+  icon_key?: string;
+  color_hex?: string;
   is_system: boolean;
   is_filipino_context: boolean;
   is_protected: boolean;
@@ -90,6 +99,8 @@ export type CreateCategoryInput = {
   slug: string;
   label: string;
   description: string;
+  icon_key?: string;
+  color_hex?: string;
   short_label?: string | null;
   is_filipino_context?: boolean;
   minimum_amount_centavos?: number | null;
@@ -102,6 +113,8 @@ export type UpdateCategoryInput = {
   label?: string;
   short_label?: string | null;
   description?: string;
+  icon_key?: string;
+  color_hex?: string;
   is_filipino_context?: boolean;
   minimum_amount_centavos?: number | null;
   always_in_budget?: boolean;
@@ -115,6 +128,8 @@ export type CreateSubcategoryInput = {
   slug: string;
   label: string;
   description: string;
+  icon_key?: string;
+  color_hex?: string;
   category_id?: string | null;
   short_label?: string | null;
   is_filipino_context?: boolean;
@@ -130,6 +145,8 @@ export type UpdateSubcategoryInput = {
   slug?: string;
   short_label?: string | null;
   description?: string;
+  icon_key?: string;
+  color_hex?: string;
   is_filipino_context?: boolean;
   is_protected?: boolean;
   minimum_amount_centavos?: number | null;
@@ -146,6 +163,8 @@ function mapCategory(row: CategoryRow): Category {
     short_label: row.short_label,
     description: row.description,
     classification: row.classification,
+    icon_key: row.icon_key,
+    color_hex: row.color_hex,
     is_system: row.is_system === 1,
     is_filipino_context: row.is_filipino_context === 1,
     minimum_amount_centavos: row.minimum_amount_centavos,
@@ -165,6 +184,8 @@ function mapSubcategory(row: SubcategoryRow): Subcategory {
     label: row.label,
     short_label: row.short_label,
     description: row.description,
+    icon_key: row.icon_key,
+    color_hex: row.color_hex,
     is_system: row.is_system === 1,
     is_filipino_context: row.is_filipino_context === 1,
     is_protected: row.is_protected === 1,
@@ -178,6 +199,8 @@ function mapSubcategory(row: SubcategoryRow): Subcategory {
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 const DATABASE_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
+const TAXONOMY_ICON_KEYS: ReadonlySet<string> = new Set(taxonomyIconKeys);
+const COLOR_HEX_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) dbPromise = initDatabase();
@@ -214,6 +237,15 @@ function validateBudgetAmounts(minimumAmountCentavos: number | null | undefined,
   }
   if (minimumAmountCentavos !== null && minimumAmountCentavos !== undefined && fixedAmountCentavos !== null && fixedAmountCentavos !== undefined && fixedAmountCentavos < minimumAmountCentavos) {
     throw new LocalDbError("VALIDATION_ERROR", "fixed_amount_centavos must be greater than or equal to minimum_amount_centavos");
+  }
+}
+
+function validateTaxonomyVisuals(iconKey: string | undefined, colorHex: string | undefined): void {
+  if (iconKey !== undefined && !TAXONOMY_ICON_KEYS.has(iconKey)) {
+    throw new LocalDbError("VALIDATION_ERROR", "icon_key is invalid");
+  }
+  if (colorHex !== undefined && !COLOR_HEX_PATTERN.test(colorHex)) {
+    throw new LocalDbError("VALIDATION_ERROR", "color_hex must be a six-digit hex color");
   }
 }
 
@@ -288,6 +320,7 @@ export async function createCategory(
     throw new LocalDbError("VALIDATION_ERROR", "slug, label, and description are required");
   }
   validateBudgetAmounts(input.minimum_amount_centavos, input.fixed_amount_centavos);
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
 
   const db = await getDb();
   const id = randomUUID();
@@ -299,16 +332,18 @@ export async function createCategory(
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO categories
-        (id, user_id, slug, label, short_label, description,
+        (id, user_id, slug, label, short_label, description, icon_key, color_hex,
          is_system, is_filipino_context, minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order, is_active, metadata,
           version, deleted, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
       id,
       userId,
       input.slug,
       input.label,
       input.short_label ?? null,
        input.description,
+       input.icon_key ?? "tag",
+       input.color_hex ?? "#0F766E",
        boolToInt(input.is_filipino_context),
        input.minimum_amount_centavos ?? null,
        boolToInt(input.always_in_budget),
@@ -351,6 +386,7 @@ export async function updateCategory(
 ): Promise<{ category: Category; operation: SyncOperation }> {
   const db = await getDb();
   const ts = now();
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
 
   let result: { category: Category; operation: SyncOperation };
 
@@ -480,6 +516,7 @@ export async function createSubcategory(
     throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_KINDS.join(", ")}`);
   }
   validateBudgetAmounts(input.minimum_amount_centavos, input.fixed_amount_centavos);
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
 
   const db = await getDb();
   const id = randomUUID();
@@ -502,10 +539,10 @@ export async function createSubcategory(
 
     await db.runAsync(
       `INSERT INTO subcategories
-        (id, user_id, category_id, slug, kind, label, short_label, description,
+        (id, user_id, category_id, slug, kind, label, short_label, description, icon_key, color_hex,
           is_system, is_filipino_context, is_protected, minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order, is_active,
           metadata, version, deleted, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
       id,
       userId,
       input.category_id ?? null,
@@ -514,6 +551,8 @@ export async function createSubcategory(
       input.label,
       input.short_label ?? null,
       input.description,
+      input.icon_key ?? "tag",
+      input.color_hex ?? "#0F766E",
       boolToInt(input.is_filipino_context),
       boolToInt(input.is_protected),
       input.minimum_amount_centavos ?? null,
@@ -557,6 +596,7 @@ export async function updateSubcategory(
 ): Promise<{ subcategory: Subcategory; operation: SyncOperation }> {
   const db = await getDb();
   const ts = now();
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
 
   let result: { subcategory: Subcategory; operation: SyncOperation };
 

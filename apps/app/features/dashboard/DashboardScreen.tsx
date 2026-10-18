@@ -15,6 +15,8 @@ import { FinancialHealthCard } from "./components/FinancialHealthCard";
 import { getBudgetContent, getForecastContent, getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
 import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getPreviousMonthName } from "./dashboardFormatting";
 import { useDashboardData } from "./hooks/useDashboardData";
+import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
+import type { CategorySpending } from "../../local-db/repositories/dashboardSummary";
 
 const P = {
   shell: "#fcf8f0",
@@ -39,8 +41,6 @@ const P = {
   sun500: "#C25E00",
   white: "#FFFFFF",
 };
-
-const SPENDING_COLORS = [P.brand, P.aqua600, "#8B7355", P.aqua300, P.sun500, P.monza600];
 
 type Props = {
   userId: string;
@@ -70,8 +70,8 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
   const categoryExpenseTotal = s.categorySpending.reduce((sum, category) => sum + category.total_centavos, 0);
   const visibleSpending = s.categorySpending.slice(0, 4);
   const hiddenSpendingTotal = s.categorySpending.slice(4).reduce((sum, category) => sum + category.total_centavos, 0);
-  const spendingGroups = hiddenSpendingTotal > 0
-    ? [...visibleSpending, { category_label: "Other", total_centavos: hiddenSpendingTotal }]
+  const spendingGroups: CategorySpending[] = hiddenSpendingTotal > 0
+    ? [...visibleSpending, { category_id: "remaining-categories", category_label: "Other categories", total_centavos: hiddenSpendingTotal, icon_key: "tag", color_hex: "#6B7A6F" }]
     : visibleSpending;
 
   const isEmpty = s.accountCount === 0
@@ -203,10 +203,10 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 32, backgroundColor: P.card, padding: 20 }}>
         <SpendingPie
-          segments={spendingGroups.map((c, i) => ({
+          segments={spendingGroups.map((c) => ({
             label: c.category_label,
             value: c.total_centavos,
-            color: SPENDING_COLORS[i] ?? P.mut,
+            color: c.color_hex ?? DEFAULT_TAXONOMY_COLOR,
           }))}
           total={categoryExpenseTotal}
           totalLabel={formatPesoCompact(categoryExpenseTotal)}
@@ -214,13 +214,15 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
           muted={P.mut}
         />
         <View style={{ flex: 1, gap: 10 }}>
-          {spendingGroups.map((c, i) => {
+          {spendingGroups.map((c) => {
             const pct = categoryExpenseTotal > 0
               ? Math.round((c.total_centavos / categoryExpenseTotal) * 100)
               : 0;
             return (
-              <View key={c.category_label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: SPENDING_COLORS[i] ?? P.mut }} />
+              <View key={c.category_id ?? "uncategorized"} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: c.color_hex ?? DEFAULT_TAXONOMY_COLOR, alignItems: "center", justifyContent: "center" }}>
+                  <TaxonomyIcon iconKey={c.icon_key} size={15} color="#fff" weight="fill" />
+                </View>
                 <Text style={{ flex: 1, fontFamily: "Manrope", fontWeight: "500", fontSize: 12.5, color: P.ink2 }} numberOfLines={1}>{c.category_label}</Text>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12.5, color: P.ink }}>{pct}%</Text>
               </View>
@@ -242,19 +244,15 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
       <View style={{ gap: 2 }}>
         {s.recentTransactions.map((tx) => {
           const isIncome = tx.transaction_type === "income";
-          const label = tx.merchant_name || tx.counterparty_name || (isIncome ? "Income" : "Expense");
-          const bgColor = isIncome ? P.aqua50 : P.sun100;
-          const iconColor = isIncome ? P.aqua700 : "#8A3F00";
+          const label = tx.merchant_name || tx.counterparty_name || tx.category_label || (isIncome ? "Income" : "Expense");
           return (
             <View key={tx.id} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 9 }}>
-              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: bgColor, justifyContent: "center", alignItems: "center" }}>
-                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: iconColor }}>
-                  {label.charAt(0).toUpperCase()}
-                </Text>
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: tx.color_hex ?? DEFAULT_TAXONOMY_COLOR, justifyContent: "center", alignItems: "center" }}>
+                <TaxonomyIcon iconKey={tx.icon_key} size={21} color="#fff" weight="fill" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: P.ink }} numberOfLines={1}>{label}</Text>
-                <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.mut }}>{isIncome ? "Income" : "Expense"}</Text>
+                <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.mut }} numberOfLines={1}>{tx.category_label ?? (isIncome ? "Income" : "Expense")}</Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
                 <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: isIncome ? P.aqua700 : P.ink }}>
