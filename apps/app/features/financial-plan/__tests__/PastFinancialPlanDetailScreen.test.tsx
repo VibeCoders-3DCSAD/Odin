@@ -126,6 +126,16 @@ describe("PastFinancialPlanDetailScreen", () => {
     expect(labelPlan.recommendation.savingsReservations).toEqual(expect.arrayContaining([expect.objectContaining({ savingsGoalId: "travel" })]));
   });
 
+  it("preserves the saved biller breakdown and requested hierarchy for historical plans", async () => {
+    mockGetFinancialPlan.mockResolvedValue({ ...plan, inputSnapshot: { ...plan.inputSnapshot, obligations: { reservations: [{ scheduledPaymentId: "electricity", label: "Electricity at acceptance", amountCentavos: 12_000, dueDate: "2026-09-20" }] } } });
+    const view = renderScreen();
+    await waitFor(() => expect(view.getByText("Electricity at acceptance")).toBeTruthy());
+    expect(view.getByText("Due 2026-09-20")).toBeTruthy();
+    const text = JSON.stringify(view.toJSON());
+    expect(text.indexOf("Savings & Debt")).toBeLessThan(text.indexOf("Billers and Remittances"));
+    expect(text.indexOf("Billers and Remittances")).toBeLessThan(text.indexOf("Category Allocations"));
+  });
+
   it("flags over-allocation and an over-plan verdict", async () => {
     const view = renderScreen();
 

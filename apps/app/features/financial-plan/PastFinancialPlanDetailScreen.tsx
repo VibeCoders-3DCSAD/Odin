@@ -5,6 +5,7 @@ import { getFinancialPlan, getFinancialPlanLabels, type AcceptedFinancialPlan } 
 import { getPlanCommitmentReview } from "../../local-db/repositories/financialPlanCommitmentReview";
 import { getPlanSpendingReview } from "../../local-db/repositories/financialPlanSpendingReview";
 import { PastPlanCommitmentsSection, type PastPlanCommitmentItem } from "./PastPlanCommitmentsSection";
+import { PlanScheduledPayments } from "./PlanScheduledPayments";
 import { PastPlanSpendingSection } from "./PastPlanSpendingSection";
 import { formatPeso, formatPlanMonthLabel, labelWithRemovedSuffix, type FinancialPlanLabels } from "./financialPlanPresentation";
 import type { PlanCommitmentReview, PlanSpendingReview } from "./pastPlanTypes";
@@ -122,9 +123,11 @@ export default function PastFinancialPlanDetailScreen({ userId, planId, onBack }
       {backButton}
       <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>{formatPlanMonthLabel(plan.periodStart)}</Text>
       <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 2 }}>Plan period {plan.periodStart} to {plan.periodEnd}</Text>
-      <PastPlanSpendingSection review={spending} labels={labels} />
+      <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: "#1B1C1A", marginTop: 16 }}>Savings &amp; Debt</Text>
       <PastPlanCommitmentsSection title="Savings" kind="savings" items={savingsItems(commitments, labels)} emptyText="No savings reservations or contributions for this period." />
       <PastPlanCommitmentsSection title="Debt" kind="debt" items={debtItems(commitments, labels)} emptyText="No debt reservations or payments for this period." />
+      <PlanScheduledPayments obligations={plan.inputSnapshot.obligations} />
+      <PastPlanSpendingSection review={spending} labels={labels} />
       <PlanSnapshotFooter plan={plan} />
     </View>
   );

@@ -61,6 +61,8 @@ export type CreateFinancialPlanInput = {
 };
 
 type FinancialPlanRow = {
+  input_snapshot_json?: string | null;
+  recommendation_json?: string | null;
   id: string;
   period_start: string;
   period_end: string;
@@ -177,6 +179,7 @@ export async function createFinancialPlan(userId: string, deviceId: string, inpu
   await db.withTransactionAsync(async () => {
     await validateReferences(db, userId, input);
     await db.runAsync("INSERT INTO financial_plans (id, user_id, period_start, period_end, status, forecast_month, forecast_total_centavos, forecast_model_version, forecast_generated_at, forecast_quality, classification_status, classification_rule_set_version, classification_assessed_at, available_funds_centavos, required_funds_centavos, shortfall_centavos, debt_surplus_centavos, savings_surplus_centavos, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, 'accepted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)", id, userId, input.periodStart, input.periodEnd, forecast.month, forecast.totalAmountCentavos, forecast.modelVersion, forecast.generatedAt, forecast.quality, typeof classification.status === "string" ? classification.status : null, typeof classification.rule_set_version === "string" ? classification.rule_set_version : null, typeof classification.assessed_at === "string" ? classification.assessed_at : null, input.recommendation.availableFundsCentavos as number, input.recommendation.requiredFundsCentavos as number ?? null, input.recommendation.shortfallCentavos as number ?? null, debtSurplusCentavos, savingsSurplusCentavos, timestamp, timestamp);
+    await db.runAsync("UPDATE financial_plans SET input_snapshot_json = ?, recommendation_json = ? WHERE id = ? AND user_id = ?", JSON.stringify(input.inputSnapshot), JSON.stringify(recommendation), id, userId);
     if (!Array.isArray(forecast.categoryForecasts)) throw new LocalDbError("VALIDATION_ERROR", "forecast points are invalid");
     for (const point of forecast.categoryForecasts) {
       if (!point || typeof point !== "object" || typeof (point as { category?: unknown }).category !== "string" || !Number.isSafeInteger((point as { amountCentavos?: unknown }).amountCentavos)) throw new LocalDbError("VALIDATION_ERROR", "forecast point is invalid");
@@ -191,6 +194,9 @@ export async function createFinancialPlan(userId: string, deviceId: string, inpu
 }
 
 async function mapPlan(db: SQLite.SQLiteDatabase, row: FinancialPlanRow): Promise<AcceptedFinancialPlan> {
+  if (row.input_snapshot_json && row.recommendation_json) {
+    return { id: row.id, periodStart: row.period_start, periodEnd: row.period_end, inputSnapshot: JSON.parse(row.input_snapshot_json), recommendation: JSON.parse(row.recommendation_json) };
+  }
   const [points, allocations, debtReservations, savingsReservations] = await Promise.all([
     db.getAllAsync<Record<string, unknown>>("SELECT category_key, amount_centavos FROM financial_plan_forecast_points WHERE plan_id = ?", row.id),
     db.getAllAsync<Record<string, unknown>>("SELECT category_id, subcategory_id, allocation_rule, allocated_amount_centavos, floor_amount_centavos, ceiling_amount_centavos, forecast_amount_centavos, subcategory_weight_bps FROM financial_plan_allocations WHERE plan_id = ?", row.id),
@@ -227,7 +233,7 @@ export async function deleteFinancialPlan(userId: string, deviceId: string, id: 
     await db.runAsync("DELETE FROM financial_plan_allocations WHERE plan_id = ?", id);
     await db.runAsync("DELETE FROM financial_plan_debt_reservations WHERE plan_id = ?", id);
     await db.runAsync("DELETE FROM financial_plan_savings_reservations WHERE plan_id = ?", id);
-    await db.runAsync("UPDATE financial_plans SET deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", timestamp, id, userId);
+    await db.runAsync("UPDATE financial_plans SET input_snapshot_json = NULL, recommendation_json = NULL, deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", timestamp, id, userId);
     result = { operation: await enqueueOperation(db, { userId, deviceId, entity: "financial_plans", recordId: id, operationType: "delete", baseVersion: plan.version, changedFields: [], payload: {}, failureMessage: "This Financial Plan could not be reset." }) };
   });
   return result;

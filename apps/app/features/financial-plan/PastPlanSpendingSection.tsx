@@ -20,7 +20,7 @@ const detailText = { fontFamily: "Manrope", fontSize: 11, color: "#6B7A6F", marg
 export function PastPlanSpendingSection({ review, labels }: Props) {
   return (
     <View style={{ marginTop: 16 }}>
-      <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: "#1B1C1A" }}>Spending</Text>
+      <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: "#1B1C1A" }}>Category Allocations</Text>
       {review.rows.length === 0 ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 6 }}>No category allocations in this plan.</Text> : null}
       {review.rows.map((row) => {
         const label = spendingRowLabel(row, labels);

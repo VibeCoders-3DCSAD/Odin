@@ -3,6 +3,8 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { Alert } from "react-native";
 import FinancialPlanScreen from "../FinancialPlanScreen";
 
+const mockListRecentExpenseSubcategoryIds = jest.fn();
+const mockListRecentExpenseCategoryIds = jest.fn();
 const mockGetAcceptedFinancialPlanForPeriod = jest.fn();
 const mockGetFinancialPlanLabels = jest.fn();
 const mockGetFinancialPlanAllocationSpending = jest.fn();
@@ -25,8 +27,8 @@ jest.mock("../../../local-db/repositories/financialPlans", () => ({
 }));
 
 jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
-  listRecentExpenseCategoryIds: jest.fn().mockResolvedValue([]),
-  listRecentExpenseSubcategoryIds: jest.fn().mockResolvedValue([]),
+  listRecentExpenseCategoryIds: (...args: unknown[]) => mockListRecentExpenseCategoryIds(...args),
+  listRecentExpenseSubcategoryIds: (...args: unknown[]) => mockListRecentExpenseSubcategoryIds(...args),
 }));
 
 jest.mock("../../../local-db/repositories/taxonomy", () => ({
@@ -50,6 +52,8 @@ jest.mock("../api", () => ({ requestFinancialPlanRecommendation: (...args: unkno
 
 describe("FinancialPlanScreen", () => {
   beforeEach(() => {
+    mockListRecentExpenseSubcategoryIds.mockResolvedValue([]);
+    mockListRecentExpenseCategoryIds.mockResolvedValue([]);
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({
       id: "plan-1",
       periodStart: "2026-10-01",
@@ -85,6 +89,41 @@ describe("FinancialPlanScreen", () => {
     expect(view.queryByLabelText("Food flexible amount in pesos")).toBeNull();
     expect(view.queryByText(/Forecast trust:/)).toBeNull();
     expect(mockGetAcceptedFinancialPlanForPeriod).toHaveBeenCalledWith("user-1", "2026-10-01", "2026-10-31");
+  });
+
+  it("shows saved billers between Savings & Debt and Category Allocations without deducting them again", async () => {
+    const saved = await mockGetAcceptedFinancialPlanForPeriod();
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ ...saved, inputSnapshot: { ...saved.inputSnapshot, obligations: { reservations: [
+      { scheduledPaymentId: "rent", label: "Monthly rent", amountCentavos: 30_000, dueDate: "2026-10-20" },
+    ] } } });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByText("Monthly rent")).toBeTruthy());
+    expect(view.getByText("Due 2026-10-20")).toBeTruthy();
+    expect(view.getAllByText("₱300.00")).toHaveLength(2);
+    expect(view.getByText("₱1,000.00")).toBeTruthy();
+    const text = JSON.stringify(view.toJSON());
+    expect(text.indexOf("Savings & Debt")).toBeLessThan(text.indexOf("Billers and Remittances"));
+    expect(text.indexOf("Billers and Remittances")).toBeLessThan(text.indexOf("Category Allocations"));
+    expect(view.queryByLabelText("Billers and Remittances surplus amount in pesos")).toBeNull();
+  });
+
+  it("shows an empty biller reservation section for a legacy saved plan", async () => {
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByText("Billers and Remittances")).toBeTruthy());
+    expect(view.getByText("No saved biller or remittance reservations for this period.")).toBeTruthy();
+  });
+
+  it("recognizes a parent's subcategory spending without asking for a manual baseline", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListCategories.mockResolvedValue([{ id: "housing", label: "Housing", minimum_amount_centavos: null, fixed_amount_centavos: null }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: "housing", label: "Rent", kind: "expense", minimum_amount_centavos: null, fixed_amount_centavos: null }]);
+    mockListRecentExpenseSubcategoryIds.mockResolvedValue(["rent"]);
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Include Housing in Financial Plan")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Include Housing in Financial Plan"));
+    expect(view.queryByLabelText("One-time plan amount for Housing in pesos")).toBeNull();
+    expect(view.getByLabelText("Include Rent in Financial Plan").props.accessibilityState.checked).toBe(false);
   });
 
   it("shows the selection flow when only a previous-month plan was accepted", async () => {

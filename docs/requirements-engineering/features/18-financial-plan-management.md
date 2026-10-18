@@ -20,6 +20,22 @@
   balances plus available income
 - Plan-period total and category-level expense forecast
 - Financial obligations due during the plan period
+- Display plan sections in this order: Savings & Debt, Billers and Remittances,
+  then Category Allocations.
+- Show each biller/remittance's snapshotted name, unpaid reserved amount and due
+  date, together with the section total. These amounts have already been deducted
+  from category funds and must not be deducted again in the display.
+- Deduct the full scheduled amounts due in the plan month from matching category
+  baselines before applying forecast changes, clamped to zero. Match a selected subcategory directly,
+  otherwise its selected parent category. Aggregate every in-period occurrence.
+- Count the scheduled portion toward a matching Fixed or Minimum requirement;
+  the category allocation covers only the residual requirement. Keep the user's
+  stored category rule unchanged.
+- Use full scheduled amounts for these deductions even when an occurrence is
+  partially or fully paid; reserve only the remaining unpaid amount separately.
+- Preserve accepted obligation inputs and recommendation documents locally and
+  through sync. Reopening an accepted plan does not recalculate its commitments
+  from current schedules. Legacy plans retain their existing stored data.
 - Active savings goals and Emergency Fund requirements
 - Active debt payment requirements
 - Savings and Debt Profile Classification, including EFC, DSTI, FM, and CCB

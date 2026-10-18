@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { clearFinancialPlanChildren, restoreFinancialPlanChildren } from "./financialPlanDocuments";
 
 type PullRow = Record<string, unknown>;
 
@@ -112,6 +113,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   financial_plans: new Set([
+    "input_snapshot_json", "recommendation_json",
     "id", "user_id", "period_start", "period_end", "status",
     "forecast_month", "forecast_total_centavos", "forecast_model_version", "forecast_generated_at", "forecast_quality",
     "classification_status", "classification_rule_set_version", "classification_assessed_at",
@@ -206,6 +208,8 @@ export function normalizePullRow(
       normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
     } else if (table === "debt_accounts" && col === "allows_extra_payments") {
       normalized[col] = row[col] === true || row[col] === 1 ? 1 : 0;
+    } else if (table === "financial_plans" && (col === "input_snapshot_json" || col === "recommendation_json")) {
+      normalized[col] = row[col] == null ? null : typeof row[col] === "object" ? JSON.stringify(row[col]) : row[col];
     } else if (col === "metadata" || col === "preset_data" || col === "payment_schedule" || col.endsWith("_snapshot_json") || col === "recommendation_json") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
@@ -221,7 +225,22 @@ export function normalizePullRow(
   return normalized;
 }
 
-export async function applyPullRow(
+export async function applyPullRow(db: PullDb, table: string, row: PullRow): Promise<void> {
+  if (table !== "financial_plans") {
+    return applyPullRowContents(db, table, row);
+  }
+  await db.runAsync("SAVEPOINT financial_plan_pull");
+  try {
+    await applyPullRowContents(db, table, row);
+    await db.runAsync("RELEASE SAVEPOINT financial_plan_pull");
+  } catch (error) {
+    await db.runAsync("ROLLBACK TO SAVEPOINT financial_plan_pull");
+    await db.runAsync("RELEASE SAVEPOINT financial_plan_pull");
+    throw error;
+  }
+}
+
+async function applyPullRowContents(
   db: PullDb,
   table: string,
   row: PullRow,
@@ -251,6 +270,7 @@ export async function applyPullRow(
       `INSERT INTO "${table}" (${columns}) VALUES (${placeholders})`,
       ...values,
     );
+    if (table === "financial_plans") await restoreFinancialPlanChildren(db, row);
     return;
   }
 
@@ -273,8 +293,9 @@ export async function applyPullRow(
         ...identityParams,
       );
     } else if (table === "financial_plans") {
+      await clearFinancialPlanChildren(db, recordId);
       await db.runAsync(
-         `UPDATE "${table}" SET deleted = 1, status = 'deleted', version = ?,
+         `UPDATE "${table}" SET input_snapshot_json = NULL, recommendation_json = NULL, deleted = 1, status = 'deleted', version = ?,
           updated_at = ? WHERE ${identityWhere}`,
         rowVersion,
         now,
@@ -312,4 +333,5 @@ export async function applyPullRow(
     ...columns.map((c) => row[c] as SQLite.SQLiteBindValue),
     ...identityParams,
   );
+  if (table === "financial_plans") await restoreFinancialPlanChildren(db, row);
 }

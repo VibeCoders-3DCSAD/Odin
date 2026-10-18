@@ -13,7 +13,7 @@ type Props = {
 export function PlanAllocations({ allocations, showSpendingProgress, readOnly, onFlexibleAmountChange, onWeightChange }: Props) {
   return (
     <View style={{ marginTop: 16 }}>
-      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: "#1B1C1A" }}>Category recommendation</Text>
+      <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: "#1B1C1A" }}>Category Allocations</Text>
       <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 3 }}>Fixed and minimum requirements are protected. Flexible amounts can be adjusted before saving.</Text>
       {allocations.map((allocation, index) => {
         const editable = allocation.allocationRule === "FLEXIBLE" && !readOnly;
