@@ -1,17 +1,18 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
-import { deterministicUUID, randomUUID } from "../uuid";
+import { randomUUID, uuidV5 } from "../uuid";
 import { currentOccurrence, dueDatesBetween, localToday, type Occurrence, type PaymentSchedule, type ScheduledPaymentFrequency } from "../../features/billers/schedule";
 import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
-import { createExpenseInTransaction, deleteTransaction } from "./ledger";
+import { BILLER_PAYMENT_MUTATION_PREFIX, createExpenseInTransaction, deleteTransaction } from "./ledger";
 import { insertScheduledPaymentRecordInTransaction, listPaidByOccurrence } from "./scheduledPaymentRecords";
 
 export type ScheduledPaymentStatus = "active" | "archived";
 
 export type ScheduledPaymentInput = PaymentSchedule & {
   name: string;
-  subcategoryId: string;
+  // Optional: an uncategorized payment posts an uncategorized expense.
+  subcategoryId: string | null;
   sourceAccountId: string;
   amountCentavos: number;
   autoPost: boolean;
@@ -29,7 +30,7 @@ export type ScheduledPayment = ScheduledPaymentInput & {
 };
 
 type Row = {
-  id: string; name: string; subcategory_id: string; source_account_id: string; amount_centavos: number; frequency: ScheduledPaymentFrequency;
+  id: string; name: string; subcategory_id: string | null; source_account_id: string; amount_centavos: number; frequency: ScheduledPaymentFrequency;
   due_day_of_month: number | null; due_second_day_of_month: number | null; due_day_of_week: number | null; due_month: number | null;
   starts_on: string; ends_on: string | null; auto_post: number; auto_post_from: string | null; is_family_support: number;
   is_dependent_support: number; protected_by_default: number; notes: string | null; status: ScheduledPaymentStatus; version: number;
@@ -44,7 +45,7 @@ const COLUMNS = {
 } as const satisfies Record<string, keyof ScheduledPaymentInput>;
 type Column = keyof typeof COLUMNS;
 const BOOLEAN_COLUMNS = new Set<Column>(["auto_post", "is_family_support", "is_dependent_support", "protected_by_default"]);
-const FREQUENCIES: ScheduledPaymentFrequency[] = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
+const FREQUENCIES: ScheduledPaymentFrequency[] = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
@@ -66,6 +67,7 @@ function normalize(input: ScheduledPaymentInput): ScheduledPaymentInput {
   return {
     ...input,
     name: input.name.trim(),
+    subcategoryId: input.subcategoryId || null,
     notes: input.notes?.trim() || null,
     dueDayOfMonth: usesDayOfMonth ? input.dueDayOfMonth : null,
     dueSecondDayOfMonth: frequency === "semi_monthly" ? input.dueSecondDayOfMonth : null,
@@ -79,7 +81,6 @@ function validate(input: ScheduledPaymentInput): void {
   const fail = (message: string) => { throw new LocalDbError("VALIDATION_ERROR", message); };
   const inRange = (value: number | null, lo: number, hi: number) => value != null && Number.isInteger(value) && value >= lo && value <= hi;
   if (!input.name || input.name.length > 120) fail("Enter a name of up to 120 characters.");
-  if (!input.subcategoryId) fail("Select an expense category.");
   if (!input.sourceAccountId) fail("Select the account this is paid from.");
   if (!Number.isSafeInteger(input.amountCentavos) || input.amountCentavos <= 0) fail("Enter a positive amount.");
   if (!FREQUENCIES.includes(input.frequency)) fail("Select how often this repeats.");
@@ -94,9 +95,9 @@ function validate(input: ScheduledPaymentInput): void {
 }
 
 async function assertReferences(db: SQLite.SQLiteDatabase, userId: string, input: ScheduledPaymentInput): Promise<void> {
-  const subcategory = await db.getFirstAsync<{ id: string }>(
+  const subcategory = input.subcategoryId ? await db.getFirstAsync<{ id: string }>(
     "SELECT id FROM subcategories WHERE id = ? AND user_id = ? AND kind = 'expense' AND is_active = 1 AND deleted = 0", input.subcategoryId, userId,
-  );
+  ) : { id: null };
   if (!subcategory) throw new LocalDbError("VALIDATION_ERROR", "Select an active expense category.");
   const account = await db.getFirstAsync<{ id: string }>(
     "SELECT id FROM financial_accounts WHERE id = ? AND user_id = ? AND status = 'active' AND deleted = 0", input.sourceAccountId, userId,
@@ -241,6 +242,13 @@ async function prepareCreditCardCycle(userId: string, deviceId: string, accountI
   if (card) await ensureCurrentCreditCardCycles(userId, deviceId, date);
 }
 
+// Marks the expense as this biller's payment, which is what lets it go uncategorized. An auto-post's id is
+// per occurrence and matches private.post_due_scheduled_payments, so server and device posts still converge.
+export function scheduledPaymentMutationId(scheduledPaymentId: string, source: "manual" | "auto", occurrenceDate: string, recordId: string): string {
+  const base = `${BILLER_PAYMENT_MUTATION_PREFIX}${scheduledPaymentId.toLowerCase()}`;
+  return source === "auto" ? `${base}:${occurrenceDate}` : `${base}:record:${recordId}`;
+}
+
 async function writePayment(db: SQLite.SQLiteDatabase, userId: string, deviceId: string, payment: Row, entry: ScheduledPaymentEntry, source: "manual" | "auto", ids: { transactionId?: string; recordId: string }): Promise<void> {
   const { transaction } = await createExpenseInTransaction(db, userId, deviceId, {
     amount_centavos: entry.amountCentavos,
@@ -249,6 +257,7 @@ async function writePayment(db: SQLite.SQLiteDatabase, userId: string, deviceId:
     transaction_date: entry.paymentDate,
     merchant_name: payment.name,
     notes: entry.notes ?? undefined,
+    client_mutation_id: scheduledPaymentMutationId(payment.id, source, entry.occurrenceDate, ids.recordId),
   }, { id: ids.transactionId });
   await insertScheduledPaymentRecordInTransaction(db, userId, deviceId, {
     id: ids.recordId, scheduledPaymentId: payment.id, transactionId: transaction.id, occurrenceDate: entry.occurrenceDate,
@@ -277,10 +286,20 @@ export async function deleteScheduledPaymentRecord(userId: string, deviceId: str
 }
 
 // Most occurrences one catch-up run posts per scheduled payment, so a long-closed app cannot flood the ledger.
+// The server job (private.post_due_scheduled_payments) has no cap and catches up the rest once online.
 const MAX_CATCH_UP = 12;
 
-// Posts each auto-post occurrence due by today that is still unpaid. Ids derive from the occurrence, so a
-// second device posting the same occurrence offline converges on the same transaction and record.
+// Shared with private.scheduled_payment_post_id on the server: never change it, or posts stop converging.
+export const SCHEDULED_PAYMENT_POST_NAMESPACE = "7f4fa802-4c64-4370-aed4-ca25c703928f";
+
+// The ids an auto-post writes for one occurrence. The server job derives the same ids, so whichever of the
+// server or a device posts first wins and every later post of that occurrence is a no-op.
+export function scheduledPaymentPostIds(scheduledPaymentId: string, dueDate: string): { transactionId: string; recordId: string } {
+  const key = `scheduled-payment:${scheduledPaymentId.toLowerCase()}:${dueDate}`;
+  return { transactionId: uuidV5(`${key}:transaction`, SCHEDULED_PAYMENT_POST_NAMESPACE), recordId: uuidV5(`${key}:record`, SCHEDULED_PAYMENT_POST_NAMESPACE) };
+}
+
+// Offline fallback for the server's auto-post job: posts each auto-post occurrence due by today that is still unpaid.
 export async function postDueScheduledPayments(userId: string, deviceId: string, today = localToday()): Promise<number> {
   const db = await getDb();
   const payments = await db.getAllAsync<Row>("SELECT * FROM scheduled_payments WHERE user_id = ? AND deleted = 0 AND status = 'active' AND auto_post = 1 AND auto_post_from IS NOT NULL", userId);
@@ -294,9 +313,10 @@ export async function postDueScheduledPayments(userId: string, deviceId: string,
         const paid = (await listPaidByOccurrence(userId, db)).get(payment.id) ?? new Map<string, number>();
         for (const dueDate of dueDates) {
           const remaining = payment.amount_centavos - (paid.get(dueDate) ?? 0);
-          const key = `scheduled-payment:${payment.id}:${dueDate}`;
-          if (remaining <= 0 || await db.getFirstAsync("SELECT id FROM scheduled_payment_records WHERE id = ?", deterministicUUID(`${key}:record`))) continue;
-          await writePayment(db, userId, deviceId, payment, { scheduledPaymentId: payment.id, occurrenceDate: dueDate, amountCentavos: remaining, paymentDate: dueDate, sourceAccountId: payment.source_account_id, notes: null }, "auto", { transactionId: deterministicUUID(`${key}:transaction`), recordId: deterministicUUID(`${key}:record`) });
+          const ids = scheduledPaymentPostIds(payment.id, dueDate);
+          // Either id already present means this occurrence was posted here or pulled from the server, even if since deleted.
+          if (remaining <= 0 || await db.getFirstAsync("SELECT id FROM scheduled_payment_records WHERE id = ?", ids.recordId) || await db.getFirstAsync("SELECT id FROM transactions WHERE id = ?", ids.transactionId)) continue;
+          await writePayment(db, userId, deviceId, payment, { scheduledPaymentId: payment.id, occurrenceDate: dueDate, amountCentavos: remaining, paymentDate: dueDate, sourceAccountId: payment.source_account_id, notes: null }, "auto", ids);
           posted += 1;
         }
       });

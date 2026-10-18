@@ -328,7 +328,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const explanationContext = buildFinancialPlanExplanationContext({
     planMonth: period.start.slice(0, 7), plannedAmountCentavos, categoryBudgetCentavos: available,
     debtReservations: [...debtReservations, ...statementReservations], savingsReservations, obligations,
-    scheduledPayments: (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { subcategory_id: string }>,
+    scheduledPayments: (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { subcategory_id: string | null }>,
     subcategories, categories: (categoriesResult.data ?? []) as Category[],
   });
   const seasonalPreferences = seasonalPreferencesFromAnswers(((onboardingResult.data as OnboardingSession | null)?.raw_answers ?? {}), period.start);

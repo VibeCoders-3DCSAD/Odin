@@ -40,6 +40,8 @@ const TYPE_COLORS: Record<string, string> = {
   expense: "#D9001F",
   transfer: "#1565C0",
 };
+// Badge for uncategorized biller and remittance payments.
+const SCHEDULED_PAYMENT_COLOR = "#E8590C";
 
 const SORT_OPTIONS = [
   { key: "transaction_date", label: "Date" },
@@ -87,6 +89,7 @@ const TransactionRow = memo(function TransactionRow({ tx, onEdit, onDelete }: {
   onDelete: (transactionId: string) => void;
 }) {
   const typeColor = TYPE_COLORS[tx.transaction_type] ?? palette.mut;
+  const badgeColor = tx.is_scheduled_payment ? SCHEDULED_PAYMENT_COLOR : typeColor;
   const prefix = tx.transaction_type === "expense" ? "-" : tx.transaction_type === "income" ? "+" : "";
   return (
     <View style={{ paddingVertical: 8, paddingHorizontal: 2, marginBottom: 2, flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -95,9 +98,9 @@ const TransactionRow = memo(function TransactionRow({ tx, onEdit, onDelete }: {
           <TaxonomyIcon iconKey={tx.icon_key} size={18} color="#fff" weight="fill" />
         </View>
       ) : (
-        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: `${typeColor}20`, alignItems: "center", justifyContent: "center", marginRight: 2 }}>
-          <Text style={{ fontSize: 10, color: typeColor, fontWeight: "800" }}>
-            {tx.transaction_type === "transfer" ? "TR" : tx.transaction_type === "income" ? "+" : "-"}
+        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: `${badgeColor}20`, alignItems: "center", justifyContent: "center", marginRight: 2 }}>
+          <Text style={{ fontSize: 10, color: badgeColor, fontWeight: "800" }}>
+            {tx.is_scheduled_payment ? "BR" : tx.transaction_type === "transfer" ? "TR" : tx.transaction_type === "income" ? "+" : "-"}
           </Text>
         </View>
       )}
@@ -315,6 +318,10 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const listScrollY = useRef<number | null>(null);
   // Stable so memoized rows skip re-rendering on unrelated state changes like search typing.
   const editTransaction = useCallback((transactionId: string) => {
+    if (transactions.some((transaction) => transaction.id === transactionId && transaction.is_scheduled_payment)) {
+      showToast("This transaction pays a biller or remittance. Delete it and record the payment again.", "danger");
+      return;
+    }
     getTransaction(userId, transactionId)
       .then((transaction) => {
         if (!transaction) {
@@ -325,7 +332,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         setEditTarget(transaction);
       })
       .catch(() => showToast("Could not open transaction", "danger"));
-  }, [userId, showToast, getScrollOffset]);
+  }, [userId, showToast, getScrollOffset, transactions]);
 
   const selectDeleteTarget = useCallback((transactionId: string) => {
     getTransaction(userId, transactionId)

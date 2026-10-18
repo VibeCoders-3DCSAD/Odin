@@ -9,11 +9,11 @@ import { listScheduledPaymentRecords } from "../../local-db/repositories/schedul
 import { createScheduledPayment, getScheduledPayment, updateScheduledPayment, type ScheduledPaymentInput } from "../../local-db/repositories/scheduledPayments";
 import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
 import { AccountPickerSheet, DateField } from "./components/BillerSheets";
-import { FREQUENCY_OPTIONS, MONTHS, WEEKDAYS, formatDueDate } from "./presentation";
+import { FREQUENCY_LABELS, FREQUENCY_OPTIONS, MONTHS, WEEKDAYS, formatDueDate } from "./presentation";
 import { localToday, nextDueDate, type ScheduledPaymentFrequency } from "./schedule";
 
 type Props = { userId: string; deviceId: string; scheduledPaymentId?: string; onClose: () => void; onSaved: (message: string) => void };
-type Field = "name" | "category" | "amount" | "account" | "dayOfWeek" | "dayOfMonth" | "secondDayOfMonth" | "month" | "startsOn" | "endsOn";
+type Field = "name" | "amount" | "account" | "dayOfWeek" | "dayOfMonth" | "secondDayOfMonth" | "month" | "startsOn" | "endsOn";
 
 const INVALID = "Some obligation details are not valid. Correct the marked fields and try again.";
 
@@ -45,6 +45,7 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
   const [startsOn, setStartsOn] = useState(localToday());
   const [endsOn, setEndsOn] = useState<string | null>(null);
   const [autoPost, setAutoPost] = useState(false);
+  // No longer shown on the form; kept so editing preserves what older payments saved.
   const [isFamilySupport, setIsFamilySupport] = useState(false);
   const [isDependentSupport, setIsDependentSupport] = useState(false);
   const [protectedByDefault, setProtectedByDefault] = useState(true);
@@ -75,7 +76,7 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
   }, [userId, scheduledPaymentId]);
 
   const input: ScheduledPaymentInput = useMemo(() => ({
-    name, subcategoryId: subcategoryId ?? "", sourceAccountId: sourceAccountId ?? "", amountCentavos: parseCentavos(amount) ?? 0, frequency,
+    name, subcategoryId, sourceAccountId: sourceAccountId ?? "", amountCentavos: parseCentavos(amount) ?? 0, frequency,
     dueDayOfWeek: dayOfWeek, dueDayOfMonth: parseDay(dayOfMonth), dueSecondDayOfMonth: parseDay(secondDayOfMonth), dueMonth: month,
     startsOn, endsOn: frequency === "once" ? null : endsOn, autoPost, isFamilySupport, isDependentSupport, protectedByDefault, notes,
   }), [name, subcategoryId, sourceAccountId, amount, frequency, dayOfWeek, dayOfMonth, secondDayOfMonth, month, startsOn, endsOn, autoPost, isFamilySupport, isDependentSupport, protectedByDefault, notes]);
@@ -88,12 +89,11 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
     const next: Partial<Record<Field, string>> = {};
     const inMonth = (day: number | null) => day != null && day >= 1 && day <= 31;
     if (!name.trim()) next.name = "Name is required.";
-    if (!subcategoryId) next.category = "Please select a category.";
     if (!amount.trim()) next.amount = "Amount is required.";
     else if ((parseCentavos(amount) ?? 0) <= 0) next.amount = "Enter a positive amount.";
     if (!sourceAccountId) next.account = "Select the account this is paid from.";
     if ((frequency === "weekly" || frequency === "biweekly") && dayOfWeek == null) next.dayOfWeek = "Select the day of the week.";
-    if (frequency !== "weekly" && frequency !== "biweekly" && frequency !== "once" && !inMonth(input.dueDayOfMonth)) next.dayOfMonth = "Due day must be 1-31.";
+    if (frequency !== "daily" && frequency !== "weekly" && frequency !== "biweekly" && frequency !== "once" && !inMonth(input.dueDayOfMonth)) next.dayOfMonth = "Due day must be 1-31.";
     if (frequency === "semi_monthly" && (!inMonth(input.dueSecondDayOfMonth) || input.dueSecondDayOfMonth === input.dueDayOfMonth)) next.secondDayOfMonth = "The second due day must be 1-31 and differ from the first.";
     if (frequency === "yearly" && month == null) next.month = "Select the month.";
     if (input.endsOn && input.endsOn < startsOn) next.endsOn = "The end date must be on or after the start date.";
@@ -121,11 +121,13 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
   }
 
   if (picker === "category") {
-    return <CategorySelectorPage userId={userId} kind="expense" initialSubcategoryId={subcategoryId ?? undefined} onClose={() => setPicker(null)} onSelect={(selection) => { setSubcategoryId(selection.id); clearError("category"); setPicker(null); }} />;
+    return <CategorySelectorPage userId={userId} kind="expense" initialSubcategoryId={subcategoryId ?? undefined} onClose={() => setPicker(null)} onSelect={(selection) => { setSubcategoryId(selection.id); setPicker(null); }} />;
   }
 
   const usesWeekday = frequency === "weekly" || frequency === "biweekly";
-  const usesDayOfMonth = !usesWeekday && frequency !== "once";
+  const usesDayOfMonth = !usesWeekday && frequency !== "daily" && frequency !== "once";
+  // A payment saved with a cadence the form no longer offers keeps it selectable.
+  const frequencyOptions = FREQUENCY_OPTIONS.some((option) => option.key === frequency) ? FREQUENCY_OPTIONS : [...FREQUENCY_OPTIONS, { key: frequency, label: FREQUENCY_LABELS[frequency] }];
   const accountName = accounts.find((account) => account.id === sourceAccountId)?.name;
   const categoryName = subcategories.find((subcategory) => subcategory.id === subcategoryId)?.label;
 
@@ -145,8 +147,8 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
               {errors.name ? <FieldError>{errors.name}</FieldError> : null}
             </View>
             <View>
-              <PickerField label="Category *" value={categoryName ?? "Select category"} placeholder={!categoryName} error={Boolean(errors.category)} onPress={() => setPicker("category")} />
-              {errors.category ? <FieldError>{errors.category}</FieldError> : null}
+              <PickerField label="Category (optional)" value={categoryName ?? "No category"} placeholder={!categoryName} onPress={() => setPicker("category")} />
+              {subcategoryId ? <Pressable onPress={() => setSubcategoryId(null)} accessibilityRole="button" hitSlop={6}><Text style={[ui.note, { color: v4.brandMid, fontWeight: "700", marginTop: 4 }]}>Remove category</Text></Pressable> : null}
             </View>
             <View>
               <TextField label="Amount *" value={amount} onChangeText={(value) => { setAmount(value); clearError("amount"); }} placeholder="0.00" suffix="PHP" keyboardType="decimal-pad" error={Boolean(errors.amount)} accessibilityLabel="Amount" />
@@ -168,7 +170,7 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
             <View>
               <FieldLabel>REPEAT</FieldLabel>
               <View style={ui.chips}>
-                {FREQUENCY_OPTIONS.map((option) => <Chip key={option.key} label={option.label} selected={frequency === option.key} onPress={() => { setFrequency(option.key); if (option.key === "once") setAutoPost(false); }} />)}
+                {frequencyOptions.map((option) => <Chip key={option.key} label={option.label} selected={frequency === option.key} onPress={() => { setFrequency(option.key); if (option.key === "once") setAutoPost(false); }} />)}
               </View>
             </View>
             {usesWeekday ? (
@@ -205,21 +207,12 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
               </View>
             ) : null}
             {!isEdit && nextPost && frequency !== "once" ? <Note>Next post: {formatDueDate(nextPost)}</Note> : null}
+            <Note>Payments are kept in your Financial Plan even when money is tight.</Note>
           </FormCard>
 
           <FormCard title="Auto-post" right={<Switch value={autoPost} onToggle={() => setAutoPost(!autoPost)} disabled={frequency === "once"} accessibilityLabel="Post automatically on the due date" />}>
             <Text style={ui.listTitle}>Post automatically on the due date</Text>
             <Note>{frequency === "once" ? "Auto-post needs a repeat. Pick a frequency to turn it on." : "Budgie records the transaction on the due date and deducts it from your budget."}</Note>
-          </FormCard>
-
-          <FormCard title="Planning">
-            {([["Family support", "Mark family support", isFamilySupport, setIsFamilySupport], ["Dependent support", "Mark dependent support", isDependentSupport, setIsDependentSupport], ["Protected", "Mark as protected", protectedByDefault, setProtectedByDefault]] as const).map(([label, accessibilityLabel, value, set]) => (
-              <View key={label} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <Text style={ui.listTitle}>{label}</Text>
-                <Switch value={value} onToggle={() => set(!value)} accessibilityLabel={accessibilityLabel} />
-              </View>
-            ))}
-            <Note>Protected payments are kept in your Financial Plan even when money is tight.</Note>
           </FormCard>
 
           <FormCard>

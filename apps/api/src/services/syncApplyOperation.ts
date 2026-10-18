@@ -329,7 +329,7 @@ const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
 const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "status", "archived_at"]);
 const SCHEDULED_PAYMENT_FIELDS = new Set(["name", "subcategory_id", "source_account_id", "amount_centavos", "frequency", "due_day_of_month", "due_second_day_of_month", "due_day_of_week", "due_month", "starts_on", "ends_on", "auto_post", "auto_post_from", "is_family_support", "is_dependent_support", "protected_by_default", "notes", "status"]);
-const SCHEDULED_PAYMENT_FREQUENCIES = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
+const SCHEDULED_PAYMENT_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
 const SCHEDULED_PAYMENT_RECORD_FIELDS = new Set(["scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes"]);
 const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes"]);
 const SAVINGS_ALLOCATION_PREFERENCE_FIELDS = new Set(["strategy"]);
@@ -819,10 +819,12 @@ async function validateTaxonomyCreatePayload(
       sanitized.source_account_id = null;
     } else if (txType === "expense") {
       requireString(sanitized, "source_account_id");
-      if (Boolean(sanitized.category_id) === Boolean(sanitized.subcategory_id)) throw new Error("expense requires one category target");
+      if (sanitized.category_id && sanitized.subcategory_id) throw new Error("expense takes at most one category target");
       if (sanitized.destination_account_id != null) throw new Error("destination_account_id must not be set for expense");
       await verifyOwnedAccount(supabase, userId, sanitized.source_account_id as string);
-      if (sanitized.category_id) await verifyCategoryOwnership(supabase, userId, sanitized.category_id as string); else await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "expense");
+      if (sanitized.category_id) await verifyCategoryOwnership(supabase, userId, sanitized.category_id as string);
+      else if (sanitized.subcategory_id) await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "expense");
+      else await verifyUncategorizedBillerPayment(supabase, userId, sanitized.client_mutation_id);
       sanitized.destination_account_id = null;
     } else {
       requireString(sanitized, "source_account_id");
@@ -1737,16 +1739,35 @@ function requirePositiveInteger(payload: Record<string, unknown>, field: string)
   }
 }
 
+// Only a biller or remittance payment may be an uncategorized expense. Its client_mutation_id names the
+// scheduled payment it pays (scheduledPaymentMutationId on the device), which must belong to the user.
+const BILLER_PAYMENT_MUTATION = /^scheduled-payment:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):/i;
+
+async function verifyUncategorizedBillerPayment(supabase: SupabaseClient, userId: string, clientMutationId: unknown): Promise<void> {
+  const scheduledPaymentId = typeof clientMutationId === "string" ? BILLER_PAYMENT_MUTATION.exec(clientMutationId)?.[1] : undefined;
+  if (!scheduledPaymentId) throw new Error("expense requires a category unless it pays a biller or remittance");
+  const { data, error } = await supabase
+    .from("scheduled_payments")
+    .select("id")
+    .eq("id", scheduledPaymentId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`biller validation failed: ${error.message}`);
+  if (!data) throw new Error("biller or remittance not found or inaccessible");
+}
+
 // Ownership of the subcategory, account, scheduled payment and transaction is checked by the sync RPC.
 function validateScheduledPaymentPayload(payload: Record<string, unknown>, creating: boolean): Record<string, unknown> {
   assertOnlyAllowed(payload, SCHEDULED_PAYMENT_FIELDS);
   const sanitized = sanitizePayload(payload, SCHEDULED_PAYMENT_FIELDS);
   if (creating) {
-    for (const field of ["name", "subcategory_id", "source_account_id", "frequency", "starts_on"]) requireString(sanitized, field);
+    for (const field of ["name", "source_account_id", "frequency", "starts_on"]) requireString(sanitized, field);
     requirePositiveInteger(sanitized, "amount_centavos");
     if (sanitized.status !== undefined) throw new Error("new scheduled payments are always active");
   }
-  for (const field of ["name", "subcategory_id", "source_account_id", "frequency"]) if (sanitized[field] !== undefined) requireString(sanitized, field);
+  for (const field of ["name", "source_account_id", "frequency"]) if (sanitized[field] !== undefined) requireString(sanitized, field);
+  // The category is optional; null clears it.
+  if (sanitized.subcategory_id != null) requireString(sanitized, "subcategory_id");
   if (sanitized.amount_centavos !== undefined) requirePositiveInteger(sanitized, "amount_centavos");
   if (sanitized.frequency !== undefined && !SCHEDULED_PAYMENT_FREQUENCIES.includes(sanitized.frequency as string)) throw new Error("frequency is not a supported schedule");
   if (sanitized.status !== undefined && sanitized.status !== "active" && sanitized.status !== "archived") throw new Error("status must be active or archived");

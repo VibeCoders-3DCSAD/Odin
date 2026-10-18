@@ -29,10 +29,17 @@ describe("BillerFormScreen", () => {
     fireEvent.press(await view.findByText("Add payment"));
 
     expect(view.getByText("Some obligation details are not valid. Correct the marked fields and try again.")).toBeTruthy();
-    for (const message of ["Name is required.", "Please select a category.", "Amount is required.", "Select the account this is paid from.", "Due day must be 1-31."]) {
+    for (const message of ["Name is required.", "Amount is required.", "Select the account this is paid from.", "Due day must be 1-31."]) {
       expect(view.getByText(message)).toBeTruthy();
     }
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("offers the savings goal cadences and no planning toggles", async () => {
+    const view = render(<BillerFormScreen {...props} />);
+    for (const label of ["Daily", "Weekly", "Twice a month", "Monthly", "None"]) expect(await view.findByText(label)).toBeTruthy();
+    for (const label of ["Every 2 weeks", "Quarterly", "Yearly", "Family support", "Dependent support", "Protected"]) expect(view.queryByText(label)).toBeNull();
+    expect(view.getByText("Payments are kept in your Financial Plan even when money is tight.")).toBeTruthy();
   });
 
   it("clears a field's error once it is corrected and keeps the other entries", async () => {

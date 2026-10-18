@@ -11,6 +11,10 @@ describe("dueDatesBetween", () => {
     expect(dueDatesBetween({ ...base, frequency: "semi_monthly", dueDayOfMonth: 30, dueSecondDayOfMonth: 15 }, "2027-02-01", "2027-03-20")).toEqual(["2027-02-15", "2027-02-28", "2027-03-15"]);
   });
 
+  it("repeats daily across a month boundary", () => {
+    expect(dueDatesBetween({ ...base, frequency: "daily", dueDayOfMonth: null, startsOn: "2026-09-29" }, "2026-09-01", "2026-10-02")).toEqual(["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"]);
+  });
+
   it("repeats weekly and every two weeks from the first matching weekday", () => {
     // 2026-09-01 is a Tuesday; 5 is Friday.
     expect(dueDatesBetween({ ...base, frequency: "weekly", dueDayOfWeek: 5 }, "2026-09-01", "2026-09-20")).toEqual(["2026-09-04", "2026-09-11", "2026-09-18"]);

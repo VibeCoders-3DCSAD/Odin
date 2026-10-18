@@ -1,14 +1,19 @@
 import { addDays, dueDatesBetween, type Occurrence, type PaymentSchedule, type ScheduledPaymentFrequency } from "./schedule";
 
-export const FREQUENCY_OPTIONS: { key: ScheduledPaymentFrequency; label: string }[] = [
-  { key: "weekly", label: "Weekly" },
-  { key: "biweekly", label: "Every 2 weeks" },
-  { key: "semi_monthly", label: "Twice a month" },
-  { key: "monthly", label: "Monthly" },
-  { key: "quarterly", label: "Quarterly" },
-  { key: "yearly", label: "Yearly" },
-  { key: "once", label: "None" },
-];
+export const FREQUENCY_LABELS: Record<ScheduledPaymentFrequency, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  biweekly: "Every 2 weeks",
+  semi_monthly: "Twice a month",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  yearly: "Yearly",
+  once: "None",
+};
+
+// The choices the form offers, matching savings goal contributions. Every 2 weeks, quarterly and yearly
+// are no longer offered but still schedule correctly for payments saved with them.
+export const FREQUENCY_OPTIONS = (["daily", "weekly", "semi_monthly", "monthly", "once"] as const).map((key) => ({ key, label: FREQUENCY_LABELS[key] }));
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
@@ -36,6 +41,7 @@ export function scheduleLabel(schedule: PaymentSchedule): string {
   const day = schedule.dueDayOfMonth;
   const weekday = schedule.dueDayOfWeek != null ? WEEKDAY_NAMES[schedule.dueDayOfWeek] : null;
   switch (schedule.frequency) {
+    case "daily": return "Daily";
     case "weekly": return weekday ? `Every ${weekday}` : "Weekly";
     case "biweekly": return weekday ? `Every other ${weekday}` : "Every 2 weeks";
     case "semi_monthly": return day != null && schedule.dueSecondDayOfMonth != null ? `${ordinal(Math.min(day, schedule.dueSecondDayOfMonth))} & ${ordinal(Math.max(day, schedule.dueSecondDayOfMonth))}` : "Twice a month";
@@ -47,7 +53,7 @@ export function scheduleLabel(schedule: PaymentSchedule): string {
 }
 
 export function repeatsLabel(frequency: ScheduledPaymentFrequency): string {
-  return frequency === "once" ? "Does not repeat" : `Repeats ${FREQUENCY_OPTIONS.find((option) => option.key === frequency)!.label.toLowerCase()}`;
+  return frequency === "once" ? "Does not repeat" : `Repeats ${FREQUENCY_LABELS[frequency].toLowerCase()}`;
 }
 
 export function dueLabel(current: Occurrence | null, today: string): string | null {

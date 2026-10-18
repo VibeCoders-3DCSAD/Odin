@@ -43,8 +43,13 @@ describe("scheduled payment sync validation", () => {
     await expect(prepareOperation({} as never, "user-1", scheduledPayment)).resolves.toMatchObject({ payload: scheduledPayment.payload });
   });
 
+  it("accepts a daily, uncategorized payment", async () => {
+    const payload = { ...scheduledPayment.payload, subcategory_id: null, frequency: "daily", due_day_of_month: null };
+    await expect(prepareOperation({} as never, "user-1", { ...scheduledPayment, payload })).resolves.toMatchObject({ payload: { subcategory_id: null, frequency: "daily" } });
+  });
+
   it("rejects a schedule the app does not support", async () => {
-    await expect(prepareOperation({} as never, "user-1", { ...scheduledPayment, payload: { ...scheduledPayment.payload, frequency: "daily" } })).rejects.toThrow("frequency is not a supported schedule");
+    await expect(prepareOperation({} as never, "user-1", { ...scheduledPayment, payload: { ...scheduledPayment.payload, frequency: "hourly" } })).rejects.toThrow("frequency is not a supported schedule");
   });
 
   it("rejects a non-positive amount and an out-of-range due day", async () => {

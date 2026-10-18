@@ -5,6 +5,7 @@ import { clearTransactionCache } from "../transactionCache";
 
 const mockListTransactions = jest.fn();
 const mockGetTransaction = jest.fn();
+const mockShowToast = jest.fn();
 
 jest.mock("../../../local-db/repositories/ledger", () => ({
   listTransactions: (...args: unknown[]) => mockListTransactions(...args),
@@ -17,7 +18,7 @@ jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({ getC
 jest.mock("../../../local-db/repositories/taxonomy", () => ({ listCategories: () => new Promise(() => {}) }));
 jest.mock("../../../local-db/repositories/unusualSpending", () => ({ confirmRecurringSpending: jest.fn() }));
 jest.mock("../../../local-db/sync/runSync", () => ({ runSync: jest.fn() }));
-jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: jest.fn() }) }));
+jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: mockShowToast }) }));
 jest.mock("../../../components/KebabTooltip", () => ({ onEdit }: { onEdit: () => void }) => {
   const { Pressable: MockPressable, Text: MockText } = require("react-native");
   return <MockPressable onPress={onEdit}><MockText>Edit</MockText></MockPressable>;
@@ -47,6 +48,7 @@ describe("TransactionHistoryScreen edit scroll", () => {
     mockListTransactions.mockReset();
     mockListTransactions.mockResolvedValue([transaction]);
     mockGetTransaction.mockResolvedValue(transaction);
+    mockShowToast.mockReset();
   });
 
   it("returns the list to the offset it had when Edit was opened", async () => {
@@ -70,5 +72,13 @@ describe("TransactionHistoryScreen edit scroll", () => {
     expect(scrollTo).toHaveBeenCalledTimes(1);
     expect(scrollTo).toHaveBeenCalledWith(840);
     await act(async () => {});
+  });
+
+  it("explains how to replace an uncategorized biller payment before opening the edit form", async () => {
+    mockListTransactions.mockResolvedValue([{ ...transaction, is_scheduled_payment: true }]);
+    const view = render(<TransactionHistoryScreen userId="user-1" deviceId="device-1" accessToken="token" unusualSpending={null} onUnusualSpendingDismissed={() => {}} onNewTransaction={() => {}} />);
+    fireEvent.press(await view.findByText("Edit"));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("This transaction pays a biller or remittance. Delete it and record the payment again.", "danger"));
+    expect(view.queryByText("Close edit form")).toBeNull();
   });
 });

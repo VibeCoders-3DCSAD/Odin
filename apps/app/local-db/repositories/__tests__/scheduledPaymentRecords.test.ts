@@ -89,7 +89,43 @@ describe("recording a scheduled payment", () => {
   });
 });
 
+describe("uncategorized billers", () => {
+  it("post an uncategorized expense named after the biller that the transaction list flags", async () => {
+    const { createScheduledPayment, postDueScheduledPayments, listTransactions } = await repos();
+    await createScheduledPayment("user-1", "device-1", { ...rent, name: "Padala kay Nanay", subcategoryId: null, autoPost: true }, "2026-10-01");
+
+    expect(await postDueScheduledPayments("user-1", "device-1", "2026-10-01")).toBe(1);
+    const [transaction] = await listTransactions("user-1");
+    expect(transaction).toMatchObject({ name: "Padala kay Nanay", transaction_type: "expense", category_label: null, is_scheduled_payment: 1 });
+    expect(harness.queued("transactions")[0]!.payload).toMatchObject({ subcategory_id: null, merchant_name: "Padala kay Nanay", client_mutation_id: expect.stringMatching(/^scheduled-payment:.+:2026-10-01$/) });
+  });
+
+  it("mark manual payments as biller payments too", async () => {
+    const { createScheduledPayment, recordScheduledPayment } = await repos();
+    const payment = await createScheduledPayment("user-1", "device-1", { ...rent, subcategoryId: null });
+    await recordScheduledPayment("user-1", "device-1", { id: "record-1", scheduledPaymentId: payment.id, occurrenceDate: "2026-10-01", amountCentavos: 1000, paymentDate: "2026-09-30", sourceAccountId: "acct-cash", notes: null });
+
+    expect(harness.queued("transactions")[0]!.payload).toMatchObject({ subcategory_id: null, client_mutation_id: `scheduled-payment:${payment.id}:record:record-1` });
+  });
+
+  it("the ledger still rejects any other uncategorized expense", async () => {
+    const { createExpense } = await repos();
+    await expect(createExpense("user-1", "device-1", { amount_centavos: 1000, source_account_id: "acct-cash", subcategory_id: null as never, transaction_date: "2026-10-01" }))
+      .rejects.toThrow("subcategory_id is required for expense");
+  });
+});
+
 describe("postDueScheduledPayments", () => {
+  it("posts a daily payment once per day", async () => {
+    const { createScheduledPayment, postDueScheduledPayments } = await repos();
+    await createScheduledPayment("user-1", "device-1", { ...rent, frequency: "daily", dueDayOfMonth: null, amountCentavos: 10_000, autoPost: true }, "2026-10-01");
+
+    expect(await postDueScheduledPayments("user-1", "device-1", "2026-10-03")).toBe(3);
+    expect(await postDueScheduledPayments("user-1", "device-1", "2026-10-03")).toBe(0);
+    expect(await postDueScheduledPayments("user-1", "device-1", "2026-10-04")).toBe(1);
+    expect((liveRecords() as { occurrence_date: string }[]).map((record) => record.occurrence_date)).toEqual(["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]);
+  });
+
   it("posts each unpaid due date since auto-post was turned on, once, with ids derived from the occurrence", async () => {
     const { createScheduledPayment, recordScheduledPayment, postDueScheduledPayments } = await repos();
     const payment = await createScheduledPayment("user-1", "device-1", { ...rent, autoPost: true }, "2026-09-15");
@@ -113,12 +149,22 @@ describe("postDueScheduledPayments", () => {
     expect(await postDueScheduledPayments("user-1", "device-1", "2026-10-02")).toBe(0);
   });
 
-  it("derives the same transaction id on every device", async () => {
-    const { createScheduledPayment, postDueScheduledPayments } = await repos();
-    const { deterministicUUID } = await import("../../uuid");
+  it("uses the ids the server's auto-post job derives", async () => {
+    const { createScheduledPayment, postDueScheduledPayments, scheduledPaymentPostIds } = await repos();
     const payment = await createScheduledPayment("user-1", "device-1", { ...rent, autoPost: true }, "2026-10-01");
     await postDueScheduledPayments("user-1", "device-1", "2026-10-01");
 
-    expect(liveRecords()).toEqual([expect.objectContaining({ transaction_id: deterministicUUID(`scheduled-payment:${payment.id}:2026-10-01:transaction`) })]);
+    const ids = scheduledPaymentPostIds(payment.id, "2026-10-01");
+    expect(liveRecords()).toEqual([expect.objectContaining({ id: ids.recordId, transaction_id: ids.transactionId })]);
+  });
+
+  it("does not post an occurrence whose server-posted transaction was pulled before its record", async () => {
+    const { createScheduledPayment, postDueScheduledPayments, scheduledPaymentPostIds } = await repos();
+    const payment = await createScheduledPayment("user-1", "device-1", { ...rent, autoPost: true }, "2026-10-01");
+    harness.sqlite.prepare(`INSERT INTO transactions (id, user_id, transaction_type, transaction_date, amount_centavos, source_account_id, subcategory_id, created_at, updated_at)
+      VALUES (?, 'user-1', 'expense', '2026-10-01', 1200000, 'acct-cash', 'sub-rent', 'now', 'now')`).run(scheduledPaymentPostIds(payment.id, "2026-10-01").transactionId);
+
+    expect(await postDueScheduledPayments("user-1", "device-1", "2026-10-01")).toBe(0);
+    expect(liveRecords()).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@
 export type ScheduledPaymentRow = {
   id: string;
   amount_centavos: number;
-  frequency: "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "yearly" | "once";
+  frequency: "daily" | "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "yearly" | "once";
   due_day_of_month: number | null;
   due_second_day_of_month: number | null;
   due_day_of_week: number | null;
@@ -45,6 +45,11 @@ export function scheduledPaymentDueDates(payment: ScheduledPaymentRow, from: str
   const end = payment.ends_on && payment.ends_on < to ? payment.ends_on : to;
   if (start > end) return [];
   if (payment.frequency === "once") return payment.starts_on >= start && payment.starts_on <= end ? [payment.starts_on] : [];
+  if (payment.frequency === "daily") {
+    const dates: string[] = [];
+    for (let time = toTime(start); time <= toTime(end); time += DAY_MS) dates.push(toDate(time));
+    return dates;
+  }
   if (payment.frequency === "weekly" || payment.frequency === "biweekly") {
     if (payment.due_day_of_week == null) return [];
     const step = (payment.frequency === "weekly" ? 7 : 14) * DAY_MS;

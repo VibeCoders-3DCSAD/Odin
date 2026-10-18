@@ -1,6 +1,6 @@
 // Due-date math for scheduled payments. Dates are ISO YYYY-MM-DD strings handled in UTC so device time zones never shift a due day.
 
-export type ScheduledPaymentFrequency = "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "yearly" | "once";
+export type ScheduledPaymentFrequency = "daily" | "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "yearly" | "once";
 
 export type PaymentSchedule = {
   frequency: ScheduledPaymentFrequency;
@@ -34,9 +34,12 @@ function toDate(time: number): string {
   return new Date(time).toISOString().slice(0, 10);
 }
 
-// Due dates follow the device's calendar day, not UTC.
+// Due dates follow the Asia/Manila calendar day on every device, the same day the server's auto-post job uses.
+// The Philippines has no daylight saving time, so a fixed +08:00 offset is exact.
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
 export function localToday(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return new Date(now.getTime() + MANILA_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 export function addDays(date: string, days: number): string {
@@ -74,6 +77,12 @@ export function dueDatesBetween(schedule: PaymentSchedule, from: string, to: str
   const inRange = (date: string) => date >= start && date <= end && date >= schedule.startsOn;
 
   if (schedule.frequency === "once") return inRange(schedule.startsOn) ? [schedule.startsOn] : [];
+
+  if (schedule.frequency === "daily") {
+    const dates: string[] = [];
+    for (let time = toTime(start); time <= toTime(end); time += DAY_MS) dates.push(toDate(time));
+    return dates;
+  }
 
   if (schedule.frequency === "weekly" || schedule.frequency === "biweekly") {
     if (schedule.dueDayOfWeek == null) return [];

@@ -9,7 +9,7 @@ type ContextInput = {
   debtReservations: Amount[];
   savingsReservations: Amount[];
   obligations: Array<Amount & { scheduledPaymentId: string; dueDate: string }>;
-  scheduledPayments: Array<{ id: string; subcategory_id: string }>;
+  scheduledPayments: Array<{ id: string; subcategory_id: string | null }>;
   subcategories: Array<{ id: string; category_id: string | null }>;
   categories: Array<{ id: string; slug: string }>;
 };
@@ -17,7 +17,7 @@ type ContextInput = {
 export function buildFinancialPlanExplanationContext(input: ContextInput): Pick<FinancialPlanEvidence, "planMonth" | "forecastComparisonBasis" | "confirmedExpenses" | "financialConstraints"> {
   const categoryById = new Map(input.categories.map((category) => [category.id, category.slug]));
   const categoryBySubcategory = new Map(input.subcategories.map((subcategory) => [subcategory.id, subcategory.category_id ? categoryById.get(subcategory.category_id) : undefined]));
-  const categoryByPayment = new Map(input.scheduledPayments.map((payment) => [payment.id, categoryBySubcategory.get(payment.subcategory_id)]));
+  const categoryByPayment = new Map(input.scheduledPayments.map((payment) => [payment.id, payment.subcategory_id ? categoryBySubcategory.get(payment.subcategory_id) : undefined]));
   const total = (amounts: Amount[]) => amounts.reduce((sum, item) => sum + item.amountCentavos, 0);
   return {
     planMonth: input.planMonth,

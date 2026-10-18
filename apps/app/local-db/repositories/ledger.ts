@@ -51,6 +51,8 @@ type TransactionListRow = {
   amount_centavos: number;
   transaction_date: string;
   transaction_type: string;
+  // 1 when the transaction pays a biller or remittance.
+  is_scheduled_payment: number;
   created_at: string;
   row_id: number;
 };
@@ -98,6 +100,11 @@ export type CreateExpenseInput = {
   client_mutation_id?: string;
   installment?: CreateCreditCardInstallmentInput;
 };
+
+// Only a biller or remittance payment may be an uncategorized expense. It is marked by a client_mutation_id
+// naming the scheduled payment; the server enforces the same rule.
+export const BILLER_PAYMENT_MUTATION_PREFIX = "scheduled-payment:";
+type ExpenseInsertInput = Omit<CreateExpenseInput, "subcategory_id"> & { subcategory_id: string | null };
 
 export type CreateTransferInput = {
   amount_centavos: number;
@@ -346,13 +353,13 @@ async function validateIncomeShape(
 async function validateExpenseShape(
   db: SQLite.SQLiteDatabase,
   userId: string,
-  input: CreateExpenseInput,
+  input: ExpenseInsertInput,
 ): Promise<void> {
   validateAmount(input.amount_centavos);
   if (!input.source_account_id) {
     throw new LocalDbError("VALIDATION_ERROR", "source_account_id is required for expense");
   }
-  if (!input.subcategory_id) {
+  if (!input.subcategory_id && !input.client_mutation_id?.startsWith(BILLER_PAYMENT_MUTATION_PREFIX)) {
     throw new LocalDbError("VALIDATION_ERROR", "subcategory_id is required for expense");
   }
   if (!input.transaction_date) {
@@ -373,7 +380,7 @@ async function validateExpenseShape(
     throw new LocalDbError("VALIDATION_ERROR", "Installment original principal must match the transaction amount.");
   }
   if (input.credit_card_posting_date != null) validateIsoDate(input.credit_card_posting_date, "credit_card_posting_date");
-  await verifySubcategoryOwnership(db, userId, input.subcategory_id, "expense");
+  if (input.subcategory_id) await verifySubcategoryOwnership(db, userId, input.subcategory_id, "expense");
 }
 
 async function validateTransferShape(
@@ -462,17 +469,17 @@ function buildTransactionInsert(
   id: string,
   userId: string,
   transactionType: string,
-  input: CreateIncomeInput | CreateExpenseInput | CreateTransferInput,
+  input: CreateIncomeInput | ExpenseInsertInput | CreateTransferInput,
   ts: string,
 ): { sql: string; params: SQLite.SQLiteBindValue[] } {
   const sourceAccountId = transactionType === "expense" || transactionType === "transfer" ? (input as CreateExpenseInput | CreateTransferInput).source_account_id : null;
   const destinationAccountId = transactionType === "income" || transactionType === "transfer" ? (input as CreateIncomeInput | CreateTransferInput).destination_account_id : null;
-  const subcategoryId = transactionType === "income" || transactionType === "expense" ? (input as CreateIncomeInput | CreateExpenseInput).subcategory_id : null;
+  const subcategoryId = transactionType === "income" || transactionType === "expense" ? (input as CreateIncomeInput | ExpenseInsertInput).subcategory_id : null;
   const merchantName = "merchant_name" in input ? input.merchant_name ?? null : null;
   const counterpartyName = "counterparty_name" in input ? input.counterparty_name ?? null : null;
   const notes = input.notes ?? null;
   const postingDate = transactionType === "expense" && "credit_card_posting_date" in input
-    ? (input as CreateExpenseInput).credit_card_posting_date ?? null
+    ? (input as ExpenseInsertInput).credit_card_posting_date ?? null
     : null;
 
   return {
@@ -570,6 +577,7 @@ export async function listTransactions(
     t.amount_centavos,
     t.transaction_date,
     t.transaction_type,
+    EXISTS (SELECT 1 FROM scheduled_payment_records r WHERE r.user_id = t.user_id AND r.transaction_id = t.id AND r.deleted = 0) AS is_scheduled_payment,
     t.created_at,
     t.rowid AS row_id
     FROM transactions t
@@ -647,51 +655,61 @@ export async function getTransaction(
   return row ? mapTransaction(row) : null;
 }
 
+export async function createIncomeInTransaction(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  input: CreateIncomeInput,
+  options?: { id?: string },
+): Promise<{ transaction: Transaction; operation: SyncOperation }> {
+  const ts = now();
+  const id = options?.id ?? randomUUID();
+  await validateIncomeShape(db, userId, input);
+
+  await applyBalanceEffects(
+    db, userId, "income", null, input.destination_account_id, input.amount_centavos,
+  );
+
+  const { sql, params } = buildTransactionInsert(id, userId, "income", input, ts);
+  await db.runAsync(sql, ...params);
+
+  const operation = await enqueueOperation(db, {
+    userId,
+    deviceId,
+    entity: "transactions",
+    recordId: id,
+    operationType: "create",
+    baseVersion: null,
+    changedFields: [],
+    payload: {
+      ...input,
+      transaction_type: "income",
+      subcategory_id: input.subcategory_id,
+      source_account_id: null,
+      destination_account_id: input.destination_account_id,
+    },
+    failureMessage: `This income transaction could not be created.`,
+  });
+
+  const row = await db.getFirstAsync<TransactionRow>(
+    "SELECT * FROM transactions WHERE user_id = ? AND id = ?",
+    userId,
+    id,
+  );
+  return { transaction: mapTransaction(row!), operation };
+}
+
 export async function createIncome(
   userId: string,
   deviceId: string,
   input: CreateIncomeInput,
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const db = await getDb();
-  const ts = now();
-  const id = randomUUID();
 
   let result: { transaction: Transaction; operation: SyncOperation };
 
   await db.withTransactionAsync(async () => {
-    await validateIncomeShape(db, userId, input);
-
-    await applyBalanceEffects(
-      db, userId, "income", null, input.destination_account_id, input.amount_centavos,
-    );
-
-    const { sql, params } = buildTransactionInsert(id, userId, "income", input, ts);
-    await db.runAsync(sql, ...params);
-
-    const operation = await enqueueOperation(db, {
-      userId,
-      deviceId,
-      entity: "transactions",
-      recordId: id,
-      operationType: "create",
-      baseVersion: null,
-      changedFields: [],
-      payload: {
-        ...input,
-        transaction_type: "income",
-        subcategory_id: input.subcategory_id,
-        source_account_id: null,
-        destination_account_id: input.destination_account_id,
-      },
-      failureMessage: `This income transaction could not be created.`,
-    });
-
-    const row = await db.getFirstAsync<TransactionRow>(
-      "SELECT * FROM transactions WHERE user_id = ? AND id = ?",
-      userId,
-      id,
-    );
-    result = { transaction: mapTransaction(row!), operation };
+    result = await createIncomeInTransaction(db, userId, deviceId, input);
   });
 
   return result!;
@@ -701,7 +719,7 @@ export async function createExpenseInTransaction(
   db: SQLite.SQLiteDatabase,
   userId: string,
   deviceId: string,
-  input: CreateExpenseInput,
+  input: ExpenseInsertInput,
   options?: { id?: string },
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   const ts = now();

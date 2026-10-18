@@ -166,7 +166,7 @@ export default function BillersScreen({ userId, deviceId, syncVersion, onAdd, on
       {visible.length === 0 ? emptyState(...FILTERED_EMPTY[filter as Exclude<Filter, "all">]) : (
         <View style={ui.list}>
           {visible.map((payment, index) => {
-            const category = categories.get(payment.subcategoryId) ?? { label: "Uncategorized", slug: "" };
+            const category = (payment.subcategoryId ? categories.get(payment.subcategoryId) : undefined) ?? { label: "Uncategorized", slug: "" };
             const tile = tileFor(category.slug);
             const overdue = payment.current?.status === "overdue";
             return (

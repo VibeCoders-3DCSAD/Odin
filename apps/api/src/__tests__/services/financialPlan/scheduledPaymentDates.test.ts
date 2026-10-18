@@ -9,6 +9,7 @@ const schedules: ScheduledPaymentRow[] = [
   base,
   { ...base, due_day_of_month: 31 },
   { ...base, frequency: "semi_monthly", due_day_of_month: 30, due_second_day_of_month: 15 },
+  { ...base, frequency: "daily", due_day_of_month: null, starts_on: "2026-12-28", ends_on: "2027-01-03" },
   { ...base, frequency: "weekly", due_day_of_week: 5 },
   { ...base, frequency: "biweekly", due_day_of_week: 0, starts_on: "2026-09-10" },
   { ...base, frequency: "quarterly", due_day_of_month: 20 },
