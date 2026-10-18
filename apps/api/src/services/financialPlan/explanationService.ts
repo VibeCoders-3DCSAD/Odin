@@ -252,11 +252,10 @@ export function fallbackFinancialPlanExplanations(evidence: FinancialPlanEvidenc
 
 export function zeroAllocationExplanations(allocations: ZeroAllocationEvidence[]): string[] {
   return allocations
-    .filter((allocation) => allocation.allocationCentavos === 0)
+    .filter((allocation) => allocation.allocationCentavos === 0 && (allocation.requiredFloorCentavos > 0 || allocation.forecastCentavos > 0))
     .slice(0, 1)
     .map((allocation) => {
       if (allocation.requiredFloorCentavos > 0) return `We recommend checking the ${peso(0)} budget for ${allocation.categoryName}. It is below your minimum amount of ${peso(allocation.requiredFloorCentavos)}.`;
-      if (allocation.forecastCentavos === 0) return `We recommend a budget of ${peso(0)} for ${allocation.categoryName}. There is no minimum amount or estimated spending for it.`;
       return `We recommend checking the ${peso(0)} budget for ${allocation.categoryName}. We estimate spending of ${peso(allocation.forecastCentavos)}, even though there is no minimum amount.`;
     });
 }

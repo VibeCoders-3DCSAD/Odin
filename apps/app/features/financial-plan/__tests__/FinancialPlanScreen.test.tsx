@@ -81,6 +81,23 @@ describe("FinancialPlanScreen", () => {
     mockRunSync.mockResolvedValue({ successful: true });
   });
 
+  it("shows the Essentials shortfall above Plan insights", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({
+      id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31",
+      inputSnapshot: { restrictions: { allocations: [{ id: "food", target: "category", priorityGroup: "ESSENTIAL" }] } },
+      recommendation: {
+        availableFundsCentavos: 100_000,
+        allocations: [{ categoryId: "food", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 60_000, floorAmountCentavos: 0, forecastAmountCentavos: 80_000 }],
+        debtReservations: [], savingsReservations: [],
+      },
+    });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByText("Essentials shortfall: ₱200.00")).toBeTruthy());
+    const output = JSON.stringify(view.toJSON());
+    expect(output.indexOf("Essentials shortfall:")).toBeLessThan(output.indexOf("Plan insights"));
+    expect(view.getAllByText("Essentials shortfall: ₱200.00")).toHaveLength(1);
+  });
+
   async function openRecommendationForAcceptance(explanationRequest?: unknown) {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
     mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);

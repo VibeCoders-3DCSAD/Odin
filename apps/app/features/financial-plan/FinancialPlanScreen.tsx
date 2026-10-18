@@ -11,6 +11,7 @@ import { requestFinancialPlanExplanations, requestFinancialPlanRecommendation, t
 import { planSpendingInsights } from "./helpers/planSpendingInsights";
 import { DevPlanMonthSettings } from "./DevPlanMonthSettings";
 import { PlanAllocations } from "./PlanAllocations";
+import { PlanEssentialShortfall } from "./PlanEssentialShortfall";
 import { PlanCategorySelection } from "./PlanCategorySelection";
 import { PlanScheduledPayments } from "./PlanScheduledPayments";
 import { PlanReservations } from "./PlanReservations";
@@ -362,6 +363,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
        {isDevPreview ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#B45309", marginTop: 8 }}>Development preview only. Plans for other months cannot be saved.</Text> : null}
         {state === "saved" ? <Pressable accessibilityRole="button" accessibilityLabel="Reset Financial Plan" onPress={resetPlan} style={{ alignSelf: "flex-start", marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 12, color: "#D9001F" }}>Reset plan</Text></Pressable> : null}
          <View style={{ marginTop: 16, borderRadius: 16, padding: 16, backgroundColor: "#013220" }}><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#D7EEE2" }}>Remaining Money in Plan</Text><Text accessibilityRole={overAllocated ? "alert" : undefined} style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 25, color: overAllocated ? "#FFB4AB" : "#FFFFFF", marginTop: 2 }}>{remainingUnallocated === null ? "Unavailable" : formatPeso(remainingUnallocated)}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: "#D7EEE2", marginTop: 4 }}>{state === "saved" ? "Available plan funds minus recorded category spending. Includes money not assigned to category budgets." : "After savings, debt, billers and remittances, and category allocations."}</Text></View>
+        <PlanEssentialShortfall allocations={recommendation.allocations} restrictions={plan.inputSnapshot.restrictions} />
         {insights.length ? <View style={{ backgroundColor: "#F0F7F3", borderColor: "#C8E2D4", borderRadius: 14, borderWidth: 1, marginTop: 16, padding: 14 }}>
          <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
            <Sparkle color="#0E6D46" size={18} weight="fill" />
@@ -376,7 +378,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
           <PlanReservations title="Savings reservations" reservations={recommendation.savingsReservations} surplusCentavos={recommendation.savingsSurplusCentavos} onSurplusAmountChange={state === "saved" ? undefined : (amount) => updateSurplus("savingsSurplusCentavos", amount)} />
           <PlanReservations title="Debt reservations" reservations={recommendation.debtReservations} surplusCentavos={recommendation.debtSurplusCentavos} onSurplusAmountChange={state === "saved" ? undefined : (amount) => updateSurplus("debtSurplusCentavos", amount)} />
           <PlanScheduledPayments obligations={plan.inputSnapshot.obligations} />
-        <PlanAllocations allocations={recommendation.allocations} showSpendingProgress={state === "saved" && planSpentCentavos !== null} readOnly={state === "saved"} onFlexibleAmountChange={(index, amount) => { const value = toCentavos(amount); if (value != null) updateAllocation(index, { allocatedAmountCentavos: value }); }} onWeightChange={(index, weight) => { const value = Number(weight); if (Number.isFinite(value) && value >= 0 && value <= 100) updateAllocation(index, { subcategoryWeightBps: Math.round(value * 100) }); }} />
+        <PlanAllocations allocations={recommendation.allocations} restrictions={plan.inputSnapshot.restrictions} showSpendingProgress={state === "saved" && planSpentCentavos !== null} readOnly={state === "saved"} onFlexibleAmountChange={(index, amount) => { const value = toCentavos(amount); if (value != null) updateAllocation(index, { allocatedAmountCentavos: value }); }} onWeightChange={(index, weight) => { const value = Number(weight); if (Number.isFinite(value) && value >= 0 && value <= 100) updateAllocation(index, { subcategoryWeightBps: Math.round(value * 100) }); }} />
        {state === "stale" ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#B45309", marginTop: 16 }}>Your source data changed. Refresh this unaccepted recommendation before saving.</Text> : null}
        {overAllocated && state !== "saved" ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#D9001F", marginTop: 16 }}>Reduce allocations or surplus amounts before saving this plan.</Text> : null}
        {error ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#D9001F", marginTop: 16 }}>{error}</Text> : null}

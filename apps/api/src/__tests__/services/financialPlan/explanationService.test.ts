@@ -157,13 +157,27 @@ describe("Financial Plan explanation service", () => {
     );
   });
 
-  it("explains zero allocations using only the required floor and forecast", () => {
+  it("skips empty category budgets before explaining an unfunded spending forecast", () => {
     expect(zeroAllocationExplanations([
-      { categoryName: "Dining Out", allocationCentavos: 0, requiredFloorCentavos: 0, forecastCentavos: 0 },
+      { categoryName: "Home Internet", allocationCentavos: 0, requiredFloorCentavos: 0, forecastCentavos: 0 },
+      { categoryName: "Family Remittance", allocationCentavos: 0, requiredFloorCentavos: 0, forecastCentavos: 0 },
       { categoryName: "Shopping", allocationCentavos: 0, requiredFloorCentavos: 0, forecastCentavos: 15_000 },
     ])).toEqual([
-      "We recommend a budget of ₱0 for Dining Out. There is no minimum amount or estimated spending for it.",
+      "We recommend checking the ₱0 budget for Shopping. We estimate spending of ₱150, even though there is no minimum amount.",
     ]);
+  });
+
+  it("omits zero-budget insights when every category has no remaining requirement", () => {
+    expect(zeroAllocationExplanations([
+      { categoryName: "Home Internet", allocationCentavos: 0, requiredFloorCentavos: 0, forecastCentavos: 0 },
+      { categoryName: "Family Remittance", allocationCentavos: 0, requiredFloorCentavos: 0, forecastCentavos: 0 },
+    ])).toEqual([]);
+  });
+
+  it("still explains an unfunded minimum when its forecast is zero", () => {
+    expect(zeroAllocationExplanations([
+      { categoryName: "Food", allocationCentavos: 0, requiredFloorCentavos: 20_000, forecastCentavos: 0 },
+    ])).toEqual(["We recommend checking the ₱0 budget for Food. It is below your minimum amount of ₱200."]);
   });
 
   it("excludes Summer preferences from an October plan", () => {

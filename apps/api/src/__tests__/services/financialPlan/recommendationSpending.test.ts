@@ -109,11 +109,26 @@ describe("Financial Plan recommendations with recorded spending", () => {
       confirmedExpenses: [{ scheduledPaymentId: "internet-bill", categorySlug: "communication", dueDate: "2026-10-22", amountCentavos: 20_000 }],
       financialConstraints: { plannedAmountCentavos: 500_000, categoryBudgetCentavos: 480_000, scheduledPaymentsCentavos: 20_000 },
     });
-    expect(result.recommendation.allocations[0]).toMatchObject({ allocatedAmountCentavos: 80_000, forecastAmountCentavos: 168_000 });
+    expect(result.recommendation.allocations[0]).toMatchObject({ allocatedAmountCentavos: 80_000, forecastAmountCentavos: 144_000 });
     expect(result.explanations.join(" ")).toContain("Separately, ₱200 is reserved for recorded payments in this category.");
     expect(result.explanations[0]).toContain("A lower budget does not mean lower expected expenses");
     expect(recommendPlanCategories).toHaveBeenCalledWith("user", result.period, 480_000, expect.any(Array), expect.any(Object));
     expect(result.inputSnapshot.spendingExplanationEvidence).toMatchObject({ forecastComparisonBasis: "usual_category_spending" });
+  });
+
+  it("does not recommend a zero category budget for a separately reserved biller", async () => {
+    (recommendPlanCategories as jest.Mock).mockResolvedValue({ recommendation: { feasibility: "FEASIBLE", allocations: [{ category_id: "internet", amount: 0 }] } });
+    const result = await getFinancialPlanRecommendation("user", client(0, null, {
+      transactions: [],
+      scheduled_payments: [{ id: "internet-bill", name: "Home Internet", subcategory_id: "internet", amount_centavos: 20_000, frequency: "once", starts_on: "2026-10-22", ends_on: null }],
+    }), 500_000, ["internet"]);
+
+    expect(result.recommendation.allocations[0]).toMatchObject({ allocatedAmountCentavos: 0, forecastAmountCentavos: 0, floorAmountCentavos: 0 });
+    expect(result.inputSnapshot.obligations.reservations).toEqual([
+      expect.objectContaining({ scheduledPaymentId: "internet-bill", amountCentavos: 20_000 }),
+    ]);
+    expect(result.explanationRequest.leading).toEqual([]);
+    expect(result.explanations.join(" ")).not.toContain("Home Internet");
   });
 
   it("does not explain an unselected category as receiving an insufficient zero budget", async () => {
