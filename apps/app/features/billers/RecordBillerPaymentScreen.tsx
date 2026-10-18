@@ -14,7 +14,7 @@ import { currentOccurrence, localToday, occurrenceChoices } from "./schedule";
 type Props = { userId: string; deviceId: string; scheduledPaymentId: string; onClose: () => void; onRecorded: (message: string) => void };
 type Field = "amount" | "paymentDate" | "account" | "occurrence";
 
-export default function RecordScheduledPaymentScreen({ userId, deviceId, scheduledPaymentId, onClose, onRecorded }: Props) {
+export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledPaymentId, onClose, onRecorded }: Props) {
   const today = localToday();
   const [payment, setPayment] = useState<ScheduledPayment | null>(null);
   const [paid, setPaid] = useState<Map<string, number>>(new Map());

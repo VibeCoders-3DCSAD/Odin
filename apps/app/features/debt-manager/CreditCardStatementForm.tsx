@@ -2,6 +2,7 @@ import DateTimePicker, { type DateTimePickerEvent } from "@react-native-communit
 import React, { useState } from "react";
 import { Modal, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { createCreditCardStatement } from "../../local-db/repositories/creditCardStatements";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const P = {
   shell: "#fcf8f0",
@@ -137,14 +138,14 @@ export default function CreditCardStatementForm({ userId, deviceId, cycleId, cyc
         <Modal visible transparent animationType="slide" onRequestClose={() => setPicker(null)}>
           <Pressable onPress={() => setPicker(null)} style={{ flex: 1, backgroundColor: "rgba(0, 0, 0, 0.35)", justifyContent: "flex-end" }}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: P.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 28 }}>
+              <BottomSheetSurface bottomSpacing={28} style={{ backgroundColor: P.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 14 }}>
                   <Pressable accessibilityRole="button" accessibilityLabel="Cancel date selection" onPress={() => setPicker(null)}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.muted }}>Cancel</Text></Pressable>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: P.ink }}>{picker === "statement" ? "Statement date" : "Payment due date"}</Text>
                   <Pressable accessibilityRole="button" accessibilityLabel="Confirm date selection" onPress={() => setPicker(null)}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.brand }}>Done</Text></Pressable>
                 </View>
                  <DateTimePicker value={dateFromIso(selectedDate ?? today)} mode="date" display="spinner" minimumDate={picker === "statement" ? dateFromIso(cycleCutoffDate) : undefined} maximumDate={picker === "statement" ? dateFromIso(today) : undefined} onChange={selectDate(picker)} />
-              </View>
+              </BottomSheetSurface>
             </Pressable>
           </Pressable>
         </Modal>

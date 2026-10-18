@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import ScheduledPaymentsScreen from "../ScheduledPaymentsScreen";
+import BillersScreen from "../BillersScreen";
 import { localToday, addDays } from "../schedule";
 
 const mockSummaries = jest.fn();
@@ -28,7 +28,7 @@ const sss = { ...base, id: "sss", name: "SSS contribution", subcategoryId: "sub-
 
 const props = { userId: "user-1", deviceId: "device-1", syncVersion: 0, onAdd: jest.fn(), onEdit: jest.fn(), onOpen: jest.fn(), onSyncRequested: jest.fn() };
 
-describe("ScheduledPaymentsScreen", () => {
+describe("BillersScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPostDue.mockResolvedValue(0);
@@ -36,11 +36,11 @@ describe("ScheduledPaymentsScreen", () => {
   });
 
   it("lists payments with their category and schedule, and filters to those due soon", async () => {
-    const view = render(<ScheduledPaymentsScreen {...props} />);
+    const view = render(<BillersScreen {...props} />);
 
     expect(await view.findByText("Housing · 1st · Auto-post")).toBeTruthy();
     expect(view.getByText("Government · Partially paid")).toBeTruthy();
-    expect(view.getByText("2 scheduled payments")).toBeTruthy();
+    expect(view.getByText("2 billers and remittances")).toBeTruthy();
 
     fireEvent.press(view.getByText("Due soon"));
     expect(view.queryByText("Rent")).toBeNull();
@@ -49,7 +49,7 @@ describe("ScheduledPaymentsScreen", () => {
 
   it("shows the filtered empty state", async () => {
     mockSummaries.mockImplementation(async (_user: string, status = "active") => status === "active" ? [rent] : []);
-    const view = render(<ScheduledPaymentsScreen {...props} />);
+    const view = render(<BillersScreen {...props} />);
     fireEvent.press(await view.findByText("Due soon"));
 
     expect(view.getByText("Nothing falls in the next 3 days. Tap All to see every payment.")).toBeTruthy();
@@ -57,8 +57,8 @@ describe("ScheduledPaymentsScreen", () => {
 
   it("prompts to add the first payment", async () => {
     mockSummaries.mockResolvedValue([]);
-    const view = render(<ScheduledPaymentsScreen {...props} />);
-    fireEvent.press(await view.findByText("Add a scheduled payment"));
+    const view = render(<BillersScreen {...props} />);
+    fireEvent.press(await view.findByText("Add a biller or remittance"));
 
     expect(view.getByText("Add rent, a bill or a contribution. Budgie deducts it from your budget on the due date.")).toBeTruthy();
     expect(props.onAdd).toHaveBeenCalled();
@@ -66,16 +66,16 @@ describe("ScheduledPaymentsScreen", () => {
 
   it("offers a retry when payments cannot be read", async () => {
     mockSummaries.mockRejectedValueOnce(new Error("disk")).mockImplementation(async () => []);
-    const view = render(<ScheduledPaymentsScreen {...props} />);
-    expect(await view.findByText("Budgie cannot read your scheduled payments.")).toBeTruthy();
+    const view = render(<BillersScreen {...props} />);
+    expect(await view.findByText("Budgie cannot read your billers and remittances.")).toBeTruthy();
 
     fireEvent.press(view.getByText("Try again"));
-    expect(await view.findByText("No scheduled payments yet")).toBeTruthy();
+    expect(await view.findByText("No billers or remittances yet")).toBeTruthy();
   });
 
   it("posts the remaining amount of the current occurrence from the row menu", async () => {
     mockRecord.mockResolvedValue(undefined);
-    const view = render(<ScheduledPaymentsScreen {...props} />);
+    const view = render(<BillersScreen {...props} />);
     fireEvent(await view.findByLabelText("SSS contribution"), "longPress");
     fireEvent.press(view.getByLabelText("Post now"));
 
@@ -85,7 +85,7 @@ describe("ScheduledPaymentsScreen", () => {
 
   it("asks for sync after auto-posting due payments", async () => {
     mockPostDue.mockResolvedValue(2);
-    render(<ScheduledPaymentsScreen {...props} />);
+    render(<BillersScreen {...props} />);
     await waitFor(() => expect(props.onSyncRequested).toHaveBeenCalled());
   });
 });

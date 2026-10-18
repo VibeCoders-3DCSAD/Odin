@@ -54,4 +54,6 @@ export type FinancialPlanRecommendation = {
     surplusRecommendation?: FinancialPlanSurplusRecommendation;
   };
   explanations: string[];
+  // Opaque server evidence, sent back to POST /financial-plans/explanations for the AI explanations.
+  explanationRequest?: unknown;
 };

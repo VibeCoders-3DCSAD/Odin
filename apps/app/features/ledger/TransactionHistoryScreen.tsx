@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ActivityIndicator,
@@ -10,7 +10,8 @@ import {
   View,
 } from "react-native";
 import { Funnel } from "phosphor-react-native";
-import { listTransactions, getTransaction, deleteTransaction, type TransactionFilters, type TransactionListItem } from "../../local-db/repositories/ledger";
+import { listTransactions, getTransaction, getTransactionTotals, deleteTransaction, type TransactionFilters, type TransactionListItem, type TransactionTotals } from "../../local-db/repositories/ledger";
+import { readTransactionCache, reuseUnchangedRows, transactionCacheKey, writeTransactionCache } from "./transactionCache";
 import { getCreditCardPurchaseMetadataForTransaction } from "../../local-db/repositories/creditCardInstallments";
 import { listCategories, type Category } from "../../local-db/repositories/taxonomy";
 import { runSync } from "../../local-db/sync/runSync";
@@ -19,6 +20,8 @@ import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
 import { confirmRecurringSpending, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
+import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
 
 const palette = {
   shell: "#fcf8f0",
@@ -55,23 +58,86 @@ type Props = {
   onUnusualSpendingDismissed: () => void;
   onNewTransaction: () => void;
   onLoadMoreChange?: (loadMore: (() => void) | null) => void;
+  // The shell owns the scroll view; these let the list return to where it was after an edit.
+  getScrollOffset?: () => number;
+  scrollTo?: (y: number) => void;
+  // Bumped by the shell after a sync pushes or pulls changes.
+  syncVersion?: number;
 };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
+// Enough rows to fill the screen; the rest render a frame later so a new list paints quickly.
+const INITIAL_RENDER_ROWS = 10;
+// listTransactions caps a page at 200 rows.
+const MAX_REFRESH_ROWS = 200;
+const DEFAULT_SORT_BY = "transaction_date";
+const DEFAULT_SORT_DIR = "desc";
 
-export default function TransactionHistoryScreen({ userId, deviceId, accessToken, unusualSpending, onUnusualSpendingDismissed, onNewTransaction, onLoadMoreChange }: Props) {
+// toLocaleString builds a new formatter on every call, which is slow on Hermes.
+const amountFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dateFormat = new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", year: "numeric" });
+
+function formatAmount(centavos: number): string {
+  return amountFormat.format(centavos / 100);
+}
+
+const TransactionRow = memo(function TransactionRow({ tx, onEdit, onDelete }: {
+  tx: TransactionListItem;
+  onEdit: (transactionId: string) => void;
+  onDelete: (transactionId: string) => void;
+}) {
+  const typeColor = TYPE_COLORS[tx.transaction_type] ?? palette.mut;
+  const prefix = tx.transaction_type === "expense" ? "-" : tx.transaction_type === "income" ? "+" : "";
+  return (
+    <View style={{ paddingVertical: 8, paddingHorizontal: 2, marginBottom: 2, flexDirection: "row", alignItems: "center", gap: 10 }}>
+      {tx.icon_key ? (
+        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: tx.color_hex ?? DEFAULT_TAXONOMY_COLOR, alignItems: "center", justifyContent: "center", marginRight: 2 }}>
+          <TaxonomyIcon iconKey={tx.icon_key} size={18} color="#fff" weight="fill" />
+        </View>
+      ) : (
+        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: `${typeColor}20`, alignItems: "center", justifyContent: "center", marginRight: 2 }}>
+          <Text style={{ fontSize: 10, color: typeColor, fontWeight: "800" }}>
+            {tx.transaction_type === "transfer" ? "TR" : tx.transaction_type === "income" ? "+" : "-"}
+          </Text>
+        </View>
+      )}
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }} numberOfLines={1}>
+          {tx.name}
+        </Text>
+        <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut }} numberOfLines={1}>
+          {[tx.category_label, tx.financial_account_name].filter(Boolean).join(" · ") || "Uncategorized"}
+        </Text>
+      </View>
+      <View style={{ alignItems: "flex-end" }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 13.5, color: typeColor }}>
+          {prefix}P{formatAmount(tx.amount_centavos)}
+        </Text>
+      </View>
+      <KebabTooltip onEdit={() => onEdit(tx.id)} onDelete={() => onDelete(tx.id)} />
+    </View>
+  );
+});
+
+export default function TransactionHistoryScreen({ userId, deviceId, accessToken, unusualSpending, onUnusualSpendingDismissed, onNewTransaction, onLoadMoreChange, getScrollOffset, scrollTo, syncVersion = 0 }: Props) {
   const { showToast } = useToast();
 
+  // The page mounts with the spinner so navigating here is immediate; cached rows are painted on the next
+  // frame by the first load. The filters always start at their defaults, so only those totals are restored.
+  const [totals, setTotals] = useState<TransactionTotals>(() => readTransactionCache(transactionCacheKey(userId, { sort_by: DEFAULT_SORT_BY, sort_dir: DEFAULT_SORT_DIR }))?.totals ?? { income_centavos: 0, expense_centavos: 0 });
   const [transactions, setTransactions] = useState<TransactionListItem[]>([]);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_RENDER_ROWS);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  // The rows on screen belong to the previous filters while the new ones are queried.
+  const [stale, setStale] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<string>("transaction_date");
-  const [sortDir, setSortDir] = useState<string>("desc");
+  const [sortBy, setSortBy] = useState<string>(DEFAULT_SORT_BY);
+  const [sortDir, setSortDir] = useState<string>(DEFAULT_SORT_DIR);
   const [dateRange, setDateRange] = useState<string>("all");
   const [customFromDate, setCustomFromDate] = useState<string | null>(null);
   const [customToDate, setCustomToDate] = useState<string | null>(null);
@@ -86,15 +152,17 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const requestId = useRef(0);
   const loadingMoreRef = useRef(false);
-  const nextOffsetRef = useRef(0);
+  // True while load() is querying; a page appended mid-refresh would be overwritten by the refreshed rows.
+  const refreshingRef = useRef(false);
+  const lastRowRef = useRef<TransactionListItem | null>(null);
 
-  function getFilters(offset: number): TransactionFilters {
+  function getFilters(after: TransactionListItem | null): TransactionFilters {
     const filters: TransactionFilters = {
       sort_by: sortBy,
       sort_dir: sortDir,
       limit: PAGE_SIZE,
-      offset,
     };
+    if (after) filters.after = after;
     if (typeFilter !== "all") filters.transaction_type = typeFilter;
     if (categoryFilter !== "all") filters.category_id = categoryFilter;
     if (search.trim()) filters.search = search.trim();
@@ -117,29 +185,93 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     return filters;
   }
 
-  async function load() {
+  // inPlace refreshes the rows already on screen after an edit, delete or sync: the cache only holds the first
+  // page and is older than what is shown, so it is skipped and every loaded page is re-queried.
+  async function load({ inPlace = false }: { inPlace?: boolean } = {}) {
     const currentRequestId = requestId.current + 1;
     requestId.current = currentRequestId;
-    setLoading(true);
-    setHasMore(false);
-    nextOffsetRef.current = 0;
+    const filters = getFilters(null);
+    const cacheKey = transactionCacheKey(userId, filters);
+    const refreshInPlace = inPlace && transactions.length > 0;
+    const cached = refreshInPlace ? null : readTransactionCache(cacheKey);
+    if (refreshInPlace) filters.limit = Math.min(Math.max(transactions.length, PAGE_SIZE), MAX_REFRESH_ROWS);
+    // Stale-while-revalidate: paint cached rows for these filters, or keep the current rows dimmed, and only
+    // fall back to the spinner when there is nothing to show. Rendering rows costs far more than the query.
+    if (refreshInPlace) {
+      // Same filters, so the rows on screen stay as they are until the refreshed ones arrive.
+    } else if (cached) {
+      setVisibleCount(INITIAL_RENDER_ROWS);
+      setTransactions((current) => reuseUnchangedRows(current, cached.rows));
+      setTotals(cached.totals);
+      setHasMore(cached.hasMore);
+      setStale(false);
+      setLoading(false);
+      lastRowRef.current = cached.rows[cached.rows.length - 1] ?? null;
+    } else if (transactions.length > 0) {
+      setStale(true);
+    } else {
+      setLoading(true);
+      setHasMore(false);
+      lastRowRef.current = null;
+    }
+    refreshingRef.current = true;
     try {
-      const rows = await listTransactions(userId, getFilters(0));
+      // Totals cover every matching row, not just the pages loaded so far.
+      const [rows, nextTotals] = await Promise.all([
+        listTransactions(userId, filters),
+        getTransactionTotals(userId, filters),
+      ]);
       if (requestId.current !== currentRequestId) return;
-      setTransactions(rows);
-      setHasMore(rows.length === PAGE_SIZE);
-      nextOffsetRef.current = rows.length;
+      const nextHasMore = rows.length === filters.limit;
+      // A list replacing a spinner or another filter's rows renders in two steps too.
+      if (!cached && !refreshInPlace) setVisibleCount(INITIAL_RENDER_ROWS);
+      setTransactions((current) => reuseUnchangedRows(current, rows));
+      setTotals(nextTotals);
+      setHasMore(nextHasMore);
+      lastRowRef.current = rows[rows.length - 1] ?? null;
+      writeTransactionCache(cacheKey, { rows, totals: nextTotals, hasMore: nextHasMore });
     } catch {
-      if (requestId.current !== currentRequestId) return;
+      // A failed refresh keeps cached or current rows, but never leaves another filter's rows on screen.
+      if (requestId.current !== currentRequestId || cached || refreshInPlace) return;
       setTransactions([]);
+      setTotals({ income_centavos: 0, expense_centavos: 0 });
+      setHasMore(false);
     } finally {
-      if (requestId.current === currentRequestId) setLoading(false);
+      if (requestId.current === currentRequestId) {
+        refreshingRef.current = false;
+        setStale(false);
+        setLoading(false);
+      }
     }
   }
 
+
+  const firstLoadRef = useRef(true);
   useEffect(() => {
+    // Wait one frame on mount so the page and spinner are shown before any rows render.
+    if (firstLoadRef.current) {
+      firstLoadRef.current = false;
+      const frame = requestAnimationFrame(() => { load(); });
+      return () => {
+        cancelAnimationFrame(frame);
+        firstLoadRef.current = true;
+      };
+    }
     load();
   }, [typeFilter, categoryFilter, sortBy, sortDir, dateRange, customFromDate, customToDate]);
+
+  useEffect(() => {
+    if (visibleCount >= transactions.length) return;
+    const frame = requestAnimationFrame(() => setVisibleCount(transactions.length));
+    return () => cancelAnimationFrame(frame);
+  }, [visibleCount, transactions.length]);
+
+  const seenSyncVersion = useRef(syncVersion);
+  useEffect(() => {
+    if (seenSyncVersion.current === syncVersion) return;
+    seenSyncVersion.current = syncVersion;
+    load({ inPlace: true });
+  }, [syncVersion]);
 
   useEffect(() => {
     if (!loading && unusualSpending) setShowUnusualSpending(true);
@@ -154,17 +286,19 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   }, [userId]);
 
   function loadMore() {
-    if (loading || !hasMore || loadingMoreRef.current) return;
+    // Scrolling the edit form must not page the hidden list.
+    if (editTarget || loading || !hasMore || loadingMoreRef.current || refreshingRef.current) return;
     const currentRequestId = requestId.current;
-    const offset = nextOffsetRef.current;
+    const after = lastRowRef.current;
     loadingMoreRef.current = true;
     setLoadingMore(true);
-    listTransactions(userId, getFilters(offset))
+    listTransactions(userId, getFilters(after))
       .then((rows) => {
         if (requestId.current !== currentRequestId) return;
-        nextOffsetRef.current = offset + rows.length;
+        if (rows.length > 0) lastRowRef.current = rows[rows.length - 1]!;
+        const nextHasMore = rows.length === PAGE_SIZE;
         setTransactions((current) => [...current, ...rows]);
-        setHasMore(rows.length === PAGE_SIZE);
+        setHasMore(nextHasMore);
       })
       .catch(() => {})
       .finally(() => {
@@ -178,23 +312,32 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     return () => onLoadMoreChange?.(null);
   }, [onLoadMoreChange, loadMore]);
 
-  async function editTransaction(transactionId: string) {
-    const transaction = await getTransaction(userId, transactionId);
-    if (!transaction) {
-      showToast("Transaction not found", "danger");
-      return;
-    }
-    setEditTarget(transaction);
-  }
+  const listScrollY = useRef<number | null>(null);
+  // Stable so memoized rows skip re-rendering on unrelated state changes like search typing.
+  const editTransaction = useCallback((transactionId: string) => {
+    getTransaction(userId, transactionId)
+      .then((transaction) => {
+        if (!transaction) {
+          showToast("Transaction not found", "danger");
+          return;
+        }
+        listScrollY.current = getScrollOffset?.() ?? null;
+        setEditTarget(transaction);
+      })
+      .catch(() => showToast("Could not open transaction", "danger"));
+  }, [userId, showToast, getScrollOffset]);
 
-  async function selectDeleteTarget(transactionId: string) {
-    const transaction = await getTransaction(userId, transactionId);
-    if (!transaction) {
-      showToast("Transaction not found", "danger");
-      return;
-    }
-    await requestDelete(transaction);
-  }
+  const selectDeleteTarget = useCallback((transactionId: string) => {
+    getTransaction(userId, transactionId)
+      .then((transaction) => {
+        if (!transaction) {
+          showToast("Transaction not found", "danger");
+          return;
+        }
+        return requestDelete(transaction);
+      })
+      .catch(() => showToast("Could not open transaction", "danger"));
+  }, [userId, showToast]);
 
   async function requestDelete(transaction: Transaction) {
     if (transaction.transaction_type === "expense" && transaction.source_account_id) {
@@ -219,8 +362,11 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       await deleteTransaction(userId, deviceId, deleteTarget.id);
       showToast("Transaction deleted", "success");
       runSync(userId, deviceId, accessToken).catch(() => {});
+      const deletedId = deleteTarget.id;
       setDeleteTarget(null);
-      load();
+      // Drop the row now; the in-place refresh then corrects the totals and fills the gap.
+      setTransactions((current) => current.filter((row) => row.id !== deletedId));
+      load({ inPlace: true });
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Delete failed", "danger");
     } finally {
@@ -228,41 +374,32 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     }
   }
 
-  function formatAmount(centavos: number): string {
-    return (centavos / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  function formatDate(dateStr: string): string {
-    const d = new Date(dateStr + "T00:00:00+08:00");
+  const grouped = useMemo(() => {
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
-    if (d.toDateString() === today.toDateString()) return "Today";
-    if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-    return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
-  }
-
-  const typePrefix = (tx: TransactionListItem) =>
-    tx.transaction_type === "expense" ? "-" : tx.transaction_type === "income" ? "+" : "";
-
-  const amountColor = (tx: TransactionListItem) =>
-    tx.transaction_type === "expense" ? palette.error
-      : tx.transaction_type === "income" ? palette.success
-      : "#1565C0";
-
-  const grouped = useMemo(() => {
-    const groups: { date: string; items: TransactionListItem[] }[] = [];
-    for (const tx of transactions) {
-      const dateLabel = formatDate(tx.transaction_date);
+    const todayKey = today.toDateString();
+    const yesterdayKey = yesterday.toDateString();
+    const groups: { key: string; date: string; items: TransactionListItem[] }[] = [];
+    for (const tx of transactions.slice(0, visibleCount)) {
       const last = groups[groups.length - 1];
+      // Rows arrive grouped by date, so only the first row of each day is formatted.
+      if (last && last.key === tx.transaction_date) {
+        last.items.push(tx);
+        continue;
+      }
+      const d = new Date(tx.transaction_date + "T00:00:00+08:00");
+      const dateKey = d.toDateString();
+      const dateLabel = dateKey === todayKey ? "Today" : dateKey === yesterdayKey ? "Yesterday" : dateFormat.format(d);
       if (last && last.date === dateLabel) {
+        last.key = tx.transaction_date;
         last.items.push(tx);
       } else {
-        groups.push({ date: dateLabel, items: [tx] });
+        groups.push({ key: tx.transaction_date, date: dateLabel, items: [tx] });
       }
     }
     return groups;
-  }, [transactions]);
+  }, [transactions, visibleCount]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -309,35 +446,35 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
 
   const filterActive = showFilters || activeFilterCount > 0;
 
-  const totals = useMemo(() => transactions.reduce(
-    (result, tx) => {
-      if (tx.transaction_type === "income") result.income += tx.amount_centavos;
-      if (tx.transaction_type === "expense") result.expenses += tx.amount_centavos;
-      return result;
-    },
-    { income: 0, expenses: 0 },
-  ), [transactions]);
-
-  if (editTarget) {
-    return (
+  // The list stays mounted, hidden, while a transaction is edited: remounting every loaded row on return
+  // blocks the JS thread for seconds, whereas a mounted list only re-renders the rows the edit changed.
+  return (
+    <>
+    {editTarget ? (
       <NewTransactionScreen
         transaction={editTarget}
         userId={userId}
         deviceId={deviceId}
         accessToken={accessToken}
-        onClose={() => { setEditTarget(null); load(); }}
+        onClose={() => { setEditTarget(null); load({ inPlace: true }); }}
       />
-    );
-  }
-
-  return (
-    <View style={{ gap: 12 }}>
+    ) : null}
+    <View
+      style={{ gap: 12, display: editTarget ? "none" : "flex" }}
+      onLayout={() => {
+        // The edit form shares the shell's scroll view, so the list's offset is restored once it is laid out again;
+        // any earlier and the scroll view is still only as tall as the form.
+        if (editTarget || listScrollY.current === null) return;
+        scrollTo?.(listScrollY.current);
+        listScrollY.current = null;
+      }}
+    >
       {/* Search bar + filter icon */}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <TextInput
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={load}
+          onSubmitEditing={() => load()}
           returnKeyType="search"
           placeholder="Search transactions..."
           placeholderTextColor={palette.mut}
@@ -371,14 +508,14 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         </Pressable>
       </View>
 
-      <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={{ flexDirection: "row", gap: 10, opacity: stale ? 0.5 : 1 }}>
         <View style={{ flex: 1, borderRadius: 14, backgroundColor: "#edfff8", borderWidth: 1, borderColor: "#d4f5e7", padding: 12 }}>
           <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.success, marginBottom: 3 }}>Income</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.success }}>+P{formatAmount(totals.income)}</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.success }}>+P{formatAmount(totals.income_centavos)}</Text>
         </View>
         <View style={{ flex: 1, borderRadius: 14, backgroundColor: "#fff0f2", borderWidth: 1, borderColor: "#ffdce2", padding: 12 }}>
           <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error, marginBottom: 3 }}>Expenses</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.error }}>-P{formatAmount(totals.expenses)}</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.error }}>-P{formatAmount(totals.expense_centavos)}</Text>
         </View>
       </View>
 
@@ -400,7 +537,9 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
           </Pressable>
         </View>
       ) : (
-        grouped.map((group) => (
+        <View style={{ opacity: stale ? 0.5 : 1 }}>
+        {stale ? <ActivityIndicator color={palette.brand} style={{ marginTop: 12 }} /> : null}
+        {grouped.map((group) => (
           <View key={`${group.date}-${group.items[0]!.id}`}>
             <Text style={{
               fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: palette.mut,
@@ -409,43 +548,11 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               {group.date.toUpperCase()}
             </Text>
             {group.items.map((tx) => (
-              <View
-                key={tx.id}
-                style={{
-                  paddingVertical: 8, paddingHorizontal: 2, marginBottom: 2,
-                  flexDirection: "row", alignItems: "center", gap: 10,
-                }}
-              >
-                <View style={{
-                  width: 34, height: 34, borderRadius: 10,
-                  backgroundColor: `${TYPE_COLORS[tx.transaction_type] ?? palette.mut}20`,
-                  alignItems: "center", justifyContent: "center", marginRight: 2,
-                }}>
-                  <Text style={{ fontSize: 10, color: TYPE_COLORS[tx.transaction_type] ?? palette.mut, fontWeight: "800" }}>
-                    {tx.transaction_type === "transfer" ? "TR" : tx.transaction_type === "income" ? "+" : "-"}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }} numberOfLines={1}>
-                    {tx.name}
-                  </Text>
-                  <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut }} numberOfLines={1}>
-                    {[tx.category_label, tx.financial_account_name].filter(Boolean).join(" · ") || "Uncategorized"}
-                  </Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{
-                    fontFamily: "Manrope", fontWeight: "800", fontSize: 13.5,
-                    color: amountColor(tx),
-                  }}>
-                    {typePrefix(tx)}P{formatAmount(tx.amount_centavos)}
-                  </Text>
-                </View>
-                <KebabTooltip onEdit={() => { editTransaction(tx.id).catch(() => showToast("Could not open transaction", "danger")); }} onDelete={() => { selectDeleteTarget(tx.id).catch(() => showToast("Could not open transaction", "danger")); }} />
-              </View>
+              <TransactionRow key={tx.id} tx={tx} onEdit={editTransaction} onDelete={selectDeleteTarget} />
             ))}
           </View>
-        ))
+        ))}
+        </View>
       )}
       {loadingMore ? <ActivityIndicator color={palette.brand} style={{ marginVertical: 16 }} /> : null}
 
@@ -455,11 +562,11 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}
           onPress={() => setShowFilters(false)}
         >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
+          <BottomSheetSurface
+            bottomSpacing={32}
             style={{
               backgroundColor: palette.shell, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              padding: 20, paddingBottom: 32,
+              padding: 20,
             }}
           >
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginBottom: 16 }} />
@@ -650,7 +757,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                 </Text>
               </Pressable>
             </View>
-          </Pressable>
+          </BottomSheetSurface>
         </Pressable>
       </Modal>
 
@@ -743,5 +850,6 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         </Pressable>
       </Modal>
     </View>
+    </>
   );
 }

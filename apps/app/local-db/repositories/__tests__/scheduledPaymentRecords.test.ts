@@ -81,7 +81,7 @@ describe("recording a scheduled payment", () => {
     await recordScheduledPayment("user-1", "device-1", { scheduledPaymentId: payment.id, occurrenceDate: "2026-11-01", amountCentavos: 500_000, paymentDate: "2026-10-30", sourceAccountId: "acct-cash", notes: null });
     const [record] = liveRecords() as { id: string; transaction_id: string }[];
 
-    await expect(updateTransaction("user-1", "device-1", record!.transaction_id, { amount_centavos: 1 })).rejects.toThrow("This transaction pays a scheduled payment.");
+    await expect(updateTransaction("user-1", "device-1", record!.transaction_id, { amount_centavos: 1 })).rejects.toThrow("This transaction pays a biller or remittance.");
     await deleteScheduledPaymentRecord("user-1", "device-1", record!.transaction_id);
     expect(liveRecords()).toEqual([]);
     expect(balance()).toBe(5_000_000);

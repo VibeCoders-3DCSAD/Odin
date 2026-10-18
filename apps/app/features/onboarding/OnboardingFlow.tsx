@@ -27,6 +27,7 @@ import {
   updateEligibilityProfile,
 } from "./api";
 import { STEPS, type StepConfig } from "./types";
+import { availableOnboardingStep, withOnboardingAnswer } from "./helpers/seasonalAnswers";
 
 const AQUA50 = "#EFFEF7";
 const AQUA600 = "#08B16A";
@@ -65,7 +66,10 @@ function isStepComplete(step: StepConfig, answers: Record<string, unknown>) {
 }
 
 function isStepVisible(step: StepConfig, answers: Record<string, unknown>) {
-  return !step.visibleWhen || answers[step.visibleWhen.questionKey] === step.visibleWhen.value;
+  if (!step.visibleWhen) return true;
+  const answer = answers[step.visibleWhen.questionKey];
+  const { value } = step.visibleWhen;
+  return typeof value === "string" ? answer === value : typeof answer === "string" && value.includes(answer);
 }
 
 function nextVisibleStepIndex(startIndex: number, direction: 1 | -1, answers: Record<string, unknown>) {
@@ -205,7 +209,7 @@ export default function OnboardingFlow({
 
   const saveAnswer = useCallback(
     (key: string, value: unknown) => {
-      setAnswers((prev) => ({ ...prev, [key]: value }));
+      setAnswers((prev) => withOnboardingAnswer(prev, key, value));
       setFieldErrors((errors) => {
         const { [key]: _, ...remaining } = errors;
         return remaining;
@@ -449,7 +453,7 @@ export default function OnboardingFlow({
 
         {step.kind === "card_multi_select" && (
           <CardMultiSelectStep
-            step={step}
+            step={availableOnboardingStep(step, answers)}
             selected={(answers[step.questionKey] as string[]) ?? []}
             onToggle={
               step.key === "dependents_protected"
@@ -1077,6 +1081,8 @@ function ReviewStep({
   if (typeof essentialCosts === "string") rows.push({ label: "Monthly Essential Costs", value: `PHP ${Number(essentialCosts).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_essential_living_costs") });
   addOptionRow("Currently Paying Off Debt", "paying_off_debt");
   addOptionRow("Credit Card Payments", "credit_card_payment_behavior");
+  const revolvingMonthsStep = stepFor("credit_card_revolving_months");
+  if (revolvingMonthsStep && isStepVisible(revolvingMonthsStep, answers)) addOptionRow("Months With a Card Balance", "credit_card_revolving_months");
 
   const protectedCats = (answers.protected_categories as string[] | undefined) ?? [];
   const catLabels = protectedCats
@@ -1087,6 +1093,7 @@ function ReviewStep({
   if (catLabels && protectedStep) rows.push({ label: "Categories", value: catLabels, stepIndex: STEPS.indexOf(protectedStep) });
   addAmountMapRows("protected_category_costs");
   addMultiOptionRow("Higher-Expense Seasons", "high_expense_seasons");
+  addMultiOptionRow("Lower-Expense Seasons", "low_expense_seasons");
   addMultiOptionRow("Saving Seasons", "saving_seasons");
 
   return (

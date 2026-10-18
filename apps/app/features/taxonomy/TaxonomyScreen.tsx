@@ -18,7 +18,6 @@ import {
 import {
   listCategories,
   listSubcategories,
-  deleteCategory,
   deleteSubcategory,
   type Category as RepoCategory,
   type Subcategory as RepoSubcategory,
@@ -26,6 +25,7 @@ import {
 import CategoryFormScreen from "./CategoryFormScreen";
 import SubcategoryFormScreen from "./SubcategoryFormScreen";
 import KebabTooltip from "../../components/KebabTooltip";
+import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "./taxonomyVisuals";
 
 type Subcategory = RepoSubcategory;
 type Category = RepoCategory & { subcategories?: Subcategory[] };
@@ -55,21 +55,13 @@ const palette = {
 
 function CategoryRow({
   category,
-  mutatingId,
-  onEdit,
-  onDelete,
   onNavigate,
 }: {
   category: Category;
-  mutatingId: string | null;
-  onEdit: (cat: Category) => void;
-  onDelete: (cat: Category) => void;
   onNavigate: (cat: Category) => void;
 }) {
-  const isSystem = category.is_system;
   const hasProtectedDefault = category.subcategories?.some((s) => s.is_protected) ?? false;
   const subCount = category.subcategories?.length ?? 0;
-  const isMutating = mutatingId === category.id;
 
   return (
     <View
@@ -88,6 +80,9 @@ function CategoryRow({
         onPress={() => onNavigate(category)}
         style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}
       >
+        <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: category.color_hex ?? DEFAULT_TAXONOMY_COLOR, alignItems: "center", justifyContent: "center" }}>
+          <TaxonomyIcon iconKey={category.icon_key} size={19} color="#fff" weight="fill" />
+        </View>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink, flexShrink: 1 }}>
@@ -111,13 +106,6 @@ function CategoryRow({
           )}
         </View>
       </Pressable>
-      <KebabTooltip
-        kebabDirection="horizontal"
-        tooltipLocation="bottomRight"
-        disabled={isSystem || hasProtectedDefault || isMutating}
-        onEdit={() => onEdit(category)}
-        onDelete={() => onDelete(category)}
-      />
       <CaretRight size={14} weight="bold" color={palette.mut} />
     </View>
   );
@@ -148,6 +136,9 @@ function SubcategoryRow({
         borderBottomColor: palette.line2,
       }}
     >
+      <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: sub.color_hex ?? DEFAULT_TAXONOMY_COLOR, alignItems: "center", justifyContent: "center" }}>
+        <TaxonomyIcon iconKey={sub.icon_key} size={17} color="#fff" weight="fill" />
+      </View>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink, flexShrink: 1 }}>
@@ -200,8 +191,6 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
   const [viewingCategoryLabel, setViewingCategoryLabel] = useState("");
 
   const [categoryFormVisible, setCategoryFormVisible] = useState(false);
-  const [categoryFormMode, setCategoryFormMode] = useState<"create" | "edit">("create");
-  const [editingCategory, setEditingCategory] = useState<Category | undefined>(undefined);
 
   const [subcategoryFormVisible, setSubcategoryFormVisible] = useState(false);
   const [subcategoryFormMode, setSubcategoryFormMode] = useState<"create" | "edit">("create");
@@ -252,40 +241,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
   }
 
   function openCategoryCreate() {
-    setCategoryFormMode("create");
-    setEditingCategory(undefined);
     setCategoryFormVisible(true);
-  }
-
-  function openCategoryEdit(category: Category) {
-    setCategoryFormMode("edit");
-    setEditingCategory(category);
-    setCategoryFormVisible(true);
-  }
-
-  function handleCategoryDelete(category: Category) {
-    Alert.alert(
-      `Delete "${category.label}"?`,
-      "This category will be hidden. Existing transactions using it are not affected.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setMutatingId(category.id);
-            try {
-              await deleteCategory(userId, deviceId, category.id);
-              load();
-            } catch (error) {
-              Alert.alert("Error", error instanceof Error ? error.message : "Failed to delete category");
-            } finally {
-              setMutatingId(null);
-            }
-          },
-        },
-      ],
-    );
   }
 
   function openSubcategoryEdit(sub: Subcategory) {
@@ -325,9 +281,13 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     load();
   }
 
+  function closeSubcategoryForm() {
+    setSubcategoryFormVisible(false);
+    setEditingSubcategory(undefined);
+  }
+
   function handleCategoryFormSaved() {
     setCategoryFormVisible(false);
-    setEditingCategory(undefined);
     load();
   }
 
@@ -335,6 +295,37 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     ? categories.find((category) => category.id === viewingCategoryId)
     : undefined;
   const viewingSubs = viewingCategory?.subcategories ?? [];
+
+  if (categoryFormVisible) {
+    return (
+      <CategoryFormScreen
+        mode="create"
+        userId={userId}
+        deviceId={deviceId}
+        onSaved={handleCategoryFormSaved}
+        onCancel={() => {
+          setCategoryFormVisible(false);
+        }}
+      />
+    );
+  }
+
+  if (subcategoryFormVisible && viewingCategoryId) {
+    return (
+      <SubcategoryFormScreen
+        mode={subcategoryFormMode}
+        subcategory={editingSubcategory}
+        categoryId={viewingCategoryId}
+        categoryLabel={viewingCategoryLabel}
+        categorySlug={viewingCategory?.slug ?? ""}
+        categoryColor={viewingCategory?.color_hex}
+        userId={userId}
+        deviceId={deviceId}
+        onSaved={handleSubcategoryFormSaved}
+        onCancel={closeSubcategoryForm}
+      />
+    );
+  }
 
   if (viewingCategoryId) {
     return (
@@ -404,20 +395,6 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
           )}
         </View>
 
-        <SubcategoryFormScreen
-          visible={subcategoryFormVisible}
-          mode={subcategoryFormMode}
-          subcategory={editingSubcategory}
-          categoryId={viewingCategoryId}
-          categoryLabel={viewingCategoryLabel}
-          userId={userId}
-          deviceId={deviceId}
-          onSaved={handleSubcategoryFormSaved}
-          onCancel={() => {
-            setSubcategoryFormVisible(false);
-            setEditingSubcategory(undefined);
-          }}
-        />
       </ScrollView>
     );
   }
@@ -485,9 +462,6 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
               <CategoryRow
                 key={category.id}
                 category={category}
-                mutatingId={mutatingId}
-                onEdit={openCategoryEdit}
-                onDelete={handleCategoryDelete}
                 onNavigate={navigateToSubcategories}
               />
             ))}
@@ -495,37 +469,6 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
         )}
       </View>
 
-      <CategoryFormScreen
-        visible={categoryFormVisible}
-        mode={categoryFormMode}
-        category={editingCategory}
-        userId={userId}
-        deviceId={deviceId}
-        onSaved={handleCategoryFormSaved}
-        onCancel={() => {
-          setCategoryFormVisible(false);
-          setEditingCategory(undefined);
-        }}
-      />
-
-      <SubcategoryFormScreen
-        visible={subcategoryFormVisible && !!viewingCategoryId}
-        mode={subcategoryFormMode}
-        subcategory={editingSubcategory}
-        categoryId={viewingCategoryId ?? ""}
-        categoryLabel={viewingCategoryLabel}
-        userId={userId}
-        deviceId={deviceId}
-        onSaved={handleSubcategoryFormSaved}
-        onCancel={() => {
-          if (subcategoryFormMode === "create" && !editingSubcategory && viewingCategoryId) {
-            setViewingCategoryId(null);
-            setViewingCategoryLabel("");
-          }
-          setSubcategoryFormVisible(false);
-          setEditingSubcategory(undefined);
-        }}
-      />
     </ScrollView>
   );
 }

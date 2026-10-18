@@ -51,3 +51,11 @@
 - The app TypeScript errors and retired-taxonomy pull test failure also reproduce
   on an unchanged HEAD archive. Logs are in /tmp/odin-plan-validation/.
 - The migration has not been applied to the application's existing database.
+
+## Main Integration
+
+- Preserve main's monthly-average fallback, deferred explanations, accepted spending insights, and progressive category rendering.
+- Use local migration 083 because main already owns versions 079–081 and existing uncommitted work owns 082.
+
+- Integrated validation: 65 API tests, 71 app tests, and the API build passed.
+- Replayed the merged PostgreSQL migration sequence (transactionally for migrations using temporary tables); both Financial Plan and scheduled-payment SQL contract checks passed.

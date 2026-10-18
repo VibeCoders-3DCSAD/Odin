@@ -1,4 +1,4 @@
-import { getMinimumContributionPerOccurrence, getRequiredSavingsAccountContributions, getRequiredSavingsContributions, validateContributionSchedule, type ScheduledSavingsGoal } from "../contributionSchedule";
+import { advanceContributionSchedule, deriveGoalContributionDate, getMinimumContributionPerOccurrence, getRequiredSavingsAccountContributions, getRequiredSavingsContributions, validateContributionSchedule, type ScheduledSavingsGoal } from "../contributionSchedule";
 
 function goal(overrides: Partial<ScheduledSavingsGoal> = {}): ScheduledSavingsGoal {
   return {
@@ -20,10 +20,36 @@ function goal(overrides: Partial<ScheduledSavingsGoal> = {}): ScheduledSavingsGo
 }
 
 describe("Savings Goal contribution schedules", () => {
+  it("derives the next date from weekday and monthly date numbers, including today", () => {
+    expect(deriveGoalContributionDate(goal({ contributionFrequency: "weekly", contributionDayOfWeek: 0 }), "2026-10-18")).toBe("2026-10-18");
+    expect(deriveGoalContributionDate(goal({ contributionFrequency: "weekly", contributionDayOfWeek: 6 }), "2026-10-18")).toBe("2026-10-24");
+    expect(deriveGoalContributionDate(goal({ contributionFrequency: "monthly", contributionDayOfMonth: 31 }), "2027-02-01")).toBe("2027-02-28");
+    expect(deriveGoalContributionDate(goal({ contributionFrequency: "semi_monthly", contributionDayOfMonth: 5, contributionSecondDayOfMonth: 20 }), "2026-10-21")).toBe("2026-11-05");
+  });
+
+  it("returns to the selected monthly date after a shorter month", () => {
+    const monthly = goal({ contributionFrequency: "monthly", contributionDayOfMonth: 31 });
+    expect(advanceContributionSchedule("2027-01-31", monthly)).toBe("2027-02-28");
+    expect(advanceContributionSchedule("2027-02-28", monthly)).toBe("2027-03-31");
+  });
+
   it("requires a cadence and anchor date", () => {
     expect(validateContributionSchedule({ ...goal(), contributionFrequency: null })).toContain("frequency");
     expect(validateContributionSchedule({ ...goal(), nextContributionDate: null })).toContain("next contribution date");
     expect(validateContributionSchedule({ ...goal(), contributionFrequency: "custom", customIntervalDays: null })).toContain("custom");
+  });
+
+  it("counts daily contributions within the selected period", () => {
+    const daily = goal({ contributionFrequency: "daily", remainingAmountCentavos: 100_000 });
+    const result = getRequiredSavingsContributions("2026-04-02", "2026-04-04", [daily], new Map());
+    expect(result.contributions[0]?.scheduledDates).toEqual(["2026-04-02", "2026-04-03", "2026-04-04"]);
+    expect(result.totalRequiredCentavos).toBe(10_347);
+  });
+
+  it("excludes unscheduled goals from required contributions", () => {
+    const unscheduled = goal({ contributionFrequency: null, nextContributionDate: null, plannedContributionAmountCentavos: 0 });
+    expect(getMinimumContributionPerOccurrence(unscheduled, "2026-04-01")).toBeNull();
+    expect(getRequiredSavingsContributions("2026-04-01", "2026-04-30", [unscheduled], new Map())).toEqual({ totalRequiredCentavos: 0, contributions: [] });
   });
 
   it("uses centavo ceiling rounding across remaining occurrences when the plan is lower", () => {

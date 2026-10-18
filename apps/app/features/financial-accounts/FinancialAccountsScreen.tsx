@@ -15,11 +15,11 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Bank,
+  CaretRight,
   CreditCard,
   DeviceMobile,
   Money,
   PiggyBank,
-  Plus,
   Question,
   Wallet,
 } from "phosphor-react-native";
@@ -33,12 +33,12 @@ import {
   type CreateFinancialAccountInput,
   type UpdateFinancialAccountInput,
 } from "../../local-db/repositories/financialFoundations";
-import KebabTooltip from "../../components/KebabTooltip";
-import AvailableBalanceCard from "../../components/AvailableBalanceCard";
+import { AmountHero } from "../../components/BudgieForm";
 import { getSavingsAccountDetails, SAVINGS_ACCOUNT_TYPES, type HysaBalanceTier, type HysaInterestCalculationBasis, type HysaInterestCreditFrequency, type HysaQualificationPeriod, type SavingsAccountDetailsInput, type SavingsAccountType, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
 import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
 import { GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "../savings-goals/contributionSchedule";
 import HysaAccountFormSheet from "./HysaAccountFormSheet";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const P = {
   shell: "#fcf8f0",
@@ -82,6 +82,10 @@ function formatPeso(centavos: number): string {
   const sign = pesos < 0 ? "-" : "";
   const formatted = `${sign}₱${Math.abs(pesos).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return formatted.length > 23 ? formatted.slice(0, 20) + "..." : formatted;
+}
+
+function formatAccountAmount(centavos: number): string {
+  return formatPeso(centavos).replace("-₱", "-PHP ").replace("₱", "PHP ");
 }
 
 function isNegativeAccount(account: FinancialAccount): boolean {
@@ -139,6 +143,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
+  const [accountActionsTarget, setAccountActionsTarget] = useState<FinancialAccount | null>(null);
 
   const loadAccounts = useCallback(async () => {
     const result = await listFinancialAccounts(userId);
@@ -151,10 +156,6 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
   const totalCash = accounts
     .filter((a) => a.status === "active" && a.includeInDashboardBalance)
     .reduce((sum, a) => sum + a.currentBalanceCentavos, 0);
-
-  const everydayAccounts = accounts.filter((account) => account.kind !== "credit_card" && account.kind !== "savings");
-  const savingsAccounts = accounts.filter((account) => account.kind === "savings");
-  const creditCardAccounts = accounts.filter((account) => account.kind === "credit_card");
 
   const handleCreate = async (input: CreateFinancialAccountInput, savingsDetails: SavingsAccountDetailsInput | null) => {
     if (savingsDetails) validateSavingsAccountDetails(savingsDetails);
@@ -188,107 +189,138 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
     ]);
   };
 
-  const renderAccount = (account: FinancialAccount) => {
+  const renderAccount = (account: FinancialAccount, index: number) => {
     const negative = isNegativeAccount(account);
     return (
       <AccountTile
         key={account.id}
         account={account}
         negative={negative}
-        tileBg={negative ? P.errorSoft : P.card}
         amountColor={negative ? P.error : P.ink}
-        iconColor={negative ? P.error : P.brandMedium}
-        onEdit={() => { setEditingAccount(account); setSheetVisible(true); }}
-        onDelete={() => handleDelete(account)}
+        isLast={index === accounts.length - 1}
+        onPress={() => setAccountActionsTarget(account)}
       />
     );
   };
 
   return (
     <>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <Text style={{ fontSize: 20, fontFamily: "Manrope", fontWeight: "800", color: P.ink }}>Accounts</Text>
-        <TouchableOpacity
-          onPress={() => { setEditingAccount(null); setSheetVisible(true); }}
-          testID="add-account"
-          accessibilityLabel="Add account"
-          hitSlop={8}
-          style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: P.brand, alignItems: "center", justifyContent: "center" }}
-        >
-          <Plus size={18} color={P.white} weight="bold" />
-        </TouchableOpacity>
+      <View style={{ marginBottom: 14 }}>
+        <AmountHero
+          label="TOTAL CASH POSITION"
+          amountCentavos={totalCash}
+          detail={`Across ${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`}
+        />
       </View>
-      <AvailableBalanceCard
-        label="Total cash position"
-        amount={formatPeso(totalCash).replace("₱", "")}
-        detail={`Across ${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`}
-        marginBottom={14}
-      />
       {loading ? null : accounts.length === 0 ? (
-        <View style={{ alignItems: "center", paddingTop: 40 }}>
-          <Wallet size={40} color={P.muted} />
-          <Text style={{ marginTop: 12, fontSize: 15, fontFamily: "Manrope", color: P.muted }}>No accounts yet</Text>
-          <Text style={{ marginTop: 4, fontSize: 13, fontFamily: "Manrope", color: P.muted }}>Tap + to add your first account</Text>
+        <View style={{ alignItems: "center", paddingHorizontal: 18, paddingTop: 22 }}>
+          <View style={{ width: 96, height: 96, borderRadius: 48, borderWidth: 1.5, borderStyle: "dashed", borderColor: "#959592", alignItems: "center", justifyContent: "center" }}>
+            <Wallet size={30} color={P.ink2} />
+          </View>
+          <Text style={{ marginTop: 14, fontSize: 15, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>No accounts yet</Text>
+          <Text style={{ marginTop: 4, fontSize: 12, fontFamily: "Manrope", lineHeight: 18, color: P.ink2, textAlign: "center" }}>Add an account to see your cash position.</Text>
+          <TouchableOpacity
+            onPress={() => { setEditingAccount(null); setSheetVisible(true); }}
+            testID="add-account"
+            accessibilityLabel="Add account"
+            style={{ width: "100%", minHeight: 50, marginTop: 14, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: P.brand }}
+          >
+            <Text style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "800", color: P.white }}>Add an account</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <>
-          {everydayAccounts.length > 0 ? (
-            <AccountGroup title="Accounts">
-              {everydayAccounts.map(renderAccount)}
-            </AccountGroup>
-          ) : null}
-          {savingsAccounts.length > 0 ? (
-            <AccountGroup title="Savings Accounts">
-              {savingsAccounts.map(renderAccount)}
-            </AccountGroup>
-          ) : null}
-          {creditCardAccounts.length > 0 ? (
-            <AccountGroup title="Credit Cards">
-              {creditCardAccounts.map(renderAccount)}
-            </AccountGroup>
-          ) : null}
+          <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+            <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "800", color: P.ink }}>Accounts</Text>
+            <TouchableOpacity
+              onPress={() => { setEditingAccount(null); setSheetVisible(true); }}
+              testID="add-account"
+              accessibilityLabel="Add account"
+              hitSlop={8}
+              style={{ paddingVertical: 4, paddingLeft: 12 }}
+            >
+              <Text style={{ fontSize: 11.5, fontFamily: "Manrope", fontWeight: "700", color: P.brand }}>Add</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ borderWidth: 1, borderColor: "#959592", borderRadius: 16, overflow: "hidden", backgroundColor: P.white }}>
+            {accounts.map(renderAccount)}
+          </View>
         </>
       )}
+      <AccountActionsSheet
+        account={accountActionsTarget}
+        onClose={() => setAccountActionsTarget(null)}
+        onEdit={() => {
+          if (!accountActionsTarget) return;
+          setEditingAccount(accountActionsTarget);
+          setAccountActionsTarget(null);
+          setSheetVisible(true);
+        }}
+        onDelete={() => {
+          if (!accountActionsTarget) return;
+          const account = accountActionsTarget;
+          setAccountActionsTarget(null);
+          handleDelete(account);
+        }}
+      />
       <AccountFormSheet userId={userId} visible={sheetVisible} editing={editingAccount} onClose={() => { setSheetVisible(false); setEditingAccount(null); }} onSubmit={editingAccount ? handleUpdate : handleCreate} />
     </>
   );
 }
 
-function AccountGroup({ title, children }: { title: string; children: React.ReactNode }) {
+function accountIconPalette(account: FinancialAccount, negative: boolean) {
+  if (negative) return { backgroundColor: "#FBE5E8", color: P.error };
+  if (account.kind === "savings") return { backgroundColor: "#E3F2EA", color: "#068751" };
+  if (account.kind === "e_wallet") return { backgroundColor: "#E2F0EA", color: "#0B8753" };
+  if (account.kind === "bank") return { backgroundColor: "#EAEAE7", color: P.ink2 };
+  return { backgroundColor: "#E4EDE8", color: P.brand };
+}
+
+function AccountTile({ account, negative, amountColor, isLast, onPress }: { account: FinancialAccount; negative: boolean; amountColor: string; isLast: boolean; onPress: () => void }) {
+  const creditCardDetails = account.kind === "credit_card" ? account.creditCardDetails : null;
+  const amount = accountDisplayAmount(account);
+  const iconPalette = accountIconPalette(account, negative);
+
   return (
-    <View style={{ marginBottom: 12 }}>
-      <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "800", color: P.ink, marginBottom: 8 }}>{title}</Text>
-      {children}
-    </View>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${account.name} account actions`} onPress={onPress} style={{ flexDirection: "row", alignItems: "center", minHeight: 56, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: isLast ? 0 : 1, borderBottomColor: "#E0DED6", backgroundColor: P.white }}>
+      <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: iconPalette.backgroundColor, alignItems: "center", justifyContent: "center", marginRight: 11 }}>
+        {kindIcon(account.kind, 17, iconPalette.color)}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text numberOfLines={1} style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: P.ink }}>{account.name}</Text>
+        <Text numberOfLines={1} style={{ fontSize: 11, fontFamily: "Manrope", color: P.muted, marginTop: 1 }}>
+          {negative ? "Negative balance" : creditCardDetails?.availableCreditCentavos != null ? "Available credit" : account.savingsAccountType === "personal_savings" ? "Personal Savings" : account.savingsAccountType === "high_yield_savings" ? "HYSA" : account.savingsAccountType === "time_deposit" ? "Time Deposit" : KIND_LABELS[account.kind] ?? account.kind}
+        </Text>
+      </View>
+      <View style={{ alignItems: "flex-end", marginLeft: 8 }}>
+        <Text style={{ fontSize: 12.5, fontFamily: "Manrope", fontWeight: "700", fontVariant: ["tabular-nums"], color: amountColor }}>{formatAccountAmount(amount)}</Text>
+      </View>
+      <CaretRight size={15} color={P.muted} style={{ marginLeft: 10 }} />
+    </Pressable>
   );
 }
 
-function AccountTile({ account, negative, tileBg, amountColor, iconColor, onEdit, onDelete }: { account: FinancialAccount; negative: boolean; tileBg: string; amountColor: string; iconColor: string; onEdit: () => void; onDelete: () => void }) {
-  const creditCardDetails = account.kind === "credit_card" ? account.creditCardDetails : null;
-  const amount = accountDisplayAmount(account);
-
+function AccountActionsSheet({ account, onClose, onEdit, onDelete }: { account: FinancialAccount | null; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: negative ? "#FFF1F3" : P.shell, borderRadius: 15, marginBottom: 9, padding: 13, borderWidth: 1, borderColor: negative ? "#FFB9C2" : P.line }}>
-      <View style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: negative ? "#FFF9F0" : tileBg, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-        {kindIcon(account.kind, 22, iconColor)}
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text numberOfLines={1} style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>{account.name}</Text>
-        <Text style={{ fontSize: 10.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 2 }}>
-          {negative ? "Over available credit" : creditCardDetails?.availableCreditCentavos != null ? "Available credit" : account.savingsAccountType === "personal_savings" ? "Personal Savings" : account.savingsAccountType === "high_yield_savings" ? "HYSA" : account.savingsAccountType === "time_deposit" ? "Time Deposit" : KIND_LABELS[account.kind] ?? account.kind}
-        </Text>
-      </View>
-      <View style={{ alignItems: "flex-end", marginRight: 2 }}>
-        <Text style={{ fontSize: 14, fontFamily: "Manrope", fontWeight: "800", color: amountColor }}>{formatPeso(amount)}</Text>
-        <Text style={{ fontSize: 9.5, fontFamily: "Manrope", fontWeight: "500", color: negative ? P.error : P.muted, marginTop: 1 }}>PHP</Text>
-      </View>
-      <KebabTooltip
-        kebabDirection="horizontal"
-        tooltipLocation="bottomRight"
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />
-    </View>
+    <Modal visible={account !== null} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(27,28,26,0.28)" }}>
+        <BottomSheetSurface bottomSpacing={20} style={{ padding: 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: P.white }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18, backgroundColor: P.line }} />
+          <Text numberOfLines={1} style={{ marginBottom: 16, fontFamily: "Manrope", fontSize: 17, fontWeight: "800", color: P.ink }}>{account?.name}</Text>
+          <AccountAction label="Edit" onPress={onEdit} />
+          <AccountAction label="Delete" destructive onPress={onDelete} />
+          <AccountAction label="Cancel" onPress={onClose} />
+        </BottomSheetSurface>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function AccountAction({ label, destructive = false, onPress }: { label: string; destructive?: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={{ minHeight: 50, alignItems: "center", justifyContent: "center", marginBottom: 9, borderRadius: 13, borderWidth: 1, borderColor: destructive ? "#FFB9C2" : P.line, backgroundColor: destructive ? P.errorSoft : P.card }}>
+      <Text style={{ fontFamily: "Manrope", fontSize: 14, fontWeight: "800", color: destructive ? P.error : P.ink }}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -547,7 +579,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
+              <BottomSheetSurface style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
                 <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: P.line, alignSelf: "center", marginTop: 10 }} />
                 <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled" bounces={false}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
@@ -601,7 +633,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                       {(savingsType === "personal_savings" || savingsType === "time_deposit") ? <FormField label="INTEREST RATE (%)" required><TextInput value={interestRate} onChangeText={setInterestRate} placeholder="Enter interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}
                       {savingsType === "personal_savings" ? <FormField label="MINIMUM BALANCE (₱)" required><TextInput value={minimumBalance} onChangeText={setMinimumBalance} placeholder="Enter minimum balance" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}
                       {savingsType === "high_yield_savings" ? <><FormField label="BASE INTEREST RATE (%)" required><TextInput value={baseInterestRate} onChangeText={setBaseInterestRate} placeholder="Enter base interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="EFFECTIVE INTEREST RATE (%)" required><TextInput value={effectiveInterestRate} onChangeText={setEffectiveInterestRate} placeholder="Enter effective interest rate" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="REQUIREMENTS TO EARN THIS RATE" hint="These bank rules are saved for reference only." required><TextInput value={interestConditions} onChangeText={setInterestConditions} placeholder="Describe the bank's requirements" placeholderTextColor={P.muted} multiline style={{ minHeight: 70, borderRadius: 12, borderWidth: 1, borderColor: P.line, padding: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="ARE THE REQUIREMENTS CURRENTLY MET?" required><View style={{ flexDirection: "row", gap: 8 }}>{[true, false].map((value) => <Pressable key={String(value)} onPress={() => setHigherRateEligible(value)} accessibilityRole="radio" accessibilityLabel={value ? "Requirements met" : "Requirements not met"} accessibilityState={{ checked: higherRateEligible === value }} style={{ flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: higherRateEligible === value ? P.brand : P.card }}><Text style={{ fontFamily: "Manrope", fontWeight: "600", color: higherRateEligible === value ? P.white : P.ink2 }}>{value ? "Yes" : "No"}</Text></Pressable>)}</View></FormField></> : null}
-                       {savingsType !== "time_deposit" ? <><FormField label="PLANNED CONTRIBUTION (₱)" required><TextInput value={plannedContribution} onChangeText={setPlannedContribution} placeholder="Enter contribution amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="NEXT CONTRIBUTION DATE" required><DateField placeholder="Select contribution date" value={nextContributionDate || null} onPress={() => setDatePicker("contribution")} /></FormField><RecurringScheduleFields frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={{ frequency: contributionFrequency, intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, secondDayOfWeek: null, monthOfYear: null, estimatedIntervalDays: "" } satisfies RecurringScheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); }} frequencyLabel="CONTRIBUTION FREQUENCY" />{contributionFrequency === "custom" ? <FormField label="CUSTOM INTERVAL DAYS" required><TextInput value={customIntervalDays} onChangeText={setCustomIntervalDays} placeholder="e.g. 45" placeholderTextColor={P.muted} keyboardType="number-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}</> : null}
+                       {savingsType !== "time_deposit" ? <><FormField label="PLANNED CONTRIBUTION (₱)" required><TextInput value={plannedContribution} onChangeText={setPlannedContribution} placeholder="Enter contribution amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="NEXT CONTRIBUTION DATE" required><DateField placeholder="Select contribution date" value={nextContributionDate || null} onPress={() => setDatePicker("contribution")} /></FormField><RecurringScheduleFields frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={{ frequency: contributionFrequency, intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, monthOfYear: null } satisfies RecurringScheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); }} frequencyLabel="CONTRIBUTION FREQUENCY" />{contributionFrequency === "custom" ? <FormField label="CUSTOM INTERVAL DAYS" required><TextInput value={customIntervalDays} onChangeText={setCustomIntervalDays} placeholder="e.g. 45" placeholderTextColor={P.muted} keyboardType="number-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField> : null}</> : null}
                        {savingsType === "time_deposit" ? <><FormField label="PRINCIPAL (₱)" required><TextInput value={principal} onChangeText={setPrincipal} placeholder="Enter principal amount" placeholderTextColor={P.muted} keyboardType="decimal-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="MATURITY DATE" required><TextInput value={maturityDate} onChangeText={setMaturityDate} placeholder="YYYY-MM-DD" placeholderTextColor={P.muted} style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="TERM (MONTHS)" required><TextInput value={termMonths} onChangeText={setTermMonths} placeholder="Enter deposit term" placeholderTextColor={P.muted} keyboardType="number-pad" style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField><FormField label="EARLY-WITHDRAWAL RULE" required><TextInput value={earlyWithdrawalRule} onChangeText={setEarlyWithdrawalRule} placeholder="Describe early-withdrawal rule" placeholderTextColor={P.muted} multiline style={{ minHeight: 70, borderRadius: 12, borderWidth: 1, borderColor: P.line, padding: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }} /></FormField></> : null}
                     </>
                   ) : null}
@@ -718,7 +750,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                     </Pressable>
                   </View>
                 </ScrollView>
-              </View>
+              </BottomSheetSurface>
             </Pressable>
           </KeyboardAvoidingView>
         </View>

@@ -1,9 +1,8 @@
 import { Modal, Pressable, Text, View } from "react-native";
-import { FieldLabel, Note, Switch, styles as ui, v4, v4Font } from "../../../components/BudgieForm";
+import { BottomSheet, FieldLabel, Note, Switch, styles as ui, v4, v4Font } from "../../../components/BudgieForm";
 import type { ScheduledPaymentSummary } from "../../../local-db/repositories/scheduledPayments";
 import { formatDueDate, formatPhp } from "../presentation";
 import { localToday, nextDueDate } from "../schedule";
-import { BottomSheet } from "./BillerSheets";
 
 function MenuRow({ label, onPress, danger = false, divider }: { label: string; onPress: () => void; danger?: boolean; divider: boolean }) {
   return (
@@ -28,7 +27,7 @@ export function RowMenuSheet({ payment, onPostNow, onAutoPost, onEdit, onDelete,
   );
 }
 
-export function DeleteConfirmDialog({ name, message = "This scheduled payment will be permanently removed. Past transactions stay.", onConfirm, onCancel }: { name: string | null; message?: string; onConfirm: () => void; onCancel: () => void }) {
+export function DeleteConfirmDialog({ name, message = "This biller or remittance will be permanently removed. Past transactions stay.", onConfirm, onCancel }: { name: string | null; message?: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <Modal visible={name !== null} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "center", padding: 28 }}>

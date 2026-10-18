@@ -45,10 +45,14 @@ type TransactionListRow = {
   id: string;
   name: string;
   category_label: string | null;
+  icon_key: string | null;
+  color_hex: string | null;
   financial_account_name: string | null;
   amount_centavos: number;
   transaction_date: string;
   transaction_type: string;
+  created_at: string;
+  row_id: number;
 };
 
 export type Transaction = {
@@ -128,6 +132,8 @@ export type TransactionFilters = {
   sort_dir?: string;
   limit?: number;
   offset?: number;
+  // Keyset cursor: the last row of the previous page. Takes precedence over offset.
+  after?: Pick<TransactionListItem, "transaction_date" | "amount_centavos" | "created_at" | "row_id">;
 };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -487,24 +493,10 @@ function buildTransactionInsert(
   };
 }
 
-export async function listTransactions(
-  userId: string,
-  filters?: TransactionFilters,
-): Promise<TransactionListItem[]> {
-  const db = await getDb();
-  const parts: string[] = [`SELECT
-    t.id,
-    COALESCE(NULLIF(t.merchant_name, ''), NULLIF(t.counterparty_name, ''), NULLIF(t.notes, ''), s.label, 'Transaction') AS name,
-    s.label AS category_label,
-    a.name AS financial_account_name,
-    t.amount_centavos,
-    t.transaction_date,
-    t.transaction_type
-    FROM transactions t
-    LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0 AND (s.user_id = t.user_id OR s.is_system = 1)
-    LEFT JOIN financial_accounts a ON a.id = CASE WHEN t.transaction_type = 'income' THEN t.destination_account_id ELSE t.source_account_id END AND a.user_id = t.user_id AND a.deleted = 0
-    WHERE t.user_id = ? AND t.deleted = 0`];
-  const params: SQLite.SQLiteBindValue[] = [userId];
+// Shared by the list and its totals so both always cover the same rows.
+function transactionFilterClauses(filters?: TransactionFilters): { parts: string[]; params: SQLite.SQLiteBindValue[] } {
+  const parts: string[] = [];
+  const params: SQLite.SQLiteBindValue[] = [];
 
   if (filters?.transaction_type) {
     if (!(VALID_TYPES as readonly string[]).includes(filters.transaction_type)) {
@@ -537,6 +529,59 @@ export async function listTransactions(
     const term = `%${filters.search}%`;
     params.push(term, term, term);
   }
+  return { parts, params };
+}
+
+export type TransactionTotals = {
+  income_centavos: number;
+  expense_centavos: number;
+};
+
+export async function getTransactionTotals(
+  userId: string,
+  filters?: TransactionFilters,
+): Promise<TransactionTotals> {
+  const db = await getDb();
+  const where = transactionFilterClauses(filters);
+  const row = await db.getFirstAsync<TransactionTotals>(
+    [`SELECT
+      COALESCE(SUM(CASE WHEN t.transaction_type = 'income' THEN t.amount_centavos END), 0) AS income_centavos,
+      COALESCE(SUM(CASE WHEN t.transaction_type = 'expense' THEN t.amount_centavos END), 0) AS expense_centavos
+      FROM transactions t
+      WHERE t.user_id = ? AND t.deleted = 0`, ...where.parts].join(" "),
+    userId,
+    ...where.params,
+  );
+  return row ?? { income_centavos: 0, expense_centavos: 0 };
+}
+
+export async function listTransactions(
+  userId: string,
+  filters?: TransactionFilters,
+): Promise<TransactionListItem[]> {
+  const db = await getDb();
+  const parts: string[] = [`SELECT
+    t.id,
+    COALESCE(NULLIF(t.merchant_name, ''), NULLIF(t.counterparty_name, ''), NULLIF(t.notes, ''), s.label, 'Transaction') AS name,
+    COALESCE(s.label, c.label) AS category_label,
+    COALESCE(s.icon_key, c.icon_key) AS icon_key,
+    COALESCE(s.color_hex, c.color_hex) AS color_hex,
+    a.name AS financial_account_name,
+    t.amount_centavos,
+    t.transaction_date,
+    t.transaction_type,
+    t.created_at,
+    t.rowid AS row_id
+    FROM transactions t
+    LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0 AND (s.user_id = t.user_id OR s.is_system = 1)
+    LEFT JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id) AND c.deleted = 0 AND (c.user_id = t.user_id OR c.is_system = 1)
+    LEFT JOIN financial_accounts a ON a.id = CASE WHEN t.transaction_type = 'income' THEN t.destination_account_id ELSE t.source_account_id END AND a.user_id = t.user_id AND a.deleted = 0
+    WHERE t.user_id = ? AND t.deleted = 0`];
+  const params: SQLite.SQLiteBindValue[] = [userId];
+
+  const where = transactionFilterClauses(filters);
+  parts.push(...where.parts);
+  params.push(...where.params);
 
   const sortBy = filters?.sort_by && (VALID_SORT_BY as readonly string[]).includes(filters.sort_by)
     ? filters.sort_by
@@ -545,6 +590,12 @@ export async function listTransactions(
     ? filters.sort_dir
     : "desc";
 
+  // Seeking past the previous page's last row keeps deep pages as cheap as the first.
+  if (filters?.after) {
+    parts.push(`AND (t.${sortBy}, t.created_at, t.rowid) ${sortDir === "desc" ? "<" : ">"} (?, ?, ?)`);
+    params.push(filters.after[sortBy as "transaction_date" | "amount_centavos" | "created_at"], filters.after.created_at, filters.after.row_id);
+  }
+
   // rowid is implicit in the existing date index and keeps offset pages stable.
   parts.push(`ORDER BY t.${sortBy} ${sortDir}, t.created_at ${sortDir}, t.rowid ${sortDir}`);
   const requestedLimit = filters?.limit;
@@ -552,7 +603,7 @@ export async function listTransactions(
   const limit = requestedLimit != null && Number.isFinite(requestedLimit)
     ? Math.max(1, Math.min(Math.trunc(requestedLimit), 200))
     : 100;
-  const offset = requestedOffset != null && Number.isFinite(requestedOffset)
+  const offset = !filters?.after && requestedOffset != null && Number.isFinite(requestedOffset)
     ? Math.max(0, Math.trunc(requestedOffset))
     : 0;
   // Expo SQLite on device rejects bound parameters in LIMIT/OFFSET.
@@ -880,7 +931,7 @@ export async function updateTransaction(
     )) throw new LocalDbError("VALIDATION_ERROR", "Edit this transaction from its debt payment.");
     if (await db.getFirstAsync<{ id: string }>(
       "SELECT id FROM scheduled_payment_records WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
-    )) throw new LocalDbError("VALIDATION_ERROR", "This transaction pays a scheduled payment. Delete it and record the payment again.");
+    )) throw new LocalDbError("VALIDATION_ERROR", "This transaction pays a biller or remittance. Delete it and record the payment again.");
     const newShape = await validateUpdatedShape(db, userId, current, input);
 
     const newAmount = input.amount_centavos ?? current.amount_centavos;

@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { createSqliteHarness } from "./sqliteHarness";
 
 const mockGetFirstAsync = jest.fn<(...args: any[]) => Promise<any>>();
 const mockGetAllAsync = jest.fn<(...args: any[]) => Promise<any>>();
@@ -124,5 +125,47 @@ describe("getDashboardSummary", () => {
     expect(planCall?.[0]).toContain("status = 'accepted'");
     expect(planCall?.[0]).toContain("period_start <= ? AND period_end >= ?");
     expect(planCall?.slice(1)).toHaveLength(3);
+  });
+
+  it("loads saved visuals, groups direct and subcategory expenses, and excludes other users' taxonomy", async () => {
+    const harness = createSqliteHarness();
+    try {
+      await harness.migrateAll();
+      const { initDatabase } = require("../../client");
+      initDatabase.mockResolvedValue(harness.db);
+      harness.sqlite.exec(`
+        INSERT INTO categories (id, user_id, slug, label, description, icon_key, color_hex, created_at, updated_at) VALUES
+          ('food', 'user-1', 'food', 'Food', 'Food', 'bowl-food', '#E86A33', 'now', 'now'),
+          ('foreign', 'user-2', 'health', 'Private health', 'Health', 'first-aid', '#15803D', 'now', 'now');
+        INSERT INTO subcategories (id, user_id, category_id, slug, label, description, icon_key, color_hex, created_at, updated_at) VALUES
+          ('bakery', 'user-1', 'food', 'food_bakery', 'Bakery', 'Bakery', 'bread', '#D97706', 'now', 'now'),
+          ('foreign-sub', 'user-2', 'foreign', 'health_dental', 'Private dental', 'Dental', 'tooth', '#15803D', 'now', 'now');
+      `);
+      const now = new Date();
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const insert = harness.sqlite.prepare(`
+        INSERT INTO transactions (id, user_id, transaction_type, transaction_date, amount_centavos, category_id, subcategory_id, created_at, updated_at)
+        VALUES (?, ?, 'expense', ?, ?, ?, ?, 'now', 'now')
+      `);
+      insert.run("direct", "user-1", date, 100, "food", null);
+      insert.run("sub", "user-1", date, 200, null, "bakery");
+      insert.run("bad-sub", "user-1", date, 300, null, "foreign-sub");
+      insert.run("bad-category", "user-1", date, 400, "foreign", null);
+      insert.run("other-user", "user-2", date, 9000, "foreign", null);
+
+      const summary = await getDashboardSummary("user-1");
+      expect(summary.currentMonthExpenseCentavos).toBe(1000);
+      expect(summary.categorySpending).toEqual(expect.arrayContaining([
+        expect.objectContaining({ category_id: "food", category_label: "Food", icon_key: "bowl-food", color_hex: "#E86A33", total_centavos: 300 }),
+        expect.objectContaining({ category_id: null, category_label: "Other", icon_key: null, color_hex: null, total_centavos: 700 }),
+      ]));
+      expect(summary.recentTransactions.find((tx) => tx.id === "sub")).toMatchObject({ category_label: "Bakery", icon_key: "bread", color_hex: "#D97706" });
+      expect(summary.recentTransactions.find((tx) => tx.id === "direct")).toMatchObject({ category_label: "Food", icon_key: "bowl-food", color_hex: "#E86A33" });
+      expect(summary.recentTransactions.find((tx) => tx.id === "bad-sub")).toMatchObject({ category_label: null, icon_key: null, color_hex: null });
+      expect(summary.recentTransactions.find((tx) => tx.id === "bad-category")).toMatchObject({ category_label: null, icon_key: null, color_hex: null });
+      expect(summary.recentTransactions.some((tx) => tx.id === "other-user")).toBe(false);
+    } finally {
+      harness.sqlite.close();
+    }
   });
 });

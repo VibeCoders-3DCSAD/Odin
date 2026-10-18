@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ArrowsClockwise, CaretLeft, ChartLine, CheckCircle, Cloud, House, ListBullets, Plus, Target, TrashSimple, User, Wallet, type IconProps } from "phosphor-react-native";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -19,14 +19,16 @@ import NewTransactionScreen from "../features/ledger/NewTransactionScreen";
 import { getTransaction, type Transaction } from "../local-db/repositories/ledger";
 import type { UnusualSpendingInsight } from "../local-db/repositories/unusualSpending";
 import TransactionHistoryScreen from "../features/ledger/TransactionHistoryScreen";
+import { clearTransactionCache } from "../features/ledger/transactionCache";
 import PrivacySettingsScreen from "../features/governance/PrivacySettingsScreen";
 import TaxonomyScreen from "../features/taxonomy/TaxonomyScreen";
 import FinancialAccountsScreen from "../features/financial-accounts/FinancialAccountsScreen";
 import IncomeSourcesScreen from "../features/income-sources/IncomeSourcesScreen";
-import ScheduledPaymentsScreen from "../features/billers/ScheduledPaymentsScreen";
-import ScheduledPaymentFormScreen from "../features/billers/ScheduledPaymentFormScreen";
-import ScheduledPaymentDetailScreen from "../features/billers/ScheduledPaymentDetailScreen";
-import RecordScheduledPaymentScreen from "../features/billers/RecordScheduledPaymentScreen";
+import IncomeSourceFormScreen from "../features/income-sources/IncomeSourceFormScreen";
+import BillersScreen from "../features/billers/BillersScreen";
+import BillerFormScreen from "../features/billers/BillerFormScreen";
+import BillerDetailScreen from "../features/billers/BillerDetailScreen";
+import RecordBillerPaymentScreen from "../features/billers/RecordBillerPaymentScreen";
 import { postDueScheduledPayments } from "../local-db/repositories/scheduledPayments";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
@@ -47,6 +49,7 @@ import { runSync } from "../local-db/sync/runSync";
 import { initDatabase } from "../local-db/client";
 import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
+import { BottomSheetSurface } from "./BottomSheetSurface";
 
 const TOOLBAR_MAX_WIDTH = 430;
 const CONTENT_GUTTER = 20;
@@ -89,6 +92,7 @@ type Page =
   | "categories"
   | "financial-accounts"
   | "income-sources"
+  | "income-source-form"
   | "scheduled-payments"
   | "scheduled-payment-form"
   | "scheduled-payment-detail"
@@ -159,7 +163,7 @@ const hubs: Record<"money" | "plan", { title: string; segments: HubSegment[] }> 
     segments: [
       { page: "financial-accounts", label: "Accounts" },
       { page: "income-sources", label: "Income" },
-      { page: "scheduled-payments", label: "Scheduled" },
+      { page: "scheduled-payments", label: "Billers and\nRemittances" },
     ],
   },
   plan: {
@@ -200,7 +204,7 @@ const parentPage: Partial<Record<Page, Page>> = {
 };
 
 // These screens draw their own header, so the shell adds no chrome around them.
-const fullScreenPages: Page[] = ["add-transaction", "scheduled-payment-form", "scheduled-payment-record"];
+const fullScreenPages: Page[] = ["add-transaction", "income-source-form", "scheduled-payment-form", "scheduled-payment-record"];
 
 const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
@@ -218,10 +222,11 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   categories: { title: "Categories", subtitle: "Manage your categories" },
   "financial-accounts": { title: "Financial Accounts", subtitle: "Manage your accounts" },
   "income-sources": { title: "Income Sources", subtitle: "Track your income" },
-  "scheduled-payments": { title: "Scheduled Payments", subtitle: "Bills and remittances" },
-  "scheduled-payment-form": { title: "Scheduled Payment", subtitle: "Add or edit a scheduled payment" },
-  "scheduled-payment-detail": { title: "Scheduled Payment", subtitle: "Schedule and payments" },
-  "scheduled-payment-record": { title: "Record Payment", subtitle: "Pay a scheduled payment" },
+  "income-source-form": { title: "Income Source", subtitle: "Add or edit an income source" },
+  "scheduled-payments": { title: "Billers and Remittances", subtitle: "Scheduled bills and transfers" },
+  "scheduled-payment-form": { title: "Biller or Remittance", subtitle: "Add or edit a biller or remittance" },
+  "scheduled-payment-detail": { title: "Biller or Remittance", subtitle: "Schedule and payments" },
+  "scheduled-payment-record": { title: "Record Payment", subtitle: "Pay a biller or remittance" },
   "debt-manager": { title: "Debt Manager", subtitle: "Credit-card billing cycles" },
   "credit-cards": { title: "Credit Cards", subtitle: "Billing cycles and statements" },
   "credit-card-detail": { title: "Credit Card", subtitle: "Billing cycles and statements" },
@@ -241,6 +246,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [selectedPastPlanId, setSelectedPastPlanId] = useState<string | null>(null);
   const [editingScheduledPaymentId, setEditingScheduledPaymentId] = useState<string | null>(null);
+  const [editingIncomeSourceId, setEditingIncomeSourceId] = useState<string | null>(null);
   const [selectedScheduledPaymentId, setSelectedScheduledPaymentId] = useState<string | null>(null);
   const [debtPaymentDebtId, setDebtPaymentDebtId] = useState<string | null>(null);
   const [debtPaymentContext, setDebtPaymentContext] = useState<DebtPaymentContext | null>(null);
@@ -281,6 +287,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transactionLoadMoreRef = useRef<(() => void) | null>(null);
   const contentScrollRef = useRef<ScrollView>(null);
+  const contentScrollY = useRef(0);
+  // Stable so the transactions screen can use them inside memoized row callbacks.
+  const getContentScrollY = useCallback(() => contentScrollY.current, []);
+  const scrollContentTo = useCallback((y: number) => contentScrollRef.current?.scrollTo({ y, animated: false }), []);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -584,6 +594,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       try { await signOut(); } catch {}
     }
 
+    clearTransactionCache();
     onLoggedOut();
   }
 
@@ -839,7 +850,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "transactions") {
-      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} />;
+      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} getScrollOffset={getContentScrollY} scrollTo={scrollContentTo} syncVersion={syncVersion} />;
     }
 
     if (currentPage === "categories") {
@@ -851,12 +862,26 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "income-sources") {
-      return <IncomeSourcesScreen userId={userId} deviceId={deviceId} onBack={() => setCurrentPage("dashboard")} onSyncRequested={handleSync} />;
+      return (
+        <IncomeSourcesScreen
+          userId={userId}
+          deviceId={deviceId}
+          onBack={() => setCurrentPage("dashboard")}
+          onAdd={() => { setEditingIncomeSourceId(null); setCurrentPage("income-source-form"); }}
+          onEdit={(id) => { setEditingIncomeSourceId(id); setCurrentPage("income-source-form"); }}
+          onSyncRequested={handleSync}
+        />
+      );
+    }
+
+    if (currentPage === "income-source-form") {
+      const close = () => { setEditingIncomeSourceId(null); setCurrentPage("income-sources"); };
+      return <IncomeSourceFormScreen userId={userId} deviceId={deviceId} incomeSourceId={editingIncomeSourceId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
     }
 
     if (currentPage === "scheduled-payments") {
       return (
-        <ScheduledPaymentsScreen
+        <BillersScreen
           userId={userId}
           deviceId={deviceId}
           syncVersion={syncVersion}
@@ -870,7 +895,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "scheduled-payment-detail" && selectedScheduledPaymentId) {
       return (
-        <ScheduledPaymentDetailScreen
+        <BillerDetailScreen
           userId={userId}
           deviceId={deviceId}
           scheduledPaymentId={selectedScheduledPaymentId}
@@ -885,14 +910,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
     if (currentPage === "scheduled-payment-record" && selectedScheduledPaymentId) {
       const back = () => setCurrentPage("scheduled-payment-detail");
-      return <RecordScheduledPaymentScreen userId={userId} deviceId={deviceId} scheduledPaymentId={selectedScheduledPaymentId} onClose={back} onRecorded={(message) => { showToast(message, "success"); back(); handleSync(); }} />;
+      return <RecordBillerPaymentScreen userId={userId} deviceId={deviceId} scheduledPaymentId={selectedScheduledPaymentId} onClose={back} onRecorded={(message) => { showToast(message, "success"); back(); handleSync(); }} />;
     }
 
     if (currentPage === "scheduled-payment-form") {
       // Edits opened from a payment's detail return there; adds and list edits return to the list.
       const returnPage: Page = editingScheduledPaymentId && editingScheduledPaymentId === selectedScheduledPaymentId ? "scheduled-payment-detail" : "scheduled-payments";
       const close = () => { setEditingScheduledPaymentId(null); setCurrentPage(returnPage); };
-      return <ScheduledPaymentFormScreen userId={userId} deviceId={deviceId} scheduledPaymentId={editingScheduledPaymentId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
+      return <BillerFormScreen userId={userId} deviceId={deviceId} scheduledPaymentId={editingScheduledPaymentId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
     }
 
     if (currentPage === "debt-manager") {
@@ -1008,6 +1033,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           contentContainerStyle={{ paddingHorizontal: CONTENT_GUTTER }}
           keyboardShouldPersistTaps="handled"
           onScroll={({ nativeEvent }) => {
+            contentScrollY.current = nativeEvent.contentOffset.y;
             const distanceFromBottom = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
             if (currentPage === "transactions" && distanceFromBottom < 200) transactionLoadMoreRef.current?.();
           }}
@@ -1031,15 +1057,15 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                     <Pressable
                       key={segment.page}
                       accessibilityRole="tab"
-                      accessibilityLabel={segment.label}
+                      accessibilityLabel={segment.label.replace("\n", " ")}
                       accessibilityState={{ selected }}
                       onPress={() => {
                         contentScrollRef.current?.scrollTo({ y: 0, animated: false });
                         setCurrentPage(segment.page);
                       }}
-                      style={{ flex: 1, alignItems: "center", paddingVertical: 10, marginBottom: -1, borderBottomWidth: 2, borderBottomColor: selected ? palette.brand : "transparent" }}
+                      style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, marginBottom: -1, borderBottomWidth: 2, borderBottomColor: selected ? palette.brand : "transparent" }}
                     >
-                      <Text style={{ fontFamily: "Manrope", fontSize: 13, fontWeight: selected ? "700" : "600", color: selected ? palette.brand : palette.mut }}>
+                      <Text style={{ fontFamily: "Manrope", fontSize: 13, fontWeight: selected ? "700" : "600", color: selected ? palette.brand : palette.mut, textAlign: "center" }}>
                         {segment.label}
                       </Text>
                     </Pressable>
@@ -1149,7 +1175,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         <Modal visible={syncDetailsVisible} transparent animationType="slide" presentationStyle="overFullScreen" onDismiss={() => setSyncDetailsVisible(false)} onRequestClose={() => setSyncDetailsVisible(false)}>
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Close sync details" onPress={() => setSyncDetailsVisible(false)} style={{ flex: 1 }} />
-            <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
+            <BottomSheetSurface bottomSpacing={22} style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
               <View {...syncSheetPanResponder.panHandlers} style={{ paddingVertical: 8, marginTop: -8, marginBottom: 10 }}>
                 <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center" }} />
               </View>
@@ -1246,7 +1272,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                   <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>Close</Text>
                 </Pressable>
               </View>
-            </View>
+            </BottomSheetSurface>
           </View>
         </Modal>
 

@@ -54,6 +54,28 @@ const ALERT_SUPPRESSION_CREATE_FIELDS = new Set(["category", "source_type", "sta
 const ALERT_SUPPRESSION_UPDATE_FIELDS = new Set(["status", "ends_at", "reason"]);
 const ANOMALY_EVALUATION_CREATE_FIELDS = new Set(["transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "model_version", "evaluated_at"]);
 const ANOMALY_EVALUATION_UPDATE_FIELDS = new Set(["confirmed_recurring_at"]);
+const TAXONOMY_ICON_KEYS = new Set([
+  "bowl-food", "wine", "t-shirt", "house", "armchair", "first-aid",
+  "car", "device-mobile", "game-controller", "graduation-cap", "fork-knife",
+  "sparkle", "tag", "airplane", "bank", "basket", "bus", "camera", "coffee",
+  "credit-card", "dog", "gift", "heart", "laptop", "music-note", "storefront",
+  "carrot", "fish", "bread", "egg", "cookie", "orange", "pill", "stethoscope", "tooth",
+  "eye", "test-tube", "hospital", "heartbeat", "shield-check",
+  "cake", "ice-cream", "hamburger", "pizza", "cooking-pot", "tea-bag",
+  "beer-bottle", "beer-stein", "martini", "cigarette", "champagne", "brandy",
+  "pants", "dress", "hoodie", "sock", "sneaker", "baseball-cap",
+  "handbag", "watch", "lightning", "drop", "flame", "wifi-high",
+  "key", "wrench", "plug", "bed", "washing-machine", "broom",
+  "fan", "oven", "potted-plant", "lightbulb", "toolbox", "syringe",
+  "thermometer", "wheelchair", "bandaids", "brain", "ambulance", "bicycle",
+  "train", "gas-pump", "motorcycle", "taxi", "steering-wheel", "truck",
+  "boat", "phone", "envelope", "globe", "sim-card", "chat-circle",
+  "headphones", "film-slate", "ticket", "palette", "barbell", "book-open",
+  "trophy", "tent", "pencil", "notebook", "calculator", "certificate",
+  "backpack", "student", "scissors", "paw-print", "baby", "diamond",
+  "scales", "identification-card", "wallet", "coat-hanger",
+]);
+const COLOR_HEX_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
 const SERVER_COLUMNS = new Set([
   "id",
@@ -72,6 +94,8 @@ const CATEGORY_CREATE_FIELDS = new Set([
   "label",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "minimum_amount_centavos",
   "always_in_budget",
@@ -83,6 +107,8 @@ const CATEGORY_UPDATE_FIELDS = new Set([
   "label",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "minimum_amount_centavos",
   "always_in_budget",
@@ -98,6 +124,8 @@ const SUBCATEGORY_CREATE_FIELDS = new Set([
   "label",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "is_protected",
   "minimum_amount_centavos",
@@ -111,6 +139,8 @@ const SUBCATEGORY_UPDATE_FIELDS = new Set([
   "slug",
   "short_label",
   "description",
+  "icon_key",
+  "color_hex",
   "is_filipino_context",
   "is_protected",
   "minimum_amount_centavos",
@@ -229,42 +259,34 @@ const TRANSACTION_UPDATE_FIELDS = new Set([
 const VALID_ACCOUNT_KINDS = ["cash", "bank", "e_wallet", "savings", "credit_card", "other"];
 const VALID_TRANSACTION_TYPES = ["income", "expense", "transfer"];
 
+const INCOME_FREQUENCIES = ["daily", "weekly", "semi_monthly", "monthly"];
+
 const INCOME_SOURCE_CREATE_FIELDS = new Set([
   "name",
-  "income_type",
   "frequency",
   "recurring_template_id",
   "destination_account_id",
   "subcategory_id",
   "expected_amount_centavos",
-  "min_amount_centavos",
-  "max_amount_centavos",
   "payday_day_of_month",
   "payday_second_day_of_month",
   "payday_day_of_week",
-  "payday_second_day_of_week",
   "next_expected_date",
-  "estimated_interval_days",
   "is_active",
   "notes",
 ]);
 
 const INCOME_SOURCE_UPDATE_FIELDS = new Set([
   "name",
-  "income_type",
   "frequency",
   "recurring_template_id",
   "destination_account_id",
   "subcategory_id",
   "expected_amount_centavos",
-  "min_amount_centavos",
-  "max_amount_centavos",
   "payday_day_of_month",
   "payday_second_day_of_month",
   "payday_day_of_week",
-  "payday_second_day_of_week",
   "next_expected_date",
-  "estimated_interval_days",
   "is_active",
   "notes",
 ]);
@@ -313,7 +335,7 @@ const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id
 const SAVINGS_ALLOCATION_PREFERENCE_FIELDS = new Set(["strategy"]);
 const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
 const SAVINGS_GOAL_PRIORITIES = ["low", "medium", "high"];
-const SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
+const SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
 
 const CREDIT_CARD_TRANSACTION_FIELDS = new Set([
   "transaction_id", "account_id", "cycle_id", "purchase_type", "installment_id", "client_mutation_id", "applied_credit_centavos", "forecast_recorded_at",
@@ -612,36 +634,23 @@ async function validateCreatePayload(
     assertOnlyAllowed(payload, INCOME_SOURCE_CREATE_FIELDS);
     const sanitized = sanitizePayload(payload, INCOME_SOURCE_CREATE_FIELDS);
     requireString(sanitized, "name");
-    requireString(sanitized, "income_type");
     requireString(sanitized, "frequency");
     requireString(sanitized, "destination_account_id");
     requireString(sanitized, "subcategory_id");
-    const validTypes = ["stable", "variable"];
-    if (!validTypes.includes(sanitized.income_type as string)) {
-      throw new Error(`income_type must be one of: ${validTypes.join(", ")}`);
+    if (!INCOME_FREQUENCIES.includes(sanitized.frequency as string)) {
+      throw new Error(`frequency must be one of: ${INCOME_FREQUENCIES.join(", ")}`);
     }
-    const validFrequencies = ["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"];
-    if (!validFrequencies.includes(sanitized.frequency as string)) {
-      throw new Error(`frequency must be one of: ${validFrequencies.join(", ")}`);
-    }
-    optionalBigInt(sanitized, "expected_amount_centavos");
-    optionalBigInt(sanitized, "min_amount_centavos");
-    optionalBigInt(sanitized, "max_amount_centavos");
+    requirePositiveInteger(sanitized, "expected_amount_centavos");
     optionalNumber(sanitized, "payday_day_of_month");
     optionalNumber(sanitized, "payday_second_day_of_month");
     optionalNumber(sanitized, "payday_day_of_week");
-    optionalNumber(sanitized, "payday_second_day_of_week");
     optionalString(sanitized, "next_expected_date");
-    optionalNumber(sanitized, "estimated_interval_days");
     optionalBoolean(sanitized, "is_active");
     optionalString(sanitized, "notes");
     optionalString(sanitized, "recurring_template_id");
-    validateNonNegative(sanitized, ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"]);
-    validateMinMaxOrdering(sanitized, "min_amount_centavos", "max_amount_centavos");
     validateDayRange(sanitized, "payday_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_second_day_of_month", 1, 31);
     validateDayRange(sanitized, "payday_day_of_week", 0, 6);
-    validateDayRange(sanitized, "payday_second_day_of_week", 0, 6);
      await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id as string);
     await verifySubcategoryOwnership(supabase, userId, sanitized.subcategory_id as string, "income");
     if (sanitized.recurring_template_id !== undefined && sanitized.recurring_template_id !== null) {
@@ -757,6 +766,7 @@ async function validateTaxonomyCreatePayload(
     requireString(sanitized, "label");
     requireString(sanitized, "description");
     optionalString(sanitized, "short_label");
+    validateTaxonomyVisuals(sanitized);
     optionalBoolean(sanitized, "is_filipino_context");
     optionalNumber(sanitized, "minimum_amount_centavos");
     optionalBoolean(sanitized, "always_in_budget");
@@ -844,6 +854,7 @@ async function validateTaxonomyCreatePayload(
     requireString(sanitized, "label");
     requireString(sanitized, "description");
     optionalString(sanitized, "short_label");
+    validateTaxonomyVisuals(sanitized);
     optionalBoolean(sanitized, "is_filipino_context");
     optionalBoolean(sanitized, "is_protected");
     optionalNumber(sanitized, "minimum_amount_centavos");
@@ -991,6 +1002,10 @@ async function validateUpdatePayload(
 
   assertOnlyAllowed(payload, allowedFields);
   const sanitized = sanitizePayload(payload, allowedFields);
+
+  if (entity === "categories" || entity === "subcategories") {
+    validateTaxonomyVisuals(sanitized);
+  }
 
   if (entity === "debt_strategy_preferences") {
     if (sanitized.strategy !== "snowball" && sanitized.strategy !== "avalanche") throw new Error("strategy must be snowball or avalanche");
@@ -1229,6 +1244,8 @@ async function validateUpdatePayload(
       continue;
     }
 
+    if (key === "icon_key" || key === "color_hex") continue;
+
     if (key === "notes") {
       if (value !== null && typeof value !== "string") {
         throw new Error("notes must be a string or null");
@@ -1253,7 +1270,7 @@ async function validateUpdatePayload(
       continue;
     }
 
-    if (key === "payday_day_of_month" || key === "payday_second_day_of_month" || key === "payday_day_of_week" || key === "payday_second_day_of_week" || key === "estimated_interval_days") {
+    if (key === "payday_day_of_month" || key === "payday_second_day_of_month" || key === "payday_day_of_week") {
       if (value !== null && typeof value !== "number") throw new Error(`${key} must be a number or null`);
       continue;
     }
@@ -1273,16 +1290,10 @@ async function validateUpdatePayload(
       continue;
     }
 
-    if (key === "expected_amount_centavos" || key === "min_amount_centavos" || key === "max_amount_centavos" || key === "minimum_amount_centavos" || key === "fixed_amount_centavos") {
+    if (key === "expected_amount_centavos" || key === "minimum_amount_centavos" || key === "fixed_amount_centavos") {
       if (value !== null && value !== undefined && (typeof value !== "number" || !Number.isInteger(value) || value < 0)) {
         throw new Error(`${key} must be a non-negative integer or null`);
       }
-      continue;
-    }
-
-    if (key === "income_type") {
-      if (typeof value !== "string") throw new Error("income_type must be a string");
-      if (!["stable", "variable"].includes(value as string)) throw new Error(`income_type must be stable or variable`);
       continue;
     }
 
@@ -1300,7 +1311,7 @@ async function validateUpdatePayload(
     if (key === "frequency") {
       if (typeof value !== "string") throw new Error("frequency must be a string");
       if (entity === "income_sources") {
-        if (!["weekly", "biweekly", "semi_monthly", "monthly", "irregular", "custom"].includes(value as string)) {
+        if (!INCOME_FREQUENCIES.includes(value as string)) {
           throw new Error("frequency must be a valid income frequency");
         }
       } else if (entity === "recurring_transaction_templates") {
@@ -1411,17 +1422,7 @@ async function validateUpdatePayload(
   }
 
   if (entity === "income_sources") {
-    const centsFields = ["expected_amount_centavos", "min_amount_centavos", "max_amount_centavos"] as const;
-    for (const f of centsFields) {
-      if (typeof sanitized[f] === "number" && (sanitized[f] as number) < 0) {
-        throw new Error(`${f} must be >= 0`);
-      }
-    }
-    const minVal = sanitized.min_amount_centavos as number | undefined;
-    const maxVal = sanitized.max_amount_centavos as number | undefined;
-    if (minVal !== undefined && maxVal !== undefined && minVal > maxVal) {
-      throw new Error("min_amount_centavos must be <= max_amount_centavos");
-    }
+    if (sanitized.expected_amount_centavos !== undefined) requirePositiveInteger(sanitized, "expected_amount_centavos");
     const dayFields = ["payday_day_of_month", "payday_second_day_of_month"] as const;
     for (const f of dayFields) {
       if (typeof sanitized[f] === "number" && ((sanitized[f] as number) < 1 || (sanitized[f] as number) > 31)) {
@@ -1430,9 +1431,6 @@ async function validateUpdatePayload(
     }
     if (typeof sanitized.payday_day_of_week === "number" && ((sanitized.payday_day_of_week as number) < 0 || (sanitized.payday_day_of_week as number) > 6)) {
       throw new Error("payday_day_of_week must be between 0 and 6");
-    }
-    if (typeof sanitized.payday_second_day_of_week === "number" && ((sanitized.payday_second_day_of_week as number) < 0 || (sanitized.payday_second_day_of_week as number) > 6)) {
-      throw new Error("payday_second_day_of_week must be between 0 and 6");
     }
     if (sanitized.destination_account_id && typeof sanitized.destination_account_id === "string") {
       await verifyAccountOwnership(supabase, userId, sanitized.destination_account_id);
@@ -1598,6 +1596,15 @@ function currentFinancialPlanPeriod(now = new Date()): { start: string; end: str
 
 function requireString(payload: Record<string, unknown>, field: string): void {
   if (!payload[field] || typeof payload[field] !== "string") throw new Error(`${field} is required`);
+}
+
+function validateTaxonomyVisuals(payload: Record<string, unknown>): void {
+  if (payload.icon_key !== undefined && (typeof payload.icon_key !== "string" || !TAXONOMY_ICON_KEYS.has(payload.icon_key))) {
+    throw new Error("icon_key is invalid");
+  }
+  if (payload.color_hex !== undefined && (typeof payload.color_hex !== "string" || !COLOR_HEX_PATTERN.test(payload.color_hex))) {
+    throw new Error("color_hex must be a six-digit hex color");
+  }
 }
 
 async function validateDebtPreset(supabase: SupabaseClient, userId: string, presetKey: string | undefined, preset: Record<string, unknown>): Promise<void> {
@@ -1787,13 +1794,15 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
   }
   if (sanitized.target_date !== undefined && sanitized.target_date !== null) requireDateString(sanitized, "target_date");
   if (sanitized.next_contribution_date !== undefined && sanitized.next_contribution_date !== null) requireDateString(sanitized, "next_contribution_date");
-  if (sanitized.contribution_frequency !== undefined && !SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES.includes(sanitized.contribution_frequency as string)) throw new Error("contribution_frequency is invalid");
+  if (sanitized.contribution_frequency !== undefined && sanitized.contribution_frequency !== null && !SAVINGS_GOAL_CONTRIBUTION_FREQUENCIES.includes(sanitized.contribution_frequency as string)) throw new Error("contribution_frequency is invalid");
   if (sanitized.contribution_interval_count !== undefined && sanitized.contribution_interval_count !== null) requirePositiveInteger(sanitized, "contribution_interval_count");
   for (const field of ["contribution_day_of_month", "contribution_second_day_of_month"]) {
     if (sanitized[field] !== undefined && sanitized[field] !== null) requireNumberInRange(sanitized, field, 1, 31);
   }
   if (sanitized.contribution_day_of_week !== undefined && sanitized.contribution_day_of_week !== null) requireNumberInRange(sanitized, "contribution_day_of_week", 0, 6);
   if (sanitized.custom_interval_days !== undefined && sanitized.custom_interval_days !== null) requirePositiveInteger(sanitized, "custom_interval_days");
+  if (creating && sanitized.contribution_frequency != null && sanitized.next_contribution_date == null) throw new Error("next_contribution_date is required for scheduled contributions");
+  if (sanitized.contribution_frequency === null && (sanitized.next_contribution_date != null || (sanitized.planned_contribution_amount_centavos != null && sanitized.planned_contribution_amount_centavos !== 0))) throw new Error("unscheduled goals must have no next contribution date and zero planned contribution");
   if (creating && (sanitized.next_contribution_date as string) > (sanitized.target_date as string)) throw new Error("next_contribution_date must be on or before target_date");
   if (sanitized.notes !== undefined && sanitized.notes !== null && (typeof sanitized.notes !== "string" || sanitized.notes.length > 1_000)) throw new Error("notes must be 1000 characters or fewer");
   if (sanitized.emergency_fund_target_method !== undefined && !["fixed_amount", "essential_expense_coverage"].includes(sanitized.emergency_fund_target_method as string)) throw new Error("emergency_fund_target_method is invalid");

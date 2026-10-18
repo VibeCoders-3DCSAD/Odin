@@ -28,8 +28,6 @@ export function createSqliteHarness() {
       // Jest's ESM interop wraps each dynamically imported migration in one more default.
       const migrations = (await loadMigrations()).map((loaded) => "up" in loaded ? loaded : (loaded as unknown as { default: typeof loaded }).default);
       for (const migration of migrations.sort((a, b) => a.version - b.version)) {
-        // 061 and 071 still read category_groups, which 002 no longer creates; recreate what older devices had.
-        if (migration.version === 61) sqlite.exec("CREATE TABLE category_groups (id text primary key, slug text); ALTER TABLE categories ADD COLUMN category_group_id text;");
         await migration.up(db as never);
       }
     },

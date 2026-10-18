@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -11,14 +11,17 @@ import {
   View,
 } from "react-native";
 import { createCategory, updateCategory } from "../../local-db/repositories/taxonomy";
+import { ArrowLeft } from "phosphor-react-native";
+import { DEFAULT_TAXONOMY_COLOR, TAXONOMY_COLORS, TAXONOMY_ICON_KEYS, TaxonomyIcon, taxonomyIconKey, type TaxonomyIconKey } from "./taxonomyVisuals";
 
 type CategoryFormScreenProps = {
-  visible: boolean;
   mode: "create" | "edit";
   category?: {
     id: string;
     label: string;
     description: string;
+    icon_key?: string;
+    color_hex?: string;
   };
   userId: string;
   deviceId: string;
@@ -43,24 +46,34 @@ function generateSlug(text: string): string {
 }
 
 export default function CategoryFormScreen({
-  visible, mode, category, userId, deviceId,
+  mode, category, userId, deviceId,
   onSaved, onCancel,
 }: CategoryFormScreenProps) {
   const isCreate = mode === "create";
   const [label, setLabel] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
+  const [iconKey, setIconKey] = useState<TaxonomyIconKey>(taxonomyIconKey(undefined));
+  const [colorHex, setColorHex] = useState(DEFAULT_TAXONOMY_COLOR);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible) {
       setLabel(category?.label ?? "");
       setSlug(category ? generateSlug(category.label) : "");
       setDescription(category?.description ?? "");
+      setIconKey(taxonomyIconKey(category?.icon_key));
+      setColorHex(category?.color_hex ?? DEFAULT_TAXONOMY_COLOR);
       setFormError(null);
-    }
-  }, [visible, mode, category?.id]);
+  }, [mode, category?.id]);
+
+  useEffect(() => {
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!saving) onCancel();
+      return true;
+    });
+    return () => back.remove();
+  }, [onCancel, saving]);
 
   useEffect(() => {
     if (label.trim()) {
@@ -80,11 +93,15 @@ export default function CategoryFormScreen({
           slug: slug.trim() || generateSlug(label.trim()),
           label: label.trim(),
           description: description.trim(),
+          icon_key: iconKey,
+          color_hex: colorHex,
         });
       } else {
         await updateCategory(userId, deviceId, category!.id, {
           label: label.trim(),
           description: description.trim(),
+          icon_key: iconKey,
+          color_hex: colorHex,
         });
       }
       onSaved();
@@ -96,14 +113,12 @@ export default function CategoryFormScreen({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Pressable onPress={onCancel} style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
-            <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
-                <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: palette.shell }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40, gap: 16 }} keyboardShouldPersistTaps="handled">
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to categories" disabled={saving} onPress={onCancel} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <ArrowLeft size={18} color={palette.ink} weight="bold" />
+          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.mut }}>Categories</Text>
+        </Pressable>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
                     {isCreate ? "New Category" : "Edit Category"}
                   </Text>
@@ -129,6 +144,26 @@ export default function CategoryFormScreen({
                         backgroundColor: palette.card,
                       }}
                     />
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>ICON</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {TAXONOMY_ICON_KEYS.map((key) => (
+                        <Pressable key={key} accessibilityRole="button" accessibilityLabel={`Use ${key} icon`} onPress={() => setIconKey(key)} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: iconKey === key ? colorHex : palette.card, borderWidth: 1, borderColor: iconKey === key ? colorHex : palette.line, alignItems: "center", justifyContent: "center" }}>
+                          <TaxonomyIcon iconKey={key} size={20} color={iconKey === key ? "#fff" : palette.ink2} weight="fill" />
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>COLOR</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                      {TAXONOMY_COLORS.map((color) => (
+                        <Pressable key={color} accessibilityRole="button" accessibilityLabel={`Use ${color} color`} onPress={() => setColorHex(color)} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: color, borderWidth: colorHex === color ? 3 : 1, borderColor: colorHex === color ? palette.ink : "#fff" }} />
+                      ))}
+                    </View>
                   </View>
 
                   <View>
@@ -184,12 +219,7 @@ export default function CategoryFormScreen({
                       )}
                     </Pressable>
                   </View>
-                </ScrollView>
-              </View>
-            </Pressable>
-          </KeyboardAvoidingView>
-        </View>
-      </Pressable>
-    </Modal>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

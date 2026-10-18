@@ -17,7 +17,7 @@ const MAX_SYNC_ATTEMPTS = 3;
 const MAX_PULL_PAGES_PER_SYNC = 3;
 const PULL_PAGE_DELAY_MS = 100;
 
-const syncPromises = new Map<string, Promise<SyncResult>>();
+const syncPromises = new Map<string, { promise: Promise<SyncResult>; pull: boolean }>();
 
 type TableCursor = { ts: string; id: string };
 
@@ -60,21 +60,29 @@ type IncomeSourceSyncFields = {
 };
 
 
+// `pull: false` only pushes queued local changes, for callers that need the server to see them but
+// do not need the server's changes back (the server-side Financial Plan reads its own database).
 export async function runSync(
   userId: string,
   deviceId: string,
   accessToken: string,
+  { pull = true }: { pull?: boolean } = {},
 ): Promise<SyncResult> {
   const syncKey = `${userId}:${deviceId}`;
   const existing = syncPromises.get(syncKey);
-  if (existing) return existing;
+  // Every run pushes, so an in-flight run covers a push-only request; a push-only run does not cover a pull.
+  if (existing && (existing.pull || !pull)) return existing.promise;
+  if (existing) {
+    await existing.promise.catch(() => {});
+    return runSync(userId, deviceId, accessToken, { pull });
+  }
 
-  const syncPromise = runSyncInternal(userId, deviceId, accessToken);
-  syncPromises.set(syncKey, syncPromise);
+  const syncPromise = runSyncInternal(userId, deviceId, accessToken, pull);
+  syncPromises.set(syncKey, { promise: syncPromise, pull });
   try {
     return await syncPromise;
   } finally {
-    if (syncPromises.get(syncKey) === syncPromise) syncPromises.delete(syncKey);
+    if (syncPromises.get(syncKey)?.promise === syncPromise) syncPromises.delete(syncKey);
   }
 }
 
@@ -82,6 +90,7 @@ async function runSyncInternal(
   userId: string,
   deviceId: string,
   accessToken: string,
+  pull: boolean,
 ): Promise<SyncResult> {
   if (!userId || !accessToken || !deviceId) {
     return { pushed: 0, pulled: 0, errors: 0, successful: false, hasMore: false };
@@ -100,6 +109,7 @@ async function runSyncInternal(
   }
 
   const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken);
+  if (!pull) return { pushed, pulled: 0, errors, successful: errors === 0, hasMore: syncState.pullPending };
 
   let pulled = 0;
   let pullSuccessful = true;

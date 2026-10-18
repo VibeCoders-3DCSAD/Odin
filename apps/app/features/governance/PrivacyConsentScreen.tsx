@@ -11,6 +11,7 @@ import {
 import { Check, ShieldCheck } from "phosphor-react-native";
 import { submitConsent } from "./api";
 import { CURRENT_TERMS_VERSION, ERRORS, TERMS_CONSENT_KIND } from "./constants";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -137,20 +138,24 @@ export default function PrivacyConsentScreen({
       <Animated.View
         style={{
           transform: [{ translateY: slideAnim }],
-          backgroundColor: CARD,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          borderBottomLeftRadius: 34,
-          borderBottomRightRadius: 34,
-          shadowColor: AQUA950,
-          shadowOffset: { width: 0, height: -16 },
-          shadowOpacity: 0.16,
-          shadowRadius: 40,
-          elevation: 16,
-          padding: 22,
-          paddingBottom: 30,
         }}
       >
+        <BottomSheetSurface
+          bottomSpacing={30}
+          style={{
+            backgroundColor: CARD,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            borderBottomLeftRadius: 34,
+            borderBottomRightRadius: 34,
+            shadowColor: AQUA950,
+            shadowOffset: { width: 0, height: -16 },
+            shadowOpacity: 0.16,
+            shadowRadius: 40,
+            elevation: 16,
+            padding: 22,
+          }}
+        >
         <View
           style={{
             width: 38, height: 4, borderRadius: 4,
@@ -264,6 +269,7 @@ export default function PrivacyConsentScreen({
             {error}
           </Text>
         ) : null}
+        </BottomSheetSurface>
       </Animated.View>
     </View>
   );

@@ -129,9 +129,10 @@ function validate(input: CreateSavingsGoalInput): CreateSavingsGoalInput {
     customIntervalDays: input.customIntervalDays ?? null,
     nextContributionDate: input.nextContributionDate ?? null,
   });
-  if (scheduleError) throw new LocalDbError("VALIDATION_ERROR", scheduleError);
-  if (!input.targetDate || !input.nextContributionDate || input.nextContributionDate > input.targetDate) throw new LocalDbError("VALIDATION_ERROR", "next contribution date must be on or before target date");
-  return { ...input, name, goalType: category, targetDate: input.targetDate ?? null, emergencyFundBaselineCentavos: input.emergencyFundBaselineCentavos ?? null, autoSaveAmountCentavos: input.autoSaveAmountCentavos ?? 0, plannedContributionAmountCentavos: input.plannedContributionAmountCentavos ?? input.autoSaveAmountCentavos ?? 0, contributionIntervalCount: input.contributionIntervalCount ?? 1, interestRateBps: input.interestRateBps ?? null, notes: input.notes?.trim() || null, emergencyFundTargetMethod: method, essentialExpenseCoverageMonths: coverage };
+  if (input.contributionFrequency != null && scheduleError) throw new LocalDbError("VALIDATION_ERROR", scheduleError);
+  if (!input.targetDate || (input.contributionFrequency != null && (!input.nextContributionDate || input.nextContributionDate > input.targetDate))) throw new LocalDbError("VALIDATION_ERROR", "next contribution date must be on or before target date");
+  const schedule = input.contributionFrequency == null ? { contributionFrequency: null, plannedContributionAmountCentavos: 0, autoSaveAmountCentavos: 0, nextContributionDate: null, contributionIntervalCount: null, contributionDayOfMonth: null, contributionSecondDayOfMonth: null, contributionDayOfWeek: null, customIntervalDays: null } : {};
+  return { ...input, name, goalType: category, targetDate: input.targetDate ?? null, emergencyFundBaselineCentavos: input.emergencyFundBaselineCentavos ?? null, autoSaveAmountCentavos: input.autoSaveAmountCentavos ?? 0, plannedContributionAmountCentavos: input.plannedContributionAmountCentavos ?? input.autoSaveAmountCentavos ?? 0, contributionIntervalCount: input.contributionIntervalCount ?? 1, interestRateBps: input.interestRateBps ?? null, notes: input.notes?.trim() || null, emergencyFundTargetMethod: method, essentialExpenseCoverageMonths: coverage, ...schedule };
 }
 
 function payload(input: CreateSavingsGoalInput): Record<string, unknown> {

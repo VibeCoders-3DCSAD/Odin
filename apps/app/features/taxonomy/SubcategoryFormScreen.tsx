@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -10,20 +10,26 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { ArrowLeft } from "phosphor-react-native";
 import { createSubcategory, updateSubcategory } from "../../local-db/repositories/taxonomy";
+import { DEFAULT_TAXONOMY_COLOR, TAXONOMY_COLORS, TaxonomyIcon, type TaxonomyIconKey } from "./taxonomyVisuals";
+import { subcategoryIconOptions, subcategoryIconKey } from "../../lib/taxonomyIconOptions";
 
 type SubcategoryFormScreenProps = {
-  visible: boolean;
   mode: "create" | "edit";
   subcategory?: {
     id: string;
     slug: string;
     label: string;
     description: string;
+    icon_key?: string;
+    color_hex?: string;
     is_protected: boolean;
   };
   categoryId: string;
   categoryLabel: string;
+  categorySlug: string;
+  categoryColor?: string;
   userId: string;
   deviceId: string;
   onSaved: () => void;
@@ -47,26 +53,37 @@ function generateSlug(text: string): string {
 }
 
 export default function SubcategoryFormScreen({
-  visible, mode, subcategory, categoryId, categoryLabel,
+  mode, subcategory, categoryId, categoryLabel, categorySlug, categoryColor,
   userId, deviceId, onSaved, onCancel,
 }: SubcategoryFormScreenProps) {
   const isCreate = mode === "create";
   const [label, setLabel] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
+  const iconOptions = subcategoryIconOptions(categorySlug);
+  const [iconKey, setIconKey] = useState<TaxonomyIconKey>(() => subcategoryIconKey(categorySlug));
+  const [colorHex, setColorHex] = useState(DEFAULT_TAXONOMY_COLOR);
   const [isProtected, setIsProtected] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible) {
-      setLabel(subcategory?.label ?? "");
-      setSlug(subcategory ? generateSlug(subcategory.label) : "");
-      setDescription(subcategory?.description ?? "");
-      setIsProtected(subcategory?.is_protected ?? false);
-      setFormError(null);
-    }
-  }, [visible, mode, subcategory?.id]);
+    setLabel(subcategory?.label ?? "");
+    setSlug(subcategory ? generateSlug(subcategory.label) : "");
+    setDescription(subcategory?.description ?? "");
+    setIconKey(subcategoryIconKey(categorySlug, subcategory?.slug, subcategory?.icon_key));
+    setColorHex(subcategory?.color_hex ?? categoryColor ?? DEFAULT_TAXONOMY_COLOR);
+    setIsProtected(subcategory?.is_protected ?? false);
+    setFormError(null);
+  }, [mode, subcategory?.id, categorySlug, categoryColor]);
+
+  useEffect(() => {
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      onCancel();
+      return true;
+    });
+    return () => back.remove();
+  }, [onCancel]);
 
   useEffect(() => {
     if (label.trim()) {
@@ -87,6 +104,8 @@ export default function SubcategoryFormScreen({
           slug: slug.trim() || generateSlug(label.trim()),
           label: label.trim(),
           description: description.trim(),
+          icon_key: iconKey,
+          color_hex: colorHex,
           is_protected: isProtected,
         });
       } else {
@@ -94,6 +113,8 @@ export default function SubcategoryFormScreen({
           label: label.trim(),
           slug: slug.trim() || generateSlug(label.trim()),
           description: description.trim(),
+          icon_key: iconKey,
+          color_hex: colorHex,
           is_protected: isProtected,
         });
       }
@@ -106,14 +127,14 @@ export default function SubcategoryFormScreen({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Pressable onPress={onCancel} style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
-            <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: palette.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginTop: 10 }} />
-                <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: palette.shell }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <View style={{ paddingTop: 0, gap: 16 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back to subcategories" onPress={onCancel} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <ArrowLeft size={18} color={palette.ink} weight="bold" />
+            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.mut }}>Subcategories</Text>
+          </Pressable>
+          <View style={{ gap: 16 }}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
                     {isCreate ? "New Subcategory" : "Edit Subcategory"}
                   </Text>
@@ -143,6 +164,26 @@ export default function SubcategoryFormScreen({
                         backgroundColor: palette.card,
                       }}
                     />
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>ICON</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {iconOptions.map((key) => (
+                        <Pressable key={key} accessibilityRole="button" accessibilityLabel={`Use ${key} icon`} onPress={() => setIconKey(key)} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: iconKey === key ? colorHex : palette.card, borderWidth: 1, borderColor: iconKey === key ? colorHex : palette.line, alignItems: "center", justifyContent: "center" }}>
+                          <TaxonomyIcon iconKey={key} size={20} color={iconKey === key ? "#fff" : palette.ink2} weight="fill" />
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>COLOR</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                      {TAXONOMY_COLORS.map((color) => (
+                        <Pressable key={color} accessibilityRole="button" accessibilityLabel={`Use ${color} color`} onPress={() => setColorHex(color)} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: color, borderWidth: colorHex === color ? 3 : 1, borderColor: colorHex === color ? palette.ink : "#fff" }} />
+                      ))}
+                    </View>
                   </View>
 
                   <View>
@@ -222,12 +263,9 @@ export default function SubcategoryFormScreen({
                       )}
                     </Pressable>
                   </View>
-                </ScrollView>
-              </View>
-            </Pressable>
-          </KeyboardAvoidingView>
+          </View>
         </View>
-      </Pressable>
-    </Modal>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

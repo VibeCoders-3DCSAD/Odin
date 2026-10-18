@@ -55,12 +55,12 @@ export async function insertScheduledPaymentRecordInTransaction(db: SQLite.SQLit
     record.id, userId, record.scheduledPaymentId, record.transactionId, record.occurrenceDate, record.paymentDate, record.amountCentavos, record.source, record.notes, ts, ts,
   );
   const payload = { scheduled_payment_id: record.scheduledPaymentId, transaction_id: record.transactionId, occurrence_date: record.occurrenceDate, payment_date: record.paymentDate, amount_centavos: record.amountCentavos, source: record.source, notes: record.notes };
-  await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payment_records", recordId: record.id, operationType: "create", baseVersion: null, changedFields: Object.keys(payload), payload, failureMessage: "This scheduled payment could not be recorded." });
+  await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payment_records", recordId: record.id, operationType: "create", baseVersion: null, changedFields: Object.keys(payload), payload, failureMessage: "This biller or remittance payment could not be recorded." });
 }
 
 export async function deleteScheduledPaymentRecordForTransactionInTransaction(db: SQLite.SQLiteDatabase, userId: string, deviceId: string, transactionId: string): Promise<void> {
   const record = await db.getFirstAsync<Row>(`${SELECT} WHERE user_id = ? AND transaction_id = ? AND deleted = 0`, userId, transactionId);
   if (!record) return;
   await db.runAsync("UPDATE scheduled_payment_records SET deleted = 1, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", new Date().toISOString(), record.id, userId);
-  await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payment_records", recordId: record.id, operationType: "delete", baseVersion: record.version, changedFields: [], payload: {}, failureMessage: "This scheduled payment record could not be deleted." });
+  await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payment_records", recordId: record.id, operationType: "delete", baseVersion: record.version, changedFields: [], payload: {}, failureMessage: "This biller or remittance payment could not be deleted." });
 }

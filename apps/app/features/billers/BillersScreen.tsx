@@ -35,7 +35,7 @@ function tileFor(slug: string) {
   return { bg: v4.ink2, Icon: Receipt };
 }
 
-export default function ScheduledPaymentsScreen({ userId, deviceId, syncVersion, onAdd, onEdit, onOpen, onSyncRequested }: Props) {
+export default function BillersScreen({ userId, deviceId, syncVersion, onAdd, onEdit, onOpen, onSyncRequested }: Props) {
   const { showToast } = useToast();
   const [filter, setFilter] = useState<Filter>("all");
   const [payments, setPayments] = useState<ScheduledPaymentSummary[] | null>(null);
@@ -112,15 +112,11 @@ export default function ScheduledPaymentsScreen({ userId, deviceId, syncVersion,
 
   const activePayments = payments ?? [];
   const header = (
-    <AmountHero label="DUE THIS MONTH">
-      <Text style={{ marginTop: 6, fontFamily: v4Font, fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: "#FFFFFF", fontVariant: ["tabular-nums"] }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", letterSpacing: 0 }}>PHP </Text>
-        {formatPhp(dueThisMonthCentavos(activePayments, today)).slice(4)}
-      </Text>
-      <Text style={{ marginTop: 10, fontFamily: v4Font, fontSize: 12.5, fontWeight: "600", color: "#FFFFFF" }}>
-        {activePayments.length} scheduled {activePayments.length === 1 ? "payment" : "payments"}
-      </Text>
-    </AmountHero>
+    <AmountHero
+      label="DUE THIS MONTH"
+      amountCentavos={dueThisMonthCentavos(activePayments, today)}
+      detail={`${activePayments.length} ${activePayments.length === 1 ? "biller or remittance" : "billers and remittances"}`}
+    />
   );
 
   function emptyState(title: string, body: string, action?: { label: string; onPress: () => void }) {
@@ -136,7 +132,7 @@ export default function ScheduledPaymentsScreen({ userId, deviceId, syncVersion,
   if (failed) {
     return (
       <View style={{ gap: 14 }}>
-        <Banner tone="error">Budgie cannot read your scheduled payments.</Banner>
+        <Banner tone="error">Budgie cannot read your billers and remittances.</Banner>
         {header}
         {emptyState("Nothing loaded", "Close Budgie and open it again. Your data stays on this phone.", { label: "Try again", onPress: load })}
       </View>
@@ -147,7 +143,7 @@ export default function ScheduledPaymentsScreen({ userId, deviceId, syncVersion,
     return (
       <View style={{ gap: 14 }}>
         {header}
-        <View style={{ alignItems: "center", paddingVertical: 30, gap: 10 }}><ActivityIndicator color={v4.brand} /><Text style={ui.note}>Loading your scheduled payments…</Text></View>
+        <View style={{ alignItems: "center", paddingVertical: 30, gap: 10 }}><ActivityIndicator color={v4.brand} /><Text style={ui.note}>Loading your billers and remittances…</Text></View>
       </View>
     );
   }
@@ -156,7 +152,7 @@ export default function ScheduledPaymentsScreen({ userId, deviceId, syncVersion,
     return (
       <View style={{ gap: 14 }}>
         {header}
-        {emptyState("No scheduled payments yet", "Add rent, a bill or a contribution. Budgie deducts it from your budget on the due date.", { label: "Add a scheduled payment", onPress: onAdd })}
+        {emptyState("No billers or remittances yet", "Add rent, a bill or a contribution. Budgie deducts it from your budget on the due date.", { label: "Add a biller or remittance", onPress: onAdd })}
       </View>
     );
   }
@@ -189,7 +185,7 @@ export default function ScheduledPaymentsScreen({ userId, deviceId, syncVersion,
           })}
         </View>
       )}
-      {filter !== "archived" ? <Pressable onPress={onAdd} accessibilityRole="button" style={[ui.button, ui.buttonGhost]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Add a scheduled payment</Text></Pressable> : null}
+      {filter !== "archived" ? <Pressable onPress={onAdd} accessibilityRole="button" style={[ui.button, ui.buttonGhost]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Add a biller or remittance</Text></Pressable> : null}
 
       <RowMenuSheet
         payment={menuFor}

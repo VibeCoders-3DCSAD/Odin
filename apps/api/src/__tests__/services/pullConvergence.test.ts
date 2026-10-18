@@ -42,9 +42,9 @@ describe("normalizePullRow", () => {
 
   it("normalizes booleans for income_sources", () => {
     const row = {
-      id: "inc-1", user_id: null, name: "Salary", income_type: "stable",
-      frequency: "monthly", expected_amount_centavos: null, min_amount_centavos: null,
-      max_amount_centavos: null, payday_day_of_month: null, payday_second_day_of_month: null,
+      id: "inc-1", user_id: null, name: "Salary",
+      frequency: "monthly", expected_amount_centavos: null,
+      payday_day_of_month: null, payday_second_day_of_month: null,
       payday_day_of_week: null, next_expected_date: null, is_active: false,
       notes: null, metadata: {}, version: 1, deleted: false,
       created_at: "2026-01-01T00:00:00Z", updated_at: "2026-07-01T00:00:00Z",

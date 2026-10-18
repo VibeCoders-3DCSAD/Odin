@@ -24,7 +24,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return <View style={{ flex: 1 }}><FieldLabel>{label}</FieldLabel><Text numberOfLines={1} style={[ui.listTitle, { fontVariant: ["tabular-nums"] }]}>{value}</Text></View>;
 }
 
-export default function ScheduledPaymentDetailScreen({ userId, deviceId, scheduledPaymentId, syncVersion, onEdit, onRecordPayment, onDeleted, onSyncRequested }: Props) {
+export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentId, syncVersion, onEdit, onRecordPayment, onDeleted, onSyncRequested }: Props) {
   const { showToast } = useToast();
   const today = localToday();
   const [payment, setPayment] = useState<ScheduledPayment | null | undefined>(undefined);

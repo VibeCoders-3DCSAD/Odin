@@ -48,7 +48,7 @@ const config = {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#ffffff",
     },
-    // Bottom sheets are not inset-aware yet, so reserve Android's navigation area.
+    // Reserve Android's navigation area for legacy screens outside inset-aware sheets.
     edgeToEdgeEnabled: false,
     predictiveBackGestureEnabled: false,
   },

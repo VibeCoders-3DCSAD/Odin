@@ -20,4 +20,12 @@ export type ForecastPayload = {
 
 export type ForecastContent = ForecastPayload;
 
+export type QuarterlyForecastPayload = {
+  quarters: { quarter: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[] }[];
+  modelVersion: string;
+  generatedAt: string;
+  // Groq's wording of the forecast notes, saved once it arrives.
+  interpretation?: string[];
+};
+
 export type ForecastUnavailableReason = "NO_COMPLETED_MONTH" | "NO_RECENT_SPENDING";

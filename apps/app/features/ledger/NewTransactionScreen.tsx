@@ -12,7 +12,8 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { ArrowLeft, Bank, Check, CreditCard, Money, Tag, Wallet } from "phosphor-react-native";
+import { ArrowLeft, Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
+import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
 import { AmountHero, Banner, Chip, FieldError, FieldLabel, FormCard, Note, PickerField, Segment, Switch, TextField, styles as ui, tileTints, v4, v4Font } from "../../components/BudgieForm";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
@@ -30,6 +31,7 @@ import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
 import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import CreditCardInstallmentFields, { type InstallmentFieldErrors, type InstallmentFormValue } from "./components/CreditCardInstallmentFields";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const QUICK_AMOUNTS = [100, 250, 500, 1000];
 
@@ -576,7 +578,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       });
 
       resetForm(true);
-      if (!isEdit) onCreated?.(unusualSpending);
+      // An edit returns to wherever it was opened from, which refreshes that list.
+      if (isEdit) onClose();
+      else onCreated?.(unusualSpending);
     } catch (error) {
       console.error("[DEBUG-TX-SAVE] failed", {
         phase: savePhase,
@@ -600,7 +604,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
               <Pressable onPress={() => {}}>
-                <View style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
+                <BottomSheetSurface style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
                   <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
                   <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 12 }} keyboardShouldPersistTaps="handled" bounces={false}>
                     <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>
@@ -642,7 +646,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                       </View>
                     )}
                   </ScrollView>
-                </View>
+                </BottomSheetSurface>
               </Pressable>
             </KeyboardAvoidingView>
           </View>
@@ -684,7 +688,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         <Pressable onPress={close} style={{ flex: 1 }}>
           <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
             <Pressable onPress={() => {}}>
-              <View style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 }}>
+              <BottomSheetSurface bottomSpacing={30} style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
                 <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 10 }}>
                   <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Cancel" hitSlop={8}>
@@ -710,7 +714,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     if (nextDate) select(nextDate);
                   }}
                 />
-              </View>
+              </BottomSheetSurface>
             </Pressable>
           </View>
         </Pressable>
@@ -721,6 +725,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   function renderCategoryPickerPage() {
     const selectedCategory = getSelectedCategory();
     const selectedSubcategory = getSelectedSubcategory();
+    const selectedVisual = categorySelection.tier === "subcategory" ? selectedSubcategory : selectedCategory;
 
     return (
       <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 14 }} showsVerticalScrollIndicator={false}>
@@ -731,9 +736,14 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             <Text style={{ fontFamily: v4Font, fontSize: 10.5, fontWeight: "700", color: v4.okInk, letterSpacing: 0.6 }}>
               CURRENT SELECTION
             </Text>
-            <Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 14, color: v4.ink }}>
-              {getCategoryFieldLabel()}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={[ui.listTile, { backgroundColor: selectedVisual?.color_hex ?? DEFAULT_TAXONOMY_COLOR }]}>
+                <TaxonomyIcon iconKey={selectedVisual?.icon_key} color="#fff" size={16} weight="fill" />
+              </View>
+              <Text style={{ flex: 1, fontFamily: v4Font, fontWeight: "700", fontSize: 14, color: v4.ink }}>
+                {getCategoryFieldLabel()}
+              </Text>
+            </View>
           </View>
         ) : null}
 
@@ -759,7 +769,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}
                   >
                     <View style={ui.listRowMain}>
-                      <View style={[ui.listTile, { backgroundColor: tileTints[3].bg }]}><Tag color={tileTints[3].fg} size={16} weight="bold" /></View>
+                      <View style={[ui.listTile, { backgroundColor: sub.color_hex ?? DEFAULT_TAXONOMY_COLOR }]}><TaxonomyIcon iconKey={sub.icon_key} color="#fff" size={16} weight="fill" /></View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text numberOfLines={1} style={[ui.listTitle, selected ? { fontWeight: "700" } : null]}>{sub.label}</Text>
                         {sub.description ? <Text numberOfLines={1} style={ui.listSubtitle}>{sub.description}</Text> : null}
@@ -1004,6 +1014,11 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                 <View>
                   <PickerField
                     label="Category"
+                    icon={
+                      <View style={[ui.listTile, { backgroundColor: (categorySelection.tier === "subcategory" ? getSelectedSubcategory()?.color_hex : getSelectedCategory()?.color_hex) ?? DEFAULT_TAXONOMY_COLOR }]}>
+                        <TaxonomyIcon iconKey={categorySelection.tier === "subcategory" ? getSelectedSubcategory()?.icon_key : getSelectedCategory()?.icon_key} color="#fff" size={16} weight="fill" />
+                      </View>
+                    }
                     value={getCategoryFieldLabel()}
                     placeholder={!categorySelection.tier}
                     error={formError === "Select a category"}

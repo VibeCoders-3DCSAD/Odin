@@ -1,5 +1,5 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import SavingsGoalsScreen from "../SavingsGoalsScreen";
 
 const mockListFinancialAccounts = jest.fn();
@@ -64,5 +64,16 @@ describe("SavingsGoalsScreen", () => {
       expect(view.getByText("Maribank HYSA")).toBeTruthy();
       expect(view.getByLabelText("Open Maribank HYSA")).toBeTruthy();
     });
+  });
+
+  it("opens the savings-type form preview from the Goals page", async () => {
+    const view = render(<SavingsGoalsScreen userId="user-1" deviceId="device-1" />);
+    await waitFor(() => expect(view.getByLabelText("Add savings")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Add savings"));
+    expect(view.getByLabelText("HYSA")).toBeTruthy();
+    expect(view.getByLabelText("Traditional Savings")).toBeTruthy();
+    expect(view.getByLabelText("Time Deposit")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Cancel"));
+    expect(view.getByText("Savings & Goals")).toBeTruthy();
   });
 });

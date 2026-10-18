@@ -1,7 +1,9 @@
+import { buildFinancialPlanExplanationContext } from "./helpers/explanationContext.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ForecastUpstreamError, ForecastValidationError, getMlForecast, type ForecastPayload } from "../forecastService.js";
+import { ForecastUnavailableError, ForecastUpstreamError, ForecastValidationError, getMlForecast, type ForecastPayload } from "../forecastService.js";
 import { recommendPlanCategories, type MlExpenseForecastSnapshot, type MlPlanCategory } from "./mlAdapter.js";
-import { explainFinancialPlan, fallbackFinancialPlanExplanations, isUserFacingFinancialPlanExplanation, zeroAllocationExplanations, type FinancialPlanEvidence } from "./explanationService.js";
+import { isUserFacingFinancialPlanExplanation, zeroAllocationExplanations, type FinancialPlanEvidence } from "./explanationService.js";
+import { deterministicFinancialPlanExplanations, type FinancialPlanExplanationRequest } from "./explanationRequest.js";
 import { deriveSurplusRecommendation } from "./classificationPolicy.js";
 import { createFinancialConditionAssessment } from "../financialConditionAssessmentService.js";
 import { getServiceRoleClient } from "../../lib/supabase.js";
@@ -89,6 +91,14 @@ export function currentCalendarMonth(now = new Date()): { start: string; end: st
   return { start: new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10), end: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10) };
 }
 
+export function financialPlanPeriod(planMonth?: string): { start: string; end: string } {
+  if (planMonth === undefined) return currentCalendarMonth();
+  if (process.env.NODE_ENV === "production" || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(planMonth)) {
+    throw new FinancialPlanInputError("Plan month overrides are only available in development with a valid YYYY-MM month");
+  }
+  return currentCalendarMonth(new Date(`${planMonth}-01T00:00:00+08:00`));
+}
+
 // The budget optimizer rejects a forecast whose month differs from the plan period.
 export function forecastCoversPlanPeriod(forecast: ForecastPayload, period: { start: string }): boolean {
   return forecast.snapshot.month === period.start.slice(0, 7);
@@ -103,55 +113,15 @@ export function remainingCommitmentCentavos(amountCentavos: number, paidCentavos
   return Math.max(amountCentavos - paidCentavos, 0);
 }
 
-// Spending already posted this month is gone from account balances, so the plan only funds what remains.
-// Debt and card payments, savings transfers and scheduled payments are excluded; those are commitments, not category spending.
-export function monthToDateSpendById(transactions: Transaction[], window: { start: string; end: string }, plannedTargets: Pick<MlPlanCategory, "id" | "target">[], parentCategoryBySubcategory: Map<string, string | null>, excludedTransactionIds: Set<string>): Map<string, number> {
-  const plannedSubcategoryIds = new Set(plannedTargets.flatMap((target) => target.target === "subcategory" ? [target.id] : []));
-  const plannedCategoryIds = new Set(plannedTargets.flatMap((target) => target.target === "category" ? [target.id] : []));
-  const spend = new Map<string, number>();
-  for (const transaction of transactions) {
-    if (transaction.transaction_type !== "expense" || transaction.transaction_date < window.start || transaction.transaction_date > window.end) continue;
-    if (excludedTransactionIds.has(transaction.id) || transaction.source_savings_goal_id || transaction.destination_savings_goal_id) continue;
-    const parentCategoryId = (transaction.subcategory_id ? parentCategoryBySubcategory.get(transaction.subcategory_id) : null) ?? transaction.category_id;
-    const targetId = transaction.subcategory_id && plannedSubcategoryIds.has(transaction.subcategory_id) ? transaction.subcategory_id : parentCategoryId && plannedCategoryIds.has(parentCategoryId) ? parentCategoryId : null;
-    if (targetId) spend.set(targetId, (spend.get(targetId) ?? 0) + transaction.amount_centavos);
-  }
-  return spend;
-}
-
-export function monthToDateAddBackCentavos(category: Pick<MlPlanCategory, "rule" | "floorCentavos">, spentCentavos: number): number {
-  return category.rule === "FIXED" ? Math.min(spentCentavos, category.floorCentavos) : spentCentavos;
-}
-
-export function toRemainingPlanCategory(category: MlPlanCategory, spentCentavos: number, availableCentavos: number): MlPlanCategory {
-  const floorCentavos = Math.max(category.floorCentavos - spentCentavos, 0);
-  return { ...category, floorCentavos, ceilingCentavos: category.rule === "FIXED" ? floorCentavos : Math.max(availableCentavos, floorCentavos), forecastCentavos: Math.max(category.forecastCentavos - spentCentavos, 0) };
-}
-
-export function toRemainingForecast(forecast: MlExpenseForecastSnapshot, spentById: Map<string, number>): MlExpenseForecastSnapshot {
-  const categoryForecasts = forecast.categoryForecasts.map((point) => ({ ...point, amountCentavos: Math.max(point.amountCentavos - (spentById.get(point.category) ?? 0), 0) }));
-  const deductedCentavos = forecast.categoryForecasts.reduce((sum, point, index) => sum + point.amountCentavos - categoryForecasts[index]!.amountCentavos, 0);
-  return { ...forecast, totalAmountCentavos: Math.max(forecast.totalAmountCentavos - deductedCentavos, 0), categoryForecasts };
-}
-
-// Stored allocations cover the whole month: what was already spent plus what the optimizer funded for the rest of it.
-export function restoreMonthToDateSpending<T extends { allocatedAmountCentavos: number; floorAmountCentavos: number; ceilingAmountCentavos: number; forecastAmountCentavos: number }>(allocations: T[], wholeMonthCategories: MlPlanCategory[], spentById: Map<string, number>): T[] {
-  return allocations.map((allocation, index) => {
-    const category = wholeMonthCategories[index]!;
-    const addBack = monthToDateAddBackCentavos(category, spentById.get(category.id) ?? 0);
-    return { ...allocation, allocatedAmountCentavos: allocation.allocatedAmountCentavos + addBack, floorAmountCentavos: category.floorCentavos, ceilingAmountCentavos: category.rule === "FIXED" ? category.floorCentavos : allocation.ceilingAmountCentavos + addBack, forecastAmountCentavos: category.forecastCentavos };
-  });
-}
-
 function addScheduleDays(date: string, days: number): string {
   const next = new Date(`${date}T00:00:00Z`);
   next.setUTCDate(next.getUTCDate() + days);
   return next.toISOString().slice(0, 10);
 }
 
-function addScheduleMonths(date: string, months: number): string {
+function addScheduleMonths(date: string, months: number, dayOfMonth?: number | null): string {
   const next = new Date(`${date}T00:00:00Z`);
-  const day = next.getUTCDate();
+  const day = dayOfMonth ?? next.getUTCDate();
   next.setUTCDate(1);
   next.setUTCMonth(next.getUTCMonth() + months);
   const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
@@ -164,14 +134,14 @@ function dateAtScheduleDay(year: number, month: number, day: number): string {
   return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
 }
 
-type RecurrenceSchedule = { intervalCount?: number | null; customIntervalDays?: number | null; semiMonthlyDays?: [number, number] | null };
+type RecurrenceSchedule = { dayOfMonth?: number | null; intervalCount?: number | null; customIntervalDays?: number | null; semiMonthlyDays?: [number, number] | null };
 
 function advanceReservationDate(date: string, frequency: string, schedule: RecurrenceSchedule): string | null {
   const interval = schedule.intervalCount && schedule.intervalCount > 0 ? schedule.intervalCount : 1;
   if (frequency === "daily") return addScheduleDays(date, interval);
   if (frequency === "weekly") return addScheduleDays(date, 7 * interval);
   if (frequency === "biweekly") return addScheduleDays(date, 14 * interval);
-  if (frequency === "monthly") return addScheduleMonths(date, interval);
+  if (frequency === "monthly") return addScheduleMonths(date, interval, schedule.dayOfMonth);
   if (frequency === "quarterly") return addScheduleMonths(date, 3 * interval);
   if (frequency === "yearly") return addScheduleMonths(date, 12 * interval);
   if (frequency === "custom") return schedule.customIntervalDays && schedule.customIntervalDays > 0 ? addScheduleDays(date, schedule.customIntervalDays) : null;
@@ -271,15 +241,25 @@ function mapRecommendation(categories: MlPlanCategory[], allocationAmounts: unkn
 
 export function seasonalPreferencesFromAnswers(answers: Record<string, unknown>, periodStart: string): FinancialPlanEvidence["seasonalPreferences"] {
   const month = Number(periodStart.slice(5, 7));
-  return ["saving_seasons", "high_expense_seasons"].flatMap((key) => Array.isArray(answers[key]) ? answers[key].flatMap((value) => typeof value === "string" && SEASONAL_LABELS[value] && SEASONAL_MONTHS[value]?.includes(month) ? [{ evidenceId: `${key}:${value}`, season: SEASONAL_LABELS[value], seasonWindow: SEASONAL_WINDOWS[value] ?? "not specified", preference: key === "saving_seasons" ? "saving" as const : "higher_expense" as const }] : []) : []);
+  const higher = Array.isArray(answers.high_expense_seasons) ? answers.high_expense_seasons : [];
+  const preferences = { saving_seasons: "saving", high_expense_seasons: "higher_expense", low_expense_seasons: "lower_expense" } as const;
+  return (Object.keys(preferences) as Array<keyof typeof preferences>).flatMap((key) => {
+    const selections = answers[key];
+    if (!Array.isArray(selections)) return [];
+    return [...new Set(selections)].flatMap((value) => {
+      if (typeof value !== "string" || !SEASONAL_LABELS[value] || !SEASONAL_MONTHS[value]?.includes(month)) return [];
+      if (key === "low_expense_seasons" && higher.includes(value)) return [];
+      return [{ evidenceId: `${key}:${value}`, season: SEASONAL_LABELS[value]!, seasonWindow: SEASONAL_WINDOWS[value]!, preference: preferences[key] }];
+    });
+  });
 }
 
 function userFacingForecastRationale(value: string): string {
   return isUserFacingFinancialPlanExplanation(value) ? value : "";
 }
 
-export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = [], reservationSkips: ReservationSkips = {}) {
-  const period = currentCalendarMonth();
+export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = [], reservationSkips: ReservationSkips = {}, planMonth?: string) {
+  const period = financialPlanPeriod(planMonth);
   const statementPaymentWindowStart = addScheduleMonths(period.start, -1);
   const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, cardPaymentsResult, debtPaymentsResult, scheduledPaymentsResult, scheduledPaidResult, scheduledPaymentTransactionsResult] = await Promise.all([
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
@@ -332,8 +312,6 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   if (availableMoney <= 0) throw new FinancialPlanInputError("No eligible financial-account balance is available");
   if (!Number.isSafeInteger(plannedAmountCentavos) || plannedAmountCentavos <= 0 || plannedAmountCentavos > availableMoney) throw new FinancialPlanInputError("Planning amount exceeds available money");
   const debtReservations = reservationSkips.skipDebtRepayments ? [] : ((debtsResult.data ?? []) as Debt[]).flatMap((debt) => debt.current_balance_centavos > 0 ? scheduledReservationDates(debt.next_due_date, debt.payment_frequency, period, debt.payment_schedule ?? {}).map((dueDate) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos), dueDate })) : []);
-  const today = manilaToday();
-  const monthToDate = { start: period.start, end: today < period.end ? today : period.end };
   const cardPayments = (cardPaymentsResult.data ?? []) as Array<CardPayment & { payment_date: string }>;
   const paidByStatement = new Map<string, number>();
   for (const payment of cardPayments) if (payment.statement_id) paidByStatement.set(payment.statement_id, (paidByStatement.get(payment.statement_id) ?? 0) + payment.amount_centavos);
@@ -341,12 +319,18 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     const amountCentavos = remainingCommitmentCentavos(statement.minimum_due_centavos, paidByStatement.get(statement.id) ?? 0);
     return amountCentavos > 0 ? [{ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos, dueDate: statement.due_date }] : [];
   });
-  const savingsReservations = reservationSkips.skipSavingsContributions ? [] : ((goalsResult.data ?? []) as Goal[]).flatMap((goal) => (goal.planned_contribution_amount_centavos ?? 0) > 0 ? scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null }).map((dueDate) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos!, dueDate })) : []);
-  const scheduledPayments = (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { name: string; subcategory_id: string }>;
+  const savingsReservations = reservationSkips.skipSavingsContributions ? [] : ((goalsResult.data ?? []) as Goal[]).flatMap((goal) => (goal.planned_contribution_amount_centavos ?? 0) > 0 ? scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { dayOfMonth: goal.contribution_day_of_month, intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null }).map((dueDate) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos!, dueDate })) : []);
+  const scheduledPayments = (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { name: string; subcategory_id: string | null }>;
   const scheduledPaymentById = new Map(scheduledPayments.map((payment) => [payment.id, payment]));
   const obligations = scheduledPaymentReservations(scheduledPayments, (scheduledPaidResult.data ?? []) as { scheduled_payment_id: string; occurrence_date: string; amount_centavos: number }[], period).map((reservation) => ({ ...reservation, label: scheduledPaymentById.get(reservation.scheduledPaymentId)?.name, subcategoryId: scheduledPaymentById.get(reservation.scheduledPaymentId)?.subcategory_id }));
   const reserved = [...debtReservations, ...statementReservations, ...savingsReservations, ...obligations].reduce((sum, item) => sum + item.amountCentavos, 0);
   const available = plannedAmountCentavos - reserved;
+  const explanationContext = buildFinancialPlanExplanationContext({
+    planMonth: period.start.slice(0, 7), plannedAmountCentavos, categoryBudgetCentavos: available,
+    debtReservations: [...debtReservations, ...statementReservations], savingsReservations, obligations,
+    scheduledPayments: (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { subcategory_id: string }>,
+    subcategories, categories: (categoriesResult.data ?? []) as Category[],
+  });
   const seasonalPreferences = seasonalPreferencesFromAnswers(((onboardingResult.data as OnboardingSession | null)?.raw_answers ?? {}), period.start);
   const transactions = (transactionsResult.data ?? []) as TransactionWithAnomalies[];
   const unusualTransactionIds = new Set(transactions.flatMap((transaction) => (transaction.anomaly_evaluations ?? [])
@@ -359,13 +343,17 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const parentBySubcategory = new Map(subcategories.map((subcategory) => [subcategory.id, subcategory.category_id]));
   const spendBySubcategory = new Map<string, number>();
   const spendByCategory = new Map<string, number>();
+  const spendMonths = new Set<string>();
   for (const transaction of cleanTransactions) {
+    if (transaction.transaction_type === "expense" && transaction.transaction_date >= trailingTwelveMonthsStart) spendMonths.add(transaction.transaction_date.slice(0, 7));
     if (transaction.transaction_type === "expense" && transaction.subcategory_id && transaction.transaction_date >= trailingTwelveMonthsStart) {
       spendBySubcategory.set(transaction.subcategory_id, (spendBySubcategory.get(transaction.subcategory_id) ?? 0) + transaction.amount_centavos);
     }
     const parentCategoryId = (transaction.subcategory_id ? parentBySubcategory.get(transaction.subcategory_id) : null) ?? transaction.category_id;
     if (transaction.transaction_type === "expense" && parentCategoryId && transaction.transaction_date >= trailingTwelveMonthsStart) spendByCategory.set(parentCategoryId, (spendByCategory.get(parentCategoryId) ?? 0) + transaction.amount_centavos);
   }
+  // Spend totals cover up to twelve months; a fallback forecast needs one month's worth.
+  const monthlySpend = (totalCentavos: number | undefined) => Math.round((totalCentavos ?? 0) / Math.max(spendMonths.size, 1));
   const slugByCategoryId = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.id, category.slug]));
   const categorySlugBySubcategoryId = new Map([
     ...subcategories.map((subcategory) => [subcategory.id, subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined] as const),
@@ -387,7 +375,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
       if (fixed === null && category.minimum_amount_centavos === null && !includedTopLevelIds.has(category.id)) return [];
       const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (category.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
       const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`category:${category.id}`) ?? 0);
-      return [{ id: category.id, target: "category" as const, priorityGroup: financialPlanPriorityGroup(category.slug), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendByCategory.get(category.id) ?? 0 }];
+      return [{ id: category.id, target: "category" as const, priorityGroup: financialPlanPriorityGroup(category.slug), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: monthlySpend(spendByCategory.get(category.id)) }];
     }),
     ...subcategories.flatMap((subcategory) => {
     const fixed = subcategory.fixed_amount_centavos;
@@ -396,33 +384,35 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     if (!automaticallyIncluded && !includedIds.has(subcategory.id)) return [];
     const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (subcategory.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
     const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`subcategory:${subcategory.id}`) ?? 0);
-    return [{ id: subcategory.id, target: "subcategory" as const, priorityGroup: financialPlanPriorityGroup(subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: spendBySubcategory.get(subcategory.id) ?? 0 }];
+    return [{ id: subcategory.id, target: "subcategory" as const, priorityGroup: financialPlanPriorityGroup(subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: monthlySpend(spendBySubcategory.get(subcategory.id)) }];
   }),
   ];
   const scheduledByTarget = scheduledCategoryAmounts(scheduledPayments, grossCategories, parentBySubcategory, period);
   const categories = subtractScheduledRequirements(grossCategories, scheduledByTarget);
-  const categoryBaselines = subtractScheduledAmounts(new Map([...spendByCategory, ...spendBySubcategory]), scheduledByTarget);
+  const categoryBaselines = subtractScheduledAmounts(new Map([...spendByCategory, ...spendBySubcategory].map(([id, amount]) => [id, monthlySpend(amount)])), scheduledByTarget);
   if (!categories.length) throw new FinancialPlanInputError("Choose at least one expense category");
-  const excludedSpendTransactionIds = new Set([
-    ...cardPayments.flatMap((payment) => payment.transaction_id && payment.payment_date >= period.start ? [payment.transaction_id] : []),
-    ...((debtPaymentsResult.data ?? []) as Array<{ transaction_id: string | null }>).flatMap((payment) => payment.transaction_id ? [payment.transaction_id] : []),
-    // Bill and remittance payments are reserved as obligations, so they are not category spending.
-    ...((scheduledPaymentTransactionsResult.data ?? []) as Array<{ transaction_id: string }>).map((record) => record.transaction_id),
-  ]);
-  const spentById = monthToDateSpendById(transactions, monthToDate, categories, new Map(subcategories.map((subcategory) => [subcategory.id, subcategory.category_id])), excludedSpendTransactionIds);
-  const monthToDateAddBack = (wholeMonthCategories: MlPlanCategory[]) => wholeMonthCategories.reduce((sum, category) => sum + monthToDateAddBackCentavos(category, spentById.get(category.id) ?? 0), 0);
-  const minimumRequired = categories.reduce((sum, category) => sum + toRemainingPlanCategory(category, spentById.get(category.id) ?? 0, available).floorCentavos, 0);
+  const minimumRequired = categories.reduce((sum, category) => sum + category.floorCentavos, 0);
   if (isFinancialPlanInfeasible(available, minimumRequired)) {
     const forecast = fallbackForecast(period, categories);
     const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: classificationResult.data ?? { status: "unavailable" } };
     const requiredFundsCentavos = reserved + minimumRequired;
     const shortfallCentavos = Math.max(0, requiredFundsCentavos - plannedAmountCentavos);
-    const explanationEvidence: FinancialPlanEvidence = { planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, shortfall: { plannedAmountCentavos, requiredFundsCentavos, shortfallCentavos }, seasonalPreferences, forecastChanges: [] };
-    const aiExplanations = await explainFinancialPlan(explanationEvidence, fetch, userId);
-    return { status: "INFEASIBLE" as const, period, inputSnapshot, recommendation: { availableFundsCentavos: available + monthToDateAddBack(categories), requiredFundsCentavos, shortfallCentavos, allocations: restoreMonthToDateSpending(categories.map((category) => toRemainingPlanCategory(category, spentById.get(category.id) ?? 0, available)).map((category) => ({ categoryId: category.target === "category" ? category.id : null, subcategoryId: category.target === "subcategory" ? category.id : null, allocationRule: category.rule, allocatedAmountCentavos: category.floorCentavos, floorAmountCentavos: category.floorCentavos, ceilingAmountCentavos: category.ceilingCentavos, forecastAmountCentavos: category.forecastCentavos })), categories, spentById), debtReservations: [...debtReservations, ...statementReservations], savingsReservations }, explanations: aiExplanations.length ? aiExplanations : fallbackFinancialPlanExplanations(explanationEvidence) };
+    const explanationEvidence: FinancialPlanEvidence = { ...explanationContext, planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, shortfall: { plannedAmountCentavos, requiredFundsCentavos, shortfallCentavos }, seasonalPreferences, forecastChanges: [] };
+    const explanationRequest: FinancialPlanExplanationRequest = { evidence: explanationEvidence, leading: [] };
+    return { status: "INFEASIBLE" as const, period, inputSnapshot: { ...inputSnapshot, spendingExplanationEvidence: explanationEvidence }, recommendation: { availableFundsCentavos: available, requiredFundsCentavos, shortfallCentavos, allocations: categories.map((category) => ({ categoryId: category.target === "category" ? category.id : null, subcategoryId: category.target === "subcategory" ? category.id : null, allocationRule: category.rule, allocatedAmountCentavos: category.floorCentavos, floorAmountCentavos: category.floorCentavos, ceilingAmountCentavos: category.ceilingCentavos, forecastAmountCentavos: category.forecastCentavos })), debtReservations: [...debtReservations, ...statementReservations], savingsReservations }, explanations: deterministicFinancialPlanExplanations(explanationRequest), explanationRequest };
   }
+  // Neither depends on the forecast, so they run while the forecast is fetched instead of after it.
+  // The no-op catches keep an early throw below from leaving these rejections unhandled; the awaits still see them.
+  const assessmentPromise = createFinancialConditionAssessment(userId, getServiceRoleClient());
+  const debtPreferencesPromise = Promise.all([
+    supabase.from("debt_strategy_preferences").select("strategy").eq("user_id", userId).eq("deleted", false).maybeSingle(),
+    supabase.from("user_debt_priorities").select("debt_account_id, priority_rank").eq("user_id", userId).eq("deleted", false).order("priority_rank").limit(100),
+  ]);
+  assessmentPromise.catch(() => {});
+  debtPreferencesPromise.catch(() => {});
   let forecast = fallbackForecast(period, categories);
   let forecastDetails: ForecastPayload["forecasts"] = [];
+  let forecastUnavailableMessage: string | null = null;
   try {
     const plannedSubcategoryIds = new Set(categories.map((category) => category.id));
     const forecastTransactions = cleanTransactions.flatMap((transaction) => {
@@ -434,7 +424,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
         : [];
     });
     if (forecastTransactions.length) {
-      const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions });
+      const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions, targetMonth: period.start.slice(0, 7) });
       if (forecastCoversPlanPeriod(mlForecast, period)) {
         // Apply the forecast's change only to the baseline remaining after scheduled payments.
         const forecastDeductions = new Map([...scheduledByTarget].map(([id, amount]) => {
@@ -444,13 +434,17 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
         }));
         forecast = subtractScheduledForecast(mapPlanForecast(userId, mlForecast, grossCategories, categorySlugBySubcategoryId), forecastDeductions, new Map(categories.map((category) => [category.id, category.floorCentavos])));
         forecastDetails = mlForecast.forecasts;
+      } else {
+        console.warn("financial plan forecast month mismatch; using spend fallback", { user_id: userId, forecast_month: mlForecast.snapshot.month, plan_month: period.start.slice(0, 7) });
       }
     }
   } catch (error) {
-    if (!(error instanceof ForecastValidationError || error instanceof ForecastUpstreamError)) throw error;
+    if (!(error instanceof ForecastValidationError || error instanceof ForecastUpstreamError || error instanceof ForecastUnavailableError)) throw error;
+    console.warn("financial plan forecast unavailable; using spend fallback", { user_id: userId, error: error.message });
+    if (error instanceof ForecastUnavailableError) forecastUnavailableMessage = error.message;
   }
   const plannedCategories = applyFinancialPlanPriorityWeights(categories.map((category) => ({ ...category, forecastCentavos: forecast.categoryForecasts.find((point) => point.category === category.id)?.amountCentavos ?? category.floorCentavos })), categoryBaselines);
-  const freshAssessment = await createFinancialConditionAssessment(userId, getServiceRoleClient());
+  const freshAssessment = await assessmentPromise;
   const assessmentRow = freshAssessment ?? (classificationResult.error ? null : classificationResult.data as { id: string; assessed_at: string; rule_set_version: string; output_snapshot: unknown } | null);
   const assessment = assessmentRow && assessmentRow.output_snapshot && typeof assessmentRow.output_snapshot === "object" && !Array.isArray(assessmentRow.output_snapshot)
     ? { id: assessmentRow.id, assessedAt: assessmentRow.assessed_at, ruleSetVersion: assessmentRow.rule_set_version, outputSnapshot: assessmentRow.output_snapshot as Record<string, unknown> }
@@ -459,23 +453,20 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const goals = (goalsResult.data ?? []) as Goal[];
   const debts = (debtsResult.data ?? []) as Debt[];
   const eligibleEmergencyGoalId = goals.find((goal) => goal.goal_type === "emergency_fund" && goal.current_amount_centavos < goal.target_amount_centavos)?.id ?? null;
-  const [strategyResult, prioritiesResult] = await Promise.all([
-    supabase.from("debt_strategy_preferences").select("strategy").eq("user_id", userId).eq("deleted", false).maybeSingle(),
-    supabase.from("user_debt_priorities").select("debt_account_id, priority_rank").eq("user_id", userId).eq("deleted", false).order("priority_rank").limit(100),
-  ]);
+  const [strategyResult, prioritiesResult] = await debtPreferencesPromise;
   const strategy = strategyResult.data?.strategy === "snowball" ? "snowball" : "avalanche";
   const priorityIds = (prioritiesResult.data ?? []).map((priority) => priority.debt_account_id).filter((id): id is string => typeof id === "string");
   const eligibleDebtId = strategyResult.error || prioritiesResult.error ? null : selectEligibleDebt(debts, strategy, priorityIds);
   const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
-  const remainingPlannedCategories = plannedCategories.map((category) => toRemainingPlanCategory(category, spentById.get(category.id) ?? 0, available));
-  const ml = await recommendPlanCategories(userId, period, available, remainingPlannedCategories, toRemainingForecast(forecast, spentById));
+  // Recommendations use monthly targets; recorded spending is tracked separately.
+  const ml = await recommendPlanCategories(userId, period, available, plannedCategories, forecast);
   const recommendation = ml.recommendation as { feasibility?: string; required_funds?: number; shortfall?: number; unallocated_surplus?: number; allocations?: unknown };
   const surplusCentavos = typeof recommendation.unallocated_surplus === "number" && Number.isFinite(recommendation.unallocated_surplus) && recommendation.unallocated_surplus > 0 ? Math.round(recommendation.unallocated_surplus * 100) : 0;
   const surplusRecommendation = deriveSurplusRecommendation({ unallocatedSurplusCentavos: surplusCentavos, assessment, sourceUpdatedAt, eligibleEmergencyGoalId, eligibleDebtId });
   const debtSurplusCentavos = 0;
   const savingsSurplusCentavos = 0;
   const baseDebtReservations = [...debtReservations, ...statementReservations];
-  const allocations = restoreMonthToDateSpending(mapRecommendation(remainingPlannedCategories, recommendation.allocations), plannedCategories, spentById);
+  const allocations = mapRecommendation(plannedCategories, recommendation.allocations);
   const categoryLabelById = new Map([...((categoriesResult.data ?? []) as Category[]), ...subcategories].map((category) => [category.id, category.label]));
   const zeroAllocationInsights = zeroAllocationExplanations(allocations.flatMap((allocation) => {
     const targetId = allocation.categoryId ?? allocation.subcategoryId;
@@ -485,24 +476,24 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   }));
   const plannedInputSnapshot = { ...inputSnapshot, debtRequirements: { reservations: baseDebtReservations, surplusCentavos: debtSurplusCentavos }, savingsRequirements: { reservations: savingsReservations, surplusCentavos: savingsSurplusCentavos } };
   const categoryBySlug = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.slug, category]));
-  const possibleSeasonalContext = seasonalPreferences.find((preference) => preference.preference === "higher_expense")?.season ?? null;
   const forecastChanges = forecastDetails.flatMap((detail) => {
     const category = categoryBySlug.get(detail.category);
     if (!category) return [];
-    const allocationCentavos = allocations.reduce((sum, allocation) => {
+    const categoryAllocations = allocations.filter((allocation) => {
       const targetId = allocation.categoryId ?? allocation.subcategoryId;
-      return targetId && categorySlugBySubcategoryId.get(targetId) === detail.category ? sum + allocation.allocatedAmountCentavos : sum;
-    }, 0);
+      return targetId && categorySlugBySubcategoryId.get(targetId) === detail.category;
+    });
+    if (categoryAllocations.length === 0) return [];
+    const allocationCentavos = categoryAllocations.reduce((sum, allocation) => sum + allocation.allocatedAmountCentavos, 0);
     const scheduledCentavos = categories.filter((target) => categorySlugBySubcategoryId.get(target.id) === detail.category).reduce((sum, target) => sum + (scheduledByTarget.get(target.id) ?? 0), 0);
     const baselineCentavos = Math.max(0, detail.userBaselineCentavos - scheduledCentavos);
     const factor = detail.userBaselineCentavos > 0 ? detail.amountCentavos / detail.userBaselineCentavos : 1;
     const forecastCentavos = Math.max(0, detail.amountCentavos - Math.round(scheduledCentavos * factor));
     const differenceCentavos = forecastCentavos - baselineCentavos;
-    return [{ evidenceId: `forecast:${detail.category}`, categoryName: category.label, baselineCentavos, forecastCentavos, allocationCentavos, allocationForecastDifferenceCentavos: allocationCentavos - forecastCentavos, differenceCentavos, percentageChange: baselineCentavos > 0 ? Number((differenceCentavos / baselineCentavos * 100).toFixed(1)) : null, forecastRationale: userFacingForecastRationale(detail.explanation), possibleSeasonalContext }];
+    return [{ evidenceId: `forecast:${detail.category}`, categoryName: category.label, categorySlug: detail.category, baselineCentavos, forecastCentavos, allocationCentavos, allocationForecastDifferenceCentavos: allocationCentavos - forecastCentavos, differenceCentavos, percentageChange: baselineCentavos > 0 ? Number((differenceCentavos / baselineCentavos * 100).toFixed(1)) : null, forecastRationale: userFacingForecastRationale(detail.explanation), possibleSeasonalContext: null }];
   });
-  const explanationEvidence: FinancialPlanEvidence = { planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos, debtSurplusCentavos, savingsSurplusCentavos, seasonalPreferences, forecastChanges };
-  const deterministicExplanations = fallbackFinancialPlanExplanations(explanationEvidence);
-  const aiExplanations = await explainFinancialPlan(explanationEvidence, fetch, userId);
-  const uniqueExplanations = [...zeroAllocationInsights, ...deterministicExplanations, ...aiExplanations, ...(Array.isArray(ml.explanations) ? ml.explanations.map((explanation) => typeof explanation === "object" && explanation !== null && "reason" in explanation ? String((explanation as { reason: unknown }).reason) : String(explanation)) : [])].filter(isUserFacingFinancialPlanExplanation).filter((explanation, index, all) => all.findIndex((item) => item.replace(/\s+/g, " ").trim().toLocaleLowerCase() === explanation.replace(/\s+/g, " ").trim().toLocaleLowerCase()) === index).slice(0, 3);
-  return { status: recommendation.feasibility === "INFEASIBLE" ? "INFEASIBLE" as const : "RECOMMENDATION_READY" as const, period, inputSnapshot: plannedInputSnapshot, recommendation: { availableFundsCentavos: available + monthToDateAddBack(plannedCategories), requiredFundsCentavos: typeof recommendation.required_funds === "number" ? Math.round(recommendation.required_funds * 100) : undefined, shortfallCentavos: typeof recommendation.shortfall === "number" ? Math.round(recommendation.shortfall * 100) : undefined, allocations, debtReservations: baseDebtReservations, debtSurplusCentavos, savingsReservations, savingsSurplusCentavos, surplusRecommendation }, explanations: uniqueExplanations };
+  const explanationEvidence: FinancialPlanEvidence = { ...explanationContext, planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos, debtSurplusCentavos, savingsSurplusCentavos, seasonalPreferences, forecastChanges };
+  // Groq explanations are fetched separately (POST /financial-plans/explanations) so the plan is not held up by them.
+  const explanationRequest: FinancialPlanExplanationRequest = { evidence: explanationEvidence, leading: [...(forecastUnavailableMessage ? [forecastUnavailableMessage] : []), ...zeroAllocationInsights] };
+  return { status: recommendation.feasibility === "INFEASIBLE" ? "INFEASIBLE" as const : "RECOMMENDATION_READY" as const, period, inputSnapshot: { ...plannedInputSnapshot, spendingExplanationEvidence: explanationEvidence }, recommendation: { availableFundsCentavos: available, requiredFundsCentavos: typeof recommendation.required_funds === "number" ? Math.round(recommendation.required_funds * 100) : undefined, shortfallCentavos: typeof recommendation.shortfall === "number" ? Math.round(recommendation.shortfall * 100) : undefined, allocations, debtReservations: baseDebtReservations, debtSurplusCentavos, savingsReservations, savingsSurplusCentavos, surplusRecommendation }, explanations: deterministicFinancialPlanExplanations(explanationRequest), explanationRequest };
 }

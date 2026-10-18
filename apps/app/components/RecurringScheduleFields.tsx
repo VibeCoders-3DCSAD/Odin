@@ -23,7 +23,6 @@ export type RecurringScheduleFrequency =
   | "monthly"
   | "quarterly"
   | "yearly"
-  | "irregular"
   | "custom";
 
 export type RecurringScheduleValue = {
@@ -32,9 +31,7 @@ export type RecurringScheduleValue = {
   dayOfMonth: string;
   secondDayOfMonth: string;
   dayOfWeek: number | null;
-  secondDayOfWeek: number | null;
   monthOfYear: number | null;
-  estimatedIntervalDays: string;
   timeOfDay?: string;
 };
 
@@ -47,8 +44,9 @@ type Props = {
   frequencyLabel?: string;
   dayOfMonthError?: boolean;
   secondDayOfMonthError?: boolean;
-  estimatedIntervalError?: boolean;
   hideYearlyDetails?: boolean;
+  showFrequencySelector?: boolean;
+  weekdayLabels?: readonly string[];
 };
 
 function renderLabel(label: string) {
@@ -72,17 +70,16 @@ export default function RecurringScheduleFields({
   frequencyLabel = "FREQUENCY",
   dayOfMonthError = false,
   secondDayOfMonthError = false,
-  estimatedIntervalError = false,
   hideYearlyDetails = false,
+  showFrequencySelector = true,
+  weekdayLabels = WEEKDAYS,
 }: Props) {
   const shouldShowInterval = showInterval || showIntervalCount;
-  const showDayOfMonth = value.frequency === "monthly" || value.frequency === "semi_monthly" || value.frequency === "quarterly" || value.frequency === "yearly";
   const showDayOfWeek = value.frequency === "weekly" || value.frequency === "biweekly";
-  const showEstimatedIntervalDays = value.frequency === "irregular";
 
   return (
     <View style={{ gap: 16 }}>
-      <FrequencySelector frequencies={frequencies} value={value.frequency} onChange={(frequency) => onChange(updateValue(value, { frequency }))} label={frequencyLabel} />
+      {showFrequencySelector ? <FrequencySelector frequencies={frequencies} value={value.frequency} onChange={(frequency) => onChange(updateValue(value, { frequency }))} label={frequencyLabel} /> : null}
 
       {shouldShowInterval && value.frequency !== "semi_monthly" && value.frequency !== "biweekly" ? (
         <View>
@@ -114,6 +111,7 @@ export default function RecurringScheduleFields({
         <View>
           {renderLabel("DAY OF MONTH")}
           <TextInput
+            accessibilityLabel="Day of month"
             value={value.dayOfMonth}
             onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
             placeholder="15"
@@ -129,6 +127,7 @@ export default function RecurringScheduleFields({
           <View>
             {renderLabel("1ST DAY OF MONTH")}
             <TextInput
+              accessibilityLabel="First day of month"
               value={value.dayOfMonth}
               onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
               placeholder="15"
@@ -140,6 +139,7 @@ export default function RecurringScheduleFields({
           <View>
             {renderLabel("2ND DAY OF MONTH")}
             <TextInput
+              accessibilityLabel="Second day of month"
               value={value.secondDayOfMonth}
               onChangeText={(secondDayOfMonth) => onChange(updateValue(value, { secondDayOfMonth }))}
               placeholder="30"
@@ -152,60 +152,33 @@ export default function RecurringScheduleFields({
       ) : null}
 
       {showDayOfWeek ? (
-        <>
-          <View>
-            {renderLabel(value.frequency === "biweekly" ? "1ST DAY OF WEEK" : "DAY OF WEEK")}
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              {WEEKDAYS.map((day, index) => {
-                const selected = value.dayOfWeek === index;
-                return (
-                  <Pressable
-                    key={day}
-                    onPress={() => onChange(updateValue(value, { dayOfWeek: index }))}
-                    accessibilityRole="radio"
-                    accessibilityLabel={day}
-                    accessibilityState={{ checked: selected }}
-                    style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: selected ? palette.brand : palette.card }}
-                  >
-                    <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: selected ? palette.white : palette.ink2 }}>{day}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+        <View>
+          {renderLabel("DAY OF WEEK")}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {weekdayLabels.map((day, index) => {
+              const selected = value.dayOfWeek === index;
+              return (
+                <Pressable
+                  key={day}
+                  onPress={() => onChange(updateValue(value, { dayOfWeek: index }))}
+                  accessibilityRole="radio"
+                  accessibilityLabel={day}
+                  accessibilityState={{ checked: selected }}
+                  style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: selected ? palette.brand : palette.card }}
+                >
+                  <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: selected ? palette.white : palette.ink2 }}>{day}</Text>
+                </Pressable>
+              );
+            })}
           </View>
-
-          {value.frequency === "biweekly" ? (
-            <View>
-              {renderLabel("2ND DAY OF WEEK")}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {WEEKDAYS.map((day, index) => {
-                  const disabled = value.dayOfWeek === index;
-                  const selected = value.secondDayOfWeek === index;
-                  return (
-                    <Pressable
-                      key={day}
-                      onPress={() => {
-                        if (!disabled) onChange(updateValue(value, { secondDayOfWeek: index }));
-                      }}
-                      accessibilityRole="radio"
-                      accessibilityLabel={day}
-                      accessibilityState={{ checked: selected, disabled }}
-                      style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: selected ? palette.brand : palette.card, opacity: disabled ? 0.35 : 1 }}
-                    >
-                      <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: selected ? palette.white : palette.ink2 }}>{day}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
-        </>
+        </View>
       ) : null}
 
       {value.frequency === "quarterly" ? (
         <View>
           {renderLabel("DAY OF MONTH")}
           <TextInput
+            accessibilityLabel="Day of month"
             value={value.dayOfMonth}
             onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
             placeholder="15"
@@ -242,6 +215,7 @@ export default function RecurringScheduleFields({
           <View>
             {renderLabel("DAY OF MONTH")}
             <TextInput
+              accessibilityLabel="First day of month"
               value={value.dayOfMonth}
               onChangeText={(dayOfMonth) => onChange(updateValue(value, { dayOfMonth }))}
               placeholder="15"
@@ -253,19 +227,6 @@ export default function RecurringScheduleFields({
         </>
       ) : null}
 
-      {showEstimatedIntervalDays ? (
-        <View>
-          {renderLabel("ESTIMATED EVERY (DAYS)")}
-          <TextInput
-            value={value.estimatedIntervalDays}
-            onChangeText={(estimatedIntervalDays) => onChange(updateValue(value, { estimatedIntervalDays }))}
-            placeholder="45"
-            placeholderTextColor={palette.muted}
-            keyboardType="number-pad"
-            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: estimatedIntervalError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
-          />
-        </View>
-      ) : null}
     </View>
   );
 }

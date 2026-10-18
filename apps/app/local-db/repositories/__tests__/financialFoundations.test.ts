@@ -222,9 +222,9 @@ describe("income source recurring linkage", () => {
     };
     const sourceRow = {
       id: "income-1", user_id: "user-1", recurring_template_id: "template-1", destination_account_id: "account-1", subcategory_id: "subcategory-1",
-      name: "Salary", income_type: "stable", frequency: "monthly", expected_amount_centavos: 50000, min_amount_centavos: null, max_amount_centavos: null,
-      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, payday_second_day_of_week: null, next_expected_date: null,
-      estimated_interval_days: null, is_active: 1, notes: null, metadata: "{}", version: 1, deleted: 0,
+      name: "Salary", frequency: "monthly", expected_amount_centavos: 50000,
+      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, next_expected_date: null,
+      is_active: 1, notes: null, metadata: "{}", version: 1, deleted: 0,
       created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
     };
     const db = createDbMock(jest.fn(async (sql: string) => {
@@ -239,7 +239,6 @@ describe("income source recurring linkage", () => {
     const { createIncomeSource } = await import("../financialFoundations");
     const result = await createIncomeSource("user-1", "device-1", {
       name: "Salary",
-      incomeType: "stable",
       frequency: "monthly",
       destinationAccountId: "account-1",
       subcategoryId: "subcategory-1",
@@ -255,9 +254,9 @@ describe("income source recurring linkage", () => {
   test("updateIncomeSource also updates its linked recurring template", async () => {
     const existing = {
       id: "income-1", user_id: "user-1", recurring_template_id: "template-1", destination_account_id: "account-1", subcategory_id: "subcategory-1",
-      name: "Salary", income_type: "stable", frequency: "monthly", expected_amount_centavos: 50000, min_amount_centavos: null, max_amount_centavos: null,
-      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, payday_second_day_of_week: null, next_expected_date: null,
-      estimated_interval_days: null, is_active: 1, notes: null, metadata: "{}", version: 3, deleted: 0,
+      name: "Salary", frequency: "monthly", expected_amount_centavos: 50000,
+      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, next_expected_date: null,
+      is_active: 1, notes: null, metadata: "{}", version: 3, deleted: 0,
       created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
     };
     const recurringCurrent = {
@@ -291,12 +290,29 @@ describe("income source recurring linkage", () => {
     expect(mockEnqueueOperation).toHaveBeenCalledTimes(2);
   });
 
+  test("updateIncomeSource rejects a twice-a-month schedule that collapses in February", async () => {
+    const existing = {
+      id: "income-1", user_id: "user-1", recurring_template_id: "template-1", destination_account_id: "account-1", subcategory_id: "subcategory-1",
+      name: "Salary", frequency: "monthly", expected_amount_centavos: 50000,
+      payday_day_of_month: 28, payday_second_day_of_month: null, payday_day_of_week: null, next_expected_date: null,
+      is_active: 1, notes: null, metadata: "{}", version: 3, deleted: 0,
+      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
+    };
+    const db = createDbMock(jest.fn(async (sql: string) => (sql.includes("FROM income_sources") ? existing : null)));
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { updateIncomeSource } = await import("../financialFoundations");
+    await expect(updateIncomeSource("user-1", "device-1", "income-1", { frequency: "semi_monthly", paydaySecondDayOfMonth: 30 }))
+      .rejects.toThrow("Date 1 must be the 27th or earlier when Date 2 is after the 28th");
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
   test("deleteIncomeSource also deletes its linked recurring template", async () => {
     const existing = {
       id: "income-1", user_id: "user-1", recurring_template_id: "template-1", destination_account_id: "account-1", subcategory_id: "subcategory-1",
-      name: "Salary", income_type: "stable", frequency: "monthly", expected_amount_centavos: 50000, min_amount_centavos: null, max_amount_centavos: null,
-      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, payday_second_day_of_week: null, next_expected_date: null,
-      estimated_interval_days: null, is_active: 1, notes: null, metadata: "{}", version: 3, deleted: 0,
+      name: "Salary", frequency: "monthly", expected_amount_centavos: 50000,
+      payday_day_of_month: 15, payday_second_day_of_month: null, payday_day_of_week: null, next_expected_date: null,
+      is_active: 1, notes: null, metadata: "{}", version: 3, deleted: 0,
       created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", last_synced_at: null,
     };
     const deletedTemplate = {
@@ -321,5 +337,32 @@ describe("income source recurring linkage", () => {
     await deleteIncomeSource("user-1", "device-1", "income-1");
 
     expect(mockEnqueueOperation).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("income schedule validation", () => {
+  const schedule = { frequency: "monthly" as const, paydayDayOfMonth: null, paydaySecondDayOfMonth: null, paydayDayOfWeek: null };
+
+  test("monthly needs one payday and accepts the 31st", async () => {
+    const { incomeScheduleError } = await import("../financialFoundations");
+    expect(incomeScheduleError(schedule)).toBe("Enter a payday from 1 to 31.");
+    expect(incomeScheduleError({ ...schedule, paydayDayOfMonth: 31 })).toBeNull();
+  });
+
+  test("twice a month needs Date 1 before Date 2, still distinct in February", async () => {
+    const { incomeScheduleError } = await import("../financialFoundations");
+    const twice = { ...schedule, frequency: "semi_monthly" as const };
+    expect(incomeScheduleError({ ...twice, paydayDayOfMonth: 15 })).toBe("Enter Date 1 and Date 2, each from 1 to 31.");
+    expect(incomeScheduleError({ ...twice, paydayDayOfMonth: 30, paydaySecondDayOfMonth: 15 })).toBe("Date 1 must come before Date 2.");
+    expect(incomeScheduleError({ ...twice, paydayDayOfMonth: 28, paydaySecondDayOfMonth: 31 })).toMatch(/^Date 1 must be the 27th or earlier/);
+    expect(incomeScheduleError({ ...twice, paydayDayOfMonth: 15, paydaySecondDayOfMonth: 31 })).toBeNull();
+    expect(incomeScheduleError({ ...twice, paydayDayOfMonth: 27, paydaySecondDayOfMonth: 28 })).toBeNull();
+  });
+
+  test("every week needs a weekday and every day needs nothing", async () => {
+    const { incomeScheduleError } = await import("../financialFoundations");
+    expect(incomeScheduleError({ ...schedule, frequency: "weekly" })).toBe("Select the payday of the week.");
+    expect(incomeScheduleError({ ...schedule, frequency: "weekly", paydayDayOfWeek: 5 })).toBeNull();
+    expect(incomeScheduleError({ ...schedule, frequency: "daily" })).toBeNull();
   });
 });

@@ -1,26 +1,10 @@
-import { useState, type ReactNode } from "react";
-import { Dimensions, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { useState } from "react";
+import { Platform, Pressable, Text, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
-import { PickerField, styles as ui, tileTints, v4, v4Font } from "../../../components/BudgieForm";
+import { BottomSheet, PickerField, styles as ui, tileTints, v4, v4Font } from "../../../components/BudgieForm";
 import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
 import { formatDueDate, formatPhp } from "../presentation";
-
-export function BottomSheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} accessibilityLabel="Close" style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
-        <Pressable onPress={() => {}} style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
-          <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 12 }} bounces={false}>
-            {title ? <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>{title}</Text> : null}
-            {children}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
 
 function AccountIcon({ kind, color }: { kind: FinancialAccount["kind"]; color: string }) {
   const Icon = kind === "credit_card" ? CreditCard : kind === "cash" ? Money : kind === "e_wallet" ? Wallet : Bank;

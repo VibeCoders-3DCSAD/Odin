@@ -42,3 +42,7 @@ it("does not subtract schedules outside the plan period", () => {
   const outside = [{ ...payment, starts_on: "2026-11-01" }, { ...payment, ends_on: "2026-09-30" }];
   expect([...scheduledCategoryAmounts(outside, [category], parentBySubcategory, period).values()].reduce((sum, amount) => sum + amount, 0)).toBe(0);
 });
+
+it("keeps uncategorized scheduled payments out of category deductions", () => {
+  expect(scheduledCategoryAmounts([{ ...payment, subcategory_id: null }], [category], parentBySubcategory, period).size).toBe(0);
+});

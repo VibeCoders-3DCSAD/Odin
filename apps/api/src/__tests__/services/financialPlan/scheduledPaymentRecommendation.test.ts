@@ -3,15 +3,13 @@ import { ForecastUpstreamError, getMlForecast } from "../../../services/forecast
 import { recommendPlanCategories } from "../../../services/financialPlan/mlAdapter.js";
 import { getFinancialPlanRecommendation } from "../../../services/financialPlan/recommendationService.js";
 import { createFinancialConditionAssessment } from "../../../services/financialConditionAssessmentService.js";
-import { explainFinancialPlan } from "../../../services/financialPlan/explanationService.js";
 
 jest.mock("../../../lib/supabase.js", () => ({ getServiceRoleClient: () => ({}) }));
 jest.mock("../../../services/forecastService.js", () => ({ ...jest.requireActual("../../../services/forecastService.js"), getMlForecast: jest.fn() }));
 jest.mock("../../../services/financialPlan/mlAdapter.js", () => ({ recommendPlanCategories: jest.fn() }));
 jest.mock("../../../services/financialConditionAssessmentService.js", () => ({ createFinancialConditionAssessment: jest.fn() }));
-jest.mock("../../../services/financialPlan/explanationService.js", () => ({ ...jest.requireActual("../../../services/financialPlan/explanationService.js"), explainFinancialPlan: jest.fn() }));
 
-function client(paid: number, fixed: number | null = null): SupabaseClient {
+function client(paid: number, fixed: number | null = null, months = 1): SupabaseClient {
   const rows: Record<string, unknown> = {
     subcategories: [{ id: "rent", category_id: "housing", label: "Rent", minimum_amount_centavos: null, fixed_amount_centavos: fixed }],
     categories: [{ id: "housing", slug: "housing_water_utilities", label: "Housing", minimum_amount_centavos: null, fixed_amount_centavos: null }],
@@ -21,6 +19,10 @@ function client(paid: number, fixed: number | null = null): SupabaseClient {
     scheduled_payment_records: [{ scheduled_payment_id: "monthly-rent", occurrence_date: "2026-10-20", amount_centavos: paid }],
     financial_condition_assessments: null, onboarding_sessions: null, debt_strategy_preferences: null,
   };
+  if (months > 1) rows.transactions = [
+    ...(rows.transactions as unknown[]),
+    { id: "older-rent", amount_centavos: 100_000, transaction_date: "2026-08-10", transaction_type: "expense", category_id: null, subcategory_id: "rent", anomaly_evaluations: [] },
+  ];
   return { from: (table: string) => {
     const builder: Record<string, unknown> = {};
     for (const name of ["select", "eq", "limit", "order", "gte", "lte", "not", "maybeSingle"]) builder[name] = () => builder;
@@ -32,7 +34,6 @@ function client(paid: number, fixed: number | null = null): SupabaseClient {
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(new Date("2026-10-15T03:00:00Z"));
   jest.mocked(createFinancialConditionAssessment).mockResolvedValue(null);
-  jest.mocked(explainFinancialPlan).mockResolvedValue([]);
   jest.mocked(getMlForecast).mockRejectedValue(new ForecastUpstreamError(503, "offline"));
   jest.mocked(recommendPlanCategories).mockImplementation(async (_user, _period, _available, categories, forecast) => ({
     recommendation: { feasibility: "FEASIBLE", allocations: categories.map((category) => ({ category_id: category.id, amount: (forecast.categoryForecasts.find((point) => point.category === category.id)?.amountCentavos ?? 0) / 100 })) }, explanations: [],
@@ -68,11 +69,16 @@ it("applies forecast changes to the baseline left after scheduled payments", asy
   const plan = await getFinancialPlanRecommendation("user-1", client(0), 200_000, ["rent"]);
   // (100,000 baseline - 30,000 scheduled) * 1.2 = 84,000 category forecast.
   expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(84_000);
-  expect(explainFinancialPlan).toHaveBeenCalledWith(expect.objectContaining({ forecastChanges: [expect.objectContaining({ baselineCentavos: 70_000, forecastCentavos: 84_000 })] }), expect.anything(), "user-1");
+  expect(plan.explanationRequest.evidence.forecastChanges).toEqual([expect.objectContaining({ baselineCentavos: 70_000, forecastCentavos: 84_000 })]);
 });
 
 it("reports a shortfall using only the residual Fixed requirement plus the scheduled reservation", async () => {
   const plan = await getFinancialPlanRecommendation("user-1", client(0, 50_000), 15_000);
   expect(plan.status).toBe("INFEASIBLE");
   expect(plan.recommendation).toMatchObject({ requiredFundsCentavos: 50_000, shortfallCentavos: 35_000 });
+});
+
+it("deducts monthly scheduled amounts after averaging a multi-month fallback baseline", async () => {
+  const plan = await getFinancialPlanRecommendation("user-1", client(0, null, 2), 200_000, ["rent"]);
+  expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(70_000);
 });

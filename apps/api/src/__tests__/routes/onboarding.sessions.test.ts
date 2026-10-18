@@ -43,6 +43,33 @@ describe("POST /odin/api/onboarding/sessions", () => {
     jest.clearAllMocks();
   });
 
+  it("accepts distinct higher and lower seasons", async () => {
+    mockAuth();
+    const answers = { high_expense_seasons: ["christmas_ber_months"], low_expense_seasons: ["summer"] };
+    mockRpc.mockReturnValue(createMockQuery({ data: { id: "session-1", raw_answers: answers }, error: null }));
+    const response = await request(app).post(`${basePath}/sessions`).set(authHeader()).send({ payload: { raw_answers: answers } });
+    expect(response.status).toBe(201);
+    expect(mockRpc).toHaveBeenCalledWith("create_onboarding_session", expect.objectContaining({ p_raw_answers: answers }));
+  });
+
+  it.each([
+    { high_expense_seasons: ["summer"], low_expense_seasons: ["summer"] },
+    { low_expense_seasons: ["unknown"] },
+    { low_expense_seasons: ["none", "summer"] },
+  ])("rejects conflicting or invalid seasonal answers: %j", async (answers) => {
+    mockAuth();
+    const response = await request(app).post(`${basePath}/sessions`).set(authHeader()).send({ payload: { raw_answers: answers } });
+    expect(response.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("allows none for both expense directions", async () => {
+    mockAuth();
+    mockRpc.mockReturnValue(createMockQuery({ data: { id: "session-1" }, error: null }));
+    const response = await request(app).post(`${basePath}/sessions`).set(authHeader()).send({ payload: { raw_answers: { high_expense_seasons: ["none"], low_expense_seasons: ["none"] } } });
+    expect(response.status).toBe(201);
+  });
+
   it("returns 201 with session when created", async () => {
     mockAuth();
 
@@ -193,6 +220,24 @@ describe("PATCH /odin/api/onboarding/sessions/:id", () => {
   });
 
   const sessionId = "session-1";
+
+  it("rejects conflicts with previously saved higher seasons on partial updates", async () => {
+    mockAuth();
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: { id: sessionId, status: "in_progress", raw_answers: { high_expense_seasons: ["summer"] } }, error: null }));
+    const response = await request(app).patch(`${basePath}/sessions/${sessionId}`).set(authHeader()).send({ payload: { raw_answers: { low_expense_seasons: ["summer"] } } });
+    expect(response.status).toBe(400);
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts changed higher seasons together with cleared conflicting lower answers", async () => {
+    mockAuth();
+    const answers = { high_expense_seasons: ["rainy_season"], low_expense_seasons: [] };
+    const updateQuery = createMockQuery({ data: { id: sessionId, raw_answers: answers }, error: null });
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: { id: sessionId, status: "in_progress", raw_answers: { low_expense_seasons: ["rainy_season"] } }, error: null })).mockReturnValueOnce(updateQuery);
+    const response = await request(app).patch(`${basePath}/sessions/${sessionId}`).set(authHeader()).send({ payload: { raw_answers: answers } });
+    expect(response.status).toBe(200);
+    expect(updateQuery.update).toHaveBeenCalledWith({ raw_answers: answers });
+  });
 
   it("returns 200 with updated session", async () => {
     mockAuth();

@@ -17,6 +17,22 @@ function wholeNumber(answers: OnboardingAnswers, key: string) {
   return typeof value === "string" && /^\d+$/.test(value) ? Number(value) : null;
 }
 
+function selfReportedRevolvingMonths(answers: OnboardingAnswers) {
+  switch (answers.credit_card_payment_behavior) {
+    case "never":
+      return 0;
+    case "every_month":
+      return 12;
+    case "some_months":
+    case "not_sure": {
+      const months = wholeNumber(answers, "credit_card_revolving_months");
+      return months !== null && months <= 12 ? months : null;
+    }
+    default:
+      return null;
+  }
+}
+
 function onboardingAssessmentInput(answers: OnboardingAnswers) {
   const grossIncome = wholeNumber(answers, "monthly_income");
   const essentialCosts = wholeNumber(answers, "monthly_essential_living_costs");
@@ -36,6 +52,7 @@ function onboardingAssessmentInput(answers: OnboardingAnswers) {
     required_monthly_debt_payments: debtPayments,
     monthly_basic_living_costs: essentialCosts,
     credit_card_accounts: [],
+    self_reported_revolving_months: selfReportedRevolvingMonths(answers),
     assessment_source: "onboarding_questionnaire",
     self_reported_credit_card_behavior: answers.credit_card_payment_behavior ?? null,
   };

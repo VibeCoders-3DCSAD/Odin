@@ -3,6 +3,15 @@ import type { Migration } from "../client";
 const migration: Migration = {
   version: 71,
   up: async (db) => {
+    const legacyCategoryGroups = await db.getFirstAsync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'category_groups'",
+    );
+    const legacyCategoryGroupId = await db.getFirstAsync<{ name: string }>(
+      "SELECT name FROM pragma_table_info('categories') WHERE name = 'category_group_id'",
+    );
+
+    if (!legacyCategoryGroups || !legacyCategoryGroupId) return;
+
     await db.execAsync(`
       PRAGMA foreign_keys = OFF;
 

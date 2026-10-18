@@ -221,6 +221,34 @@ Detailed repository standards live in [REPOSITORY-STANDARDS.md](docs/standards/R
 - Write E2E flows as Maestro YAML against the installed APK on emulator or device.
 - Keep test method signatures aligned with the production method signatures they exercise.
 
+#### On-Device Verification (adb)
+
+Use this to check UI flows, perceived speed, and that lists refresh after creates, edits, and deletes. Jest cannot show these.
+
+- **Permission:** the connected device is usually the developer's own phone. Drive it only when the user has asked for on-device testing.
+- **Device and Metro:** `adb devices` lists the device. The dev build loads JS from Metro through `adb reverse tcp:8081 tcp:8081`.
+- **Loading new code:** if Fast Refresh has not picked up a change, restart the app with `adb shell am force-stop com.odin.finances`, then `adb shell monkey -p com.odin.finances -c android.intent.category.LAUNCHER 1`.
+- **Logs:** JS `console.log` output appears in `adb logcat` under the `ReactNativeJS` tag. Clear the buffer with `adb logcat -c` before an action, then read it with `adb logcat -d | grep ReactNativeJS`.
+- **Driving the UI:**
+  - `adb shell input tap X Y`, `input swipe X1 Y1 X2 Y2 MS`, `input text`, and `input keyevent 4` (back). Coordinates are device pixels.
+  - Capture the screen with `adb exec-out screencap -p > file.png`, saved under the agent scratchpad.
+  - Scale screenshots down (for example `magick in.png -resize 40% out.png`) before reading them.
+  - Take a screenshot after each step instead of assuming a tap landed.
+- **Testing mutations:** never edit or delete the user's existing records.
+  1. Create a clearly labelled test record, for example a ₱100 expense described `AGENTTEST`.
+  2. Run the edit against it.
+  3. Delete it, so balances and totals end where they started.
+  4. Say in the report that the delete leaves a synced tombstone.
+- **Inspecting without saving:** when only looking at a form, leave with its back arrow instead of saving.
+- **Timing:**
+  - Wrap the area under test in a temporary React `Profiler` whose `onRender` logs `actualDuration`, or log `Date.now()` around the async step.
+  - Compare query time against render time; on device, rendering is usually the larger cost.
+  - Remove all temporary instrumentation before finishing.
+- **Inspecting the local DB:**
+  - Copy it off the device with `adb exec-out run-as com.odin.finances cat files/SQLite/odin.db > <scratchpad>/odin.db`.
+  - Open the copy read-only, for example with `node:sqlite` `new DatabaseSync(path, { readOnly: true })`.
+  - Never write to the device database directly.
+
 ### Remediation Rules
 
 - When a security or correctness issue is found in one place, sweep the codebase for the same pattern before considering the fix complete.

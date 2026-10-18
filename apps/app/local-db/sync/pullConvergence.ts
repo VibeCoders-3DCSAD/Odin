@@ -45,13 +45,13 @@ export const SYNCED_TABLES = [
 const LOCAL_COLUMNS: Record<string, Set<string>> = {
   categories: new Set([
     "id", "user_id", "slug", "label", "short_label",
-    "description", "classification", "is_system", "is_filipino_context", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos", "sort_order",
+    "description", "classification", "icon_key", "color_hex", "is_system", "is_filipino_context", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos", "sort_order",
     "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
   subcategories: new Set([
     "id", "user_id", "category_id", "slug", "kind", "label", "short_label",
-    "description", "is_system", "is_filipino_context", "is_protected", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos",
+    "description", "icon_key", "color_hex", "is_system", "is_filipino_context", "is_protected", "minimum_amount_centavos", "always_in_budget", "fixed_amount_centavos",
     "sort_order", "is_active", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
   ]),
@@ -81,10 +81,8 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   income_sources: new Set([
-    "id", "user_id", "name", "income_type", "frequency",
-    "expected_amount_centavos", "min_amount_centavos", "max_amount_centavos",
-    "payday_day_of_month", "payday_second_day_of_month", "payday_day_of_week",
-    "payday_second_day_of_week", "next_expected_date", "estimated_interval_days",
+    "id", "user_id", "name", "frequency", "expected_amount_centavos",
+    "payday_day_of_month", "payday_second_day_of_month", "payday_day_of_week", "next_expected_date",
     "destination_account_id", "subcategory_id", "recurring_template_id",
     "is_active", "notes", "metadata", "version",
     "deleted", "created_at", "updated_at", "last_synced_at",

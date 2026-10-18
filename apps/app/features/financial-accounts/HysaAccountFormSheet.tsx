@@ -24,6 +24,7 @@ import type {
   FinancialAccount,
 } from "../../local-db/repositories/financialFoundations";
 import type { GoalContributionFrequency } from "../savings-goals/contributionSchedule";
+import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const P = {
   brand: "#013220",
@@ -481,7 +482,7 @@ export default function HysaAccountFormSheet({
             behavior={Platform.OS === "ios" ? "padding" : "padding"}
           >
             <Pressable onPress={() => {}}>
-              <View
+              <BottomSheetSurface
                 style={{
                   backgroundColor: P.white,
                   borderTopLeftRadius: 20,
@@ -1186,7 +1187,7 @@ export default function HysaAccountFormSheet({
                     </Pressable>
                   </View>
                 </ScrollView>
-              </View>
+              </BottomSheetSurface>
             </Pressable>
           </KeyboardAvoidingView>
         </View>

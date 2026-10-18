@@ -145,7 +145,7 @@ export async function createScheduledPayment(userId: string, deviceId: string, r
     );
     const payload: Record<string, unknown> = Object.fromEntries(columns.map((column) => [column, toPayloadValue(column, input)]));
     payload.auto_post_from = autoPostFrom;
-    await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payments", recordId: id, operationType: "create", baseVersion: null, changedFields: Object.keys(payload), payload, failureMessage: `The scheduled payment "${input.name}" could not be created.` });
+    await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payments", recordId: id, operationType: "create", baseVersion: null, changedFields: Object.keys(payload), payload, failureMessage: `The biller or remittance "${input.name}" could not be created.` });
   });
   return (await getScheduledPayment(userId, id))!;
 }
@@ -157,7 +157,7 @@ async function applyUpdate(db: SQLite.SQLiteDatabase, userId: string, deviceId: 
     `UPDATE scheduled_payments SET ${fields.map((field) => `${field} = ?`).join(", ")}, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?`,
     ...fields.map((field) => columnValues[field] ?? null), new Date().toISOString(), existing.id, userId,
   );
-  await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payments", recordId: existing.id, operationType: "update", baseVersion: existing.version, changedFields: fields, payload: changes, failureMessage: `The scheduled payment "${existing.name}" could not be updated.` });
+  await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payments", recordId: existing.id, operationType: "update", baseVersion: existing.version, changedFields: fields, payload: changes, failureMessage: `The biller or remittance "${existing.name}" could not be updated.` });
 }
 
 export async function updateScheduledPayment(userId: string, deviceId: string, id: string, rawInput: ScheduledPaymentInput, today = localToday()): Promise<ScheduledPayment> {
@@ -166,8 +166,8 @@ export async function updateScheduledPayment(userId: string, deviceId: string, i
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     const existing = await readRow(db, userId, id);
-    if (!existing) throw new LocalDbError("NOT_FOUND", "This scheduled payment no longer exists.");
-    if (existing.status !== "active") throw new LocalDbError("VALIDATION_ERROR", "Restore this scheduled payment before editing it.");
+    if (!existing) throw new LocalDbError("NOT_FOUND", "This biller or remittance no longer exists.");
+    if (existing.status !== "active") throw new LocalDbError("VALIDATION_ERROR", "Restore this biller or remittance before editing it.");
     await assertReferences(db, userId, input);
     const changes: Record<string, unknown> = {};
     const columnValues: Record<string, SQLite.SQLiteBindValue> = {};
@@ -186,7 +186,7 @@ export async function updateScheduledPayment(userId: string, deviceId: string, i
 
 export async function setScheduledPaymentAutoPost(userId: string, deviceId: string, id: string, autoPost: boolean, today = localToday()): Promise<ScheduledPayment> {
   const existing = await getScheduledPayment(userId, id);
-  if (!existing) throw new LocalDbError("NOT_FOUND", "This scheduled payment no longer exists.");
+  if (!existing) throw new LocalDbError("NOT_FOUND", "This biller or remittance no longer exists.");
   if (autoPost && existing.frequency === "once") throw new LocalDbError("VALIDATION_ERROR", "Auto-post needs a repeat. Pick a frequency to turn it on.");
   return updateScheduledPayment(userId, deviceId, id, { ...existing, autoPost }, today);
 }
@@ -196,7 +196,7 @@ export async function setScheduledPaymentArchived(userId: string, deviceId: stri
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     const existing = await readRow(db, userId, id);
-    if (!existing) throw new LocalDbError("NOT_FOUND", "This scheduled payment no longer exists.");
+    if (!existing) throw new LocalDbError("NOT_FOUND", "This biller or remittance no longer exists.");
     const status: ScheduledPaymentStatus = archived ? "archived" : "active";
     if (existing.status === status) return;
     const changes: Record<string, unknown> = { status };
@@ -211,9 +211,9 @@ export async function deleteScheduledPayment(userId: string, deviceId: string, i
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     const existing = await readRow(db, userId, id);
-    if (!existing) throw new LocalDbError("NOT_FOUND", "This scheduled payment no longer exists.");
+    if (!existing) throw new LocalDbError("NOT_FOUND", "This biller or remittance no longer exists.");
     await db.runAsync("UPDATE scheduled_payments SET deleted = 1, auto_post = 0, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", new Date().toISOString(), id, userId);
-    await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payments", recordId: id, operationType: "delete", baseVersion: existing.version, changedFields: [], payload: {}, failureMessage: `The scheduled payment "${existing.name}" could not be deleted.` });
+    await enqueueOperation(db, { userId, deviceId, entity: "scheduled_payments", recordId: id, operationType: "delete", baseVersion: existing.version, changedFields: [], payload: {}, failureMessage: `The biller or remittance "${existing.name}" could not be deleted.` });
   });
 }
 

@@ -6,8 +6,7 @@ jest.mock("../../lib/supabase.js", () => {
   return { supabase: client, createAuthenticatedSupabaseClient: () => client };
 });
 jest.mock("../../services/financialPlan/recommendationService.js", () => ({
-  FinancialPlanInputError: class FinancialPlanInputError extends Error {},
-  FinancialPlanUnavailableError: class FinancialPlanUnavailableError extends Error {},
+  ...jest.requireActual("../../services/financialPlan/recommendationService.js"),
   getFinancialPlanRecommendation: jest.fn(),
 }));
 
@@ -37,6 +36,25 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
 
     expect(response.status).toBe(422);
     expect(response.body).toEqual({ error: "Unprocessable Entity", message: "Financial Plan inputs are incomplete" });
+  });
+
+  it("passes a selected development month to the recommendation service", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, planMonth: "2026-11" });
+    expect(response.status).toBe(200);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: false, skipSavingsContributions: false }, "2026-11");
+  });
+
+  it.each(["2026-13", "2026-1", "2026-11-01", 202611, null])("rejects an invalid plan month %p", async (planMonth) => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, planMonth });
+    expect(response.status).toBe(422);
+    expect(getFinancialPlanRecommendation).not.toHaveBeenCalled();
+  });
+
+  it("rejects month overrides in production", async () => {
+    jest.replaceProperty(process, "env", { ...process.env, NODE_ENV: "production" });
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, planMonth: "2026-11" });
+    expect(response.status).toBe(422);
+    expect(getFinancialPlanRecommendation).not.toHaveBeenCalled();
   });
 
   it("requires a positive planning amount", async () => {
@@ -78,5 +96,28 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
 
     expect(response.status).toBe(422);
     expect(response.body).toEqual({ error: "Unprocessable Entity", message: "Financial Plan inputs are incomplete" });
+  });
+});
+
+describe("POST /odin/api/financial-plans/explanations", () => {
+  const evidence = { planPeriodLabel: "October 2026", surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, seasonalPreferences: [], forecastChanges: [] };
+
+  beforeEach(() => {
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: { id: validUserId } }, error: null });
+  });
+
+  it("returns the merged explanations for the authenticated user", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/explanations").set(authHeader()).send({ leading: ["Leading notice."], evidence });
+
+    expect(response.status).toBe(200);
+    expect(response.body.payload.explanations[0]).toBe("Leading notice.");
+    expect((await request(app).post("/odin/api/financial-plans/explanations").send({ leading: [], evidence })).status).toBe(401);
+  });
+
+  it("rejects a malformed explanation request", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/explanations").set(authHeader()).send({ leading: "Leading notice.", evidence });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toEqual({ error: "Unprocessable Entity", message: "Financial Plan explanation request is invalid" });
   });
 });

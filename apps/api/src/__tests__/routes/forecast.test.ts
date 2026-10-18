@@ -42,6 +42,30 @@ describe("POST /odin/api/forecast", () => {
     expect((await request(app).post("/odin/api/forecast").send(body)).status).toBe(401);
   });
 
+  it("returns four quarterly totals from the quarterly route", async () => {
+    jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] }).setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
+    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(async () => new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-11", quarter: "2026Q4", amount: 100, user_baseline_amount: 90, hfce_multiplier: 1.1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast." }], snapshot: { month: "2026-11", total_amount: 100, category_forecasts: [{ category: "food", amount: 100 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
+    const response = await request(app).post("/odin/api/forecast/quarterly").set(authHeader()).send(body);
+    jest.useRealTimers();
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(response.body.payload.quarters.map((quarter: { quarter: string }) => quarter.quarter)).toEqual(["2026Q4", "2027Q1", "2027Q2", "2027Q3"]);
+    expect(response.body.payload.quarters[0].totalCentavos).toBe(30_000);
+  });
+
+  it("returns the notes unchanged from the interpretation route when Groq is not configured", async () => {
+    const apiKey = process.env.GROQ_API_KEY;
+    delete process.env.GROQ_API_KEY;
+    const notes = ["Your spending will likely stay about the same, around PHP 10,000 every 3 months."];
+    const response = await request(app).post("/odin/api/forecast/interpretation").set(authHeader()).send({ notes });
+    const invalid = await request(app).post("/odin/api/forecast/interpretation").set(authHeader()).send({ notes: [] });
+    if (apiKey === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = apiKey;
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ payload: { notes } });
+    expect(invalid.status).toBe(400);
+    expect((await request(app).post("/odin/api/forecast/interpretation").send({ notes })).status).toBe(401);
+  });
+
   it("returns a no-recent-spending message instead of an error when every category is stale", async () => {
     jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] }).setSystemTime(new Date("2026-10-07T12:00:00.000Z"));
     const fetchSpy = jest.spyOn(global, "fetch");

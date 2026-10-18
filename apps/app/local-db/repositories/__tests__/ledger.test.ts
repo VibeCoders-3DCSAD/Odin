@@ -202,6 +202,60 @@ describe("transaction list pagination", () => {
     );
   });
 
+  test("seeks past the previous page's last row instead of using an offset", async () => {
+    const db = { getAllAsync: jest.fn(async () => []) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { listTransactions } = await import("../ledger");
+    await listTransactions("user-1", {
+      limit: 25,
+      offset: 100,
+      sort_by: "amount_centavos",
+      sort_dir: "asc",
+      after: { transaction_date: "2026-10-01", amount_centavos: 5000, created_at: "2026-10-01T00:00:00Z", row_id: 42 },
+    });
+
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("AND (t.amount_centavos, t.created_at, t.rowid) > (?, ?, ?) ORDER BY t.amount_centavos asc, t.created_at asc, t.rowid asc LIMIT 25 OFFSET 0"),
+      "user-1",
+      5000,
+      "2026-10-01T00:00:00Z",
+      42,
+    );
+  });
+
+  test("returns category icon and color, falling back to the parent category", async () => {
+    const db = { getAllAsync: jest.fn(async () => []) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { listTransactions } = await import("../ledger");
+    await listTransactions("user-1");
+
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("COALESCE(s.icon_key, c.icon_key) AS icon_key"),
+      "user-1",
+    );
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining("LEFT JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id)"),
+      "user-1",
+    );
+  });
+
+  test("totals every matching row with the same filters as the list", async () => {
+    const db = { getFirstAsync: jest.fn(async () => ({ income_centavos: 1000, expense_centavos: 400 })) };
+    mockInitDatabase.mockResolvedValue(db);
+
+    const { getTransactionTotals } = await import("../ledger");
+    const totals = await getTransactionTotals("user-1", { category_id: "category-1", from_date: "2026-10-01", limit: 25 });
+
+    expect(totals).toEqual({ income_centavos: 1000, expense_centavos: 400 });
+    const [sql, ...params] = (db.getFirstAsync.mock.calls[0] as unknown[]);
+    expect(sql).toContain("category_filter.category_id = ? AND");
+    expect(sql).toContain("AND t.transaction_date >= ?");
+    expect(sql).not.toContain("LIMIT");
+    expect(params).toEqual(["user-1", "category-1", "2026-10-01"]);
+  });
+
   test("filters transactions by their parent category", async () => {
     const db = { getAllAsync: jest.fn(async () => []) };
     mockInitDatabase.mockResolvedValue(db);

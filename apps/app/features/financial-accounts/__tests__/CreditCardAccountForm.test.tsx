@@ -42,11 +42,6 @@ jest.mock("../../../components/KebabTooltip", () => {
   return { __esModule: true, default: Stub };
 });
 
-jest.mock("../../../components/AvailableBalanceCard", () => {
-  const Stub = () => null;
-  return { __esModule: true, default: Stub };
-});
-
 function renderScreen() {
   return render(
     <FinancialAccountsScreen userId="test-user" deviceId="test-device" onBack={jest.fn()} />,
@@ -62,10 +57,10 @@ beforeEach(() => {
   mockDeleteFinancialAccount.mockResolvedValue({});
 });
 
-it("shows credit card fields only when the Credit Card kind is selected", () => {
+it("shows credit card fields only when the Credit Card kind is selected", async () => {
   const view = renderScreen();
 
-  fireEvent.press(view.getByTestId("add-account"));
+  fireEvent.press(await view.findByTestId("add-account"));
 
   expect(view.queryByPlaceholderText("Enter credit limit")).toBeNull();
 
@@ -81,7 +76,7 @@ it("shows credit card fields only when the Credit Card kind is selected", () => 
 it("submits credit card details when creating a credit card account", async () => {
   const view = renderScreen();
 
-  fireEvent.press(view.getByTestId("add-account"));
+  fireEvent.press(await view.findByTestId("add-account"));
   fireEvent.changeText(view.getByPlaceholderText("Enter account name"), "Visa Platinum");
   fireEvent.press(view.getByLabelText("Credit Card"));
   fireEvent.changeText(view.getByPlaceholderText("Enter credit limit"), "25000");
@@ -106,7 +101,7 @@ it("submits credit card details when creating a credit card account", async () =
 it("shows per-field validation errors without submitting and keeps entered values", async () => {
   const view = renderScreen();
 
-  fireEvent.press(view.getByTestId("add-account"));
+  fireEvent.press(await view.findByTestId("add-account"));
   fireEvent.press(view.getByLabelText("Credit Card"));
   fireEvent.press(view.getByRole("button", { name: "Add Account" }));
 
@@ -150,7 +145,7 @@ it("shows per-field validation errors without submitting and keeps entered value
 it("keeps card fields hidden and omits card details for a bank account", async () => {
   const view = renderScreen();
 
-  fireEvent.press(view.getByTestId("add-account"));
+  fireEvent.press(await view.findByTestId("add-account"));
 
   expect(view.queryByPlaceholderText("Enter credit limit")).toBeNull();
   expect(view.getByLabelText("Bank")).toBeTruthy();
@@ -165,7 +160,7 @@ it("keeps card fields hidden and omits card details for a bank account", async (
   expect(input.creditCardDetails).toBeUndefined();
 });
 
-it("groups credit cards separately and displays their credit limit", async () => {
+it("lists credit cards with their available credit", async () => {
   mockListFinancialAccounts.mockResolvedValue([
     {
       id: "bank-1",
@@ -209,8 +204,13 @@ it("groups credit cards separately and displays their credit limit", async () =>
   const view = renderScreen();
 
   await waitFor(() => {
-    expect(view.getByText("Credit Cards")).toBeTruthy();
-    expect(view.getByText("₱25,000.00")).toBeTruthy();
+    expect(view.getByText("Visa Platinum")).toBeTruthy();
+    expect(view.getByText("PHP 25,000.00")).toBeTruthy();
   });
   expect(view.getByText("Available credit")).toBeTruthy();
+
+  fireEvent.press(view.getByLabelText("Visa Platinum account actions"));
+
+  expect(view.getByRole("button", { name: "Edit" })).toBeTruthy();
+  expect(view.getByRole("button", { name: "Delete" })).toBeTruthy();
 });

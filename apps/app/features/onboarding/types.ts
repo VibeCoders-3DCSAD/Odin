@@ -39,8 +39,21 @@ export type StepConfig = {
   inputSuffix?: string;
   amountSourceKey?: string;
   amountOptions?: StepOption[];
-  visibleWhen?: { questionKey: string; value: string };
+  visibleWhen?: { questionKey: string; value: string | readonly string[] };
 };
+
+export const EXPENSE_SEASON_OPTIONS: StepOption[] = [
+  { key: "rainy_season", label: "Rainy Season" },
+  { key: "back_to_school", label: "Back-to-School Season" },
+  { key: "undas", label: "Undas / All Souls' Day" },
+  { key: "christmas_ber_months", label: "Christmas and Ber Months" },
+  { key: "new_year", label: "New Year" },
+  { key: "summer", label: "Summer" },
+  { key: "annual_payments", label: "Tax and Annual-Payment Season" },
+  { key: "family_celebrations", label: "Birthday and Family-Celebration Months" },
+  { key: "other", label: "Other" },
+  { key: "none", label: "No Particular Higher-Expense Season" },
+];
 
 export const STEPS: StepConfig[] = [
   {
@@ -233,6 +246,15 @@ export const STEPS: StepConfig[] = [
     ],
   },
   {
+    key: "credit_card_revolving_months",
+    title: "Months With a Card Balance",
+    subtitle: "In how many of the last 12 months did you have an unpaid credit-card balance after the due date?",
+    kind: "dropdown",
+    questionKey: "credit_card_revolving_months",
+    options: Array.from({ length: 13 }, (_, months) => ({ key: String(months), label: months === 1 ? "1 month" : `${months} months` })),
+    visibleWhen: { questionKey: "credit_card_payment_behavior", value: ["some_months", "not_sure"] },
+  },
+  {
     key: "dependents_protected",
     title: "Dependents & Protected Status",
     subtitle: "Select any that apply to your household.",
@@ -268,18 +290,15 @@ export const STEPS: StepConfig[] = [
     subtitle: "When are your expenses usually higher? Select all that apply.",
     kind: "card_multi_select",
     questionKey: "high_expense_seasons",
-    options: [
-      { key: "rainy_season", label: "Rainy Season" },
-      { key: "back_to_school", label: "Back-to-School Season" },
-      { key: "undas", label: "Undas / All Souls' Day" },
-      { key: "christmas_ber_months", label: "Christmas and Ber Months" },
-      { key: "new_year", label: "New Year" },
-      { key: "summer", label: "Summer" },
-      { key: "annual_payments", label: "Tax and Annual-Payment Season" },
-      { key: "family_celebrations", label: "Birthday and Family-Celebration Months" },
-      { key: "other", label: "Other" },
-      { key: "none", label: "My Expenses Do Not Usually Change by Season" },
-    ],
+    options: EXPENSE_SEASON_OPTIONS,
+  },
+  {
+    key: "low_expense_seasons",
+    title: "Lower-Expense Seasons",
+    subtitle: "When are your expenses usually lower? Select all that apply. Seasons you selected for higher expenses are excluded.",
+    kind: "card_multi_select",
+    questionKey: "low_expense_seasons",
+    options: EXPENSE_SEASON_OPTIONS.map((option) => option.key === "none" ? { ...option, label: "No Particular Lower-Expense Season" } : option),
   },
   {
     key: "saving_seasons",

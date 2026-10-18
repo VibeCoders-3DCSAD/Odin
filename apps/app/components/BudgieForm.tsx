@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { CaretRight, Info, Warning, WarningCircle } from "phosphor-react-native";
+import { CaretRight, Check, Info, Warning, WarningCircle } from "phosphor-react-native";
+import { BottomSheetSurface } from "./BottomSheetSurface";
 
 // Budgie V4 form tokens (screens v4, "v3" overrides).
 export const v4 = {
@@ -59,6 +60,11 @@ export function FieldError({ children }: { children: string }) {
   return <Text style={styles.fieldError}>{children}</Text>;
 }
 
+// Uppercase heading above a group of chips (b-slabel).
+export function SectionLabel({ children }: { children: string }) {
+  return <Text style={styles.sectionLabel}>{children}</Text>;
+}
+
 type PickerFieldProps = {
   label: string;
   value: string;
@@ -87,11 +93,12 @@ export function PickerField({ label, value, placeholder = false, onPress, access
   );
 }
 
-export function TextField({ label, suffix, error, style, ...input }: TextInputProps & { label: string; suffix?: string; error?: boolean }) {
+export function TextField({ label, suffix, error, icon, style, ...input }: TextInputProps & { label: string; suffix?: string; error?: boolean; icon?: ReactNode }) {
   return (
     <View>
       <FieldLabel>{label}</FieldLabel>
       <View style={[styles.fieldBox, input.multiline ? styles.fieldBoxMultiline : null, error ? styles.fieldBoxError : null]}>
+        {icon}
         <TextInput placeholderTextColor={v4.placeholder} {...input} style={[styles.fieldInput, input.multiline ? styles.fieldInputMultiline : null, style]} />
         {suffix ? <Text style={styles.fieldSuffix}>{suffix}</Text> : null}
       </View>
@@ -118,7 +125,14 @@ export function Banner({ tone, children }: { tone: BannerTone; children: string 
   );
 }
 
-export function AmountHero({ children, label = "AMOUNT" }: { children: ReactNode; label?: string }) {
+type AmountHeroProps = {
+  children?: ReactNode;
+  label?: string;
+  amountCentavos?: number;
+  detail?: string;
+};
+
+export function AmountHero({ children, label = "AMOUNT", amountCentavos, detail }: AmountHeroProps) {
   return (
     <View style={styles.hero}>
       <Svg style={StyleSheet.absoluteFill} preserveAspectRatio="none">
@@ -131,6 +145,13 @@ export function AmountHero({ children, label = "AMOUNT" }: { children: ReactNode
         <Rect width="100%" height="100%" fill="url(#amountHero)" />
       </Svg>
       <Text style={styles.heroLabel}>{label}</Text>
+      {amountCentavos !== undefined ? (
+        <Text style={styles.heroAmount}>
+          <Text style={styles.heroCurrency}>PHP </Text>
+          {(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+      ) : null}
+      {detail ? <Text style={styles.heroDetail}>{detail}</Text> : null}
       {children}
     </View>
   );
@@ -196,6 +217,35 @@ export function Switch({ value, onToggle, accessibilityLabel, disabled = false }
   );
 }
 
+// A selectable option card in a picker sheet (b-opt): a check when selected, an empty ring otherwise.
+export function OptionRow({ title, subtitle, selected, onPress }: { title: string; subtitle?: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="radio" accessibilityLabel={title} accessibilityState={{ checked: selected }} style={[styles.option, selected ? styles.optionOn : null]}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={styles.optionTitle}>{title}</Text>
+        {subtitle ? <Text numberOfLines={1} style={styles.optionSubtitle}>{subtitle}</Text> : null}
+      </View>
+      {selected ? <Check color={v4.brandMid} size={16} weight="bold" /> : <View style={styles.optionRing} />}
+    </Pressable>
+  );
+}
+
+export function BottomSheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable onPress={onClose} accessibilityLabel="Close" style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
+        <BottomSheetSurface style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
+          <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 12 }} bounces={false} keyboardShouldPersistTaps="handled">
+            {title ? <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>{title}</Text> : null}
+            {children}
+          </ScrollView>
+        </BottomSheetSurface>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export function Note({ children }: { children: ReactNode }) {
   return <Text style={styles.note}>{children}</Text>;
 }
@@ -206,6 +256,7 @@ export const styles = StyleSheet.create({
   cardTitle: { fontFamily: v4Font, fontSize: 13.5, fontWeight: "700", color: v4.ink, flexShrink: 1 },
   fieldLabel: { fontFamily: v4Font, fontSize: 11.5, fontWeight: "600", color: v4.ink2, marginBottom: 5 },
   fieldError: { fontFamily: v4Font, fontSize: 10.5, fontWeight: "600", color: v4.error, marginTop: 4 },
+  sectionLabel: { fontFamily: v4Font, fontSize: 11, fontWeight: "700", letterSpacing: 0.6, color: v4.ink2, marginBottom: 5 },
   fieldBox: { minHeight: 48, borderWidth: 1, borderColor: v4.border, backgroundColor: v4.surface, borderRadius: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 9 },
   fieldBoxMultiline: { alignItems: "flex-start", paddingVertical: 12 },
   fieldBoxError: { borderColor: v4.error, backgroundColor: v4.errorFieldBg },
@@ -218,6 +269,9 @@ export const styles = StyleSheet.create({
   bannerText: { flex: 1, fontFamily: v4Font, fontSize: 11.5, lineHeight: 17, fontWeight: "500" },
   hero: { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 17, overflow: "hidden", backgroundColor: v4.brand },
   heroLabel: { fontFamily: v4Font, fontSize: 10.5, fontWeight: "700", letterSpacing: 0.95, color: "rgba(255,255,255,0.62)" },
+  heroAmount: { marginTop: 6, fontFamily: v4Font, fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: "#FFFFFF", fontVariant: ["tabular-nums"] },
+  heroCurrency: { fontSize: 13, fontWeight: "600", letterSpacing: 0 },
+  heroDetail: { marginTop: 10, fontFamily: v4Font, fontSize: 12.5, fontWeight: "600", color: "#FFFFFF" },
   segment: { flexDirection: "row", backgroundColor: v4.surface, borderWidth: 1, borderColor: v4.border, borderRadius: 12, padding: 3, gap: 3 },
   segmentItem: { flex: 1, minHeight: 44, borderRadius: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 4 },
   segmentItemOn: { backgroundColor: v4.brand },
@@ -231,6 +285,11 @@ export const styles = StyleSheet.create({
   switchTrackOn: { backgroundColor: v4.brandMid },
   switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#FFFFFF", alignSelf: "flex-start" },
   switchThumbOn: { alignSelf: "flex-end" },
+  option: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderColor: v4.border, backgroundColor: v4.surface, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 14 },
+  optionOn: { borderColor: v4.brandMid, backgroundColor: "#F4FDF8" },
+  optionTitle: { fontFamily: v4Font, fontSize: 13.5, fontWeight: "700", color: v4.ink },
+  optionSubtitle: { fontFamily: v4Font, fontSize: 11, color: v4.ink2, marginTop: 1 },
+  optionRing: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.6, borderColor: v4.border },
   note: { fontFamily: v4Font, fontSize: 11, lineHeight: 16.5, color: v4.ink2 },
   dimmed: { opacity: 0.55 },
   list: { backgroundColor: v4.surface, borderWidth: 1, borderColor: v4.border, borderRadius: 16, overflow: "hidden" },

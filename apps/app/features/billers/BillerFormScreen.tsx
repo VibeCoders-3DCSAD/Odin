@@ -27,7 +27,7 @@ function parseCentavos(value: string): number | null {
   return value.trim() && Number.isFinite(amount) ? Math.round(amount * 100) : null;
 }
 
-export default function ScheduledPaymentFormScreen({ userId, deviceId, scheduledPaymentId, onClose, onSaved }: Props) {
+export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId, onClose, onSaved }: Props) {
   const isEdit = Boolean(scheduledPaymentId);
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
@@ -133,7 +133,7 @@ export default function ScheduledPaymentFormScreen({ userId, deviceId, scheduled
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: v4.shell }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}><ArrowLeft color={v4.ink} size={20} weight="bold" /></Pressable>
-        <Text style={{ flex: 1, fontFamily: v4Font, fontWeight: "800", fontSize: 16.5, color: v4.ink }}>{isEdit ? "Edit scheduled payment" : "Add scheduled payment"}</Text>
+        <Text style={{ flex: 1, fontFamily: v4Font, fontWeight: "800", fontSize: 16.5, color: v4.ink }}>{isEdit ? "Edit biller or remittance" : "Add biller or remittance"}</Text>
       </View>
       {loading ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><ActivityIndicator color={v4.brand} /></View> : (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">

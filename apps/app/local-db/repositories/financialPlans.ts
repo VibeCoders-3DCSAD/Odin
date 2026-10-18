@@ -240,16 +240,18 @@ export async function deleteFinancialPlan(userId: string, deviceId: string, id: 
 }
 
 // Current-plan progress uses the same spending rules as the past-plan review, so both screens agree.
-export async function getFinancialPlanAllocationSpending(userId: string, planId: string): Promise<Record<string, number>> {
-  const review = await getPlanSpendingReview(userId, planId);
-  return Object.fromEntries((review?.rows ?? []).flatMap((row) => {
-    const key = row.categoryId ? `category:${row.categoryId}` : row.subcategoryId ? `subcategory:${row.subcategoryId}` : null;
-    return key ? [[key, row.actualCentavos]] : [];
-  }));
-}
+export type FinancialPlanSpending = { allocationSpending: Record<string, number>; spentCentavos: number };
 
-export async function getFinancialPlanSpentAmount(userId: string, planId: string): Promise<number> {
-  return (await getPlanSpendingReview(userId, planId))?.actualTotalCentavos ?? 0;
+// One spending review serves both the per-allocation progress and the plan total.
+export async function getFinancialPlanSpending(userId: string, planId: string): Promise<FinancialPlanSpending> {
+  const review = await getPlanSpendingReview(userId, planId);
+  return {
+    allocationSpending: Object.fromEntries((review?.rows ?? []).flatMap((row) => {
+      const key = row.categoryId ? `category:${row.categoryId}` : row.subcategoryId ? `subcategory:${row.subcategoryId}` : null;
+      return key ? [[key, row.actualCentavos]] : [];
+    })),
+    spentCentavos: review?.actualTotalCentavos ?? 0,
+  };
 }
 
 export async function getAcceptedFinancialPlanForPeriod(userId: string, periodStart: string, periodEnd: string): Promise<AcceptedFinancialPlan | null> {
