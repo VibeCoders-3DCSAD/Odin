@@ -167,4 +167,29 @@ describe("PlanCategorySelection", () => {
     fireEvent.press(view.getByLabelText("Skip Debt Repayments"));
     expect(onReservationSkipChange).toHaveBeenCalledWith("debtRepayments", true);
   });
+
+  it("renders every category after the first frames and still toggles one rendered later", async () => {
+    const categories = Array.from({ length: 6 }, (_, index) => ({ ...food, id: `category-${index}`, slug: `category-${index}`, label: `Category ${index}` }));
+    const subcategories = categories.map((category) => ({ ...groceries, id: `sub-${category.id}`, slug: `sub-${category.id}`, category_id: category.id, label: `Sub ${category.label}` }));
+    const onToggle = jest.fn();
+    const view = render(<PlanCategorySelection
+      topLevelCategories={categories}
+      subcategories={subcategories}
+      includedIds={new Set()}
+      recommendedIds={new Set()}
+      onToggle={onToggle}
+      onToggleCategory={jest.fn()}
+      onSaveRule={jest.fn().mockResolvedValue(undefined)}
+      plannedAmount="1000.00"
+      availableMoneyCentavos={100_000}
+      planningAmountError={null}
+      onPlannedAmountChange={jest.fn()}
+      onContinue={jest.fn()}
+    />);
+
+    expect(view.getByText("Category 0")).toBeTruthy();
+    await waitFor(() => expect(view.getByText("Category 5")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Include Sub Category 5 in Financial Plan"));
+    expect(onToggle).toHaveBeenCalledWith("sub-category-5");
+  });
 });
