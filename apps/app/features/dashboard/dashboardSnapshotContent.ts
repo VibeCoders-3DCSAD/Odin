@@ -1,8 +1,6 @@
 import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
-import type { ForecastPayload } from "../forecast/types";
+import type { ForecastPayload, QuarterlyForecastPayload } from "../forecast/types";
 
-type BudgetItem = { label: string; spent: number; budget: number };
-type BudgetStatus = "on_track" | "warning" | "critical" | "unknown";
 
 export type ForecastContent = ForecastPayload;
 
@@ -38,17 +36,6 @@ export function getSnapshotCentavos(snapshot: DashboardSnapshotWithMeta | null |
   return null;
 }
 
-export function getBudgetContent(snapshot: DashboardSnapshotWithMeta | null | undefined): { items: BudgetItem[]; status: BudgetStatus } {
-  const value = payload(snapshot);
-  const items = Array.isArray(value.items) ? value.items.filter((item): item is BudgetItem => !!item && typeof item === "object" && typeof item.label === "string" && typeof item.spent === "number" && Number.isFinite(item.spent) && typeof item.budget === "number" && Number.isFinite(item.budget)) : [];
-  const status = value.status === "on_track" || value.status === "warning" || value.status === "critical" ? value.status : "unknown";
-  const start = value.period_start ?? value.periodStart;
-  const end = value.period_end ?? value.periodEnd;
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  return typeof start !== "string" || typeof end !== "string" || (start <= today && end >= today) ? { items, status } : { items: [], status: "unknown" };
-}
-
 export function getForecastContent(snapshot: DashboardSnapshotWithMeta | null | undefined): ForecastContent | null {
   const value = payload(snapshot);
   if (typeof value.modelVersion !== "string" || value.status !== "SUCCESS") return null;
@@ -59,4 +46,23 @@ export function getForecastContent(snapshot: DashboardSnapshotWithMeta | null | 
     return [{ category: row.category, month: row.month, quarter: row.quarter, amountCentavos: row.amountCentavos, userBaselineCentavos: row.userBaselineCentavos, hfceMultiplier: row.hfceMultiplier, hfceForecastAmountMillionPhp: row.hfceForecastAmountMillionPhp, explanation: row.explanation }];
   }) : [];
   return { forecasts, modelVersion: value.modelVersion, status: "SUCCESS" };
+}
+
+export function getQuarterlyForecastContent(snapshot: DashboardSnapshotWithMeta | null | undefined): QuarterlyForecastPayload | null {
+  const value = payload(snapshot);
+  if (typeof value.modelVersion !== "string" || typeof value.generatedAt !== "string" || !Array.isArray(value.quarters)) return null;
+  const quarters = value.quarters.flatMap((quarter) => {
+    if (!quarter || typeof quarter !== "object" || Array.isArray(quarter)) return [];
+    const row = quarter as Record<string, unknown>;
+    if (typeof row.quarter !== "string" || !/^\d{4}Q[1-4]$/.test(row.quarter) || typeof row.totalCentavos !== "number" || !Number.isFinite(row.totalCentavos) || !Array.isArray(row.categories)) return [];
+    const categories = row.categories.flatMap((point) => {
+      if (!point || typeof point !== "object" || Array.isArray(point)) return [];
+      const item = point as Record<string, unknown>;
+      return typeof item.category === "string" && typeof item.amountCentavos === "number" && Number.isFinite(item.amountCentavos) ? [{ category: item.category, amountCentavos: item.amountCentavos }] : [];
+    });
+    return [{ quarter: row.quarter, totalCentavos: row.totalCentavos, categories }];
+  });
+  const interpretation = Array.isArray(value.interpretation) ? value.interpretation.filter((note): note is string => typeof note === "string" && note.trim().length > 0) : [];
+  if (!quarters.length) return null;
+  return { quarters, modelVersion: value.modelVersion, generatedAt: value.generatedAt, ...(interpretation.length ? { interpretation } : {}) };
 }

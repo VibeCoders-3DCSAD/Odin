@@ -29,7 +29,15 @@ export type ForecastPayload = {
   status: "SUCCESS";
 };
 
+export type QuarterlyForecastPayload = {
+  quarters: { quarter: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[] }[];
+  modelVersion: string;
+  generatedAt: string;
+};
+
 const MAX_TRANSACTIONS = 500;
+const FORECAST_QUARTERS = 4;
+const MONTHS_PER_QUARTER = 3;
 const MAX_TEXT_LENGTH = 160;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -133,6 +141,40 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function utcMonth(year: number, monthIndex: number): string {
+  return new Date(Date.UTC(year, monthIndex, 1)).toISOString().slice(0, 7);
+}
+
+function quarterOf(month: string): string {
+  return `${month.slice(0, 4)}Q${Math.floor((Number(month.slice(5, 7)) - 1) / MONTHS_PER_QUARTER) + 1}`;
+}
+
+// One target month per quarter: next month opens the window, later quarters use their first month.
+export function forecastQuarterMonths(now = new Date()): string[] {
+  const year = now.getUTCFullYear();
+  const nextMonthIndex = now.getUTCMonth() + 1;
+  const quarterStartIndex = Math.floor(nextMonthIndex / MONTHS_PER_QUARTER) * MONTHS_PER_QUARTER;
+  return [
+    utcMonth(year, nextMonthIndex),
+    ...Array.from({ length: FORECAST_QUARTERS - 1 }, (_, index) => utcMonth(year, quarterStartIndex + (index + 1) * MONTHS_PER_QUARTER)),
+  ];
+}
+
+// odin-ml scales a category's monthly baseline by its quarter's HFCE multiplier, so every month
+// in a quarter forecasts the same amount and the quarter total is three of them.
+export async function getMlQuarterlyForecast(userId: string, request: ForecastRequest, fetcher: typeof fetch = fetch): Promise<QuarterlyForecastPayload> {
+  const months = forecastQuarterMonths();
+  const payloads = await Promise.all(months.map((targetMonth) => getMlForecast(userId, { historicalTransactions: request.historicalTransactions, targetMonth }, fetcher)));
+  return {
+    quarters: payloads.map((payload, index) => {
+      const categories = payload.forecasts.map((point) => ({ category: point.category, amountCentavos: point.amountCentavos * MONTHS_PER_QUARTER }));
+      return { quarter: quarterOf(months[index]!), totalCentavos: categories.reduce((total, point) => total + point.amountCentavos, 0), categories };
+    }),
+    modelVersion: payloads[0]!.modelVersion,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 // Mirrors odin-ml: a category needs completed-month spend newer than this many months.

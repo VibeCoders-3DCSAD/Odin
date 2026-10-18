@@ -8,7 +8,8 @@ export type DashboardSnapshotSource =
   | "budget_health"
   | "alerts"
   | "savings_goals"
-  | "forecast";
+  | "forecast"
+  | "forecast_quarterly";
 
 export type DashboardSnapshot = {
   id: string;
