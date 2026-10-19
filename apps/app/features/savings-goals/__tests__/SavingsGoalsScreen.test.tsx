@@ -66,13 +66,12 @@ describe("SavingsGoalsScreen", () => {
     });
   });
 
-  it("opens the savings-type form preview from the Goals page", async () => {
+  it("opens a savable goal form from the Goals page", async () => {
     const view = render(<SavingsGoalsScreen userId="user-1" deviceId="device-1" />);
     await waitFor(() => expect(view.getByLabelText("Add savings")).toBeTruthy());
     fireEvent.press(view.getByLabelText("Add savings"));
-    expect(view.getByLabelText("HYSA")).toBeTruthy();
-    expect(view.getByLabelText("Traditional Savings")).toBeTruthy();
-    expect(view.getByLabelText("Time Deposit")).toBeTruthy();
+    expect(view.getByLabelText("Goal name")).toBeTruthy();
+    expect(view.getByLabelText("Save savings goal")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Cancel"));
     expect(view.getByText("Savings & Goals")).toBeTruthy();
   });

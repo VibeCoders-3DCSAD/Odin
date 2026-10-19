@@ -151,6 +151,14 @@ function payload(input: CreateSavingsGoalInput): Record<string, unknown> {
   };
 }
 
+async function assertUniqueName(db: SQLite.SQLiteDatabase, userId: string, name: string, excludeId: string | null = null): Promise<void> {
+  const existing = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM savings_goals WHERE user_id = ? AND deleted = 0 AND lower(trim(name)) = lower(trim(?)) AND (? IS NULL OR id <> ?) LIMIT 1",
+    userId, name, excludeId, excludeId,
+  );
+  if (existing) throw new LocalDbError("DUPLICATE_NAME", "A savings goal with this name already exists. Choose a different name.");
+}
+
 async function readOwned(db: SQLite.SQLiteDatabase, userId: string, id: string): Promise<SavingsGoalRow> {
   const row = await db.getFirstAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND id = ? AND deleted = 0", userId, id);
   if (!row) throw new LocalDbError("NOT_FOUND", "Savings goal not found");
@@ -194,6 +202,7 @@ export async function getEmergencyFundBaseline(userId: string, referenceDate = n
 export async function createSavingsGoal(userId: string, deviceId: string, input: CreateSavingsGoalInput): Promise<{ goal: SavingsGoal; operation: SyncOperation }> {
   const valid = validate(input); const data = payload(valid); const db = await getDb(); const id = randomUUID(); const ts = now(); let result!: { goal: SavingsGoal; operation: SyncOperation };
   await db.withTransactionAsync(async () => {
+    await assertUniqueName(db, userId, valid.name);
     await db.runAsync("INSERT INTO savings_goals (id, user_id, name, goal_type, target_amount_centavos, starting_amount_centavos, target_date, priority, emergency_fund_baseline_centavos, auto_save_amount_centavos, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, contribution_day_of_week, custom_interval_days, next_contribution_date, interest_rate_bps, notes, emergency_fund_target_method, essential_expense_coverage_months, status, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, 0, ?, ?)", id, userId, data.name as string, data.goal_type as string, data.target_amount_centavos as number, data.starting_amount_centavos as number, data.target_date as string | null, data.priority as string, data.emergency_fund_baseline_centavos as number | null, data.auto_save_amount_centavos as number, data.planned_contribution_amount_centavos as number, data.contribution_frequency as string, data.contribution_interval_count as number, data.contribution_day_of_month as number | null, data.contribution_second_day_of_month as number | null, data.contribution_day_of_week as number | null, data.custom_interval_days as number | null, data.next_contribution_date as string, data.interest_rate_bps as number | null, data.notes as string | null, data.emergency_fund_target_method as string, data.essential_expense_coverage_months as number | null, ts, ts);
     const operation = await enqueueOperation(db, { userId, deviceId, entity: "savings_goals", recordId: id, operationType: "create", baseVersion: null, changedFields: Object.keys(data), payload: data, failureMessage: `This savings goal \"${valid.name}\" could not be created.` });
     result = { goal: await readResult(db, userId, id), operation };
@@ -207,6 +216,7 @@ export async function updateSavingsGoal(userId: string, deviceId: string, id: st
     const current = await readOwned(db, userId, id); const valid = validate({ ...inputFromRow(current), ...input }); const next = payload(valid); const before = payload(inputFromRow(current));
     const changed = Object.keys(next).filter((field) => next[field] !== before[field]);
     if (changed.length === 0) { result = { goal: mapGoal(current), operation: null }; return; }
+    if (changed.includes("name")) await assertUniqueName(db, userId, valid.name, id);
     const ts = now(); const values = changed.map((field) => next[field]) as SQLite.SQLiteBindValue[];
     await db.runAsync(`UPDATE savings_goals SET ${changed.map((field) => `${field} = ?`).join(", ")}, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?`, ...values, ts, id, userId);
     const operation = await enqueueOperation(db, { userId, deviceId, entity: "savings_goals", recordId: id, operationType: "update", baseVersion: current.version, changedFields: changed, payload: Object.fromEntries(changed.map((field) => [field, next[field]])), failureMessage: `This savings goal \"${current.name}\" could not be updated.` });

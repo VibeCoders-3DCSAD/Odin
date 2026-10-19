@@ -3,7 +3,6 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { archiveSavingsGoal, deleteSavingsGoal, getSavingsGoal, listSavingsGoals, restoreSavingsGoal, type SavingsGoal } from "../../local-db/repositories/savingsGoals";
 import { SAVINGS_GOAL_PRIORITY_LABELS, SAVINGS_GOAL_TYPE_LABELS } from "./constants";
 import SavingsGoalForm from "./SavingsGoalForm";
-import SavingsAccountFormPreview from "./SavingsAccountFormPreview";
 import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import { getMinimumContributionPerOccurrence, type ScheduledSavingsGoal } from "./contributionSchedule";
 import { listSavingsGoalActivities } from "../../local-db/repositories/savingsGoalActivities";
@@ -44,8 +43,7 @@ export default function SavingsGoalsScreen({ userId, deviceId, syncVersion = 0, 
   async function remove() { if (!selected) return; setDeleting(true); try { await deleteSavingsGoal(userId, deviceId, selected.id); await load(); setSelected(null); setPage("list"); } catch { setMessage("Your savings goal could not be deleted. Please try again."); } finally { setDeleting(false); } }
   async function archive() { if (!selected) return; setDeleting(true); try { await archiveSavingsGoal(userId, deviceId, selected.id); await load(); setSelected(null); setPage("list"); } catch { setMessage("Your savings goal could not be archived. Please try again."); } finally { setDeleting(false); } }
   async function restore() { if (!selected) return; setDeleting(true); try { await restoreSavingsGoal(userId, deviceId, selected.id); setView("active"); setSelected(null); setPage("list"); } catch { setMessage("Your savings goal could not be restored. Please try again."); } finally { setDeleting(false); } }
-  if (page === "create") return <SavingsAccountFormPreview onCancel={() => setPage("list")} />;
-  if (page === "edit") return <SavingsGoalForm userId={userId} deviceId={deviceId} goal={selected ?? undefined} onCancel={() => setPage(selected ? "detail" : "list")} onSaved={(goal) => { setSelected(goal); load().catch(() => {}); setPage("detail"); }} />;
+  if (page === "create" || page === "edit") return <SavingsGoalForm userId={userId} deviceId={deviceId} goal={page === "edit" ? selected ?? undefined : undefined} onCancel={() => setPage(page === "edit" && selected ? "detail" : "list")} onSaved={(goal) => { setSelected(goal); load().catch(() => {}); setPage("detail"); }} />;
   if (loading) return <View style={{ minHeight: 180, alignItems: "center", justifyContent: "center" }}><ActivityIndicator color={P.brand} /></View>;
   if (page === "detail" && selected) {
     const today = new Date().toISOString().slice(0, 10);

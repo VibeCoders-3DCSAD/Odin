@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { SAVINGS_GOAL_PLACEHOLDERS, SAVINGS_GOAL_PRIORITY_LABELS, SAVINGS_GOAL_PRIORITIES, type SavingsGoalPriority, type SavingsGoalType } from "./constants";
+import { LocalDbError } from "../../local-db/helpers";
 import { createSavingsGoal, updateSavingsGoal, type SavingsGoal } from "../../local-db/repositories/savingsGoals";
 import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
 import { getPhilippineToday } from "../debt-manager/debtTrendRange";
@@ -41,6 +42,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
   const [customIntervalDays, setCustomIntervalDays] = useState(goal?.customIntervalDays != null ? String(goal.customIntervalDays) : "");
   const [interestRate, setInterestRate] = useState(goal?.interestRateBps != null ? String(goal.interestRateBps / 100) : "");
   const [notes, setNotes] = useState(goal?.notes ?? "");
+  const [duplicateName, setDuplicateName] = useState(false);
   const [saving, setSaving] = useState(false); const [message, setMessage] = useState<string | null>(null);
 
   async function save() {
@@ -68,7 +70,12 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
       const input = { name, goalType, targetAmountCentavos, startingAmountCentavos, targetDate, priority, emergencyFundBaselineCentavos: goalType === "emergency_fund" ? baseline : null, autoSaveAmountCentavos: plannedContributionAmountCentavos, plannedContributionAmountCentavos, contributionFrequency, contributionIntervalCount: contributionFrequency === null ? null : contributionFrequency === goal?.contributionFrequency ? goal.contributionIntervalCount ?? 1 : 1, contributionDayOfMonth: contributionFrequency === "semi_monthly" || contributionFrequency === "monthly" || contributionFrequency === "quarterly" ? contributionDayOfMonth : null, contributionSecondDayOfMonth: contributionFrequency === "semi_monthly" ? contributionSecondDayOfMonth : null, contributionDayOfWeek: contributionFrequency === "weekly" || contributionFrequency === "biweekly" ? contributionDayOfWeek : null, customIntervalDays: contributionFrequency === "custom" ? parsedCustomIntervalDays : null, nextContributionDate: contributionFrequency === null ? null : nextContributionDate, interestRateBps, notes };
       const result = goal ? await updateSavingsGoal(userId, deviceId, goal.id, input) : await createSavingsGoal(userId, deviceId, input);
       onSaved(result.goal);
-    } catch {
+    } catch (error) {
+      if (error instanceof LocalDbError && error.code === "DUPLICATE_NAME") {
+        setDuplicateName(true);
+        setMessage("A savings goal with this name already exists. Choose a different name.");
+        return;
+      }
       setMessage("Your savings information could not be saved. Check your details and try again.");
     } finally { setSaving(false); }
   }
@@ -79,7 +86,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
     <View><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 20, fontWeight: "800" }}>{goal ? "Edit savings goal" : "Add savings goal"}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 3 }}>Set a target and track the amount you have already saved.</Text></View>
     <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 14, padding: 14 }}>
       {goalType === "emergency_fund" && baseline !== null ? <View style={{ backgroundColor: "#F8EFDC", borderRadius: 10, padding: 11 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Suggested monthly baseline: PHP {fromCentavos(baseline)}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 3 }}>Based on posted expenses from the six completed calendar months before today. Saving keeps this baseline without recalculating it later.</Text></View> : null}
-      <Field label="Goal name" value={name} onChangeText={setName} placeholder={SAVINGS_GOAL_PLACEHOLDERS.name} invalid={invalid && !name.trim()} />
+      <Field label="Goal name" value={name} onChangeText={(value) => { setName(value); if (duplicateName) { setDuplicateName(false); setMessage(null); } }} placeholder={SAVINGS_GOAL_PLACEHOLDERS.name} invalid={duplicateName || (invalid && !name.trim())} />
       <Field label="Target amount" value={target} onChangeText={setTarget} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(target)) || toCentavos(target) <= 0)} />
       <Field label="Starting amount" value={starting} onChangeText={setStarting} placeholder={SAVINGS_GOAL_PLACEHOLDERS.startingAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(starting)) || toCentavos(starting) < 0)} />
        <Field label="Target date" value={targetDate} onChangeText={setTargetDate} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetDate} invalid={invalid && !targetDate} />
@@ -94,7 +101,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
        <Field label="Notes" value={notes} onChangeText={setNotes} placeholder="Optional" />
       <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Priority</Text><View style={{ flexDirection: "row", gap: 7 }}>{SAVINGS_GOAL_PRIORITIES.map((value) => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`Select ${SAVINGS_GOAL_PRIORITY_LABELS[value]} priority`} accessibilityState={{ selected: value === priority }} onPress={() => setPriority(value)} style={{ backgroundColor: value === priority ? P.brand : P.white, borderColor: value === priority ? P.brand : P.line, borderRadius: 9, borderWidth: 1, flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center" }}><Text style={{ color: value === priority ? P.white : P.ink, fontFamily: "Manrope", fontSize: 11, fontWeight: "700" }}>{SAVINGS_GOAL_PRIORITY_LABELS[value]}</Text></Pressable>)}</View></View>
        {message ? <Text accessibilityLiveRegion="polite" style={{ color: P.error, fontFamily: "Manrope", fontSize: 12 }}>{message}</Text> : null}
-      <View style={{ flexDirection: "row", gap: 10 }}><Pressable accessibilityRole="button" accessibilityLabel={goal ? "Save savings goal changes" : "Save savings goal"} disabled={saving} onPress={() => { save().catch(() => {}); }} style={{ backgroundColor: P.brand, borderRadius: 10, flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", opacity: saving ? 0.6 : 1 }}>{saving ? <ActivityIndicator color={P.white} /> : <Text style={{ color: P.white, fontFamily: "Manrope", fontWeight: "700" }}>{goal ? "Save changes" : "Save goal"}</Text>}</Pressable><Pressable accessibilityRole="button" disabled={saving} onPress={onCancel} style={{ borderColor: P.line, borderRadius: 10, borderWidth: 1, flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center" }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontWeight: "700" }}>Cancel</Text></Pressable></View>
+      <View style={{ flexDirection: "row", gap: 10 }}><Pressable accessibilityRole="button" accessibilityLabel={goal ? "Save savings goal changes" : "Save savings goal"} disabled={saving} onPress={() => { save().catch(() => {}); }} style={{ backgroundColor: P.brand, borderRadius: 10, flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", opacity: saving ? 0.6 : 1 }}>{saving ? <ActivityIndicator color={P.white} /> : <Text style={{ color: P.white, fontFamily: "Manrope", fontWeight: "700" }}>{goal ? "Save changes" : "Save goal"}</Text>}</Pressable><Pressable accessibilityRole="button" accessibilityLabel="Cancel" disabled={saving} onPress={onCancel} style={{ borderColor: P.line, borderRadius: 10, borderWidth: 1, flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center" }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontWeight: "700" }}>Cancel</Text></Pressable></View>
      </View>
    </View>;
 }

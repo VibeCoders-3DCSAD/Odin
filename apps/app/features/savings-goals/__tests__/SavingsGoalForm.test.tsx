@@ -1,12 +1,14 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import SavingsGoalForm from "../SavingsGoalForm";
+import { LocalDbError } from "../../../local-db/helpers";
 import type { SavingsGoal } from "../../../local-db/repositories/savingsGoals";
 
 const mockUpdate = jest.fn();
+const mockCreate = jest.fn();
 jest.mock("../../../local-db/repositories/savingsGoals", () => ({
   updateSavingsGoal: (...args: unknown[]) => mockUpdate(...args),
-  createSavingsGoal: jest.fn(),
+  createSavingsGoal: (...args: unknown[]) => mockCreate(...args),
   getEmergencyFundBaseline: jest.fn().mockResolvedValue(0),
 }));
 jest.mock("../../debt-manager/debtTrendRange", () => ({ getPhilippineToday: () => "2026-10-18" }));
@@ -27,8 +29,48 @@ const goal: SavingsGoal = {
 
 describe("SavingsGoalForm contribution frequency", () => {
   beforeEach(() => {
+    mockCreate.mockReset();
+    mockCreate.mockResolvedValue({ goal });
     mockUpdate.mockReset();
     mockUpdate.mockResolvedValue({ goal });
+  });
+
+  it("saves a newly filled goal and notifies the screen", async () => {
+    const onSaved = jest.fn();
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={onSaved} />);
+    fireEvent.changeText(view.getByLabelText("Goal name"), "Travel");
+    fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
+    fireEvent.changeText(view.getByLabelText("Target date"), "2026-12-31");
+    fireEvent.press(view.getByLabelText("None"));
+    fireEvent.press(view.getByLabelText("Save savings goal"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(goal));
+    expect(mockCreate).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ name: "Travel", targetAmountCentavos: 100_000, contributionFrequency: null }));
+  });
+
+  it("shows a duplicate-name error when creating a goal", async () => {
+    mockCreate.mockRejectedValueOnce(new LocalDbError("DUPLICATE_NAME", "duplicate"));
+    const onSaved = jest.fn();
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={onSaved} />);
+    fireEvent.changeText(view.getByLabelText("Goal name"), "Travel");
+    fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
+    fireEvent.changeText(view.getByLabelText("Target date"), "2026-12-31");
+    fireEvent.press(view.getByLabelText("None"));
+    fireEvent.press(view.getByLabelText("Save savings goal"));
+    await waitFor(() => expect(view.getByText("A savings goal with this name already exists. Choose a different name.")).toBeTruthy());
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("explains duplicate names and clears the error when the name changes", async () => {
+    mockUpdate.mockRejectedValueOnce(new LocalDbError("DUPLICATE_NAME", "duplicate"));
+    const onSaved = jest.fn();
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={goal} onCancel={jest.fn()} onSaved={onSaved} />);
+    fireEvent.press(view.getByLabelText("Save savings goal changes"));
+    await waitFor(() => expect(view.getByText("A savings goal with this name already exists. Choose a different name.")).toBeTruthy());
+    expect(onSaved).not.toHaveBeenCalled();
+    fireEvent.changeText(view.getByLabelText("Goal name"), "Japan trip");
+    expect(view.queryByText("A savings goal with this name already exists. Choose a different name.")).toBeNull();
+    fireEvent.press(view.getByLabelText("Save savings goal changes"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(goal));
   });
 
   it("offers the five frequencies and saves a daily schedule", async () => {

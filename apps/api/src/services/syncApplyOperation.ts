@@ -1804,6 +1804,7 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
     }
   }
   if (sanitized.name !== undefined && (typeof sanitized.name !== "string" || !sanitized.name.trim())) throw new Error("name must be a non-empty string");
+  if (typeof sanitized.name === "string") sanitized.name = sanitized.name.trim();
   if (sanitized.goal_type !== undefined && !SAVINGS_GOAL_TYPES.includes(sanitized.goal_type as string)) throw new Error("goal_type is invalid");
   if (sanitized.priority !== undefined && !SAVINGS_GOAL_PRIORITIES.includes(sanitized.priority as string)) throw new Error("priority is invalid");
   if (sanitized.status !== undefined && !["active", "archived"].includes(sanitized.status as string)) throw new Error("status is invalid");

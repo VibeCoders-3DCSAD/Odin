@@ -12,6 +12,11 @@ describe("savings-goal sync validation", () => {
     await expect(prepareOperation({} as never, "user-1", createOperation)).resolves.toMatchObject({ payload: createOperation.payload });
   });
 
+  it("trims goal names on create and rename", async () => {
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, name: "  Travel  " } })).resolves.toMatchObject({ payload: { name: "Travel" } });
+    await expect(prepareOperation({} as never, "user-1", { ...createOperation, operation_type: "update", base_version: 1, changed_fields: ["name"], payload: { name: "  Travel  " } })).resolves.toMatchObject({ payload: { name: "Travel" } });
+  });
+
   it("accepts daily contributions and unscheduled goals", async () => {
     await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: "daily" } })).resolves.toMatchObject({ payload: { contribution_frequency: "daily" } });
     await expect(prepareOperation({} as never, "user-1", { ...createOperation, payload: { ...createOperation.payload, contribution_frequency: null, planned_contribution_amount_centavos: 0, next_contribution_date: null } })).resolves.toMatchObject({ payload: { contribution_frequency: null, next_contribution_date: null } });
