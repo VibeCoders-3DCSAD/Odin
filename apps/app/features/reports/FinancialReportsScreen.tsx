@@ -14,7 +14,7 @@ import {
 } from "./ReportSections";
 import { cashFlowComparisonFor, rangeFor, type ReportPeriod } from "./reportRange";
 
-type Props = { userId: string; deviceId: string; accessToken: string };
+type Props = { userId: string; deviceId: string; accessToken: string; syncVersion?: number };
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", tint: "#EFFEF7" };
 
@@ -25,9 +25,10 @@ const PERIODS: { value: ReportPeriod; label: string }[] = [
   { value: "this_week", label: "This week" },
 ];
 
-export default function FinancialReportsScreen({ userId, deviceId, accessToken }: Props) {
+export default function FinancialReportsScreen({ userId, deviceId, accessToken, syncVersion = 0 }: Props) {
   const [period, setPeriod] = useState<ReportPeriod>("this_month");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [manualRefreshKey, setManualRefreshKey] = useState(0);
+  const refreshKey = manualRefreshKey + syncVersion;
   const range = rangeFor(period);
   const cashFlowComparison = cashFlowComparisonFor(period);
 
@@ -45,7 +46,7 @@ export default function FinancialReportsScreen({ userId, deviceId, accessToken }
     </View>
     <View style={{ alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginTop: 7 }}>
       <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11 }}>{range.startDate} to {range.endDate}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial report" onPress={() => setRefreshKey((value) => value + 1)} hitSlop={8}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Refresh financial report" onPress={() => setManualRefreshKey((value) => value + 1)} hitSlop={8}>
         <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Refresh</Text>
       </Pressable>
     </View>
@@ -61,7 +62,7 @@ export default function FinancialReportsScreen({ userId, deviceId, accessToken }
       <AllocationSummarySection userId={userId} range={range} refreshKey={refreshKey} />
     </View>
 
-    <View style={{ marginTop: 32 }}><SpendingForecastScreen userId={userId} accessToken={accessToken} embedded /></View>
+    <View style={{ marginTop: 32 }}><SpendingForecastScreen userId={userId} accessToken={accessToken} refreshKey={refreshKey} embedded /></View>
     <View style={{ marginTop: 32 }}><AnomalyAlertsScreen userId={userId} deviceId={deviceId} /></View>
   </View>;
 }

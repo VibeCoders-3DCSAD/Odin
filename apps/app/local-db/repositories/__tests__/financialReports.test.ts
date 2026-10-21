@@ -13,6 +13,7 @@ import {
   _resetDbCacheForTesting,
   getAccountBalanceAt,
   getAllocationSummary,
+  getBudgetActualSummary,
   getCashFlowComparisonSummary,
   getCashFlowSummary,
   getCashOutflowDistribution,
@@ -78,7 +79,31 @@ describe("getAccountBalanceAt", () => {
     expect(sql).toContain("t.transaction_date > ?");
     expect(sql).toContain("t.destination_account_id = fa.id");
     expect(sql).toContain("t.source_account_id = fa.id");
+    // An account opened before the date counts even if it was added to the app later.
+    expect(sql).toContain("COALESCE(fa.opened_on, substr(fa.created_at, 1, 10)) <= ?");
     expect(params).toEqual(["2026-08-31", "user-1", "2026-08-31"]);
+  });
+});
+
+describe("getBudgetActualSummary", () => {
+  it("adds every plan period the range touches instead of comparing a year with one month", async () => {
+    mockGetFirstAsync.mockResolvedValueOnce({ total: 25_000_000, plans: 10 }).mockResolvedValueOnce({ total: 24_324_673 });
+
+    await expect(getBudgetActualSummary("user-1", { startDate: "2026-01-01", endDate: "2026-10-21" })).resolves.toEqual({
+      plannedCentavos: 25_000_000,
+      actualCentavos: 24_324_673,
+      varianceCentavos: 675_327,
+    });
+    const [sql, ...params] = mockGetFirstAsync.mock.calls[0]!;
+    expect(sql).toContain("SUM(p.available_funds_centavos)");
+    expect(sql).toContain("newer.period_start = p.period_start");
+    expect(params).toEqual(["user-1", "2026-10-21", "2026-01-01"]);
+  });
+
+  it("returns nothing when no accepted plan covers the range", async () => {
+    mockGetFirstAsync.mockResolvedValueOnce({ total: null, plans: 0 });
+
+    await expect(getBudgetActualSummary("user-1", { startDate: "2026-01-01", endDate: "2026-01-31" })).resolves.toBeNull();
   });
 });
 
@@ -90,18 +115,20 @@ describe("cash outflow breakdowns", () => {
     await expect(listCategoryBreakdown("user-1", range)).resolves.toEqual([{ label: "Groceries", amountCentavos: 7_500 }]);
     await expect(getCashOutflowDistribution("user-1", range)).resolves.toEqual([{ label: "Groceries", amountCentavos: 7_500 }]);
 
-    for (const [sql, ...params] of mockGetAllAsync.mock.calls) {
+    for (const [index, [sql, ...params]] of mockGetAllAsync.mock.calls.entries()) {
       expect(sql).toContain("COALESCE(s.label, 'Uncategorised')");
       expect(sql).toContain("COALESCE(s.id, 'uncategorised')");
       expect(sql).not.toContain("COALESCE(c.label, 'Uncategorised')");
       expect(sql).toContain("s.user_id = t.user_id");
-      expect(params).toEqual(["user-1", "2026-09-01", "2026-09-30"]);
+      expect(params).toEqual(["user-1", index, "2026-09-01", "2026-09-30"]);
     }
     const [cashOutflowSql] = mockGetAllAsync.mock.calls[1]!;
     expect(cashOutflowSql).toContain("'Savings contributions'");
     expect(cashOutflowSql).toContain("'Debt repayments'");
     expect(cashOutflowSql).toContain("t.destination_savings_goal_id IS NOT NULL");
-    expect(cashOutflowSql).toContain("LEFT JOIN debt_payments dp");
+    expect(cashOutflowSql).toContain("FROM debt_payments dp");
+    expect(cashOutflowSql).toContain("FROM credit_card_payments cp");
+    expect(cashOutflowSql).toContain("FROM scheduled_payment_records spr");
   });
 });
 

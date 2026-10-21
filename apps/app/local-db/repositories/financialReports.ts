@@ -93,7 +93,7 @@ export async function getAccountBalanceAt(userId: string, endDate: string): Prom
             ), 0)) AS total
        FROM financial_accounts fa
       WHERE fa.user_id = ? AND fa.deleted = 0 AND fa.status = 'active' AND fa.kind <> 'credit_card'
-        AND substr(fa.created_at, 1, 10) <= ?`,
+        AND COALESCE(fa.opened_on, substr(fa.created_at, 1, 10)) <= ?`,
     endDate, userId, endDate,
   );
   return { accountCount: row?.count ?? 0, balanceCentavos: row?.total ?? 0 };
@@ -101,14 +101,21 @@ export async function getAccountBalanceAt(userId: string, endDate: string): Prom
 
 export async function getBudgetActualSummary(userId: string, range: ReportRange): Promise<BudgetActualSummary> {
   const db = await getDb();
-  const plan = await db.getFirstAsync<{ total: number }>(
-    `SELECT available_funds_centavos AS total FROM financial_plans
-      WHERE user_id = ? AND deleted = 0 AND status = 'accepted'
-        AND period_start <= ? AND period_end >= ?
-      ORDER BY updated_at DESC LIMIT 1`,
+  // Every plan period the range touches counts once, using its latest accepted plan, so a year compares
+  // against all of its monthly plans rather than one.
+  const plan = await db.getFirstAsync<{ total: number | null; plans: number }>(
+    `SELECT SUM(p.available_funds_centavos) AS total, COUNT(*) AS plans FROM financial_plans p
+      WHERE p.user_id = ? AND p.deleted = 0 AND p.status = 'accepted'
+        AND p.period_start <= ? AND p.period_end >= ?
+        AND NOT EXISTS (
+          SELECT 1 FROM financial_plans newer
+           WHERE newer.user_id = p.user_id AND newer.deleted = 0 AND newer.status = 'accepted'
+             AND newer.period_start = p.period_start
+             AND (newer.updated_at > p.updated_at OR (newer.updated_at = p.updated_at AND newer.id > p.id))
+        )`,
     userId, range.endDate, range.startDate,
   );
-  if (!plan) return null;
+  if (!plan?.plans) return null;
   const actual = await db.getFirstAsync<{ total: number | null }>(
     `SELECT SUM(amount_centavos) AS total FROM transactions
       WHERE user_id = ? AND deleted = 0 AND status = 'posted' AND transaction_type = 'expense'
@@ -116,7 +123,8 @@ export async function getBudgetActualSummary(userId: string, range: ReportRange)
     userId, ...periodPredicate(range),
   );
   const actualCentavos = actual?.total ?? 0;
-  return { plannedCentavos: plan.total, actualCentavos, varianceCentavos: plan.total - actualCentavos };
+  const plannedCentavos = plan.total ?? 0;
+  return { plannedCentavos, actualCentavos, varianceCentavos: plannedCentavos - actualCentavos };
 }
 
 export async function getSavingsSummary(userId: string): Promise<SavingsSummary> {
@@ -148,48 +156,52 @@ export async function getDebtSummary(userId: string): Promise<DebtSummary> {
   return { openingCentavos, paidCentavos: Math.max(0, openingCentavos - remainingCentavos), remainingCentavos };
 }
 
-export async function listCategoryBreakdown(userId: string, range: ReportRange): Promise<CategoryBreakdown[]> {
+async function listOutflowCategories(userId: string, range: ReportRange, includeSavings: boolean): Promise<CategoryBreakdown[]> {
   const db = await getDb();
   return db.getAllAsync<CategoryBreakdown>(
-    `SELECT COALESCE(s.label, 'Uncategorised') AS label, SUM(t.amount_centavos) AS amountCentavos
-       FROM transactions t
-       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
-       WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
-         AND t.transaction_date >= ? AND t.transaction_date <= ?
-       GROUP BY COALESCE(s.id, 'uncategorised'), COALESCE(s.label, 'Uncategorised')
-       ORDER BY amountCentavos DESC LIMIT 5`,
-    userId, ...periodPredicate(range),
+    `WITH classified AS (
+       SELECT t.amount_centavos,
+              CASE
+                WHEN EXISTS (SELECT 1 FROM debt_payments dp
+                              WHERE dp.transaction_id = t.id AND dp.user_id = t.user_id AND dp.deleted = 0)
+                  OR EXISTS (SELECT 1 FROM credit_card_payments cp
+                              WHERE cp.transaction_id = t.id AND cp.user_id = t.user_id AND cp.deleted = 0)
+                  THEN 'debt'
+                WHEN t.destination_savings_goal_id IS NOT NULL THEN 'savings'
+                WHEN EXISTS (SELECT 1 FROM scheduled_payment_records spr
+                              WHERE spr.transaction_id = t.id AND spr.user_id = t.user_id AND spr.deleted = 0)
+                  THEN 'biller'
+                ELSE 'category'
+              END AS kind,
+              COALESCE(s.id, 'uncategorised') AS categoryId,
+              COALESCE(s.label, 'Uncategorised') AS categoryLabel
+         FROM transactions t
+         LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
+        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'
+          AND (t.transaction_type = 'expense' OR (? = 1 AND t.destination_savings_goal_id IS NOT NULL))
+          AND t.transaction_date >= ? AND t.transaction_date <= ?
+     )
+     SELECT CASE kind
+              WHEN 'debt' THEN 'Debt repayments'
+              WHEN 'savings' THEN 'Savings contributions'
+              WHEN 'biller' THEN 'Billers & remittances'
+              ELSE categoryLabel
+            END AS label,
+            SUM(amount_centavos) AS amountCentavos
+       FROM classified
+      GROUP BY kind, CASE WHEN kind = 'category' THEN categoryId END,
+               CASE WHEN kind = 'category' THEN categoryLabel END
+      ORDER BY amountCentavos DESC`,
+    userId, includeSavings ? 1 : 0, ...periodPredicate(range),
   );
 }
 
+export async function listCategoryBreakdown(userId: string, range: ReportRange): Promise<CategoryBreakdown[]> {
+  return (await listOutflowCategories(userId, range, false)).slice(0, 5);
+}
+
 export async function getCashOutflowDistribution(userId: string, range: ReportRange): Promise<CategoryBreakdown[]> {
-  const db = await getDb();
-  const categories = await db.getAllAsync<CategoryBreakdown>(
-    `SELECT CASE
-              WHEN dp.id IS NOT NULL THEN 'Debt repayments'
-              WHEN t.destination_savings_goal_id IS NOT NULL THEN 'Savings contributions'
-              ELSE COALESCE(s.label, 'Uncategorised')
-            END AS label,
-            SUM(t.amount_centavos) AS amountCentavos
-       FROM transactions t
-        LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
-        LEFT JOIN debt_payments dp ON dp.transaction_id = t.id AND dp.user_id = t.user_id AND dp.deleted = 0
-        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'
-          AND (t.transaction_type = 'expense' OR t.destination_savings_goal_id IS NOT NULL)
-          AND t.transaction_date >= ? AND t.transaction_date <= ?
-        GROUP BY CASE
-                   WHEN dp.id IS NOT NULL THEN 'Debt repayments'
-                   WHEN t.destination_savings_goal_id IS NOT NULL THEN 'Savings contributions'
-                   ELSE COALESCE(s.id, 'uncategorised')
-                 END,
-                 CASE
-                   WHEN dp.id IS NOT NULL THEN 'Debt repayments'
-                   WHEN t.destination_savings_goal_id IS NOT NULL THEN 'Savings contributions'
-                   ELSE COALESCE(s.label, 'Uncategorised')
-                 END
-        ORDER BY amountCentavos DESC`,
-    userId, ...periodPredicate(range),
-  );
+  const categories = await listOutflowCategories(userId, range, true);
   const primaryCategories = categories.slice(0, 5);
   const otherCentavos = categories.slice(5).reduce((total, category) => total + category.amountCentavos, 0);
   return otherCentavos > 0 ? [...primaryCategories, { label: "Other", amountCentavos: otherCentavos }] : primaryCategories;

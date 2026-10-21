@@ -61,15 +61,17 @@ type RefreshProps = { refreshKey: number };
 
 export function CashFlowSection({ userId, range, comparison, refreshKey }: { userId: string; range: ReportRange; comparison: CashFlowComparison } & RefreshProps) {
   const { data, loading, error } = useReportData(async () => {
-    const [current, previous] = await Promise.all([
+    // Against an average month, this period is averaged the same way so a year's total is not compared with one month.
+    const [current, currentAverage, previous] = await Promise.all([
       getCashFlowSummary(userId, range),
+      comparison.averageByActiveMonth ? getCashFlowComparisonSummary(userId, range, true) : null,
       getCashFlowComparisonSummary(userId, comparison.range, comparison.averageByActiveMonth),
     ]);
-    return { current, previous };
+    return { current, compared: currentAverage ?? current, previous };
   }, [userId, range.startDate, range.endDate, comparison.range.startDate, comparison.range.endDate, comparison.averageByActiveMonth, refreshKey]);
   return <Section title="Cash flow"><State loading={loading} error={error}>{data ? <View style={{ marginTop: 14, gap: 8 }}>
-    <ComparisonMetric label="Income" current={data.current.incomeCentavos} previous={data.previous.incomeCentavos} comparisonLabel={comparison.label} />
-    <ComparisonMetric label="Outflow" current={data.current.outflowCentavos} previous={data.previous.outflowCentavos} comparisonLabel={comparison.label} />
+    <ComparisonMetric label="Income" current={data.current.incomeCentavos} compared={data.compared.incomeCentavos} previous={data.previous.incomeCentavos} comparisonLabel={comparison.label} perMonth={comparison.averageByActiveMonth} />
+    <ComparisonMetric label="Outflow" current={data.current.outflowCentavos} compared={data.compared.outflowCentavos} previous={data.previous.outflowCentavos} comparisonLabel={comparison.label} perMonth={comparison.averageByActiveMonth} increaseIsPositive={false} />
     <Metric label="Net cash flow" value={money(data.current.netCashFlowCentavos)} color={data.current.netCashFlowCentavos >= 0 ? P.positive : P.negative} strong />
   </View> : <LoadingValue>No posted income or expenses in this period.</LoadingValue>}</State></Section>;
 }
@@ -146,20 +148,22 @@ function Metric({ label, value, color = P.ink, strong = false }: { label: string
   return <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}><Text style={{ color: P.muted, flex: 1, fontFamily: "Manrope", fontSize: 12 }}>{label}</Text><Text style={{ color, fontFamily: "Manrope", fontSize: 12, fontWeight: strong ? "800" : "700" }}>{value}</Text></View>;
 }
 
-function ComparisonMetric({ label, current, previous, comparisonLabel }: { label: string; current: number; previous: number; comparisonLabel: string }) {
-  const difference = current - previous;
+// compared is the value measured against previous when it differs from the one shown, such as a monthly average.
+function ComparisonMetric({ label, current, compared = current, previous, comparisonLabel, perMonth = false, increaseIsPositive = true }: { label: string; current: number; compared?: number; previous: number; comparisonLabel: string; perMonth?: boolean; increaseIsPositive?: boolean }) {
+  const difference = compared - previous;
   const hasBaseline = previous !== 0;
-  const percentage = hasBaseline ? Math.abs(difference / previous * 100).toFixed(1) : null;
+  const percentage = hasBaseline ? `${difference > 0 ? "+" : difference < 0 ? "-" : ""}${Math.abs(difference / previous * 100).toFixed(1)}` : null;
   const isIncrease = difference >= 0;
+  const changeColor = difference === 0 ? P.muted : isIncrease === increaseIsPositive ? P.positive : P.negative;
   if (previous === 0) {
     return <View style={{ marginTop: 10 }}><Metric label={label} value={money(current)} strong /><LoadingValue>{current === 0 ? `No change from ${comparisonLabel}.` : `No prior value for ${comparisonLabel}.`}</LoadingValue></View>;
   }
   return <View style={{ marginTop: 10 }}>
     <Metric label={label} value={money(current)} strong />
     <View style={{ alignItems: "center", flexDirection: "row", gap: 4, marginTop: 5 }}>
-      {isIncrease ? <ArrowUpRight size={14} color={P.positive} weight="bold" /> : <ArrowDownLeft size={14} color={P.negative} weight="bold" />}
-      <Text style={{ color: isIncrease ? P.positive : P.negative, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>{percentage}%</Text>
-      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>vs {comparisonLabel}</Text>
+      {isIncrease ? <ArrowUpRight size={14} color={changeColor} weight="bold" /> : <ArrowDownLeft size={14} color={changeColor} weight="bold" />}
+      <Text style={{ color: changeColor, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>{percentage}%</Text>
+      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{perMonth ? "per month " : ""}vs {comparisonLabel}</Text>
     </View>
   </View>;
 }
