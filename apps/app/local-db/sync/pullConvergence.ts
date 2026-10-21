@@ -182,13 +182,28 @@ const PULL_IDENTITY_COLUMNS: Record<string, string> = {
   savings_allocation_preferences: "user_id",
 };
 
+function normalizeAnomalyEvaluation(row: PullRow): PullRow {
+  const features = row.feature_vector && typeof row.feature_vector === "object" && !Array.isArray(row.feature_vector)
+    ? row.feature_vector as Record<string, unknown> : {};
+  return {
+    ...row,
+    usable_history_count: row.usable_history_count ?? row.history_days,
+    usual_spending_centavos: row.usual_spending_centavos ?? features.usual_spending_centavos,
+    lower_bound_centavos: row.lower_bound_centavos ?? features.lower_bound_centavos,
+    upper_bound_centavos: row.upper_bound_centavos ?? features.upper_bound_centavos,
+    severity: row.severity ?? row.raw_anomaly_score,
+    confirmed_recurring_at: row.confirmed_recurring_at ?? null,
+  };
+}
+
 export function normalizePullRow(
   table: string,
-  row: PullRow,
+  remoteRow: PullRow,
   userId: string,
 ): PullRow {
   const columns = LOCAL_COLUMNS[table];
-  if (!columns) return row;
+  if (!columns) return remoteRow;
+  const row = table === "anomaly_evaluations" ? normalizeAnomalyEvaluation(remoteRow) : remoteRow;
 
   const now = new Date().toISOString();
   const normalized: PullRow = {};

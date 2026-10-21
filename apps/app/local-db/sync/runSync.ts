@@ -10,6 +10,7 @@ import { syncQueueEligibleStatusesClause, syncQueueOrderByClause } from "./queue
 import { markSyncConflict, rebaseLegacyDebtPriorityConflict } from "./syncConflict";
 import { repairCreditCardPaymentCreateRows } from "./repairCreditCardPaymentCreates";
 import { repairCreditCardDetailCreateRows } from "./repairCreditCardDetailCreates";
+import { retryAnomalyEvaluationPulls } from "./retryAnomalyEvaluationPulls";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const REQUEST_TIMEOUT = 10_000;
@@ -111,7 +112,7 @@ async function runSyncInternal(
   const { pushed, errors } = await pushQueue(db, userId, deviceId, accessToken);
   if (!pull) return { pushed, pulled: 0, errors, successful: errors === 0, hasMore: syncState.pullPending };
 
-  let pulled = 0;
+  let pulled = await retryAnomalyEvaluationPulls(db, userId);
   let pullSuccessful = true;
   let hasMore = syncState.pullPending;
 

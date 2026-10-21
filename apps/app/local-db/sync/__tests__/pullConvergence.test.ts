@@ -1,6 +1,32 @@
 import { jest } from "@jest/globals";
 import { applyPullRow, normalizePullRow } from "../pullConvergence";
 
+describe("recurring spending confirmation pull convergence", () => {
+  it.each([null, 1])("maps server IQR fields when the local evaluation version is %s", async (version) => {
+    const confirmedAt = "2026-10-21T14:30:00.000Z";
+    const row = normalizePullRow("anomaly_evaluations", {
+      id: "evaluation-1", user_id: "user-1", transaction_id: "groceries-1",
+      subcategory_id: "groceries", amount_centavos: 244037,
+      history_days: 24, raw_anomaly_score: 2.5,
+      feature_vector: { usual_spending_centavos: 140000, lower_bound_centavos: 90000, upper_bound_centavos: 210000 },
+      baseline_snapshot: { scope: "category_iqr" },
+      model_version: "personal-transaction-iqr-local-v2.4.0",
+      evaluated_at: confirmedAt, confirmed_recurring_at: confirmedAt,
+      version: 2, deleted: false, created_at: confirmedAt, updated_at: confirmedAt,
+    }, "user-1");
+
+    expect(row).toMatchObject({
+      confirmed_recurring_at: confirmedAt, usable_history_count: 24,
+      usual_spending_centavos: 140000, lower_bound_centavos: 90000,
+      upper_bound_centavos: 210000, severity: 2.5,
+    });
+    const db = { getFirstAsync: jest.fn(async () => version === null ? null : { version, user_id: "user-1" }), runAsync: jest.fn<(...args: any[]) => any>(async () => ({ changes: 1 })) };
+    await applyPullRow(db as never, "anomaly_evaluations", row);
+    expect(db.runAsync.mock.calls[0]).not.toContain(undefined);
+    expect(db.runAsync.mock.calls[0]).toContain(confirmedAt);
+  });
+});
+
 describe("credit-card cycle pull convergence", () => {
   it("does not update immutable dates on a recorded cycle", async () => {
     const db = {
