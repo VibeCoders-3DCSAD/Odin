@@ -57,4 +57,3 @@ export function createRandom(seed: number) {
 export function centavos(pesos: number) {
   return Math.round(pesos * 100);
 }
-
