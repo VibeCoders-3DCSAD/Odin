@@ -8,6 +8,7 @@ import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { deriveGoalContributionDate, GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "./contributionSchedule";
 import { recommendGoalContribution } from "./helpers/contributionRecommendation";
 import SavingsGoalAccountSelector from "./SavingsGoalAccountSelector";
+import { SavingsDate } from "./SavingsFormControls";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF" } as const;
 
@@ -24,8 +25,8 @@ type Props = { userId: string; deviceId: string; goal?: SavingsGoal; initialLink
 function toCentavos(value: string) { const amount = Number(value.replace(/,/g, "")); return Number.isFinite(amount) ? Math.round(amount * 100) : Number.NaN; }
 function fromCentavos(value: number) { return String(value / 100); }
 
-function Field({ label, value, onChangeText, placeholder, numeric, invalid }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; numeric?: boolean; invalid?: boolean }) {
-  return <View style={{ gap: 5 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#919A91" keyboardType={numeric ? "decimal-pad" : "default"} style={{ backgroundColor: P.white, borderColor: invalid ? P.error : P.line, borderRadius: 10, borderWidth: 1, color: P.ink, fontFamily: "Manrope", fontSize: 14, minHeight: 46, paddingHorizontal: 12 }} /></View>;
+function Field({ label, value, onChangeText, placeholder, numeric, currency, invalid }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; numeric?: boolean; currency?: boolean; invalid?: boolean }) {
+  return <View style={{ gap: 5 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} onBlur={currency ? () => { const centavos = toCentavos(value); if (value.trim() && Number.isSafeInteger(centavos)) onChangeText((centavos / 100).toFixed(2)); } : undefined} placeholder={placeholder} placeholderTextColor="#919A91" keyboardType={numeric ? "decimal-pad" : "default"} style={{ backgroundColor: P.white, borderColor: invalid ? P.error : P.line, borderRadius: 10, borderWidth: 1, color: P.ink, fontFamily: "Manrope", fontSize: 14, minHeight: 46, paddingHorizontal: 12 }} /></View>;
 }
 
 export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedAccountId, onCancel, onSaved }: Props) {
@@ -33,8 +34,8 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
   const [name, setName] = useState(goal?.name ?? "");
   const [linkedAccountId, setLinkedAccountId] = useState(goal?.linkedAccountId ?? initialLinkedAccountId ?? null);
   const [accountInvalid, setAccountInvalid] = useState(false);
-  const [target, setTarget] = useState(goal ? fromCentavos(goal.targetAmountCentavos) : "");
-  const [starting, setStarting] = useState(goal ? fromCentavos(goal.startingAmountCentavos) : "0");
+  const [target, setTarget] = useState(goal ? (goal.targetAmountCentavos / 100).toFixed(2) : "");
+  const [starting, setStarting] = useState(goal ? (goal.startingAmountCentavos / 100).toFixed(2) : "0.00");
   const [targetDate, setTargetDate] = useState(goal?.targetDate ?? "");
   const [priority, setPriority] = useState<SavingsGoalPriority>(goal?.priority ?? "high");
   const baseline = goal?.emergencyFundBaselineCentavos ?? null;
@@ -109,9 +110,9 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
       {goalType === "emergency_fund" && baseline !== null ? <View style={{ backgroundColor: "#F8EFDC", borderRadius: 10, padding: 11 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Suggested monthly baseline: PHP {fromCentavos(baseline)}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 3 }}>Based on posted expenses from the six completed calendar months before today. Saving keeps this baseline without recalculating it later.</Text></View> : null}
       <Field label="Goal name" value={name} onChangeText={(value) => { setName(value); if (duplicateName) { setDuplicateName(false); setMessage(null); } }} placeholder={SAVINGS_GOAL_PLACEHOLDERS.name} invalid={duplicateName || (invalid && !name.trim())} />
       <SavingsGoalAccountSelector userId={userId} value={linkedAccountId} onChange={(id) => { setLinkedAccountId(id); setAccountInvalid(false); setMessage(null); }} invalid={accountInvalid} />
-      <Field label="Target amount" value={target} onChangeText={setTarget} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(target)) || toCentavos(target) <= 0)} />
-      <Field label="Starting amount" value={starting} onChangeText={setStarting} placeholder={SAVINGS_GOAL_PLACEHOLDERS.startingAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(starting)) || toCentavos(starting) < 0)} />
-       <Field label="Target date" value={targetDate} onChangeText={setTargetDate} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetDate} invalid={invalid && !targetDate} />
+      <Field label="Target amount" value={target} onChangeText={setTarget} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetAmount} numeric currency invalid={invalid && (!Number.isSafeInteger(toCentavos(target)) || toCentavos(target) <= 0)} />
+      <Field label="Starting amount" value={starting} onChangeText={setStarting} placeholder={SAVINGS_GOAL_PLACEHOLDERS.startingAmount} numeric currency invalid={invalid && (!Number.isSafeInteger(toCentavos(starting)) || toCentavos(starting) < 0)} />
+       <SavingsDate label="Target date" value={targetDate} onChange={setTargetDate} error={invalid && !targetDate ? "Select a target date." : undefined} />
         <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Contribution frequency</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>{CONTRIBUTION_OPTIONS.map((option) => <Pressable key={option.label} accessibilityRole="radio" accessibilityLabel={option.label} accessibilityState={{ selected: contributionFrequency === option.value }} onPress={() => { setContributionFrequency(option.value); setMessage(null); }} style={{ backgroundColor: contributionFrequency === option.value ? P.brand : P.white, borderColor: P.line, borderRadius: 10, borderWidth: 1, padding: 10 }}><Text style={{ color: contributionFrequency === option.value ? P.white : P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{option.label}</Text></Pressable>)}</View></View>
         {contributionFrequency !== null && !CONTRIBUTION_OPTIONS.some((option) => option.value === contributionFrequency) ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Existing schedule: {contributionFrequency}. Choose a frequency above to change it.</Text> : null}
         {contributionFrequency === null ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>No scheduled contributions. You can still contribute manually.</Text> : <>

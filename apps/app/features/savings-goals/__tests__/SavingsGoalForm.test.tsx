@@ -1,4 +1,5 @@
 import React from "react";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import SavingsGoalForm from "../SavingsGoalForm";
 import { LocalDbError } from "../../../local-db/helpers";
@@ -8,6 +9,8 @@ jest.mock("../../../local-db/repositories/savingsGoalAccounts", () => ({
   listActiveSavingsGoalAccounts: jest.fn().mockResolvedValue([{ id: "account-1", name: "Main account", status: "active" }]),
   getSavingsGoalAccount: jest.fn().mockResolvedValue({ id: "account-1", name: "Main account", status: "active" }),
 }));
+
+jest.mock("@react-native-community/datetimepicker", () => "DateTimePicker");
 
 const mockUpdate = jest.fn();
 const mockCreate = jest.fn();
@@ -32,6 +35,11 @@ const goal: SavingsGoal = {
   essentialExpenseCoverageMonths: null, status: "active", version: 1,
 };
 
+function selectTargetDate(view: ReturnType<typeof render>, date: Date) {
+  fireEvent.press(view.getByLabelText("Target date"));
+  fireEvent(view.UNSAFE_getByType(DateTimePicker), "onChange", { type: "set" }, date);
+}
+
 describe("SavingsGoalForm contribution frequency", () => {
   beforeEach(() => {
     mockCreate.mockReset();
@@ -45,7 +53,7 @@ describe("SavingsGoalForm contribution frequency", () => {
     const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={onSaved} />);
     fireEvent.changeText(view.getByLabelText("Goal name"), "Travel");
     fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
-    fireEvent.changeText(view.getByLabelText("Target date"), "2026-12-31");
+    selectTargetDate(view, new Date(2026, 11, 31));
     fireEvent.press(view.getByLabelText("None"));
     fireEvent.press(view.getByLabelText("Select financial account"));
     await waitFor(() => expect(view.getByLabelText("Link Main account")).toBeTruthy());
@@ -55,13 +63,36 @@ describe("SavingsGoalForm contribution frequency", () => {
     expect(mockCreate).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ name: "Travel", linkedAccountId: "account-1", targetAmountCentavos: 100_000, contributionFrequency: null }));
   });
 
+  it("formats both amounts as decimals and saves their cents", async () => {
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={goal} onCancel={jest.fn()} onSaved={jest.fn()} />);
+    expect(view.getByLabelText("Starting amount").props.value).toBe("0.00");
+    for (const label of ["Target amount", "Starting amount"]) {
+      expect(view.getByLabelText(label).props.keyboardType).toBe("decimal-pad");
+    }
+    fireEvent.changeText(view.getByLabelText("Target amount"), "295000.5");
+    fireEvent(view.getByLabelText("Target amount"), "blur");
+    expect(view.getByLabelText("Target amount").props.value).toBe("295000.50");
+    fireEvent.changeText(view.getByLabelText("Starting amount"), "1234.25");
+    fireEvent(view.getByLabelText("Starting amount"), "blur");
+    fireEvent.press(view.getByLabelText("Save savings goal changes"));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith("user-1", "device-1", "goal-1", expect.objectContaining({ targetAmountCentavos: 29_500_050, startingAmountCentavos: 123_425 })));
+  });
+
+  it("keeps the target date when the picker is dismissed", () => {
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={goal} onCancel={jest.fn()} onSaved={jest.fn()} />);
+    fireEvent.press(view.getByLabelText("Target date"));
+    fireEvent(view.UNSAFE_getByType(DateTimePicker), "onChange", { type: "dismissed" }, new Date(2026, 9, 21));
+    expect(view.getByText("2026-12-31")).toBeTruthy();
+    expect(view.UNSAFE_queryByType(DateTimePicker)).toBeNull();
+  });
+
   it("shows a duplicate-name error when creating a goal", async () => {
     mockCreate.mockRejectedValueOnce(new LocalDbError("DUPLICATE_NAME", "duplicate"));
     const onSaved = jest.fn();
     const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={onSaved} />);
     fireEvent.changeText(view.getByLabelText("Goal name"), "Travel");
     fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
-    fireEvent.changeText(view.getByLabelText("Target date"), "2026-12-31");
+    selectTargetDate(view, new Date(2026, 11, 31));
     fireEvent.press(view.getByLabelText("None"));
     fireEvent.press(view.getByLabelText("Select financial account"));
     await waitFor(() => expect(view.getByLabelText("Link Main account")).toBeTruthy());
@@ -107,7 +138,7 @@ describe("SavingsGoalForm contribution frequency", () => {
     fireEvent.press(view.getByLabelText("Daily"));
     expect(view.getByText(/Suggested: PHP 13.34 per contribution/)).toBeTruthy();
     expect(view.getByLabelText("Planned contribution amount").props.value).toBe("75");
-    fireEvent.changeText(view.getByLabelText("Target date"), "2026-10-19");
+    selectTargetDate(view, new Date(2026, 9, 19));
     expect(view.getByText(/Suggested: PHP 500.00 per contribution/)).toBeTruthy();
     fireEvent.press(view.getByLabelText("Use suggested amount"));
     expect(view.getByLabelText("Planned contribution amount").props.value).toBe("500");

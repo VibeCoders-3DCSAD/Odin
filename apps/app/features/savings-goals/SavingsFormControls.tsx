@@ -9,7 +9,7 @@ export function SavingsInput({ label, value, onChange, error, numeric, multiline
 
 export function SavingsDate({ label, value, onChange, error }: { label: string; value: string; onChange: (value: string) => void; error?: string }) {
   const [open, setOpen] = useState(false);
-  return <View><PickerField label={label} accessibilityLabel={label} value={value || "Select date"} placeholder={!value} error={Boolean(error)} onPress={() => setOpen(true)} />{error ? <FieldError>{error}</FieldError> : null}{open ? <DateTimePicker mode="date" value={value ? new Date(`${value}T12:00:00`) : new Date()} onChange={(_, date) => { setOpen(false); if (date) onChange(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`); }} /> : null}</View>;
+  return <View><PickerField label={label} accessibilityLabel={label} value={value || "Select date"} placeholder={!value} error={Boolean(error)} onPress={() => setOpen(true)} />{error ? <FieldError>{error}</FieldError> : null}{open ? <DateTimePicker mode="date" value={value ? new Date(`${value}T12:00:00`) : new Date()} onChange={(event, date) => { setOpen(false); if (event.type === "set" && date) onChange(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`); }} /> : null}</View>;
 }
 
 export function SavingsToggle({ label, description, value, onToggle }: { label: string; description: string; value: boolean; onToggle: () => void }) {
