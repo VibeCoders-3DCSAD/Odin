@@ -4,6 +4,11 @@ import SavingsGoalForm from "../SavingsGoalForm";
 import { LocalDbError } from "../../../local-db/helpers";
 import type { SavingsGoal } from "../../../local-db/repositories/savingsGoals";
 
+jest.mock("../../../local-db/repositories/savingsGoalAccounts", () => ({
+  listActiveSavingsGoalAccounts: jest.fn().mockResolvedValue([{ id: "account-1", name: "Main account", status: "active" }]),
+  getSavingsGoalAccount: jest.fn().mockResolvedValue({ id: "account-1", name: "Main account", status: "active" }),
+}));
+
 const mockUpdate = jest.fn();
 const mockCreate = jest.fn();
 jest.mock("../../../local-db/repositories/savingsGoals", () => ({
@@ -42,9 +47,12 @@ describe("SavingsGoalForm contribution frequency", () => {
     fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
     fireEvent.changeText(view.getByLabelText("Target date"), "2026-12-31");
     fireEvent.press(view.getByLabelText("None"));
+    fireEvent.press(view.getByLabelText("Select financial account"));
+    await waitFor(() => expect(view.getByLabelText("Link Main account")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Link Main account"));
     fireEvent.press(view.getByLabelText("Save savings goal"));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(goal));
-    expect(mockCreate).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ name: "Travel", targetAmountCentavos: 100_000, contributionFrequency: null }));
+    expect(mockCreate).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ name: "Travel", linkedAccountId: "account-1", targetAmountCentavos: 100_000, contributionFrequency: null }));
   });
 
   it("shows a duplicate-name error when creating a goal", async () => {
@@ -55,6 +63,9 @@ describe("SavingsGoalForm contribution frequency", () => {
     fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
     fireEvent.changeText(view.getByLabelText("Target date"), "2026-12-31");
     fireEvent.press(view.getByLabelText("None"));
+    fireEvent.press(view.getByLabelText("Select financial account"));
+    await waitFor(() => expect(view.getByLabelText("Link Main account")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Link Main account"));
     fireEvent.press(view.getByLabelText("Save savings goal"));
     await waitFor(() => expect(view.getByText("A savings goal with this name already exists. Choose a different name.")).toBeTruthy());
     expect(onSaved).not.toHaveBeenCalled();
@@ -89,6 +100,36 @@ describe("SavingsGoalForm contribution frequency", () => {
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith("user-1", "device-1", "goal-1", expect.objectContaining({ contributionFrequency: "daily", plannedContributionAmountCentavos: 5_000, nextContributionDate: "2026-10-18", contributionDayOfMonth: null })));
   });
 
+  it("updates suggestions for frequency and date changes without replacing a manual amount", async () => {
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={goal} onCancel={jest.fn()} onSaved={jest.fn()} />);
+    expect(view.getByText(/Suggested: PHP 500.00 per contribution/)).toBeTruthy();
+    fireEvent.changeText(view.getByLabelText("Planned contribution amount"), "75");
+    fireEvent.press(view.getByLabelText("Daily"));
+    expect(view.getByText(/Suggested: PHP 13.34 per contribution/)).toBeTruthy();
+    expect(view.getByLabelText("Planned contribution amount").props.value).toBe("75");
+    fireEvent.changeText(view.getByLabelText("Target date"), "2026-10-19");
+    expect(view.getByText(/Suggested: PHP 500.00 per contribution/)).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Use suggested amount"));
+    expect(view.getByLabelText("Planned contribution amount").props.value).toBe("500");
+    fireEvent.press(view.getByLabelText("Save savings goal changes"));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith("user-1", "device-1", "goal-1", expect.objectContaining({ plannedContributionAmountCentavos: 50_000 })));
+  });
+
+  it("accounts for recorded activity and changes to the starting amount", () => {
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={{ ...goal, currentAmountCentavos: 40_000 }} onCancel={jest.fn()} onSaved={jest.fn()} />);
+    expect(view.getByText(/Suggested: PHP 300.00 per contribution/)).toBeTruthy();
+    fireEvent.changeText(view.getByLabelText("Starting amount"), "200");
+    expect(view.getByText(/Suggested: PHP 200.00 per contribution/)).toBeTruthy();
+    fireEvent.changeText(view.getByLabelText("Target amount"), "1200");
+    expect(view.getByText(/Suggested: PHP 300.00 per contribution/)).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Weekly"));
+    expect(view.queryByLabelText("Use suggested amount")).toBeNull();
+    fireEvent.press(view.getByLabelText("Sunday"));
+    expect(view.getByLabelText("Use suggested amount")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("None"));
+    expect(view.queryByText(/Suggested:/)).toBeNull();
+  });
+
   it("clears the schedule when None is saved", async () => {
     const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={goal} onCancel={jest.fn()} onSaved={jest.fn()} />);
     fireEvent.press(view.getByLabelText("None"));
@@ -101,8 +142,8 @@ describe("SavingsGoalForm contribution frequency", () => {
   it("shows both calendar day inputs for Twice a Month", () => {
     const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={goal} onCancel={jest.fn()} onSaved={jest.fn()} />);
     fireEvent.press(view.getByLabelText("Twice a Month"));
-    expect(view.getByText("1ST DAY OF MONTH")).toBeTruthy();
-    expect(view.getByText("2ND DAY OF MONTH")).toBeTruthy();
+    expect(view.getByText("1st day of month")).toBeTruthy();
+    expect(view.getByText("2nd day of month")).toBeTruthy();
   });
 
   it("requires a weekly weekday and derives the occurrence from that choice", async () => {
@@ -148,4 +189,12 @@ describe("SavingsGoalForm contribution frequency", () => {
     fireEvent.press(view.getByLabelText("Save savings goal changes"));
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith("user-1", "device-1", "goal-1", expect.objectContaining({ contributionFrequency: "biweekly", contributionIntervalCount: 2 })));
   });
+
+  it("requires an account when creating a savings goal", () => {
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
+    fireEvent.press(view.getByLabelText("Save savings goal"));
+    expect(view.getByText("Select an active financial account for this savings goal.")).toBeTruthy();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
 });

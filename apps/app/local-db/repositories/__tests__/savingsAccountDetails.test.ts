@@ -67,3 +67,11 @@ describe("savings account detail validation", () => {
     expect(() => validateSavingsAccountDetails({ ...hysa, balanceTiers: [{ minimumBalanceCentavos: 0, maximumBalanceCentavos: 50_000_00, interestRateBps: 400 }, { minimumBalanceCentavos: 50_000_00, maximumBalanceCentavos: 100_000_00, interestRateBps: 450 }] })).toThrow("cannot overlap");
   });
 });
+
+it("accepts an optional annual rate and reference details without changing legacy calculation settings", () => {
+  const saved = validateSavingsAccountDetails(details({ interestRateBps: null, minimumBalanceCentavos: null, interestReference: { balanceBasis: "daily_balance", method: "compound", rateStructure: "tiered", notes: "  Bank rules  " } }));
+  expect(saved.interestReference?.notes).toBe("Bank rules");
+  expect(saved.interestCalculationBasis).toBeNull();
+  expect(saved.interestCreditFrequency).toBeNull();
+  expect(saved.interestRateBps).toBeNull();
+});

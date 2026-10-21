@@ -1,3 +1,6 @@
+import { validateSavingsGoalContributionPayload } from "./helpers/savingsGoalContribution.js";
+import { validateSavingsExpenseWithdrawalPayload } from "./helpers/savingsExpenseWithdrawals.js";
+import { normalizeSavingsInterestReference } from "@odin/savings-interest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Operation = {
@@ -172,6 +175,7 @@ const FINANCIAL_ACCOUNT_UPDATE_FIELDS = new Set([
 ]);
 
 const SAVINGS_ACCOUNT_DETAIL_FIELDS = new Set([
+  "interest_reference",
   "account_type", "interest_rate_bps", "minimum_balance_centavos",
   "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible",
   "boosted_interest_rate_bps", "interest_calculation_basis", "interest_credit_frequency",
@@ -227,6 +231,8 @@ const CREDIT_CARD_REPAYMENT_PREFERENCE_FIELDS = new Set([
 ]);
 
 const TRANSACTION_CREATE_FIELDS = new Set([
+  "savings_goal_contribution",
+  "savings_goal_withdrawals",
   "transaction_type",
   "transaction_date",
   "credit_card_posting_date",
@@ -244,6 +250,8 @@ const TRANSACTION_CREATE_FIELDS = new Set([
 ]);
 
 const TRANSACTION_UPDATE_FIELDS = new Set([
+  "savings_goal_contribution",
+  "savings_goal_withdrawals",
   "amount_centavos",
   "category_id",
   "subcategory_id",
@@ -327,7 +335,7 @@ const DEBT_PRIORITY_FIELDS = new Set(["priorities"]);
 const CREDIT_CARD_SETTLEMENT_FIELDS = new Set(["installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status"]);
 const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy", "custom_amount_centavos", "percentage_bps"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
-const SAVINGS_GOAL_FIELDS = new Set(["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "status", "archived_at"]);
+const SAVINGS_GOAL_FIELDS = new Set(["linked_account_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "status", "archived_at"]);
 const SCHEDULED_PAYMENT_FIELDS = new Set(["name", "subcategory_id", "source_account_id", "amount_centavos", "frequency", "due_day_of_month", "due_second_day_of_month", "due_day_of_week", "due_month", "starts_on", "ends_on", "auto_post", "auto_post_from", "is_family_support", "is_dependent_support", "protected_by_default", "notes", "status"]);
 const SCHEDULED_PAYMENT_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
 const SCHEDULED_PAYMENT_RECORD_FIELDS = new Set(["scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes"]);
@@ -358,7 +366,10 @@ export async function prepareOperation(
     case "update":
       return {
         ...op,
-        payload: await validateUpdatePayload(supabase, userId, op.entity, op.record_id, filterPayloadFields(op.payload, op.changed_fields)),
+        payload: await validateUpdatePayload(supabase, userId, op.entity, op.record_id,
+          filterPayloadFields(op.payload, op.entity === "transactions"
+            ? [...op.changed_fields, "savings_goal_contribution", "savings_goal_withdrawals"]
+            : op.changed_fields)),
       };
     case "delete":
       return op;
@@ -552,7 +563,7 @@ async function validateCreatePayload(
     return sanitized;
   }
   if (entity === "savings_goals") {
-    return validateSavingsGoalPayload(payload, true);
+    return validateSavingsGoalPayload(payload, true, supabase, userId);
   }
   if (entity === "savings_goal_activities") {
     assertOnlyAllowed(payload, SAVINGS_GOAL_ACTIVITY_FIELDS);
@@ -801,6 +812,9 @@ async function validateTaxonomyCreatePayload(
     payload = transactionPayload;
     assertOnlyAllowed(payload, TRANSACTION_CREATE_FIELDS);
     const sanitized = sanitizePayload(payload, TRANSACTION_CREATE_FIELDS);
+    validateSavingsExpenseWithdrawalPayload(sanitized.savings_goal_withdrawals);
+    validateSavingsGoalContributionPayload(sanitized.savings_goal_contribution);
+    if (sanitized.savings_goal_withdrawals !== undefined && sanitized.transaction_type !== "expense") throw new Error("savings goal funding requires an expense");
     requireString(sanitized, "transaction_type");
     if (!VALID_TRANSACTION_TYPES.includes(sanitized.transaction_type as string)) {
       throw new Error(`transaction_type must be one of: ${VALID_TRANSACTION_TYPES.join(", ")}`);
@@ -809,6 +823,7 @@ async function validateTaxonomyCreatePayload(
     requirePositiveInteger(sanitized, "amount_centavos");
 
     const txType = sanitized.transaction_type as string;
+    if (sanitized.savings_goal_contribution !== undefined && txType !== "transfer") throw new Error("savings contribution requires a transfer");
 
     if (txType === "income") {
       requireString(sanitized, "destination_account_id");
@@ -829,7 +844,7 @@ async function validateTaxonomyCreatePayload(
     } else {
       requireString(sanitized, "source_account_id");
       requireString(sanitized, "destination_account_id");
-      if (sanitized.source_account_id === sanitized.destination_account_id) {
+      if (sanitized.source_account_id === sanitized.destination_account_id && !sanitized.savings_goal_contribution) {
         throw new Error("source and destination accounts must differ");
       }
       if (sanitized.subcategory_id != null || sanitized.category_id != null) throw new Error("category target must not be set for transfer");
@@ -1056,6 +1071,8 @@ async function validateUpdatePayload(
     if (typeof sanitized.account_id !== "string") throw new Error("account_id must be a string");
     await verifyAccountOwnership(supabase, userId, sanitized.account_id);
   } else if (entity === "transactions") {
+    validateSavingsExpenseWithdrawalPayload(sanitized.savings_goal_withdrawals);
+    validateSavingsGoalContributionPayload(sanitized.savings_goal_contribution);
     for (const field of ["source_account_id", "destination_account_id"]) {
       const accountId = sanitized[field];
       if (accountId !== undefined && accountId !== null) {
@@ -1093,7 +1110,7 @@ async function validateUpdatePayload(
   }
 
   if (entity === "savings_goals") {
-    return validateSavingsGoalPayload(sanitized, false);
+    return validateSavingsGoalPayload(sanitized, false, supabase, userId);
   }
 
   if (entity === "savings_allocation_preferences") {
@@ -1379,6 +1396,8 @@ async function validateUpdatePayload(
     if (!current) throw new Error("transaction not found or inaccessible");
 
     const txType = current.transaction_type as string;
+    if (sanitized.savings_goal_contribution !== undefined && txType !== "transfer") throw new Error("savings contribution requires a transfer");
+    if (sanitized.savings_goal_withdrawals !== undefined && txType !== "expense") throw new Error("savings goal funding requires an expense");
     const src = sanitized.source_account_id ?? undefined;
     const dst = sanitized.destination_account_id ?? undefined;
     const sub = sanitized.subcategory_id ?? undefined;
@@ -1795,11 +1814,11 @@ function validateScheduledPaymentRecordPayload(payload: Record<string, unknown>)
   return sanitized;
 }
 
-function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: boolean): Record<string, unknown> {
+async function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: boolean, supabase: SupabaseClient, userId: string): Promise<Record<string, unknown>> {
   assertOnlyAllowed(payload, SAVINGS_GOAL_FIELDS);
   const sanitized = sanitizePayload(payload, SAVINGS_GOAL_FIELDS);
   if (creating) {
-    for (const field of ["name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "planned_contribution_amount_centavos", "contribution_frequency", "next_contribution_date"]) {
+    for (const field of ["linked_account_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "planned_contribution_amount_centavos", "contribution_frequency", "next_contribution_date"]) {
       if (!(field in sanitized)) throw new Error(`${field} is required`);
     }
   }
@@ -1829,6 +1848,12 @@ function validateSavingsGoalPayload(payload: Record<string, unknown>, creating: 
   if (sanitized.notes !== undefined && sanitized.notes !== null && (typeof sanitized.notes !== "string" || sanitized.notes.length > 1_000)) throw new Error("notes must be 1000 characters or fewer");
   if (sanitized.emergency_fund_target_method !== undefined && !["fixed_amount", "essential_expense_coverage"].includes(sanitized.emergency_fund_target_method as string)) throw new Error("emergency_fund_target_method is invalid");
   if (sanitized.essential_expense_coverage_months !== undefined && sanitized.essential_expense_coverage_months !== null) requireNumberInRange(sanitized, "essential_expense_coverage_months", 3, 6);
+  if (creating || sanitized.linked_account_id !== undefined) {
+    requireString(sanitized, "linked_account_id");
+    const { data: account, error } = await supabase.from("financial_accounts").select("id")
+      .eq("id", sanitized.linked_account_id as string).eq("user_id", userId).eq("deleted", false).eq("status", "active").maybeSingle();
+    if (error || !account) throw new Error("linked account must be an active financial account owned by the user");
+  }
   return sanitized;
 }
 
@@ -1841,6 +1866,7 @@ async function validateSavingsAccountDetailsPayload(
 ): Promise<Record<string, unknown>> {
   assertOnlyAllowed(payload, SAVINGS_ACCOUNT_DETAIL_FIELDS);
   const sanitized = sanitizePayload(payload, SAVINGS_ACCOUNT_DETAIL_FIELDS);
+  if (sanitized.interest_reference !== undefined) sanitized.interest_reference = normalizeSavingsInterestReference(sanitized.interest_reference);
   if (creating && sanitized.account_type === undefined) throw new Error("account_type is required");
   if (sanitized.account_type !== undefined && !["personal_savings", "high_yield_savings", "time_deposit"].includes(sanitized.account_type as string)) throw new Error("savings account type is invalid");
   for (const field of ["interest_rate_bps", "minimum_balance_centavos", "base_interest_rate_bps", "effective_interest_rate_bps", "boosted_interest_rate_bps", "maximum_eligible_balance_centavos", "required_deposit_centavos", "direct_deposit_threshold_centavos", "promotional_interest_rate_bps", "planned_contribution_amount_centavos"]) {
@@ -1867,9 +1893,8 @@ async function validateSavingsAccountDetailsPayload(
   if (sanitized.custom_interval_days !== undefined && sanitized.custom_interval_days !== null) requirePositiveInteger(sanitized, "custom_interval_days");
   if (sanitized.next_contribution_date !== undefined && sanitized.next_contribution_date !== null) requireDateString(sanitized, "next_contribution_date");
   if (creating) {
-    if (sanitized.account_type === "personal_savings" && (sanitized.interest_rate_bps == null || sanitized.minimum_balance_centavos == null)) throw new Error("Personal Savings requires an interest rate and minimum balance");
-    if (sanitized.account_type === "high_yield_savings" && (sanitized.base_interest_rate_bps == null || sanitized.interest_calculation_basis == null || sanitized.interest_credit_frequency == null)) throw new Error("HYSA requires a base interest rate, calculation basis, and credit frequency");
-    if (sanitized.account_type === "time_deposit" && (sanitized.principal_centavos == null || sanitized.interest_rate_bps == null || sanitized.maturity_date == null || sanitized.term_months == null || sanitized.early_withdrawal_rule == null)) throw new Error("Time Deposit requires principal, interest rate, maturity date, term, and an early-withdrawal rule");
+    if (sanitized.account_type === "high_yield_savings" && (sanitized.interest_calculation_basis == null || sanitized.interest_credit_frequency == null)) throw new Error("HYSA requires calculation basis and credit frequency");
+    if (sanitized.account_type === "time_deposit" && (sanitized.principal_centavos == null || sanitized.maturity_date == null || sanitized.term_months == null || sanitized.early_withdrawal_rule == null)) throw new Error("Time Deposit requires principal, maturity date, term, and an early-withdrawal rule");
     const scheduleFields = ["planned_contribution_amount_centavos", "contribution_frequency", "next_contribution_date"];
     const hasContributionSchedule = scheduleFields.some((field) => sanitized[field] != null);
     if (sanitized.account_type !== "time_deposit" && hasContributionSchedule && scheduleFields.some((field) => sanitized[field] == null)) throw new Error("Savings contribution schedule is incomplete");

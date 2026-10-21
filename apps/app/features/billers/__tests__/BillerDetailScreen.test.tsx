@@ -8,6 +8,7 @@ const mockGet = jest.fn();
 const mockRecords = jest.fn();
 const mockArchive = jest.fn();
 const mockRecord = jest.fn();
+const mockGetSavingsExpenseFunding = jest.fn();
 jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
   getScheduledPayment: (...args: unknown[]) => mockGet(...args),
   setScheduledPaymentArchived: (...args: unknown[]) => mockArchive(...args),
@@ -21,6 +22,7 @@ jest.mock("../../../local-db/repositories/scheduledPaymentRecords", () => ({
 }));
 jest.mock("../../../local-db/repositories/financialFoundations", () => ({ listFinancialAccounts: async () => [{ id: "acct-bpi", name: "BPI Debit", status: "active", currentBalanceCentavos: 0 }] }));
 jest.mock("../../../local-db/repositories/taxonomy", () => ({ listSubcategories: async () => [{ id: "sub-electricity", label: "Electricity" }] }));
+jest.mock("../../../local-db/repositories/savingsExpenseFunding", () => ({ getSavingsExpenseFunding: (...args: unknown[]) => mockGetSavingsExpenseFunding(...args) }));
 jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: jest.fn() }) }));
 
 const today = localToday();
@@ -70,7 +72,12 @@ describe("BillerDetailScreen", () => {
 
 describe("RecordBillerPaymentScreen", () => {
   const props = { userId: "user-1", deviceId: "device-1", scheduledPaymentId: "meralco", onClose: jest.fn(), onRecorded: jest.fn() };
-  beforeEach(() => { jest.clearAllMocks(); mockGet.mockResolvedValue(meralco); mockRecord.mockResolvedValue(undefined); });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGet.mockResolvedValue(meralco);
+    mockGetSavingsExpenseFunding.mockResolvedValue({ accountId: "acct-bpi", unallocatedCentavos: 248_000, requiredWithdrawalCentavos: 0, existingShortfallCentavos: 0, goals: [] });
+    mockRecord.mockResolvedValue(undefined);
+  });
 
   it("defaults to the current occurrence's full amount and the pay-from account", async () => {
     const view = render(<RecordBillerPaymentScreen {...props} />);

@@ -28,7 +28,7 @@ function parseArgs() {
   };
   const email = valueFor("--email")?.trim().toLowerCase();
   const password = valueFor("--password");
-  if (!email || !password) throw new Error("Usage: pnpm seed -- --email <email> --password <password> [--seed number] [--dry-run] [--confirm <email>]. Seeding replaces existing demo history; deleted history cannot be restored.");
+  if (!email || !password) throw new Error("Usage: pnpm seed -- --email <email> --password <password> [--seed number] [--dry-run] [--confirm <email>]. Seeding replaces existing seeded history; deleted history cannot be restored.");
   const seed = Number(valueFor("--seed") ?? "42");
   if (!Number.isSafeInteger(seed)) throw new Error("--seed must be an integer");
   return { email, password, seed, dryRun: args.includes("--dry-run"), confirmation: valueFor("--confirm") };
@@ -106,7 +106,7 @@ async function clearSeededData(supabase: SupabaseClient, userId: string) {
     selectIds(supabase.from("savings_goals").select("id").eq("user_id", userId).or(markerFilter)),
     selectIds(supabase.from("debt_accounts").select("id").eq("user_id", userId).or(markerFilter)),
     selectIds(supabase.from("income_sources").select("id").eq("user_id", userId).or(markerFilter)),
-    selectIds(supabase.from("financial_plans").select("id").eq("user_id", userId).eq("forecast_model_version", seedForecastModelVersion)),
+    selectIds(supabase.from("financial_plans").select("id").eq("user_id", userId).in("forecast_model_version", [seedForecastModelVersion, "demo-seed-v1"])),
   ]);
   const scheduleIds = accountIds.length ? await selectIds(supabase.from("scheduled_payments").select("id").eq("user_id", userId).in("source_account_id", accountIds)) : [];
   const { data: records, error: recordsError } = scheduleIds.length
@@ -149,10 +149,9 @@ async function clearSeededData(supabase: SupabaseClient, userId: string) {
 }
 
 async function writeSeedData(supabase: SupabaseClient, userId: string, data: SeedData) {
-  // Parents before children; transactions before the card, goal, debt, and biller rows that link to them.
+  // Parents before children; transactions before the card, debt, and biller rows that link to them.
   await insertRows(supabase, "financial_accounts", data.accounts);
   await insertRows(supabase, "income_sources", data.incomeSources);
-  await insertRows(supabase, "savings_goals", data.savingsGoals);
   await insertRows(supabase, "debt_accounts", data.debtAccounts);
   await insertRows(supabase, "credit_card_details", data.creditCardDetails);
   await insertRows(supabase, "credit_card_cycles", data.creditCardCycles);
@@ -162,14 +161,12 @@ async function writeSeedData(supabase: SupabaseClient, userId: string, data: See
   await applyAvailableCreditAdjustments(supabase, userId, data.availableCreditAdjustments);
   await insertRows(supabase, "credit_card_statements", data.creditCardStatements);
   await insertRows(supabase, "credit_card_payments", data.creditCardPayments);
-  await insertRows(supabase, "savings_goal_activities", data.savingsGoalActivities);
   await insertRows(supabase, "debt_payments", data.debtPayments);
   await insertRows(supabase, "scheduled_payments", data.scheduledPayments);
   await insertRows(supabase, "scheduled_payment_records", data.scheduledPaymentRecords);
   await insertRows(supabase, "financial_plans", data.financialPlans);
   await insertRows(supabase, "financial_plan_forecast_points", data.planForecastPoints);
   await insertRows(supabase, "financial_plan_allocations", data.planAllocations);
-  await insertRows(supabase, "financial_plan_savings_reservations", data.planSavingsReservations);
   await insertRows(supabase, "financial_plan_debt_reservations", data.planDebtReservations);
 }
 
@@ -207,7 +204,7 @@ async function main() {
   const peso = (amountCentavos: number) => `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
   console.log(`Prepared ${data.transactions.length} transactions from ${data.summary.start} through ${data.summary.end}:`);
   console.log(`  ${data.accounts.length} accounts, ${data.incomeSources.length} income sources, ${data.scheduledPayments.length} billers and remittances (${data.scheduledPaymentRecords.length} payments)`);
-  console.log(`  ${data.debtAccounts.length} debts (${data.debtPayments.length} payments), ${data.savingsGoals.length} savings goals (${data.savingsGoalActivities.length} contributions)`);
+  console.log(`  ${data.debtAccounts.length} debts (${data.debtPayments.length} payments)`);
   console.log(`  ${data.creditCardCycles.length} card cycles, ${data.creditCardStatements.length} statements, ${data.creditCardPayments.length} card payments, ${data.financialPlans.length} financial plans`);
   for (const [name, balance] of Object.entries(data.summary.endingBalances)) console.log(`  ${name}: ${peso(balance)}`);
   if (dryRun) return;

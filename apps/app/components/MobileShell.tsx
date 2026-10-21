@@ -172,7 +172,7 @@ const hubs: Record<"money" | "plan", { title: string; segments: HubSegment[] }> 
     segments: [
       { page: "financial-plan", label: "Budget" },
       { page: "debt-manager", label: "Debts" },
-      { page: "savings-goals", label: "Goals" },
+      { page: "savings-goals", label: "Savings Goals" },
     ],
   },
 };
@@ -216,7 +216,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
     "financial-plan": { title: "Financial Plan", subtitle: "Plan this month's money" },
   "financial-plan-history": { title: "Past Plans", subtitle: "Completed Financial Plans" },
   "financial-plan-history-detail": { title: "Past Plan", subtitle: "How your plan turned out" },
-  "savings-goals": { title: "Savings & Goals", subtitle: "Track your progress" },
+  "savings-goals": { title: "Savings Goals", subtitle: "Track your progress" },
   insurance: { title: "Insurance", subtitle: "Coverage overview" },
   assistant: { title: "Assistant", subtitle: "AI-powered help" },
   "add-transaction": { title: "Add Transaction", subtitle: "Record a new entry" },

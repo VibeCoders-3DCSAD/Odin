@@ -1,3 +1,5 @@
+import SavingsExpenseFundingSheet from "../ledger/components/SavingsExpenseFundingSheet";
+import { getSavingsExpenseFunding, type SavingsExpenseFunding, type SavingsExpenseWithdrawal } from "../../local-db/repositories/savingsExpenseFunding";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { ArrowLeft } from "phosphor-react-native";
@@ -28,6 +30,7 @@ export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledP
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingsFunding, setSavingsFunding] = useState<SavingsExpenseFunding | null>(null);
   const [pickingAccount, setPickingAccount] = useState(false);
   // One id per form keeps a double tap or retry from recording the payment twice.
   const recordId = useRef(randomUUID());
@@ -60,7 +63,7 @@ export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledP
     if (errors[field]) setErrors(({ [field]: _cleared, ...rest }) => rest);
   }
 
-  async function handleSave() {
+  async function handleSave(savingsGoalWithdrawals?: SavingsExpenseWithdrawal[]) {
     if (!payment || inFlight.current) return;
     const centavos = Math.round(Number(amount.replace(/,/g, "")) * 100);
     const next: Partial<Record<Field, string>> = {};
@@ -74,7 +77,13 @@ export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledP
     setSaving(true);
     inFlight.current = true;
     try {
-      await recordScheduledPayment(userId, deviceId, { id: recordId.current, scheduledPaymentId: payment.id, occurrenceDate: occurrence!, amountCentavos: centavos, paymentDate: paymentDate!, sourceAccountId: sourceAccountId!, notes });
+      if (!savingsGoalWithdrawals) {
+        const funding = await getSavingsExpenseFunding(userId, sourceAccountId!, centavos);
+        if (funding.requiredWithdrawalCentavos > 0) {
+          setSavingsFunding(funding); setSaving(false); inFlight.current = false; return;
+        }
+      }
+      await recordScheduledPayment(userId, deviceId, { savingsGoalWithdrawals, id: recordId.current, scheduledPaymentId: payment.id, occurrenceDate: occurrence!, amountCentavos: centavos, paymentDate: paymentDate!, sourceAccountId: sourceAccountId!, notes });
       onRecorded(`${formatPhp(centavos)} recorded for ${payment.name}.`);
     } catch (error) {
       setFormError(error instanceof LocalDbError ? error.message : "Your obligation data could not be loaded or saved. Try again.");
@@ -127,13 +136,14 @@ export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledP
           </View>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Pressable onPress={onClose} disabled={saving} accessibilityRole="button" style={[ui.button, ui.buttonGhost, { flex: 1 }]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Cancel</Text></Pressable>
-            <Pressable onPress={handleSave} disabled={saving} accessibilityRole="button" accessibilityState={{ disabled: saving }} style={[ui.button, { flex: 1, opacity: saving ? 0.6 : 1 }]}>
+            <Pressable onPress={() => { void handleSave(); }} disabled={saving} accessibilityRole="button" accessibilityState={{ disabled: saving }} style={[ui.button, { flex: 1, opacity: saving ? 0.6 : 1 }]}>
               {saving ? <ActivityIndicator color="#FFFFFF" /> : null}
               <Text style={ui.buttonText}>{saving ? "Saving…" : "Record payment"}</Text>
             </Pressable>
           </View>
         </ScrollView>
       )}
+      {savingsFunding ? <SavingsExpenseFundingSheet funding={savingsFunding} onCancel={() => setSavingsFunding(null)} onConfirm={(withdrawals) => { setSavingsFunding(null); void handleSave(withdrawals); }} /> : null}
       <AccountPickerSheet visible={pickingAccount} accounts={accounts} selectedId={sourceAccountId} onSelect={(id) => { setSourceAccountId(id); clearError("account"); }} onClose={() => setPickingAccount(false)} />
     </KeyboardAvoidingView>
   );

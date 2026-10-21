@@ -12,6 +12,19 @@ const mockListFinancialAccounts = jest.fn();
 const mockCreateFinancialAccount = jest.fn();
 const mockUpdateFinancialAccount = jest.fn();
 const mockDeleteFinancialAccount = jest.fn();
+const mockGetSavingsDetails = jest.fn();
+const mockUpsertSavingsDetails = jest.fn();
+
+jest.mock("../../../local-db/repositories/savingsAccountDetails", () => ({
+  ...jest.requireActual("../../../local-db/repositories/savingsAccountDetails"),
+  getSavingsAccountDetails: (...args: unknown[]) => mockGetSavingsDetails(...args),
+  upsertSavingsAccountDetails: (...args: unknown[]) => mockUpsertSavingsDetails(...args),
+}));
+jest.mock("../../../local-db/repositories/savingsGoalAccounts", () => ({
+  getSavingsGoalAccount: jest.fn().mockResolvedValue({ id: "savings-new", name: "Rainy day", kind: "savings", status: "active" }),
+  listActiveSavingsGoalAccounts: jest.fn().mockResolvedValue([]),
+}));
+
 const mockDatePickerRef: { props: MockDatePickerProps | null } = { props: null };
 
 jest.mock("../../../local-db/repositories/financialFoundations", () => ({
@@ -55,6 +68,8 @@ beforeEach(() => {
   mockCreateFinancialAccount.mockResolvedValue({});
   mockUpdateFinancialAccount.mockResolvedValue({});
   mockDeleteFinancialAccount.mockResolvedValue({});
+  mockGetSavingsDetails.mockResolvedValue(null);
+  mockUpsertSavingsDetails.mockResolvedValue({});
 });
 
 it("shows credit card fields only when the Credit Card kind is selected", async () => {
@@ -213,4 +228,78 @@ it("lists credit cards with their available credit", async () => {
 
   expect(view.getByRole("button", { name: "Edit" })).toBeTruthy();
   expect(view.getByRole("button", { name: "Delete" })).toBeTruthy();
+});
+
+
+const savingsAccount = {
+  id: "savings-new", name: "Rainy day", kind: "savings", status: "active",
+  openingBalanceCentavos: 0, currentBalanceCentavos: 0, includeInDashboardBalance: true,
+  institutionName: null, openedOn: null, archivedAt: null, sortOrder: 0, creditCardDetails: null,
+};
+
+it("offers the five account types without a Savings choice", async () => {
+  const view = renderScreen();
+  fireEvent.press(await view.findByTestId("add-account"));
+  for (const label of ["Cash", "Bank", "E-Wallet", "Credit Card", "Other"]) expect(view.getByRole("radio", { name: label })).toBeTruthy();
+  expect(view.queryByRole("radio", { name: "Savings" })).toBeNull();
+});
+
+async function editExistingSavingsAccount() {
+  mockListFinancialAccounts.mockResolvedValue([savingsAccount]);
+  const view = renderScreen();
+  fireEvent.press(await view.findByLabelText("Rainy day account actions"));
+  fireEvent.press(view.getByRole("button", { name: "Edit" }));
+  fireEvent.press(view.getByLabelText("Advanced interest options"));
+  await waitFor(() => expect(view.getByLabelText("Interest rate")).toBeTruthy());
+  return view;
+}
+
+it.each(["personal_savings", "high_yield_savings"])("edits legacy %s in the shared account sheet while preserving its schedule", async (accountType) => {
+  const schedule = { plannedContributionAmountCentavos: 50000, contributionFrequency: "monthly", contributionIntervalCount: 1, contributionDayOfMonth: 15, contributionSecondDayOfMonth: null, contributionDayOfWeek: null, customIntervalDays: null, nextContributionDate: "2027-01-15" };
+  mockListFinancialAccounts.mockResolvedValue([savingsAccount]);
+  mockGetSavingsDetails.mockResolvedValue({
+    accountId: savingsAccount.id, version: 1, accountType, interestRateBps: accountType === "personal_savings" ? 100 : null, minimumBalanceCentavos: 0,
+    baseInterestRateBps: accountType === "high_yield_savings" ? 100 : null, effectiveInterestRateBps: null, interestConditions: null, higherRateEligible: null,
+    boostedInterestRateBps: null, interestCalculationBasis: accountType === "high_yield_savings" ? "daily_ending_balance" : null, interestCreditFrequency: accountType === "high_yield_savings" ? "monthly" : null,
+    maximumEligibleBalanceCentavos: null, balanceTiers: null, requiredDepositCentavos: null,
+    requiredDepositFrequency: null, requiredTransactionCount: null, requiredTransactionPeriod: null,
+    directDepositThresholdCentavos: null, qualificationPeriod: null, promotionalInterestRateBps: null,
+    promotionStartDate: null, promotionEndDate: null, principalCentavos: null, maturityDate: null,
+    termMonths: null, earlyWithdrawalRule: null, interestReference: { balanceBasis: "daily_balance", method: "simple", rateStructure: "fixed", notes: "Bank disclosure" }, ...schedule,
+  });
+  const view = renderScreen();
+  fireEvent.press(await view.findByLabelText("Rainy day account actions"));
+  fireEvent.press(view.getByRole("button", { name: "Edit" }));
+  fireEvent.press(view.getByLabelText("Advanced interest options"));
+  await waitFor(() => expect(view.getByPlaceholderText("Enter interest rate").props.value).toBe("1"));
+  expect(view.getByLabelText("Interest behavior: Simple Interest").props.accessibilityState.checked).toBe(true);
+  expect(view.getByLabelText("Interest notes").props.value).toBe("Bank disclosure");
+  expect(view.queryByRole("radio", { name: "Savings" })).toBeNull();
+  expect(view.getByText("Savings (existing account)")).toBeTruthy();
+  expect(view.queryByText("PLANNED CONTRIBUTION (₱)")).toBeNull();
+  fireEvent.press(view.getByRole("button", { name: "Save Changes" }));
+  await waitFor(() => expect(mockUpsertSavingsDetails).toHaveBeenCalledWith("test-user", "test-device", "savings-new", expect.objectContaining(schedule)));
+  expect(view.queryByText("Do you want to add a goal?")).toBeNull();
+});
+
+it("saves fixed interest settings on an existing Savings account after collapsing Advanced Options", async () => {
+  const view = await editExistingSavingsAccount();
+  fireEvent.changeText(view.getByLabelText("Interest rate"), "4");
+  fireEvent.press(view.getByLabelText("Calculation basis: Average Daily Balance (ADB)"));
+  fireEvent.changeText(view.getByLabelText("Interest notes"), "  Bank disclosure  ");
+  fireEvent.press(view.getByLabelText("Advanced interest options"));
+  expect(view.queryByText("Calculation basis")).toBeNull();
+  fireEvent.press(view.getByRole("button", { name: "Save Changes" }));
+  await waitFor(() => expect(mockUpsertSavingsDetails).toHaveBeenCalledWith("test-user", "test-device", "savings-new", expect.objectContaining({
+    interestRateBps: 400, minimumBalanceCentavos: null,
+    interestReference: expect.objectContaining({ balanceBasis: "average_daily_balance", method: "compound", rateStructure: "fixed", notes: "Bank disclosure", configuration: expect.objectContaining({ withholdingTaxBps: 2000, creditFrequency: "monthly", autoProject: false }) }),
+  })));
+});
+
+it("blocks malformed rates before updating an existing savings account", async () => {
+  const view = await editExistingSavingsAccount();
+  fireEvent.changeText(view.getByLabelText("Interest rate"), "-2");
+  fireEvent.press(view.getByRole("button", { name: "Save Changes" }));
+  expect(view.getByText("Enter a valid annual interest rate with up to two decimal places.")).toBeTruthy();
+  expect(mockUpdateFinancialAccount).not.toHaveBeenCalled();
 });

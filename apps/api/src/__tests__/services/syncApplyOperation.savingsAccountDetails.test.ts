@@ -49,3 +49,43 @@ describe("savings account detail sync validation", () => {
     await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload })).resolves.toMatchObject({ payload });
   });
 });
+
+it("accepts savings with no interest rate or minimum balance", async () => {
+  await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, changed_fields: ["account_type"], payload: { account_type: "personal_savings" } })).resolves.toMatchObject({ payload: { account_type: "personal_savings" } });
+});
+
+it("normalizes overlapping reference settings and allows explicitly clearing them", async () => {
+  const reference = { balanceBasis: "average_daily_balance", method: "compound", rateStructure: "tiered", notes: "  Bank conditions apply  " };
+  const update = { ...operation, operation_type: "update" as const, base_version: 1, changed_fields: ["interest_reference"], payload: { interest_reference: reference } };
+  await expect(prepareOperation(ownedSavingsAccount as never, "user-1", update)).resolves.toMatchObject({ payload: { interest_reference: { ...reference, notes: "Bank conditions apply" } } });
+  await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...update, payload: { interest_reference: null } })).resolves.toMatchObject({ payload: { interest_reference: null } });
+});
+
+it.each([[], "compound", { method: "invalid" }, { method: 1 }, { account_id: "other-account" }, { notes: "x".repeat(1001) }])("rejects invalid interest reference %j", async (interest_reference) => {
+  await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, interest_reference } })).rejects.toThrow();
+});
+
+it("accepts a scheduled savings credit contract and rejects malformed schedules", async () => {
+  const interest_reference = { balanceBasis: "daily_balance", method: "compound", rateStructure: "fixed", notes: null,
+    schedule: { startsOn: "2026-10-21", frequency: "monthly", withholdingTaxBps: 2000, tiers: [] } };
+  await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, interest_reference } })).resolves.toMatchObject({ payload: { interest_reference } });
+  for (const schedule of [{ ...interest_reference.schedule, startsOn: "2026-02-30" }, { ...interest_reference.schedule, frequency: "hourly" }, { ...interest_reference.schedule, withholdingTaxBps: -1 }, { ...interest_reference.schedule, userId: "other" }]) {
+    await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, interest_reference: { ...interest_reference, schedule } } })).rejects.toThrow();
+  }
+});
+
+it("validates the fixed interest form configuration before sync", async () => {
+  const configuration = {
+    version: 1, calculationFrequency: "daily", creditFrequency: "custom", creditIntervalDays: 14,
+    postingMode: "period_end", postingDay: null, postingDate: null, startsOn: "2026-01-01", startingBalanceCentavos: 10000,
+    averagingPeriod: "calendar_month", averagingIntervalDays: null, minimumQualifyingBalanceCentavos: null,
+    maximumInterestBearingBalanceCentavos: null, dayCountBasis: "actual_365", taxEnabled: true, withholdingTaxBps: 2000,
+    autoProject: false, stoppingPolicy: "preserve", showBreakdown: true, rateHistory: [{ effectiveOn: "2026-01-01", rateBps: 425 }],
+  };
+  const interest_reference = { balanceBasis: "daily_balance", method: "compound", rateStructure: "fixed", notes: null, configuration };
+  await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, interest_reference } })).resolves.toMatchObject({ payload: { interest_reference } });
+  await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, interest_reference: { ...interest_reference, configuration: { ...configuration, autoProject: true } } } })).resolves.toMatchObject({ payload: { interest_reference: { configuration: { autoProject: false } } } });
+  for (const changes of [{ withholdingTaxBps: 10001 }, { creditIntervalDays: 0 }, { user_id: "other-user" }, { taxEnabled: "yes" }]) {
+    await expect(prepareOperation(ownedSavingsAccount as never, "user-1", { ...operation, payload: { ...operation.payload, interest_reference: { ...interest_reference, configuration: { ...configuration, ...changes } } } })).rejects.toThrow();
+  }
+});

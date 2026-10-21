@@ -1,3 +1,4 @@
+import type { SavingsExpenseWithdrawal } from "./savingsExpenseFunding";
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
@@ -226,6 +227,7 @@ export async function listScheduledPaymentSummaries(userId: string, status: Sche
 }
 
 export type ScheduledPaymentEntry = {
+  savingsGoalWithdrawals?: SavingsExpenseWithdrawal[];
   // Generated once per payment form, so a repeated submit records nothing new.
   id?: string;
   scheduledPaymentId: string;
@@ -251,6 +253,7 @@ export function scheduledPaymentMutationId(scheduledPaymentId: string, source: "
 
 async function writePayment(db: SQLite.SQLiteDatabase, userId: string, deviceId: string, payment: Row, entry: ScheduledPaymentEntry, source: "manual" | "auto", ids: { transactionId?: string; recordId: string }): Promise<void> {
   const { transaction } = await createExpenseInTransaction(db, userId, deviceId, {
+    savings_goal_withdrawals: entry.savingsGoalWithdrawals,
     amount_centavos: entry.amountCentavos,
     source_account_id: entry.sourceAccountId,
     subcategory_id: payment.subcategory_id,

@@ -6,6 +6,8 @@ import { createSavingsGoal, updateSavingsGoal, type SavingsGoal } from "../../lo
 import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
 import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { deriveGoalContributionDate, GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "./contributionSchedule";
+import { recommendGoalContribution } from "./helpers/contributionRecommendation";
+import SavingsGoalAccountSelector from "./SavingsGoalAccountSelector";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF" } as const;
 
@@ -17,7 +19,7 @@ const CONTRIBUTION_OPTIONS: { label: string; value: GoalContributionFrequency | 
   { label: "None", value: null },
 ];
 
-type Props = { userId: string; deviceId: string; goal?: SavingsGoal; onCancel: () => void; onSaved: (goal: SavingsGoal) => void };
+type Props = { userId: string; deviceId: string; goal?: SavingsGoal; initialLinkedAccountId?: string; onCancel: () => void; onSaved: (goal: SavingsGoal) => void };
 
 function toCentavos(value: string) { const amount = Number(value.replace(/,/g, "")); return Number.isFinite(amount) ? Math.round(amount * 100) : Number.NaN; }
 function fromCentavos(value: number) { return String(value / 100); }
@@ -26,9 +28,11 @@ function Field({ label, value, onChangeText, placeholder, numeric, invalid }: { 
   return <View style={{ gap: 5 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#919A91" keyboardType={numeric ? "decimal-pad" : "default"} style={{ backgroundColor: P.white, borderColor: invalid ? P.error : P.line, borderRadius: 10, borderWidth: 1, color: P.ink, fontFamily: "Manrope", fontSize: 14, minHeight: 46, paddingHorizontal: 12 }} /></View>;
 }
 
-export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSaved }: Props) {
+export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedAccountId, onCancel, onSaved }: Props) {
   const goalType: SavingsGoalType = goal?.goalType ?? "custom";
   const [name, setName] = useState(goal?.name ?? "");
+  const [linkedAccountId, setLinkedAccountId] = useState(goal?.linkedAccountId ?? initialLinkedAccountId ?? null);
+  const [accountInvalid, setAccountInvalid] = useState(false);
   const [target, setTarget] = useState(goal ? fromCentavos(goal.targetAmountCentavos) : "");
   const [starting, setStarting] = useState(goal ? fromCentavos(goal.startingAmountCentavos) : "0");
   const [targetDate, setTargetDate] = useState(goal?.targetDate ?? "");
@@ -46,6 +50,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
   const [saving, setSaving] = useState(false); const [message, setMessage] = useState<string | null>(null);
 
   async function save() {
+    if (!goal && !linkedAccountId) { setAccountInvalid(true); setMessage("Select an active financial account for this savings goal."); return; }
     const targetAmountCentavos = toCentavos(target); const startingAmountCentavos = toCentavos(starting); const plannedContributionAmountCentavos = contributionFrequency === null ? 0 : toCentavos(plannedContribution); const interestRateBps = interestRate.trim() ? Math.round(Number(interestRate) * 100) : null;
     const contributionDayOfMonth = contributionDay.trim() ? Number(contributionDay) : null; const contributionSecondDayOfMonth = contributionSecondDay.trim() ? Number(contributionSecondDay) : null; const parsedCustomIntervalDays = customIntervalDays.trim() ? Number(customIntervalDays) : null;
     if (!name.trim() || !targetDate || !Number.isSafeInteger(targetAmountCentavos) || targetAmountCentavos <= 0 || !Number.isSafeInteger(startingAmountCentavos) || startingAmountCentavos < 0 || !Number.isSafeInteger(plannedContributionAmountCentavos) || plannedContributionAmountCentavos < 0 || (interestRateBps != null && (!Number.isSafeInteger(interestRateBps) || interestRateBps < 0))) {
@@ -68,7 +73,8 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
     setSaving(true); setMessage(null);
     try {
       const input = { name, goalType, targetAmountCentavos, startingAmountCentavos, targetDate, priority, emergencyFundBaselineCentavos: goalType === "emergency_fund" ? baseline : null, autoSaveAmountCentavos: plannedContributionAmountCentavos, plannedContributionAmountCentavos, contributionFrequency, contributionIntervalCount: contributionFrequency === null ? null : contributionFrequency === goal?.contributionFrequency ? goal.contributionIntervalCount ?? 1 : 1, contributionDayOfMonth: contributionFrequency === "semi_monthly" || contributionFrequency === "monthly" || contributionFrequency === "quarterly" ? contributionDayOfMonth : null, contributionSecondDayOfMonth: contributionFrequency === "semi_monthly" ? contributionSecondDayOfMonth : null, contributionDayOfWeek: contributionFrequency === "weekly" || contributionFrequency === "biweekly" ? contributionDayOfWeek : null, customIntervalDays: contributionFrequency === "custom" ? parsedCustomIntervalDays : null, nextContributionDate: contributionFrequency === null ? null : nextContributionDate, interestRateBps, notes };
-      const result = goal ? await updateSavingsGoal(userId, deviceId, goal.id, input) : await createSavingsGoal(userId, deviceId, input);
+      const accountLink = goal && linkedAccountId === (goal.linkedAccountId ?? null) ? {} : { linkedAccountId };
+      const result = goal ? await updateSavingsGoal(userId, deviceId, goal.id, { ...input, ...accountLink }) : await createSavingsGoal(userId, deviceId, { ...input, linkedAccountId });
       onSaved(result.goal);
     } catch (error) {
       if (error instanceof LocalDbError && error.code === "DUPLICATE_NAME") {
@@ -76,28 +82,50 @@ export default function SavingsGoalForm({ userId, deviceId, goal, onCancel, onSa
         setMessage("A savings goal with this name already exists. Choose a different name.");
         return;
       }
+      if (error instanceof LocalDbError && error.code === "VALIDATION_ERROR") {
+        setAccountInvalid(true);
+        setMessage("Check your goal details and select an active financial account.");
+        return;
+      }
       setMessage("Your savings information could not be saved. Check your details and try again.");
     } finally { setSaving(false); }
   }
 
   const invalid = Boolean(message);
+  const suggestedContribution = toCentavos(starting) < 0 ? null : recommendGoalContribution({
+    plannedContributionAmountCentavos: 0,
+    contributionFrequency,
+    contributionIntervalCount: contributionFrequency === goal?.contributionFrequency ? goal.contributionIntervalCount ?? 1 : 1,
+    contributionDayOfMonth: contributionDay.trim() ? Number(contributionDay) : null,
+    contributionSecondDayOfMonth: contributionSecondDay.trim() ? Number(contributionSecondDay) : null,
+    contributionDayOfWeek,
+    customIntervalDays: customIntervalDays.trim() ? Number(customIntervalDays) : null,
+    nextContributionDate: goal?.nextContributionDate ?? null,
+  }, toCentavos(target), toCentavos(starting) + (goal ? goal.currentAmountCentavos - goal.startingAmountCentavos : 0), targetDate, getPhilippineToday());
   const scheduleValue: RecurringScheduleValue = { frequency: contributionFrequency ?? "monthly", intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, monthOfYear: null };
   return <View style={{ gap: 14 }}>
     <View><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 20, fontWeight: "800" }}>{goal ? "Edit savings goal" : "Add savings goal"}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 3 }}>Set a target and track the amount you have already saved.</Text></View>
     <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 14, padding: 14 }}>
       {goalType === "emergency_fund" && baseline !== null ? <View style={{ backgroundColor: "#F8EFDC", borderRadius: 10, padding: 11 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Suggested monthly baseline: PHP {fromCentavos(baseline)}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 3 }}>Based on posted expenses from the six completed calendar months before today. Saving keeps this baseline without recalculating it later.</Text></View> : null}
       <Field label="Goal name" value={name} onChangeText={(value) => { setName(value); if (duplicateName) { setDuplicateName(false); setMessage(null); } }} placeholder={SAVINGS_GOAL_PLACEHOLDERS.name} invalid={duplicateName || (invalid && !name.trim())} />
+      <SavingsGoalAccountSelector userId={userId} value={linkedAccountId} onChange={(id) => { setLinkedAccountId(id); setAccountInvalid(false); setMessage(null); }} invalid={accountInvalid} />
       <Field label="Target amount" value={target} onChangeText={setTarget} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(target)) || toCentavos(target) <= 0)} />
       <Field label="Starting amount" value={starting} onChangeText={setStarting} placeholder={SAVINGS_GOAL_PLACEHOLDERS.startingAmount} numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(starting)) || toCentavos(starting) < 0)} />
        <Field label="Target date" value={targetDate} onChangeText={setTargetDate} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetDate} invalid={invalid && !targetDate} />
         <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Contribution frequency</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>{CONTRIBUTION_OPTIONS.map((option) => <Pressable key={option.label} accessibilityRole="radio" accessibilityLabel={option.label} accessibilityState={{ selected: contributionFrequency === option.value }} onPress={() => { setContributionFrequency(option.value); setMessage(null); }} style={{ backgroundColor: contributionFrequency === option.value ? P.brand : P.white, borderColor: P.line, borderRadius: 10, borderWidth: 1, padding: 10 }}><Text style={{ color: contributionFrequency === option.value ? P.white : P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{option.label}</Text></Pressable>)}</View></View>
         {contributionFrequency !== null && !CONTRIBUTION_OPTIONS.some((option) => option.value === contributionFrequency) ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Existing schedule: {contributionFrequency}. Choose a frequency above to change it.</Text> : null}
         {contributionFrequency === null ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>No scheduled contributions. You can still contribute manually.</Text> : <>
-        <Field label="Planned contribution amount" value={plannedContribution} onChangeText={setPlannedContribution} placeholder="0.00" numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(plannedContribution)) || toCentavos(plannedContribution) < 0)} />
-        <RecurringScheduleFields showFrequencySelector={false} weekdayLabels={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]} frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={scheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); setMessage(null); }} frequencyLabel="CONTRIBUTION FREQUENCY" dayOfMonthError={invalid && (contributionFrequency === "semi_monthly" || contributionFrequency === "monthly") && (!Number.isInteger(Number(contributionDay)) || Number(contributionDay) < 1 || Number(contributionDay) > 31)} secondDayOfMonthError={invalid && contributionFrequency === "semi_monthly" && !contributionSecondDay} />
+        <RecurringScheduleFields appearance="form" showFrequencySelector={false} weekdayLabels={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]} frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={scheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); setMessage(null); }} frequencyLabel="CONTRIBUTION FREQUENCY" dayOfMonthError={invalid && (contributionFrequency === "semi_monthly" || contributionFrequency === "monthly") && (!Number.isInteger(Number(contributionDay)) || Number(contributionDay) < 1 || Number(contributionDay) > 31)} secondDayOfMonthError={invalid && contributionFrequency === "semi_monthly" && !contributionSecondDay} />
         {contributionFrequency === "custom" ? <Field label="Custom interval days" value={customIntervalDays} onChangeText={setCustomIntervalDays} placeholder="e.g. 45" numeric invalid={invalid && (!Number.isSafeInteger(Number(customIntervalDays)) || Number(customIntervalDays) <= 0)} /> : null}
+        <Field label="Planned contribution amount" value={plannedContribution} onChangeText={setPlannedContribution} placeholder="0.00" numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(plannedContribution)) || toCentavos(plannedContribution) < 0)} />
+        {suggestedContribution !== null ? <View style={{ gap: 7 }}>
+          <Text accessibilityLiveRegion="polite" style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Suggested: PHP {(suggestedContribution / 100).toFixed(2)} per contribution to reach your target by {targetDate}. Based on your remaining balance; excludes interest.</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Use suggested amount" onPress={() => setPlannedContribution(fromCentavos(suggestedContribution))} style={{ alignSelf: "flex-start", paddingVertical: 8 }}>
+            <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Use suggested amount</Text>
+          </Pressable>
+        </View> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Enter a remaining target, a valid target date, and contribution days to see a suggested amount.</Text>}
         </>}
-       <Field label="Interest rate (%)" value={interestRate} onChangeText={setInterestRate} placeholder="Optional" numeric invalid={invalid && interestRate.trim() !== "" && (!Number.isFinite(Number(interestRate)) || Number(interestRate) < 0)} />
+       {goal ? <Field label="Interest rate (%)" value={interestRate} onChangeText={setInterestRate} placeholder="Optional" numeric invalid={invalid && interestRate.trim() !== "" && (!Number.isFinite(Number(interestRate)) || Number(interestRate) < 0)} /> : null}
        <Field label="Notes" value={notes} onChangeText={setNotes} placeholder="Optional" />
       <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Priority</Text><View style={{ flexDirection: "row", gap: 7 }}>{SAVINGS_GOAL_PRIORITIES.map((value) => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`Select ${SAVINGS_GOAL_PRIORITY_LABELS[value]} priority`} accessibilityState={{ selected: value === priority }} onPress={() => setPriority(value)} style={{ backgroundColor: value === priority ? P.brand : P.white, borderColor: value === priority ? P.brand : P.line, borderRadius: 9, borderWidth: 1, flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center" }}><Text style={{ color: value === priority ? P.white : P.ink, fontFamily: "Manrope", fontSize: 11, fontWeight: "700" }}>{SAVINGS_GOAL_PRIORITY_LABELS[value]}</Text></Pressable>)}</View></View>
        {message ? <Text accessibilityLiveRegion="polite" style={{ color: P.error, fontFamily: "Manrope", fontSize: 12 }}>{message}</Text> : null}

@@ -32,7 +32,7 @@ type PaymentRow = Omit<CreditCardPayment, "issuer_recognized" | "deleted"> & { i
 export type StatementPaymentContext = { statementId: string; cycleId: string };
 
 export type CreateStatementPaymentInput = StatementPaymentContext & Pick<CreateExpenseInput,
-  "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name"
+  "savings_goal_withdrawals" | "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name"
 > & { notes?: string | null };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -131,6 +131,7 @@ export async function createStatementPayment(
     if (existing) throw new LocalDbError("VALIDATION_ERROR", "A payment is already recorded for this billing cycle.");
 
     const { transaction, operation: transactionOperation } = await createExpenseInTransaction(db, userId, deviceId, {
+      savings_goal_withdrawals: input.savings_goal_withdrawals,
       amount_centavos: input.amount_centavos,
       source_account_id: input.source_account_id,
       subcategory_id: input.subcategory_id,
@@ -183,7 +184,7 @@ export async function updateStatementPayment(
   userId: string,
   deviceId: string,
   paymentId: string,
-  input: Pick<CreateStatementPaymentInput, "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name" | "notes">,
+  input: Pick<CreateStatementPaymentInput, "savings_goal_withdrawals" | "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name" | "notes">,
 ): Promise<void> {
   const db = await getDb();
   const ts = timestamp();
@@ -199,6 +200,7 @@ export async function updateStatementPayment(
       throw new LocalDbError("VALIDATION_ERROR", "Payment amount cannot exceed the statement balance.");
     }
     await updateTransaction(userId, deviceId, payment.transaction_id, {
+      savings_goal_withdrawals: input.savings_goal_withdrawals,
       amount_centavos: input.amount_centavos, source_account_id: input.source_account_id,
       subcategory_id: input.subcategory_id, transaction_date: input.transaction_date,
       merchant_name: input.merchant_name ?? "", notes: input.notes ?? "",

@@ -26,7 +26,7 @@ describe("credit-card expense inserts", () => {
   test("binds every transaction column when creating an expense", async () => {
     const db = {
       getFirstAsync: jest.fn(async (sql: string) => {
-        if (sql.includes("kind = 'credit_card'")) return { id: "account-1" };
+        if (sql.includes("kind = 'credit_card'")) return { id: "account-1", kind: "credit_card", current_balance_centavos: 0 };
         if (sql.includes("FROM credit_card_cycles")) return { id: "cycle-1" };
         if (sql.includes("FROM subcategories")) return { id: "subcategory-1" };
         if (sql.includes("FROM transactions")) return {
@@ -36,8 +36,9 @@ describe("credit-card expense inserts", () => {
           destination_account_id: null, recurring_template_id: null, merchant_name: null,
           counterparty_name: null, notes: null, client_mutation_id: null,
         };
-        return { id: "account-1" };
+        return { id: "account-1", kind: "credit_card", current_balance_centavos: 0 };
       }),
+      getAllAsync: jest.fn(async () => []),
       runAsync: jest.fn(async () => ({ changes: 1 })),
       withTransactionAsync: jest.fn(async (work: (tx: unknown) => Promise<void>) => work(db)),
     };
@@ -76,7 +77,7 @@ describe("credit-card expense inserts", () => {
   test("creates an installment before its linked credit-card relationship", async () => {
     const db = {
       getFirstAsync: jest.fn(async (sql: string) => {
-        if (sql.includes("kind = 'credit_card'")) return { id: "account-1" };
+        if (sql.includes("kind = 'credit_card'")) return { id: "account-1", kind: "credit_card", current_balance_centavos: 0 };
         if (sql.includes("FROM credit_card_cycles")) return { id: "cycle-1" };
         if (sql.includes("FROM subcategories")) return { id: "subcategory-1" };
         if (sql.includes("FROM transactions")) return {
@@ -93,8 +94,9 @@ describe("credit-card expense inserts", () => {
           interest_rate_bps: 0, interest_type: "zero_interest", settlement_status: "active", version: 1,
           deleted: 0, created_at: "now", updated_at: "now",
         };
-        return { id: "account-1" };
+        return { id: "account-1", kind: "credit_card", current_balance_centavos: 0 };
       }),
+      getAllAsync: jest.fn(async () => []),
       runAsync: jest.fn(async () => ({ changes: 1 })),
       withTransactionAsync: jest.fn(async (work: (tx: unknown) => Promise<void>) => work(db)),
     };
@@ -141,8 +143,9 @@ describe("credit-card expense inserts", () => {
         if (sql.includes("FROM credit_card_transactions")) return { account_id: "account-1", cycle_id: "cycle-september", version: 1 };
         if (sql.includes("FROM credit_card_cycles")) return { id: "cycle-august" };
         if (sql.includes("FROM transactions")) return transaction;
-        return { id: "account-1" };
+        return { id: "account-1", kind: "credit_card", current_balance_centavos: 0 };
       }),
+      getAllAsync: jest.fn(async () => []),
       runAsync: jest.fn(async () => ({ changes: 1 })),
       withTransactionAsync: jest.fn(async (work: (tx: unknown) => Promise<void>) => work(db)),
     };

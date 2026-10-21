@@ -64,7 +64,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   savings_account_details: new Set([
     "account_id", "user_id", "account_type", "interest_rate_bps", "minimum_balance_centavos",
-    "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible", "boosted_interest_rate_bps", "interest_calculation_basis", "interest_credit_frequency", "maximum_eligible_balance_centavos", "balance_tiers_json", "required_deposit_centavos", "required_deposit_frequency", "required_transaction_count", "required_transaction_period", "direct_deposit_threshold_centavos", "qualification_period", "promotional_interest_rate_bps", "promotion_start_date", "promotion_end_date", "principal_centavos",
+    "base_interest_rate_bps", "effective_interest_rate_bps", "interest_conditions", "higher_rate_eligible", "boosted_interest_rate_bps", "interest_calculation_basis", "interest_credit_frequency", "maximum_eligible_balance_centavos", "balance_tiers_json", "interest_reference_json", "required_deposit_centavos", "required_deposit_frequency", "required_transaction_count", "required_transaction_period", "direct_deposit_threshold_centavos", "qualification_period", "promotional_interest_rate_bps", "promotion_start_date", "promotion_end_date", "principal_centavos",
     "maturity_date", "term_months", "early_withdrawal_rule", "planned_contribution_amount_centavos",
     "contribution_frequency", "contribution_interval_count", "contribution_day_of_month",
     "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days",
@@ -90,7 +90,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   transactions: new Set([
     "id", "user_id", "transaction_type", "status", "entry_source",
     "transaction_date", "posted_at", "credit_card_posting_date", "amount_centavos",
-    "subcategory_id", "source_account_id", "destination_account_id",
+    "subcategory_id", "source_account_id", "destination_account_id", "source_savings_goal_id", "destination_savings_goal_id",
     "recurring_template_id", "merchant_name", "counterparty_name",
     "notes", "client_mutation_id", "metadata", "version", "deleted",
     "created_at", "updated_at", "last_synced_at",
@@ -157,7 +157,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   anomaly_whitelist_rules: new Set(["id", "user_id", "merchant_name", "subcategory_id", "base_amount_centavos", "tolerance_bps", "allow_any_amount", "status", "notes", "version", "deleted", "updated_at"]),
   alert_suppression_rules: new Set(["id", "user_id", "category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata", "version", "deleted", "updated_at"]),
   anomaly_evaluations: new Set(["id", "user_id", "transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "confirmed_recurring_at", "model_version", "evaluated_at", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
-  savings_goals: new Set(["id", "user_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "archived_at", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
+  savings_goals: new Set(["id", "user_id", "linked_account_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "archived_at", "status", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   savings_goal_activities: new Set(["id", "user_id", "savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),
   scheduled_payments: new Set([
     "id", "user_id", "name", "subcategory_id", "source_account_id", "amount_centavos", "frequency",
@@ -211,6 +211,8 @@ export function normalizePullRow(
     } else if (col === "metadata" || col === "preset_data" || col === "payment_schedule" || col.endsWith("_snapshot_json") || col === "recommendation_json") {
       const val = row[col];
       normalized[col] = typeof val === "object" && val !== null ? JSON.stringify(val) : (val ?? "{}");
+    } else if (table === "savings_account_details" && col === "interest_reference_json") {
+      normalized[col] = row.interest_reference == null ? null : JSON.stringify(row.interest_reference);
     } else if (table === "savings_account_details" && col === "balance_tiers_json") {
       const tiers = row.balance_tiers;
       normalized[col] = typeof tiers === "object" && tiers !== null ? JSON.stringify(tiers) : null;
@@ -299,7 +301,7 @@ async function applyPullRowContents(
         now,
         ...identityParams,
       );
-    } else if (table === "credit_card_cycles" || table === "credit_card_details" || table === "credit_card_payments" || table === "debt_payments" || table === "savings_account_details" || table === "scheduled_payments" || table === "scheduled_payment_records") {
+    } else if (table === "credit_card_cycles" || table === "credit_card_details" || table === "credit_card_payments" || table === "debt_payments" || table === "savings_account_details" || table === "savings_goal_activities" || table === "scheduled_payments" || table === "scheduled_payment_records") {
       await db.runAsync(
         `UPDATE "${table}" SET deleted = 1, version = ?,
           updated_at = ? WHERE ${identityWhere}`,

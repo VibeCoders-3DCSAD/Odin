@@ -1,10 +1,10 @@
-// Builds a deterministic year-plus of demo financial history in memory. seed.ts writes it to Supabase.
+// Builds a deterministic year-plus of seeded financial history in memory. seed.ts writes it to Supabase.
 import { createHash, randomUUID } from "node:crypto";
 
 export const seedMarker = "dummy-financial-data";
 export const legacySeedMarker = "dummy-financial-data-v1";
 // Seeded plans have no metadata column, so this model version is what marks them for cleanup.
-export const seedForecastModelVersion = "demo-seed-v1";
+export const seedForecastModelVersion = "seed-v1";
 // Must match private.scheduled_payment_post_id and SCHEDULED_PAYMENT_POST_NAMESPACE on the device, so the
 // auto-post job treats seeded biller payments as already posted instead of posting them again.
 const SCHEDULED_PAYMENT_POST_NAMESPACE = "7f4fa802-4c64-4370-aed4-ca25c703928f";
@@ -22,7 +22,7 @@ export const requiredSubcategorySlugs = [
   "housing_rent", "housing_electricity", "housing_water", "housing_internet", "communication_mobile_postpaid",
   "recreation_streaming", "recreation_sports", "recreation_cinema", "health_insurance", "health_medicines",
   "transport_vehicle_registration", "transport_public", "transport_ride_hailing", "transport_fuel", "misc_other",
-  "misc_financial_services", "misc_personal_care", "education_tuition", "food_groceries", "food_fresh_produce",
+  "misc_personal_care", "education_tuition", "food_groceries", "food_fresh_produce",
   "restaurants_cafes", "restaurants_fast_food", "restaurants_street_food", "restaurants_delivery",
   "restaurants_casual_dining", "household_cleaning_supplies", "household_kitchenware", "clothing_accessories",
   "clothing_childrens",
@@ -37,6 +37,7 @@ export type Transaction = Row & {
   amount_centavos: number;
   source_account_id: string | null;
   destination_account_id: string | null;
+  category_id: null;
   subcategory_id: string | null;
   client_mutation_id: string;
 };
@@ -44,7 +45,6 @@ export type Transaction = Row & {
 export type SeedData = {
   accounts: Row[];
   incomeSources: Row[];
-  savingsGoals: Row[];
   debtAccounts: Row[];
   creditCardDetails: Row[];
   creditCardCycles: Row[];
@@ -52,14 +52,12 @@ export type SeedData = {
   creditCardTransactions: Row[];
   creditCardStatements: Row[];
   creditCardPayments: Row[];
-  savingsGoalActivities: Row[];
   debtPayments: Row[];
   scheduledPayments: Row[];
   scheduledPaymentRecords: Row[];
   financialPlans: Row[];
   planForecastPoints: Row[];
   planAllocations: Row[];
-  planSavingsReservations: Row[];
   planDebtReservations: Row[];
   // Card purchases to insert at a lower amount and then correct, so the server's purchase-amount trigger
   // lowers available credit by the card's outstanding balance (it can't be written directly).
@@ -160,8 +158,8 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
   const inWindow = (date: string) => date >= start && date <= today;
   const monthIndexOf = (date: string) => months.indexOf(monthStartOf(date));
 
-  const accountIds = { bank: randomUUID(), wallet: randomUUID(), savings: randomUUID(), rewardsCard: randomUUID(), cashbackCard: randomUUID() };
-  const openingBalances = { [accountIds.bank]: centavos(90_000), [accountIds.wallet]: centavos(6_000), [accountIds.savings]: centavos(40_000) };
+  const accountIds = { bank: randomUUID(), wallet: randomUUID(), rewardsCard: randomUUID(), cashbackCard: randomUUID() };
+  const openingBalances = { [accountIds.bank]: centavos(90_000), [accountIds.wallet]: centavos(6_000) };
 
   const transactions: Transaction[] = [];
   const addTransaction = (input: {
@@ -171,7 +169,7 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
     const row: Transaction = {
       id: input.id ?? randomUUID(), user_id: userId, transaction_type: input.type, status: "posted", entry_source: input.entrySource ?? "manual",
       transaction_date: input.date, posted_at: manilaNoon(input.date), amount_centavos: input.amount,
-      subcategory_id: input.slug ? subcategory(input.slug) : null, source_account_id: input.source ?? null, destination_account_id: input.destination ?? null,
+      category_id: null, subcategory_id: input.slug ? subcategory(input.slug) : null, source_account_id: input.source ?? null, destination_account_id: input.destination ?? null,
       merchant_name: input.merchant ?? null, notes: input.notes ?? null, client_mutation_id: input.mutationId ?? randomUUID(),
       metadata: marker, deleted: false, version: 1, ...input.extra,
     };
@@ -252,8 +250,8 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
 
   // Non-credit-card debts: two still active, two paid off inside the window.
   const debtSpecs = [
-    { name: "Personal Loan", lender: "Demo Bank", presetKey: "personal_loan", original: 120_000, startingBalance: 92_000, rateBps: 1_250, method: "diminishing_balance", payment: 4_500, day: 5, firstMonthIndex: 0, openedOn: monthDate(addMonths(start, -8), 5), termMonths: 36, presetData: { personalLoan: { purpose: "Home improvements" } }, notes: "Consistent monthly payments." },
-    { name: "Motorcycle Loan", lender: "Demo Finance", presetKey: "auto_loan", original: 190_000, startingBalance: 190_000, rateBps: 890, method: "diminishing_balance", payment: 6_800, day: 20, firstMonthIndex: 1, openedOn: monthDate(start, 20), termMonths: 36, presetData: { autoLoan: { vehicleDescription: "Commuter motorcycle", vehiclePurchasePriceCentavos: centavos(240_000), downpaymentCentavos: centavos(50_000), financedPrincipalCentavos: centavos(190_000) } }, notes: null },
+    { name: "Personal Loan", lender: "Bank", presetKey: "personal_loan", original: 120_000, startingBalance: 92_000, rateBps: 1_250, method: "diminishing_balance", payment: 4_500, day: 5, firstMonthIndex: 0, openedOn: monthDate(addMonths(start, -8), 5), termMonths: 36, presetData: { personalLoan: { purpose: "Home improvements" } }, notes: "Consistent monthly payments." },
+    { name: "Motorcycle Loan", lender: "Finance", presetKey: "auto_loan", original: 190_000, startingBalance: 190_000, rateBps: 890, method: "diminishing_balance", payment: 6_800, day: 20, firstMonthIndex: 1, openedOn: monthDate(start, 20), termMonths: 36, presetData: { autoLoan: { vehicleDescription: "Commuter motorcycle", vehiclePurchasePriceCentavos: centavos(240_000), downpaymentCentavos: centavos(50_000), financedPrincipalCentavos: centavos(190_000) } }, notes: null },
     { name: "Refrigerator Installment", lender: "Abenson", presetKey: "custom_debt", original: 24_000, startingBalance: 24_000, rateBps: 0, method: "no_interest", payment: 3_000, day: 28, firstMonthIndex: 0, openedOn: monthDate(addMonths(start, -1), 28), termMonths: 8, presetData: { customDebt: { providerCalculatedInterest: false } }, notes: "0% store installment." },
     { name: "SSS Salary Loan", lender: "SSS", presetKey: "salary_loan", original: 20_000, startingBalance: 20_000, rateBps: 1_000, method: "flat_add_on", payment: 2_000, day: 15, firstMonthIndex: 0, openedOn: monthDate(addMonths(start, -1), 15), termMonths: 11, presetData: { salaryLoan: { provider: "sss", linkedIncomeSourceId: incomeSourceIds.salary, repaymentMethod: "manual_payment", deductionAmountCentavos: null, deductionSchedule: null } }, notes: null },
   ];
@@ -275,8 +273,9 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
       const principal = balance - (payment - interest) < centavos(1) ? balance : payment - interest;
       debtReservations.push({ debtAccountId: id, monthIndex: index, amountCentavos: principal + interest, dueDate });
       if (!inWindow(dueDate)) continue;
-      const transaction = addTransaction({ date: dueDate, type: "expense", amount: principal + interest, slug: "misc_financial_services", source: accountIds.bank, merchant: spec.lender, notes: `${spec.name} payment` });
-      debtPayments.push({ id: randomUUID(), debt_account_id: id, user_id: userId, transaction_id: transaction.id, source: "transaction", payment_date: dueDate, amount_centavos: principal + interest, principal_centavos: principal, interest_centavos: interest, notes: null, metadata: marker, version: 1, deleted: false });
+      const paymentId = randomUUID();
+      const transaction = addTransaction({ date: dueDate, type: "expense", amount: principal + interest, source: accountIds.bank, merchant: spec.lender, notes: `${spec.name} payment`, mutationId: `debt-payment:${paymentId}` });
+      debtPayments.push({ id: paymentId, debt_account_id: id, user_id: userId, transaction_id: transaction.id, source: "transaction", payment_date: dueDate, amount_centavos: principal + interest, principal_centavos: principal, interest_centavos: interest, notes: null, metadata: marker, version: 1, deleted: false });
       balance -= principal;
       lastPaymentDate = dueDate;
     }
@@ -292,48 +291,6 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
       interest_period: spec.rateBps === 0 ? "none" : "annual", interest_method: spec.method,
       preset_data: { startDate: spec.openedOn, feesCentavos: 0, penaltyInfo: null, termMonths: spec.termMonths, ...spec.presetData },
       notes: spec.notes, metadata: marker, version: 1, deleted: false,
-    });
-  }
-
-  // Savings goals: two active, two completed (archived after reaching their targets).
-  const goalSpecs = [
-    { name: "Emergency Fund", goalType: "emergency_fund", priority: "high", target: 180_000, starting: 30_000, contribution: 3_000, firstMonthIndex: 0, completed: false, targetDate: monthDate(addMonths(currentMonth, 24), 30) },
-    { name: "Japan Trip", goalType: "custom", priority: "medium", target: 120_000, starting: 0, contribution: 2_500, firstMonthIndex: 6, completed: false, targetDate: monthDate(addMonths(currentMonth, 18), 31) },
-    { name: "New Laptop", goalType: "custom", priority: "medium", target: 50_000, starting: 10_000, contribution: 4_000, firstMonthIndex: 0, completed: true, targetDate: monthDate(months[10], 28) },
-    { name: "Christmas Gifts", goalType: "custom", priority: "low", target: 10_000, starting: 0, contribution: 2_500, firstMonthIndex: 0, completed: true, targetDate: monthDate(months[4], 20) },
-  ];
-  const savingsGoals: Row[] = [];
-  const savingsGoalActivities: Row[] = [];
-  const savingsReservations: (Reservation & { savingsGoalId: string })[] = [];
-  for (const spec of goalSpecs) {
-    const id = randomUUID();
-    const contribution = centavos(spec.contribution);
-    const target = centavos(spec.target);
-    let current = centavos(spec.starting);
-    let achievedOn: string | null = null;
-    for (const [index, month] of months.entries()) {
-      if (index < spec.firstMonthIndex || (spec.completed && current >= target)) continue;
-      const dueDate = monthDate(month, 16);
-      const amount = spec.completed ? Math.min(contribution, target - current) : contribution;
-      savingsReservations.push({ savingsGoalId: id, monthIndex: index, amountCentavos: amount, dueDate });
-      if (!inWindow(dueDate)) continue;
-      const transaction = addTransaction({ date: dueDate, type: "transfer", amount, source: accountIds.bank, destination: accountIds.savings, notes: `Contribution to ${spec.name}`, extra: { destination_savings_goal_id: id } });
-      savingsGoalActivities.push({ id: randomUUID(), user_id: userId, savings_goal_id: id, transaction_id: transaction.id, activity_kind: "contribution", amount_centavos: amount, activity_date: dueDate, notes: null, version: 1, deleted: false });
-      current += amount;
-      if (current >= target && !achievedOn) achievedOn = dueDate;
-    }
-    if (spec.completed && !achievedOn) throw new Error(`${spec.name} must reach its target inside the seeded window`);
-    const schedule = spec.completed
-      ? { contribution_frequency: null, planned_contribution_amount_centavos: null, next_contribution_date: null, contribution_interval_count: null, contribution_day_of_month: null }
-      : { contribution_frequency: "monthly", planned_contribution_amount_centavos: contribution, next_contribution_date: nextMonthlyDate(today, 16), contribution_interval_count: 1, contribution_day_of_month: 16 };
-    savingsGoals.push({
-      id, user_id: userId, linked_account_id: accountIds.savings, name: spec.name, goal_type: spec.goalType, priority: spec.priority,
-      status: spec.completed ? "archived" : "active", progress_state: spec.completed ? "achieved" : "on_track",
-      target_amount_centavos: target, starting_amount_centavos: centavos(spec.starting), current_amount_centavos: current, target_date: spec.targetDate,
-      achieved_at: achievedOn ? manilaNoon(achievedOn) : null, archived_at: achievedOn && spec.completed ? manilaNoon(addDays(achievedOn, 3)) : null,
-      auto_save_amount_centavos: spec.completed ? 0 : contribution, emergency_fund_baseline_centavos: spec.goalType === "emergency_fund" ? centavos(30_000) : 0,
-      emergency_fund_target_method: spec.goalType === "emergency_fund" ? "essential_expense_coverage" : "fixed_amount", essential_expense_coverage_months: 6,
-      ...schedule, metadata: marker, version: 1, deleted: false,
     });
   }
 
@@ -366,13 +323,13 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
 
   // Credit cards: thirteen billing cycles each, ending with the open one. Statement balances carry unpaid amounts with a 3% finance charge.
   const cardSpecs = [
-    { id: accountIds.rewardsCard, name: "Demo Rewards Visa", issuer: "Demo Bank", limit: 120_000, cutoffDay: 15, minimumPayEvery: 0, holidayPurchase: { slug: "clothing_childrens", merchants: ["SM Department Store"], pesos: 6_500, count: 1 }, purchases: [
+    { id: accountIds.rewardsCard, name: "Rewards Visa", issuer: "Bank", limit: 120_000, cutoffDay: 15, minimumPayEvery: 0, holidayPurchase: { slug: "clothing_childrens", merchants: ["SM Department Store"], pesos: 6_500, count: 1 }, purchases: [
       { slug: "transport_fuel", merchants: ["Petron", "Shell"], pesos: 450, count: 4 },
       { slug: "clothing_accessories", merchants: ["Shopee"], pesos: 1_500, count: 1 },
       { slug: "restaurants_casual_dining", merchants: ["Dinner out"], pesos: 1_200, count: 2 },
       { slug: "recreation_cinema", merchants: ["SM Cinema"], pesos: 600, count: 1 },
     ] },
-    { id: accountIds.cashbackCard, name: "Demo Cashback Mastercard", issuer: "Demo Credit", limit: 50_000, cutoffDay: 25, minimumPayEvery: 4, holidayPurchase: null, purchases: [
+    { id: accountIds.cashbackCard, name: "Cashback Mastercard", issuer: "Credit", limit: 50_000, cutoffDay: 25, minimumPayEvery: 4, holidayPurchase: null, purchases: [
       { slug: "restaurants_delivery", merchants: ["GrabFood", "foodpanda"], pesos: 450, count: 4 },
       { slug: "household_kitchenware", merchants: ["Lazada"], pesos: 900, count: 1 },
       { slug: "health_medicines", merchants: ["Mercury Drug"], pesos: 700, count: 1 },
@@ -433,9 +390,10 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
         continue;
       }
       const amount = card.minimumPayEvery && cycleIndex % card.minimumPayEvery === 2 ? minimumDue : balance;
-      const mutationId = randomUUID();
-      const transaction = addTransaction({ date: paymentDate, type: "expense", amount, slug: "misc_financial_services", source: accountIds.bank, merchant: `${card.name} payment`, mutationId });
-      creditCardPayments.push({ id: randomUUID(), user_id: userId, cycle_id: cycle.id, statement_id: statementId, transaction_id: transaction.id, amount_centavos: amount, payment_date: paymentDate, source_account_id: accountIds.bank, notes: null, issuer_recognized: false, client_mutation_id: mutationId, version: 1, deleted: false });
+      const paymentId = randomUUID();
+      const mutationId = `credit-card-payment:${paymentId}`;
+      const transaction = addTransaction({ date: paymentDate, type: "expense", amount, source: accountIds.bank, merchant: `${card.name} payment`, mutationId });
+      creditCardPayments.push({ id: paymentId, user_id: userId, cycle_id: cycle.id, statement_id: statementId, transaction_id: transaction.id, amount_centavos: amount, payment_date: paymentDate, source_account_id: accountIds.bank, notes: null, issuer_recognized: false, client_mutation_id: mutationId, version: 1, deleted: false });
       paidTotal += amount;
       carried = balance - amount;
     }
@@ -471,11 +429,10 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
     include_in_dashboard_balance: includeInDashboard, institution_name: institution, opened_on: openedOn, sort_order: sortOrder, metadata: marker, deleted: false, version: 1,
   });
   const accounts = [
-    accountRow(accountIds.bank, "Demo Payroll Account", "bank", "Demo Bank", 1, start),
-    accountRow(accountIds.wallet, "Demo Daily Wallet", "e_wallet", "Demo Wallet", 2, start),
-    accountRow(accountIds.savings, "Demo Emergency Savings", "savings", "Demo Bank", 3, start),
-    accountRow(accountIds.rewardsCard, "Demo Rewards Visa", "credit_card", "Demo Bank", 4, cardOpenedOn[accountIds.rewardsCard], false),
-    accountRow(accountIds.cashbackCard, "Demo Cashback Mastercard", "credit_card", "Demo Credit", 5, cardOpenedOn[accountIds.cashbackCard], false),
+    accountRow(accountIds.bank, "Payroll Account", "bank", "Bank", 1, start),
+    accountRow(accountIds.wallet, "Daily Wallet", "e_wallet", "Wallet", 2, start),
+    accountRow(accountIds.rewardsCard, "Rewards Visa", "credit_card", "Bank", 3, cardOpenedOn[accountIds.rewardsCard], false),
+    accountRow(accountIds.cashbackCard, "Cashback Mastercard", "credit_card", "Credit", 4, cardOpenedOn[accountIds.cashbackCard], false),
   ];
 
   // One accepted plan per month. Each plan's forecast tracks what was actually spent that month, give or take a few percent.
@@ -498,7 +455,6 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
   const financialPlans: Row[] = [];
   const planForecastPoints: Row[] = [];
   const planAllocations: Row[] = [];
-  const planSavingsReservations: Row[] = [];
   const planDebtReservations: Row[] = [];
   for (const [index, month] of months.entries()) {
     const planId = randomUUID();
@@ -510,8 +466,6 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
       const floor = spec.rule === "FIXED" ? allocated : spec.rule === "MINIMUM" ? wholePesos(centavos(spec.pesos) * 0.9) : wholePesos(allocated * 0.6);
       return { id: randomUUID(), plan_id: planId, category_id: null, subcategory_id: subcategoryId, allocation_rule: spec.rule, allocated_amount_centavos: allocated, floor_amount_centavos: Math.min(floor, allocated), ceiling_amount_centavos: spec.rule === "FIXED" ? allocated : null, forecast_amount_centavos: forecast, subcategory_weight_bps: null };
     });
-    const savings = savingsReservations.filter((reservation) => reservation.monthIndex === index)
-      .map((reservation) => ({ id: randomUUID(), plan_id: planId, savings_goal_id: reservation.savingsGoalId, amount_centavos: reservation.amountCentavos, due_date: reservation.dueDate }));
     const debts = [
       ...debtReservations.filter((reservation) => reservation.monthIndex === index)
         .map((reservation) => ({ id: randomUUID(), plan_id: planId, debt_account_id: reservation.debtAccountId, credit_card_statement_id: null, amount_centavos: reservation.amountCentavos, due_date: reservation.dueDate })),
@@ -520,7 +474,7 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
     ];
     const availableFunds = centavos(32_500 * 2 + 9_000 + (month.slice(5, 7) === "12" ? 32_500 : 0));
     const sum = (rows: { amount_centavos?: number; allocated_amount_centavos?: number }[]) => rows.reduce((total, row) => total + (row.allocated_amount_centavos ?? row.amount_centavos ?? 0), 0);
-    const required = sum(allocations) + sum(savings) + sum(debts);
+    const required = sum(allocations) + sum(debts);
     const remaining = availableFunds - required;
     const savingsSurplus = remaining > 0 ? Math.floor(remaining * 0.6) : 0;
     financialPlans.push({
@@ -532,14 +486,13 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
     });
     planForecastPoints.push(...allocations.map((allocation) => ({ plan_id: planId, category_key: allocation.subcategory_id, amount_centavos: allocation.forecast_amount_centavos })));
     planAllocations.push(...allocations);
-    planSavingsReservations.push(...savings);
     planDebtReservations.push(...debts);
   }
 
   return {
-    accounts, incomeSources, savingsGoals, debtAccounts, creditCardDetails, creditCardCycles, transactions, creditCardTransactions,
-    creditCardStatements, creditCardPayments, savingsGoalActivities, debtPayments, scheduledPayments, scheduledPaymentRecords,
-    financialPlans, planForecastPoints, planAllocations, planSavingsReservations, planDebtReservations, availableCreditAdjustments,
+    accounts, incomeSources, debtAccounts, creditCardDetails, creditCardCycles, transactions, creditCardTransactions,
+    creditCardStatements, creditCardPayments, debtPayments, scheduledPayments, scheduledPaymentRecords,
+    financialPlans, planForecastPoints, planAllocations, planDebtReservations, availableCreditAdjustments,
     summary: { start, end: today, endingBalances: Object.fromEntries(accounts.map((account) => [account.name, account.current_balance_centavos as number])) },
   };
 }

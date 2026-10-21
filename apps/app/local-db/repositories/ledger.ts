@@ -1,5 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
+import { validateSavingsGoalContribution, writeSavingsGoalContribution, type SavingsGoalContribution } from "./savingsGoalContributions";
+import { readSavingsExpenseFunding, validateSavingsExpenseWithdrawals, replaceExpenseSavingsWithdrawals, type SavingsExpenseWithdrawal } from "./savingsExpenseFunding";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
@@ -28,6 +30,8 @@ type TransactionRow = {
   subcategory_id: string | null;
   source_account_id: string | null;
   destination_account_id: string | null;
+  destination_savings_goal_id?: string | null;
+  source_savings_goal_id?: string | null;
   recurring_template_id: string | null;
   merchant_name: string | null;
   counterparty_name: string | null;
@@ -69,6 +73,8 @@ export type Transaction = {
   subcategory_id: string | null;
   source_account_id: string | null;
   destination_account_id: string | null;
+  destination_savings_goal_id?: string | null;
+  source_savings_goal_id?: string | null;
   recurring_template_id: string | null;
   merchant_name: string | null;
   counterparty_name: string | null;
@@ -89,6 +95,7 @@ export type CreateIncomeInput = {
 };
 
 export type CreateExpenseInput = {
+  savings_goal_withdrawals?: SavingsExpenseWithdrawal[];
   amount_centavos: number;
   source_account_id: string;
   subcategory_id: string;
@@ -117,6 +124,7 @@ export type CreateTransferInput = {
 };
 
 export type UpdateTransactionInput = {
+  savings_goal_withdrawals?: SavingsExpenseWithdrawal[];
   amount_centavos?: number;
   subcategory_id?: string;
   source_account_id?: string;
@@ -167,6 +175,8 @@ function mapTransaction(row: TransactionRow): Transaction {
     subcategory_id: row.subcategory_id,
     source_account_id: row.source_account_id,
     destination_account_id: row.destination_account_id,
+    destination_savings_goal_id: row.destination_savings_goal_id ?? null,
+    source_savings_goal_id: row.source_savings_goal_id ?? null,
     recurring_template_id: row.recurring_template_id,
     merchant_name: row.merchant_name,
     counterparty_name: row.counterparty_name,
@@ -417,6 +427,8 @@ async function validateUpdatedShape(
   transaction_type: string;
   source_account_id: string | null;
   destination_account_id: string | null;
+  destination_savings_goal_id?: string | null;
+  source_savings_goal_id?: string | null;
   subcategory_id: string | null;
 }> {
   const transactionType = current.transaction_type;
@@ -453,7 +465,7 @@ async function validateUpdatedShape(
     if (input.credit_card_posting_date != null) validateIsoDate(input.credit_card_posting_date, "credit_card_posting_date");
   } else if (transactionType === "transfer") {
     if (!sourceId || !destId) throw new LocalDbError("VALIDATION_ERROR", "both accounts are required for transfer");
-    if (sourceId === destId) throw new LocalDbError("VALIDATION_ERROR", "source and destination accounts must differ");
+    if (sourceId === destId && !current.destination_savings_goal_id) throw new LocalDbError("VALIDATION_ERROR", "source and destination accounts must differ");
     if (subId != null) throw new LocalDbError("VALIDATION_ERROR", "subcategory_id must be null for transfer");
   }
 
@@ -635,6 +647,7 @@ export async function listSavingsAccountMovements(userId: string, accountId: str
       amount_centavos AS amountCentavos, transaction_date AS transactionDate
      FROM transactions
      WHERE user_id = ? AND status = 'posted' AND deleted = 0
+       AND source_account_id IS NOT destination_account_id
        AND ((destination_account_id = ? AND transaction_type IN ('income', 'transfer'))
          OR (source_account_id = ? AND transaction_type IN ('expense', 'transfer')))
      ORDER BY transaction_date ASC, created_at ASC`,
@@ -726,11 +739,14 @@ export async function createExpenseInTransaction(
   const id = options?.id ?? randomUUID();
   const isCreditCard = await verifyExpenseAccountCanBeUsed(db, userId, input.source_account_id);
   await validateExpenseShape(db, userId, input);
+  const withdrawals = input.savings_goal_withdrawals ?? [];
+  validateSavingsExpenseWithdrawals(await readSavingsExpenseFunding(db, userId, input.source_account_id, input.amount_centavos), withdrawals);
   if (!isCreditCard) {
     await applyBalanceEffects(db, userId, "expense", input.source_account_id, null, input.amount_centavos);
   }
   const { sql, params } = buildTransactionInsert(id, userId, "expense", input, ts);
   await db.runAsync(sql, ...params);
+  await replaceExpenseSavingsWithdrawals(db, userId, id, withdrawals, input.transaction_date, input.notes ?? null);
   const { installment: _installment, ...transactionInput } = input;
   const operation = await enqueueOperation(db, {
     userId, deviceId, entity: "transactions", recordId: id, operationType: "create",
@@ -900,22 +916,36 @@ export async function createSavingsGoalTransfer(
   input: { savings_goal_id: string; kind: "contribution" | "withdrawal"; account_id: string; amount_centavos: number; transaction_date: string; notes?: string },
 ): Promise<{ transaction: Transaction; operation: SyncOperation }> {
   validateAmount(input.amount_centavos);
+  validateIsoDate(input.transaction_date, "transaction_date");
   const db = await getDb(); const id = randomUUID(); const ts = now();
   let result!: { transaction: Transaction; operation: SyncOperation };
   await db.withTransactionAsync(async () => {
-    const goal = await db.getFirstAsync<{ id: string; target_amount_centavos: number; starting_amount_centavos: number; status: string }>("SELECT id, target_amount_centavos, starting_amount_centavos, status FROM savings_goals WHERE id = ? AND user_id = ? AND deleted = 0", input.savings_goal_id, userId);
-    if (!goal || goal.status !== "active") throw new LocalDbError("VALIDATION_ERROR", "Savings activities require an active savings goal.");
-    await verifyAccountOwnership(db, userId, input.account_id, "financial account");
+    if (input.kind !== "contribution" && input.kind !== "withdrawal") throw new LocalDbError("VALIDATION_ERROR", "Savings activity kind is invalid.");
+    if (input.kind === "withdrawal") {
+      const goal = await db.getFirstAsync<{ status: string }>("SELECT status FROM savings_goals WHERE id = ? AND user_id = ? AND deleted = 0", input.savings_goal_id, userId);
+      if (!goal || goal.status !== "active") throw new LocalDbError("VALIDATION_ERROR", "Savings activities require an active savings goal.");
+      await verifyAccountOwnership(db, userId, input.account_id, "financial account");
+    }
     const sourceAccountId = input.kind === "contribution" ? input.account_id : null;
-    const destinationAccountId = input.kind === "withdrawal" ? input.account_id : null;
+    const destinationAccountId = input.kind === "contribution"
+      ? await validateSavingsGoalContribution(db, userId, input.savings_goal_id, input.account_id, input.amount_centavos)
+      : input.account_id;
+    const contribution: SavingsGoalContribution | null = input.kind === "contribution" ? { savings_goal_id: input.savings_goal_id, activity_id: randomUUID() } : null;
     const transactionInput: CreateTransferInput = { amount_centavos: input.amount_centavos, source_account_id: sourceAccountId ?? "", destination_account_id: destinationAccountId ?? "", transaction_date: input.transaction_date, notes: input.notes, source_savings_goal_id: input.kind === "withdrawal" ? input.savings_goal_id : null, destination_savings_goal_id: input.kind === "contribution" ? input.savings_goal_id : null };
     if (sourceAccountId) await applyBalanceEffects(db, userId, "expense", sourceAccountId, null, input.amount_centavos);
     if (destinationAccountId) await applyBalanceEffects(db, userId, "income", null, destinationAccountId, input.amount_centavos);
     const { sql, params } = buildTransactionInsert(id, userId, "transfer", transactionInput, ts);
     await db.runAsync(sql, ...params);
-    const payload = { transaction_type: "transfer", transaction_date: input.transaction_date, amount_centavos: input.amount_centavos, source_account_id: sourceAccountId, destination_account_id: destinationAccountId, source_savings_goal_id: transactionInput.source_savings_goal_id, destination_savings_goal_id: transactionInput.destination_savings_goal_id, subcategory_id: null, notes: input.notes ?? null };
+    const payload = {
+      transaction_type: "transfer", transaction_date: input.transaction_date, amount_centavos: input.amount_centavos,
+      source_account_id: sourceAccountId, destination_account_id: destinationAccountId, subcategory_id: null, notes: input.notes ?? null,
+      ...(contribution ? { savings_goal_contribution: contribution } : {
+        source_savings_goal_id: transactionInput.source_savings_goal_id, destination_savings_goal_id: transactionInput.destination_savings_goal_id,
+      }),
+    };
     const operation = await enqueueOperation(db, { userId, deviceId, entity: "transactions", recordId: id, operationType: "create", baseVersion: null, changedFields: [], payload, failureMessage: "This savings transfer could not be created." });
-    await createSavingsGoalActivityInTransaction(db, userId, deviceId, { savingsGoalId: input.savings_goal_id, transactionId: id, kind: input.kind, amountCentavos: input.amount_centavos, activityDate: input.transaction_date, notes: input.notes });
+    if (contribution) await writeSavingsGoalContribution(db, userId, id, contribution, input.amount_centavos, input.transaction_date, input.notes ?? null);
+    else await createSavingsGoalActivityInTransaction(db, userId, deviceId, { savingsGoalId: input.savings_goal_id, transactionId: id, kind: input.kind, amountCentavos: input.amount_centavos, activityDate: input.transaction_date, notes: input.notes });
     const row = await db.getFirstAsync<TransactionRow>("SELECT * FROM transactions WHERE user_id = ? AND id = ?", userId, id);
     result = { transaction: mapTransaction(row!), operation };
   });
@@ -1006,6 +1036,23 @@ export async function updateTransaction(
       }
       updatedCycleId = cycle.id;
     }
+    let contribution: SavingsGoalContribution | null = null;
+    if (current.destination_savings_goal_id) {
+      await validateSavingsGoalContribution(db, userId, current.destination_savings_goal_id, newShape.source_account_id!, newAmount, id, newShape.destination_account_id);
+      const activity = await db.getFirstAsync<{ id: string }>("SELECT id FROM savings_goal_activities WHERE user_id = ? AND transaction_id = ? AND savings_goal_id = ? AND activity_kind = 'contribution' AND deleted = 0", userId, id, current.destination_savings_goal_id);
+      if (!activity) throw new LocalDbError("VALIDATION_ERROR", "This contribution is unavailable.");
+      contribution = { savings_goal_id: current.destination_savings_goal_id, activity_id: activity.id };
+    }
+    let expenseWithdrawals: SavingsExpenseWithdrawal[] | null = null;
+    if (current.transaction_type === "expense") {
+      const existing = await db.getAllAsync<{ savings_goal_id: string; amount_centavos: number }>(
+        "SELECT savings_goal_id, amount_centavos FROM savings_goal_activities WHERE user_id = ? AND transaction_id = ? AND deleted = 0", userId, id,
+      );
+      expenseWithdrawals = (input.savings_goal_withdrawals ?? existing).map((item) => ({ ...item, id: randomUUID() }));
+      validateSavingsExpenseWithdrawals(await readSavingsExpenseFunding(db, userId, newShape.source_account_id!, newAmount, id), expenseWithdrawals);
+    } else if (input.savings_goal_withdrawals?.length) {
+      throw new LocalDbError("VALIDATION_ERROR", "Goal funding is only available for expenses.");
+    }
     const balanceChanged =
       input.amount_centavos != null ||
       input.source_account_id != null ||
@@ -1061,6 +1108,9 @@ export async function updateTransaction(
       params.push(value as SQLite.SQLiteBindValue);
     }
 
+    if (!updates.length && expenseWithdrawals) {
+      changedFields.push("notes"); updates.push("notes = ?"); params.push(current.notes);
+    }
     if (updates.length > 0) {
       updates.push("updated_at = ?");
       params.push(ts);
@@ -1072,11 +1122,15 @@ export async function updateTransaction(
       await db.runAsync(sql, ...params);
     }
 
-    await updateSavingsGoalActivityForTransactionInTransaction(db, userId, deviceId, id, {
-      amountCentavos: newAmount,
-      activityDate: input.transaction_date ?? current.transaction_date,
-      notes: input.notes ?? current.notes,
-    });
+    if (contribution) {
+      await writeSavingsGoalContribution(db, userId, id, contribution, newAmount, input.transaction_date ?? current.transaction_date, input.notes ?? current.notes);
+    } else if (expenseWithdrawals) {
+      expenseWithdrawals = await replaceExpenseSavingsWithdrawals(db, userId, id, expenseWithdrawals, input.transaction_date ?? current.transaction_date, input.notes ?? current.notes);
+    } else {
+      await updateSavingsGoalActivityForTransactionInTransaction(db, userId, deviceId, id, {
+        amountCentavos: newAmount, activityDate: input.transaction_date ?? current.transaction_date, notes: input.notes ?? current.notes,
+      });
+    }
 
     if (cardPurchase && updatedCycleId !== cardPurchase.cycle_id) {
       await db.runAsync(
@@ -1108,7 +1162,9 @@ export async function updateTransaction(
       operationType: "update",
       baseVersion: current.version,
       changedFields,
-      payload: { ...input },
+      payload: { ...input, ...(contribution ? { savings_goal_contribution: contribution } : {}), ...(expenseWithdrawals ? { savings_goal_withdrawals: expenseWithdrawals } : {}),
+        ...(input.notes === undefined && changedFields.includes("notes") ? { notes: current.notes } : {}),
+      },
       failureMessage: `This transaction could not be updated.`,
     });
 
@@ -1208,7 +1264,11 @@ export async function deleteTransaction(
       id,
     );
 
-    await deleteSavingsGoalActivityForTransactionInTransaction(db, userId, deviceId, id);
+    if (current.transaction_type === "expense" || current.destination_savings_goal_id) {
+      await replaceExpenseSavingsWithdrawals(db, userId, id, [], current.transaction_date, current.notes);
+    } else {
+      await deleteSavingsGoalActivityForTransactionInTransaction(db, userId, deviceId, id);
+    }
     await deleteScheduledPaymentRecordForTransactionInTransaction(db, userId, deviceId, id);
 
     const operation = await enqueueOperation(db, {

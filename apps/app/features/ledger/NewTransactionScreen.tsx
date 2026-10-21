@@ -1,3 +1,6 @@
+import SavingsContributionAccounts from "./components/SavingsContributionAccounts";
+import SavingsExpenseFundingSheet from "./components/SavingsExpenseFundingSheet";
+import { getSavingsExpenseFunding, type SavingsExpenseFunding, type SavingsExpenseWithdrawal } from "../../local-db/repositories/savingsExpenseFunding";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,9 +15,9 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { ArrowLeft, Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
+import { ArrowLeft, Check } from "phosphor-react-native";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
-import { AmountHero, Banner, Chip, FieldError, FieldLabel, FormCard, Note, PickerField, Segment, Switch, TextField, styles as ui, tileTints, v4, v4Font } from "../../components/BudgieForm";
+import { AmountHero, Banner, Chip, FieldError, FieldLabel, FormCard, Note, PickerField, Segment, Switch, TextField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import { CategorySelectorTree, type CategorySelection } from "../../components/CategorySelector";
 import TransactionTypeSelector, { TransactionType } from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
@@ -29,8 +32,8 @@ import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import { useConnectivityStore } from "../../services/connectivity";
 import type { Subcategory } from "../../local-db/repositories/taxonomy";
-import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import CreditCardInstallmentFields, { type InstallmentFieldErrors, type InstallmentFormValue } from "./components/CreditCardInstallmentFields";
+import AccountSelectionSheet from "../../components/AccountSelectionSheet";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 
 const QUICK_AMOUNTS = [100, 250, 500, 1000];
@@ -52,6 +55,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
   const isEdit = !!transaction;
+  const contributionGoalId = savingsActivityContext?.kind === "contribution" ? savingsActivityContext.savingsGoalId : transaction?.destination_savings_goal_id ?? null;
 
   const [txType, setTxType] = useState<TransactionType>(savingsActivityContext ? "transfer" : statementPaymentContext ? "expense" : (transaction?.transaction_type as TransactionType) ?? "expense");
   const [statementPayment, setStatementPayment] = useState<CreditCardStatement | null>(null);
@@ -87,6 +91,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const [description, setDescription] = useState(transaction?.merchant_name ?? transaction?.counterparty_name ?? "");
   const [notes, setNotes] = useState(transaction?.notes ?? "");
   const [saving, setSaving] = useState(false);
+  const [savingsFunding, setSavingsFunding] = useState<SavingsExpenseFunding | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [installmentErrors, setInstallmentErrors] = useState<InstallmentFieldErrors>({});
   const [accountPickerMode, setAccountPickerMode] = useState<"source" | "dest" | null>(null);
@@ -359,9 +364,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     return isEdit ? "Edit Transaction" : "New Transaction";
   }
 
-  async function handleSave(confirmed = false) {
+  async function handleSave(confirmed = false, savingsWithdrawals?: SavingsExpenseWithdrawal[]) {
+    if (saving) return;
     let savePhase = "start";
-    console.log("[DEBUG-TX-SAVE] started", { isEdit, txType });
     setFormError(null);
     const centavos = parseAmount();
     const effectiveSubcategoryId = resolveEffectiveSubcategoryId();
@@ -453,9 +458,16 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     }
 
     savePhase = "validated";
-    console.log("[DEBUG-TX-SAVE] validation passed", { isEdit, txType });
     setSaving(true);
     try {
+      if (txType === "expense" && !savingsWithdrawals) {
+        const funding = await getSavingsExpenseFunding(userId, sourceAccountId, centavos, transaction?.id);
+        if (funding.requiredWithdrawalCentavos > 0) {
+          setSavingsFunding(funding);
+          return;
+        }
+        savingsWithdrawals = [];
+      }
       let createdExpense: Transaction | null = null;
       let unusualSpending: UnusualSpendingInsight | null = null;
       if (isStatementPayment && (!statementPayment || (isEdit && !existingStatementPayment))) {
@@ -464,14 +476,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       }
        if (isEdit && isStatementPayment && existingStatementPayment) {
         await updateStatementPayment(userId, deviceId, existingStatementPayment.id, {
-          amount_centavos: centavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId,
+          savings_goal_withdrawals: savingsWithdrawals, amount_centavos: centavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId,
           transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined,
         });
        } else if (isEdit && debtPaymentContext) {
-          await updateTransactionDebtPayment(userId, deviceId, debtPaymentContext.paymentId, { amount_centavos: centavos, principal_centavos: principalCentavos, interest_centavos: interestCentavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
+          await updateTransactionDebtPayment(userId, deviceId, debtPaymentContext.paymentId, { savings_goal_withdrawals: savingsWithdrawals, amount_centavos: centavos, principal_centavos: principalCentavos, interest_centavos: interestCentavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
        } else if (isEdit) {
         savePhase = "updateTransaction";
-        console.log("[DEBUG-TX-SAVE] calling updateTransaction");
         const updateInput: Record<string, unknown> = {
           amount_centavos: centavos,
           transaction_date: dateStr,
@@ -479,6 +490,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         };
 
         if (txType === "expense") {
+          updateInput.savings_goal_withdrawals = savingsWithdrawals;
           updateInput.source_account_id = sourceAccountId;
           updateInput.subcategory_id = effectiveSubcategoryId;
           updateInput.merchant_name = description.trim() || "";
@@ -489,16 +501,16 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           updateInput.counterparty_name = description.trim() || "";
         } else {
           updateInput.source_account_id = sourceAccountId;
-          updateInput.destination_account_id = destAccountId;
+          if (!contributionGoalId) updateInput.destination_account_id = destAccountId;
           const desc = description.trim();
           const note = notes.trim();
           updateInput.notes = desc && note ? `${desc} — ${note}` : (desc || note || "");
         }
 
          await updateTransaction(userId, deviceId, transaction!.id, updateInput as UpdateTransactionInput);
-         console.log("[DEBUG-TX-SAVE] updateTransaction completed");
             } else if (isStatementPayment && statementPaymentContext) {
             await createStatementPayment(userId, deviceId, {
+              savings_goal_withdrawals: savingsWithdrawals,
               statementId: statementPaymentContext.statementId,
               cycleId: statementPaymentContext.cycleId,
               amount_centavos: centavos,
@@ -509,11 +521,11 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               notes: notes.trim() || undefined,
             });
           } else if (isDebtPayment && txType === "expense") {
-             await createTransactionDebtPayment(userId, deviceId, { debt_account_id: debtPaymentId, amount_centavos: centavos, principal_centavos: principalCentavos, interest_centavos: interestCentavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
+             await createTransactionDebtPayment(userId, deviceId, { savings_goal_withdrawals: savingsWithdrawals, debt_account_id: debtPaymentId, amount_centavos: centavos, principal_centavos: principalCentavos, interest_centavos: interestCentavos, source_account_id: sourceAccountId, subcategory_id: effectiveSubcategoryId, transaction_date: dateStr, merchant_name: description.trim() || undefined, notes: notes.trim() || undefined });
           } else if (txType === "expense") {
             savePhase = "createExpense";
-           console.log("[DEBUG-TX-SAVE] calling createExpense");
             const result = await createExpense(userId, deviceId, {
+          savings_goal_withdrawals: savingsWithdrawals,
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
           subcategory_id: effectiveSubcategoryId,
@@ -526,7 +538,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             createdExpense = result.transaction;
       } else if (txType === "income") {
          savePhase = "createIncome";
-         console.log("[DEBUG-TX-SAVE] calling createIncome");
          await createIncome(userId, deviceId, {
           amount_centavos: centavos,
           destination_account_id: destAccountId,
@@ -547,7 +558,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         const note = notes.trim();
         const mergedNotes = desc && note ? `${desc} — ${note}` : (desc || note || undefined);
         savePhase = "createTransfer";
-        console.log("[DEBUG-TX-SAVE] calling createTransfer");
         await createTransfer(userId, deviceId, {
           amount_centavos: centavos,
           source_account_id: sourceAccountId,
@@ -569,11 +579,10 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
       showToast(isStatementPayment ? "Your credit-card payment was recorded. Review the statement status to confirm the update." : isEdit ? "Transaction updated" : "Transaction saved", "success");
       savePhase = "runSync";
-      console.log("[DEBUG-TX-SAVE] starting runSync");
       runSync(userId, deviceId, accessToken).catch((error) => {
-        console.error("[DEBUG-TX-SAVE] runSync failed", {
-          name: error instanceof Error ? error.name : "unknown",
-          message: error instanceof Error ? error.message : String(error),
+        console.error("[ledger] sync after transaction save failed", {
+          error_class: error instanceof Error ? error.constructor.name : "UnknownError",
+          save_phase: savePhase,
         });
       });
 
@@ -582,10 +591,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       if (isEdit) onClose();
       else onCreated?.(unusualSpending);
     } catch (error) {
-      console.error("[DEBUG-TX-SAVE] failed", {
-        phase: savePhase,
-        name: error instanceof Error ? error.name : "unknown",
-        message: error instanceof Error ? error.message : String(error),
+      console.error("[ledger] transaction save failed", {
+        error_class: error instanceof Error ? error.constructor.name : "UnknownError",
+        save_phase: savePhase,
       });
       setFormError(error instanceof Error ? error.message : "Failed to save transaction");
     } finally {
@@ -598,61 +606,13 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     const isSource = accountPickerMode === "source";
     const pickable = accounts.filter((a) => !isStatementPayment || a.kind !== "credit_card");
 
-    return (
-      <Modal visible transparent animationType="slide" onRequestClose={() => setAccountPickerMode(null)}>
-        <Pressable onPress={() => setAccountPickerMode(null)} style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
-            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
-              <Pressable onPress={() => {}}>
-                <BottomSheetSurface style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
-                  <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
-                  <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 12 }} keyboardShouldPersistTaps="handled" bounces={false}>
-                    <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>
-                      {isSource ? "From account" : "To account"}
-                    </Text>
-                    {accounts.length === 0 ? (
-                      <Text style={{ fontFamily: v4Font, fontSize: 13, color: v4.mut, textAlign: "center", paddingVertical: 20 }}>
-                        No financial accounts available
-                      </Text>
-                    ) : (
-                      <View style={ui.list}>
-                        {pickable.map((a, index) => {
-                          const selected = isSource ? sourceAccountId === a.id : destAccountId === a.id;
-                          const tint = accountTint(a.kind);
-                          return (
-                            <Pressable
-                              key={a.id}
-                              onPress={() => {
-                                if (isSource) setSourceAccountId(a.id);
-                                else setDestAccountId(a.id);
-                                setAccountPickerMode(null);
-                              }}
-                              accessibilityRole="button"
-                              accessibilityLabel={a.name}
-                              accessibilityState={{ selected }}
-                              style={[ui.listRow, index > 0 ? ui.listRowDivider : null, selected ? ui.listRowSelected : null]}
-                            >
-                              <View style={ui.listRowMain}>
-                                <View style={[ui.listTile, { backgroundColor: tint.bg }]}><AccountKindIcon kind={a.kind} color={tint.fg} /></View>
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text numberOfLines={1} style={ui.listTitle}>{a.name}</Text>
-                                  <Text numberOfLines={1} style={ui.listSubtitle}>{formatAccountKind(a.kind)} · {formatAccountAmount(a)}</Text>
-                                </View>
-                                {selected ? <Check color={v4.brandMid} size={16} weight="bold" /> : null}
-                              </View>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </ScrollView>
-                </BottomSheetSurface>
-              </Pressable>
-            </KeyboardAvoidingView>
-          </View>
-        </Pressable>
-      </Modal>
-    );
+    return <AccountSelectionSheet
+      title={isSource ? "From account" : "To account"}
+      accounts={pickable.map((account) => ({ id: account.id, name: account.name, kind: account.kind, amountLabel: formatAccountAmount(account) }))}
+      selectedId={isSource ? sourceAccountId : destAccountId}
+      onSelect={(id) => { if (isSource) setSourceAccountId(id); else setDestAccountId(id); }}
+      onClose={() => setAccountPickerMode(null)}
+    />;
   }
 
   function renderDatePicker(mode: "transaction" | "posting") {
@@ -852,7 +812,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           <ScrollView contentContainerStyle={{ paddingBottom: 28, gap: 14 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {savingsActivityContext ? (
               <FormCard title={savingsActivityContext.kind === "contribution" ? "Savings contribution" : "Savings withdrawal"}>
-                <Note>This transfer is linked to the selected savings goal.</Note>
+                <Note>{contributionGoalId ? "Use available money in the linked account, or transfer money from another account." : "This transfer is linked to the selected savings goal."}</Note>
               </FormCard>
             ) : null}
             {isStatementPayment ? (
@@ -902,7 +862,9 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
               <PickerField label="Date" value={formatDate(date)} onPress={() => setShowDatePicker(true)} />
 
-              {txType === "transfer" ? (
+              {txType === "transfer" && contributionGoalId ? (
+                <SavingsContributionAccounts userId={userId} goalId={contributionGoalId} transactionId={transaction?.id} accounts={accounts} sourceAccountId={sourceAccountId} onSourceChange={setSourceAccountId} />
+              ) : txType === "transfer" ? (
                 <>
                   <PickerField
                     label="From account"
@@ -1058,6 +1020,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         {renderDatePicker("transaction")}
         {renderDatePicker("posting")}
         {renderAccountPicker()}
+        {savingsFunding ? <SavingsExpenseFundingSheet funding={savingsFunding} onCancel={() => setSavingsFunding(null)} onConfirm={(withdrawals) => { setSavingsFunding(null); void handleSave(true, withdrawals); }} /> : null}
         <Modal visible={balanceWarning !== null} transparent animationType="fade" onRequestClose={() => setBalanceWarning(null)}>
           <Pressable onPress={() => setBalanceWarning(null)} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(27,28,26,0.4)" }}>
             <Pressable onPress={() => {}}>
@@ -1094,24 +1057,4 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       </View>
     </KeyboardAvoidingView>
   );
-}
-
-function accountTint(kind: FinancialAccount["kind"]) {
-  if (kind === "savings") return tileTints[3];
-  if (kind === "e_wallet") return tileTints[1];
-  if (kind === "cash") return tileTints[2];
-  if (kind === "credit_card") return tileTints[0];
-  return tileTints[4];
-}
-
-function AccountKindIcon({ kind, color }: { kind: FinancialAccount["kind"]; color: string }) {
-  if (kind === "bank" || kind === "savings") return <Bank color={color} size={16} weight="bold" />;
-  if (kind === "credit_card") return <CreditCard color={color} size={16} weight="bold" />;
-  if (kind === "cash") return <Money color={color} size={16} weight="bold" />;
-  return <Wallet color={color} size={16} weight="bold" />;
-}
-
-function formatAccountKind(kind: FinancialAccount["kind"]): string {
-  const label = kind.replace("_", " ");
-  return label.charAt(0).toUpperCase() + label.slice(1);
 }

@@ -1,0 +1,7 @@
+# Keep local tooling, worktree copies, and package caches out of the graph.
+.codex/
+.claude/
+.agents/
+.worktrees/
+.pnpm-store/
+graphify-out/

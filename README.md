@@ -15,6 +15,9 @@ To create the user if needed and replace that user's existing demo history, run
 the same command with `--confirm <email>` instead of `--dry-run`. Replacement
 deletes previous demo history and cannot be undone. Writes run in batches; a
 failure may leave partial demo data, so rerun after resolving the error.
+Apply pending migrations before seeding (`pnpm exec supabase db push --local`).
+Savings contributions and debt/card repayments are uncategorized; repayment
+transactions use explicit payment markers so they do not inflate expense-category forecasts.
 
 ## Repositories
 
@@ -139,6 +142,39 @@ pnpm --filter app exec tsc --noEmit
 pnpm test           # Run all tests
 ```
 
+## Graphify
+
+Graphify maps code into a local knowledge graph for architecture and relationship
+queries. Install the CLI in an isolated tool environment (Python 3.10+ and `uv`):
+
+```bash
+uv tool install 'graphifyy[sql]==0.9.93'
+graphify --version
+```
+
+The repository includes Graphify skills for Codex (`$graphify`) and Claude Code
+(`/graphify`). Start a new assistant session after installation to discover them.
+Claude Code's shared settings include Graphify's query guidance hooks.
+Codex discovers `.agents/skills/graphify/`, a symlink to the bundled
+`.codex/skills/graphify/` directory; preserve symlinks when cloning the repo.
+
+From the repository root, build the initial graph without model calls:
+
+```bash
+graphify extract . --code-only
+graphify cluster-only . --no-label
+graphify export html
+graphify query "How does offline synchronization work?"
+```
+
+Open `graphify-out/graph.html` in a browser to explore the graph. Generated files
+are ignored by Git; each developer builds their own graph. After code changes,
+run `graphify update .`. The graph excludes dependencies, assistant files,
+worktrees, and build artifacts through `.gitignore` and `.graphifyignore`.
+Code-only extraction uses local AST parsing; document and media extraction via
+the assistant skill can use its model. This graph covers `odin`; build `odin-ml`
+separately if needed.
+
 ## Android Device Flow
 
 1. Connect an Android phone with USB debugging enabled.
@@ -150,6 +186,12 @@ pnpm test           # Run all tests
 For Android emulator, use `http://10.0.2.2:3001` as `EXPO_PUBLIC_API_BASE_URL`.
 
 ## Troubleshooting
+
+### Metro cannot resolve a newly added workspace package
+
+Run `pnpm install` from the repository root, stop Metro, and restart it with
+`pnpm --filter app start --clear`. Metro discovers workspace package folders at
+startup, so Fast Refresh alone may not pick up a new package.
 
 ### `pnpm` warns about package manager version
 
@@ -343,3 +385,15 @@ curl -X POST https://your-api.com/odin/internal/daily-financial-reports/run \
 ```
 
 Do not call this endpoint with a user session or from the mobile app.
+
+### Savings interest configuration
+
+All savings interest configuration lives inside Advanced Options. The form supports Daily Balance or ADB, Simple or Compound behavior, and fixed nominal annual rates only. None stores 0%, disables interest settings and preserves historical transactions. Tiered and conditional controls are excluded.
+
+The form saves daily calculation separately from daily/monthly/quarterly/yearly/custom credit timing, posting day/date, start date and backdated starting balance, ADB averaging period, optional balance limits, Actual/365 or Actual/366 or Actual/Actual, configurable withholding tax (enabled at 20% by default), effective-dated rate history, a breakdown preference. Automatic interest generation is not available. Saved rate history cannot be overwritten through the form; append a dated change instead.
+
+Migration `20261116000008_fixed_interest_form_configuration.sql` extends the existing interest-reference JSON validation. Apply pending migrations manually through the normal Supabase workflow. SQLite already stores the complete configuration in `interest_reference_json`; sync requires the new server migration.
+
+Interest is entered manually as income. The form stores bank calculation terms; it does not generate credits, projections or balance changes. Migration `20261116000009_disable_automatic_savings_interest.sql` removes the legacy `post-due-savings-interest` cron job, retires the posting function as a safe no-op, and disables saved automatic projection flags. Existing transactions and balances are preserved. Apply this migration manually through the normal Supabase workflow to disable any previously deployed interest job.
+
+Regression checks: `supabase/tests/fixed_interest_form_configuration.sql`, form interactions, SQLite round trips and API validation. The SQL tests roll back their fixtures.

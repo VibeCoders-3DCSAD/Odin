@@ -80,6 +80,7 @@ export async function getAccountBalanceAt(userId: string, endDate: string): Prom
     `SELECT COUNT(*) AS count,
             SUM(fa.current_balance_centavos - COALESCE((
               SELECT SUM(CASE
+                WHEN t.transaction_type = 'transfer' AND t.source_account_id = t.destination_account_id THEN 0
                 WHEN t.transaction_type = 'income' AND t.destination_account_id = fa.id THEN t.amount_centavos
                 WHEN t.transaction_type = 'expense' AND t.source_account_id = fa.id THEN -t.amount_centavos
                 WHEN t.transaction_type = 'transfer' AND t.destination_account_id = fa.id THEN t.amount_centavos

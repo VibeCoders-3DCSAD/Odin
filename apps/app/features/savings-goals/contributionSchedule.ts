@@ -163,10 +163,20 @@ function validatePeriod(periodStart: string, periodEnd: string): void {
 
 export function getMinimumContributionPerOccurrence(goal: ScheduledSavingsGoal, asOfDate: string): number | null {
   if (!isIsoDate(asOfDate) || goal.status !== "active" || goal.isAchieved || goal.remainingAmountCentavos <= 0 || !goal.targetDate) return null;
-  const dates = scheduledDates(goal, asOfDate, goal.targetDate);
-  if (!dates.length) return null;
-  const targetDateMinimumCentavos = Math.ceil(goal.remainingAmountCentavos / dates.length);
+  const targetDateMinimumCentavos = getTargetDateContributionAmount(goal, goal.remainingAmountCentavos, goal.targetDate, asOfDate);
+  if (targetDateMinimumCentavos === null) return null;
   return Math.max(goal.plannedContributionAmountCentavos, targetDateMinimumCentavos);
+}
+
+export function getTargetDateContributionAmount(
+  schedule: SavingsContributionSchedule,
+  remainingAmountCentavos: number,
+  targetDate: string,
+  asOfDate: string,
+): number | null {
+  if (!isIsoDate(targetDate) || !isIsoDate(asOfDate) || !Number.isSafeInteger(remainingAmountCentavos) || remainingAmountCentavos <= 0) return null;
+  const dates = scheduledDates(schedule, asOfDate, targetDate);
+  return dates.length ? Math.ceil(remainingAmountCentavos / dates.length) : null;
 }
 
 export function getRequiredSavingsContributions(

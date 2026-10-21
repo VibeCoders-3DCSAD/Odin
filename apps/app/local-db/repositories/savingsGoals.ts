@@ -6,6 +6,8 @@ import type { SavingsGoalProgress } from "../../features/savings-goals/types";
 import { listSavingsGoalActivitiesByGoal } from "./savingsGoalActivities";
 import { calculateEmergencyFundBaseline, completedCalendarMonthRange } from "../../features/savings-goals/emergencyFundBaseline";
 import { validateContributionSchedule, type GoalContributionFrequency, type SavingsContributionSchedule } from "../../features/savings-goals/contributionSchedule";
+import { assertActiveSavingsGoalAccount } from "./savingsGoalAccounts";
+import { repairUnlinkedGoalCreate } from "./helpers/savingsGoalSync";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
@@ -14,6 +16,8 @@ import { randomUUID } from "../uuid";
 export type SavingsGoal = SavingsGoalProgress & SavingsContributionSchedule & {
   id: string;
   name: string;
+  linkedAccountId?: string | null;
+  linkedAccountName?: string | null;
   goalType: SavingsGoalType;
   targetAmountCentavos: number;
   startingAmountCentavos: number;
@@ -33,6 +37,7 @@ export type SavingsGoal = SavingsGoalProgress & SavingsContributionSchedule & {
 
 export type CreateSavingsGoalInput = {
   name: string;
+  linkedAccountId?: string | null;
   goalType: SavingsGoalType;
   targetAmountCentavos: number;
   startingAmountCentavos: number;
@@ -57,7 +62,8 @@ export type CreateSavingsGoalInput = {
 export type UpdateSavingsGoalInput = Partial<CreateSavingsGoalInput>;
 
 type SavingsGoalRow = {
-  id: string; user_id: string; name: string; goal_type: string; target_amount_centavos: number;
+  id: string; user_id: string; linked_account_id: string | null; name: string; goal_type: string; target_amount_centavos: number;
+  linked_account_name?: string | null;
   starting_amount_centavos: number; target_date: string | null; priority: string;
   emergency_fund_baseline_centavos: number | null; auto_save_amount_centavos: number;
   planned_contribution_amount_centavos: number | null; contribution_frequency: GoalContributionFrequency | null;
@@ -71,10 +77,11 @@ type SavingsGoalRow = {
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
 function now() { return new Date().toISOString(); }
+const GOAL_SELECT = "SELECT g.*, a.name AS linked_account_name FROM savings_goals g LEFT JOIN financial_accounts a ON a.id = g.linked_account_id AND a.user_id = g.user_id AND a.deleted = 0";
 
 function mapGoal(row: SavingsGoalRow): SavingsGoal {
   return {
-    id: row.id, name: row.name, goalType: row.goal_type as SavingsGoalType,
+    id: row.id, name: row.name, linkedAccountId: row.linked_account_id ?? null, linkedAccountName: row.linked_account_name ?? null, goalType: row.goal_type as SavingsGoalType,
     targetAmountCentavos: row.target_amount_centavos, startingAmountCentavos: row.starting_amount_centavos,
     currentAmountCentavos: row.starting_amount_centavos, remainingAmountCentavos: Math.max(0, row.target_amount_centavos - row.starting_amount_centavos), progressPercent: Math.min(100, Math.round((row.starting_amount_centavos / row.target_amount_centavos) * 100)), isAchieved: row.starting_amount_centavos >= row.target_amount_centavos, contributionShortfallCentavos: 0, targetDate: row.target_date,
     priority: row.priority as SavingsGoalPriority,
@@ -137,7 +144,7 @@ function validate(input: CreateSavingsGoalInput): CreateSavingsGoalInput {
 
 function payload(input: CreateSavingsGoalInput): Record<string, unknown> {
   return {
-    name: input.name, goal_type: input.goalType, target_amount_centavos: input.targetAmountCentavos,
+    linked_account_id: input.linkedAccountId ?? null, name: input.name, goal_type: input.goalType, target_amount_centavos: input.targetAmountCentavos,
     starting_amount_centavos: input.startingAmountCentavos, target_date: input.targetDate ?? null,
     priority: input.priority, emergency_fund_baseline_centavos: input.emergencyFundBaselineCentavos ?? null,
     auto_save_amount_centavos: input.autoSaveAmountCentavos ?? 0,
@@ -160,7 +167,7 @@ async function assertUniqueName(db: SQLite.SQLiteDatabase, userId: string, name:
 }
 
 async function readOwned(db: SQLite.SQLiteDatabase, userId: string, id: string): Promise<SavingsGoalRow> {
-  const row = await db.getFirstAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND id = ? AND deleted = 0", userId, id);
+  const row = await db.getFirstAsync<SavingsGoalRow>(`${GOAL_SELECT} WHERE g.user_id = ? AND g.id = ? AND g.deleted = 0`, userId, id);
   if (!row) throw new LocalDbError("NOT_FOUND", "Savings goal not found");
   return row;
 }
@@ -171,19 +178,19 @@ async function readResult(db: SQLite.SQLiteDatabase, userId: string, id: string)
 }
 
 function inputFromRow(row: SavingsGoalRow): CreateSavingsGoalInput {
-  return { name: row.name, goalType: row.goal_type as SavingsGoalType, targetAmountCentavos: row.target_amount_centavos, startingAmountCentavos: row.starting_amount_centavos, targetDate: row.target_date, priority: row.priority as SavingsGoalPriority, emergencyFundBaselineCentavos: row.emergency_fund_baseline_centavos, autoSaveAmountCentavos: row.auto_save_amount_centavos, plannedContributionAmountCentavos: row.planned_contribution_amount_centavos, contributionFrequency: row.contribution_frequency, contributionIntervalCount: row.contribution_interval_count, contributionDayOfMonth: row.contribution_day_of_month, contributionSecondDayOfMonth: row.contribution_second_day_of_month, contributionDayOfWeek: row.contribution_day_of_week, customIntervalDays: row.custom_interval_days, nextContributionDate: row.next_contribution_date, interestRateBps: row.interest_rate_bps, notes: row.notes, emergencyFundTargetMethod: row.emergency_fund_target_method as EmergencyFundTargetMethod, essentialExpenseCoverageMonths: row.essential_expense_coverage_months };
+  return { linkedAccountId: row.linked_account_id ?? null, name: row.name, goalType: row.goal_type as SavingsGoalType, targetAmountCentavos: row.target_amount_centavos, startingAmountCentavos: row.starting_amount_centavos, targetDate: row.target_date, priority: row.priority as SavingsGoalPriority, emergencyFundBaselineCentavos: row.emergency_fund_baseline_centavos, autoSaveAmountCentavos: row.auto_save_amount_centavos, plannedContributionAmountCentavos: row.planned_contribution_amount_centavos, contributionFrequency: row.contribution_frequency, contributionIntervalCount: row.contribution_interval_count, contributionDayOfMonth: row.contribution_day_of_month, contributionSecondDayOfMonth: row.contribution_second_day_of_month, contributionDayOfWeek: row.contribution_day_of_week, customIntervalDays: row.custom_interval_days, nextContributionDate: row.next_contribution_date, interestRateBps: row.interest_rate_bps, notes: row.notes, emergencyFundTargetMethod: row.emergency_fund_target_method as EmergencyFundTargetMethod, essentialExpenseCoverageMonths: row.essential_expense_coverage_months };
 }
 
 export async function listSavingsGoals(userId: string, status: Extract<SavingsGoalStatus, "active" | "archived"> = "active"): Promise<SavingsGoal[]> {
   const db = await getDb();
-  const rows = await db.getAllAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND deleted = 0 AND status = ? ORDER BY updated_at DESC, name COLLATE NOCASE ASC", userId, status);
+  const rows = await db.getAllAsync<SavingsGoalRow>(`${GOAL_SELECT} WHERE g.user_id = ? AND g.deleted = 0 AND g.status = ? ORDER BY g.updated_at DESC, g.name COLLATE NOCASE ASC`, userId, status);
   const activities = await listSavingsGoalActivitiesByGoal(userId, rows.map((row) => row.id));
   return rows.map((row) => ({ ...mapGoal(row), ...calculateSavingsGoalProgress(row.starting_amount_centavos, row.target_amount_centavos, activities.get(row.id) ?? []) }));
 }
 
 export async function getSavingsGoal(userId: string, id: string): Promise<SavingsGoal | null> {
   const db = await getDb();
-  const row = await db.getFirstAsync<SavingsGoalRow>("SELECT * FROM savings_goals WHERE user_id = ? AND id = ? AND deleted = 0 AND status IN ('active', 'archived')", userId, id);
+  const row = await db.getFirstAsync<SavingsGoalRow>(`${GOAL_SELECT} WHERE g.user_id = ? AND g.id = ? AND g.deleted = 0 AND g.status IN ('active', 'archived')`, userId, id);
   if (!row) return null;
   const activities = await listSavingsGoalActivitiesByGoal(userId, [id]);
   return { ...mapGoal(row), ...calculateSavingsGoalProgress(row.starting_amount_centavos, row.target_amount_centavos, activities.get(id) ?? []) };
@@ -202,8 +209,9 @@ export async function getEmergencyFundBaseline(userId: string, referenceDate = n
 export async function createSavingsGoal(userId: string, deviceId: string, input: CreateSavingsGoalInput): Promise<{ goal: SavingsGoal; operation: SyncOperation }> {
   const valid = validate(input); const data = payload(valid); const db = await getDb(); const id = randomUUID(); const ts = now(); let result!: { goal: SavingsGoal; operation: SyncOperation };
   await db.withTransactionAsync(async () => {
+    await assertActiveSavingsGoalAccount(db, userId, valid.linkedAccountId);
     await assertUniqueName(db, userId, valid.name);
-    await db.runAsync("INSERT INTO savings_goals (id, user_id, name, goal_type, target_amount_centavos, starting_amount_centavos, target_date, priority, emergency_fund_baseline_centavos, auto_save_amount_centavos, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, contribution_day_of_week, custom_interval_days, next_contribution_date, interest_rate_bps, notes, emergency_fund_target_method, essential_expense_coverage_months, status, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, 0, ?, ?)", id, userId, data.name as string, data.goal_type as string, data.target_amount_centavos as number, data.starting_amount_centavos as number, data.target_date as string | null, data.priority as string, data.emergency_fund_baseline_centavos as number | null, data.auto_save_amount_centavos as number, data.planned_contribution_amount_centavos as number, data.contribution_frequency as string, data.contribution_interval_count as number, data.contribution_day_of_month as number | null, data.contribution_second_day_of_month as number | null, data.contribution_day_of_week as number | null, data.custom_interval_days as number | null, data.next_contribution_date as string, data.interest_rate_bps as number | null, data.notes as string | null, data.emergency_fund_target_method as string, data.essential_expense_coverage_months as number | null, ts, ts);
+    await db.runAsync("INSERT INTO savings_goals (id, user_id, linked_account_id, name, goal_type, target_amount_centavos, starting_amount_centavos, target_date, priority, emergency_fund_baseline_centavos, auto_save_amount_centavos, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, contribution_day_of_week, custom_interval_days, next_contribution_date, interest_rate_bps, notes, emergency_fund_target_method, essential_expense_coverage_months, status, version, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, 0, ?, ?)", id, userId, data.linked_account_id as string, data.name as string, data.goal_type as string, data.target_amount_centavos as number, data.starting_amount_centavos as number, data.target_date as string | null, data.priority as string, data.emergency_fund_baseline_centavos as number | null, data.auto_save_amount_centavos as number, data.planned_contribution_amount_centavos as number, data.contribution_frequency as string, data.contribution_interval_count as number, data.contribution_day_of_month as number | null, data.contribution_second_day_of_month as number | null, data.contribution_day_of_week as number | null, data.custom_interval_days as number | null, data.next_contribution_date as string, data.interest_rate_bps as number | null, data.notes as string | null, data.emergency_fund_target_method as string, data.essential_expense_coverage_months as number | null, ts, ts);
     const operation = await enqueueOperation(db, { userId, deviceId, entity: "savings_goals", recordId: id, operationType: "create", baseVersion: null, changedFields: Object.keys(data), payload: data, failureMessage: `This savings goal \"${valid.name}\" could not be created.` });
     result = { goal: await readResult(db, userId, id), operation };
   });
@@ -215,6 +223,10 @@ export async function updateSavingsGoal(userId: string, deviceId: string, id: st
   await db.withTransactionAsync(async () => {
     const current = await readOwned(db, userId, id); const valid = validate({ ...inputFromRow(current), ...input }); const next = payload(valid); const before = payload(inputFromRow(current));
     const changed = Object.keys(next).filter((field) => next[field] !== before[field]);
+    if (changed.includes("linked_account_id")) {
+      await assertActiveSavingsGoalAccount(db, userId, valid.linkedAccountId);
+      await repairUnlinkedGoalCreate(db, userId, id, valid.linkedAccountId!);
+    }
     if (changed.length === 0) { result = { goal: mapGoal(current), operation: null }; return; }
     if (changed.includes("name")) await assertUniqueName(db, userId, valid.name, id);
     const ts = now(); const values = changed.map((field) => next[field]) as SQLite.SQLiteBindValue[];

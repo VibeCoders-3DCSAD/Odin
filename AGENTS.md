@@ -628,3 +628,17 @@ Suggested future sections:
 - testing requirements
 - environment variable policy
 - Git workflow
+
+## Graphify
+
+- For architecture and relationship questions, query the local graph first with
+  `graphify query "<question>"` when `graphify-out/graph.json` exists. Use
+  `graphify path "<A>" "<B>"` and `graphify explain "<concept>"` for focused lookups.
+- Verify relevant source before editing. Use source searches when the graph is
+  missing, stale, or does not provide enough context.
+- After code changes, run `graphify update .` when the CLI and graph are available.
+- Keep generated `graphify-out/` files local. See the README's Graphify section
+  for installation and the initial code-only build.
+- Codex discovers `.agents/skills/graphify/`, linked to the installed skill at
+  `.codex/skills/graphify/SKILL.md` (`$graphify`);
+  Claude Code uses `.claude/skills/graphify/SKILL.md` (`/graphify`).

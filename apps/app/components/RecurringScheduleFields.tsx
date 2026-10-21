@@ -47,12 +47,13 @@ type Props = {
   hideYearlyDetails?: boolean;
   showFrequencySelector?: boolean;
   weekdayLabels?: readonly string[];
+  appearance?: "default" | "form";
 };
 
-function renderLabel(label: string) {
+function renderLabel(label: string, formAppearance: boolean) {
   return (
-    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
-      {label}
+    <Text style={{ fontFamily: "Manrope", fontWeight: formAppearance ? "700" : "600", fontSize: 12, color: formAppearance ? palette.ink : palette.ink2, marginBottom: formAppearance ? 5 : 6 }}>
+      {formAppearance ? label.charAt(0) + label.slice(1).toLowerCase() : label}
     </Text>
   );
 }
@@ -73,7 +74,10 @@ export default function RecurringScheduleFields({
   hideYearlyDetails = false,
   showFrequencySelector = true,
   weekdayLabels = WEEKDAYS,
+  appearance = "default",
 }: Props) {
+  const formAppearance = appearance === "form";
+  const inputAppearance = formAppearance ? { backgroundColor: palette.white, borderRadius: 10, paddingHorizontal: 12, minHeight: 46 } : {};
   const shouldShowInterval = showInterval || showIntervalCount;
   const showDayOfWeek = value.frequency === "weekly" || value.frequency === "biweekly";
 
@@ -83,7 +87,7 @@ export default function RecurringScheduleFields({
 
       {shouldShowInterval && value.frequency !== "semi_monthly" && value.frequency !== "biweekly" ? (
         <View>
-          {renderLabel("REPEAT EVERY")}
+          {renderLabel("REPEAT EVERY", formAppearance)}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <TextInput
               value={value.intervalCount}
@@ -92,7 +96,7 @@ export default function RecurringScheduleFields({
               placeholderTextColor={palette.muted}
               keyboardType="number-pad"
               accessibilityLabel="Repeat interval"
-              style={{ width: 72, height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+              style={{ width: 72, height: 46, borderRadius: 12, borderWidth: 1, borderColor: palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card, ...inputAppearance }}
             />
             <Text style={{ fontFamily: "Manrope", fontSize: 14, color: palette.ink2 }}>
               {value.frequency === "daily" ? "day(s)" : value.frequency === "weekly" ? "week(s)" : value.frequency === "monthly" ? "month(s)" : value.frequency === "quarterly" ? "quarter(s)" : "year(s)"}
@@ -109,7 +113,7 @@ export default function RecurringScheduleFields({
 
       {value.frequency === "monthly" ? (
         <View>
-          {renderLabel("DAY OF MONTH")}
+          {renderLabel("DAY OF MONTH", formAppearance)}
           <TextInput
             accessibilityLabel="Day of month"
             value={value.dayOfMonth}
@@ -117,7 +121,7 @@ export default function RecurringScheduleFields({
             placeholder="15"
             placeholderTextColor={palette.muted}
             keyboardType="number-pad"
-            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card, ...inputAppearance }}
           />
         </View>
       ) : null}
@@ -125,7 +129,7 @@ export default function RecurringScheduleFields({
       {value.frequency === "semi_monthly" ? (
         <>
           <View>
-            {renderLabel("1ST DAY OF MONTH")}
+            {renderLabel("1ST DAY OF MONTH", formAppearance)}
             <TextInput
               accessibilityLabel="First day of month"
               value={value.dayOfMonth}
@@ -133,11 +137,11 @@ export default function RecurringScheduleFields({
               placeholder="15"
               placeholderTextColor={palette.muted}
               keyboardType="number-pad"
-              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card, ...inputAppearance }}
             />
           </View>
           <View>
-            {renderLabel("2ND DAY OF MONTH")}
+            {renderLabel("2ND DAY OF MONTH", formAppearance)}
             <TextInput
               accessibilityLabel="Second day of month"
               value={value.secondDayOfMonth}
@@ -145,7 +149,7 @@ export default function RecurringScheduleFields({
               placeholder="30"
               placeholderTextColor={palette.muted}
               keyboardType="number-pad"
-              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: secondDayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: secondDayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card, ...inputAppearance }}
             />
           </View>
         </>
@@ -153,7 +157,7 @@ export default function RecurringScheduleFields({
 
       {showDayOfWeek ? (
         <View>
-          {renderLabel("DAY OF WEEK")}
+          {renderLabel("DAY OF WEEK", formAppearance)}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {weekdayLabels.map((day, index) => {
               const selected = value.dayOfWeek === index;
@@ -164,9 +168,9 @@ export default function RecurringScheduleFields({
                   accessibilityRole="radio"
                   accessibilityLabel={day}
                   accessibilityState={{ checked: selected }}
-                  style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: selected ? palette.brand : palette.card }}
+                  style={{ paddingVertical: formAppearance ? 10 : 8, paddingHorizontal: 12, borderRadius: formAppearance ? 10 : 8, ...(formAppearance ? { borderWidth: 1, borderColor: selected ? palette.brand : palette.line } : {}), backgroundColor: selected ? palette.brand : formAppearance ? palette.white : palette.card }}
                 >
-                  <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: selected ? palette.white : palette.ink2 }}>{day}</Text>
+                  <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: formAppearance ? "700" : "600", color: selected ? palette.white : formAppearance ? palette.ink : palette.ink2 }}>{day}</Text>
                 </Pressable>
               );
             })}
@@ -176,7 +180,7 @@ export default function RecurringScheduleFields({
 
       {value.frequency === "quarterly" ? (
         <View>
-          {renderLabel("DAY OF MONTH")}
+          {renderLabel("DAY OF MONTH", formAppearance)}
           <TextInput
             accessibilityLabel="Day of month"
             value={value.dayOfMonth}
@@ -184,7 +188,7 @@ export default function RecurringScheduleFields({
             placeholder="15"
             placeholderTextColor={palette.muted}
             keyboardType="number-pad"
-            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+            style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card, ...inputAppearance }}
           />
         </View>
       ) : null}
@@ -192,7 +196,7 @@ export default function RecurringScheduleFields({
       {value.frequency === "yearly" && !hideYearlyDetails ? (
         <>
           <View>
-            {renderLabel("MONTH")}
+            {renderLabel("MONTH", formAppearance)}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               {MONTHS.map((month, index) => {
                 const monthValue = index + 1;
@@ -204,16 +208,16 @@ export default function RecurringScheduleFields({
                     accessibilityRole="radio"
                     accessibilityLabel={month}
                     accessibilityState={{ checked: selected }}
-                    style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: selected ? palette.brand : palette.card }}
+                    style={{ paddingVertical: formAppearance ? 10 : 8, paddingHorizontal: 12, borderRadius: formAppearance ? 10 : 8, ...(formAppearance ? { borderWidth: 1, borderColor: selected ? palette.brand : palette.line } : {}), backgroundColor: selected ? palette.brand : formAppearance ? palette.white : palette.card }}
                   >
-                    <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: "600", color: selected ? palette.white : palette.ink2 }}>{month}</Text>
+                    <Text style={{ fontSize: 13, fontFamily: "Manrope", fontWeight: formAppearance ? "700" : "600", color: selected ? palette.white : formAppearance ? palette.ink : palette.ink2 }}>{month}</Text>
                   </Pressable>
                 );
               })}
             </View>
           </View>
           <View>
-            {renderLabel("DAY OF MONTH")}
+            {renderLabel("DAY OF MONTH", formAppearance)}
             <TextInput
               accessibilityLabel="First day of month"
               value={value.dayOfMonth}
@@ -221,7 +225,7 @@ export default function RecurringScheduleFields({
               placeholder="15"
               placeholderTextColor={palette.muted}
               keyboardType="number-pad"
-              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card }}
+              style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: dayOfMonthError ? palette.error : palette.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: palette.ink, backgroundColor: palette.card, ...inputAppearance }}
             />
           </View>
         </>

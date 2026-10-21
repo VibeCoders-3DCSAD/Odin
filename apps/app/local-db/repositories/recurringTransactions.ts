@@ -1,3 +1,4 @@
+import { readSavingsExpenseFunding, validateSavingsExpenseWithdrawals } from "./savingsExpenseFunding";
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
@@ -558,6 +559,9 @@ export async function generateNextOccurrence(
       const subId = template.transaction_type !== "transfer"
         ? template.subcategory_id! : null;
 
+      if (template.transaction_type === "expense" && sourceId) {
+        validateSavingsExpenseWithdrawals(await readSavingsExpenseFunding(db, userId, sourceId, template.amount_centavos), []);
+      }
       // Apply balance effects
       if (template.transaction_type === "income" && destId) {
         await db.runAsync(

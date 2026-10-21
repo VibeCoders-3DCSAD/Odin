@@ -24,7 +24,7 @@ export async function listAllDebtPayments(userId: string): Promise<DebtPayment[]
   return db.getAllAsync<DebtPayment>("SELECT id, debt_account_id, transaction_id, payment_date, amount_centavos, principal_centavos, interest_centavos, notes, version FROM debt_payments WHERE user_id = ? AND deleted = 0 ORDER BY payment_date ASC, created_at ASC", userId);
 }
 
-type TransactionDebtPaymentInput = Pick<CreateExpenseInput, "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name" | "notes"> & { debt_account_id: string; principal_centavos: number; interest_centavos: number };
+type TransactionDebtPaymentInput = Pick<CreateExpenseInput, "savings_goal_withdrawals" | "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name" | "notes"> & { debt_account_id: string; principal_centavos: number; interest_centavos: number };
 type UpdateTransactionDebtPaymentInput = Omit<TransactionDebtPaymentInput, "debt_account_id">;
 
 function validateAllocation(input: Pick<TransactionDebtPaymentInput, "amount_centavos" | "principal_centavos" | "interest_centavos">) {
@@ -69,7 +69,7 @@ export async function updateTransactionDebtPayment(userId: string, deviceId: str
     if (!payment) throw new LocalDbError("NOT_FOUND", "Debt payment not found.");
     const debt = await db.getFirstAsync<{ current_balance_centavos: number }>("SELECT current_balance_centavos FROM debt_accounts WHERE id = ? AND user_id = ? AND deleted = 0", payment.debt_account_id, userId);
     if (!debt || input.principal_centavos > debt.current_balance_centavos + payment.principal_centavos) throw new LocalDbError("VALIDATION_ERROR", "Principal amount cannot exceed the current debt balance.");
-    await updateTransaction(userId, deviceId, payment.transaction_id, { amount_centavos: input.amount_centavos, source_account_id: input.source_account_id, subcategory_id: input.subcategory_id, transaction_date: input.transaction_date, merchant_name: input.merchant_name ?? "", notes: input.notes ?? "" }, { allowDebtPayment: true, db });
+    await updateTransaction(userId, deviceId, payment.transaction_id, { savings_goal_withdrawals: input.savings_goal_withdrawals, amount_centavos: input.amount_centavos, source_account_id: input.source_account_id, subcategory_id: input.subcategory_id, transaction_date: input.transaction_date, merchant_name: input.merchant_name ?? "", notes: input.notes ?? "" }, { allowDebtPayment: true, db });
     const currentBalance = debt.current_balance_centavos + payment.principal_centavos - input.principal_centavos;
     await db.runAsync("UPDATE debt_payments SET amount_centavos = ?, principal_centavos = ?, interest_centavos = ?, payment_date = ?, notes = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", input.amount_centavos, input.principal_centavos, input.interest_centavos, input.transaction_date, input.notes ?? null, ts, paymentId, userId);
     await db.runAsync("UPDATE debt_accounts SET current_balance_centavos = ?, status = CASE WHEN ? = 0 THEN 'paid_off' ELSE 'active' END, paid_off_at = CASE WHEN ? = 0 THEN COALESCE(paid_off_at, ?) ELSE NULL END, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?", currentBalance, currentBalance, currentBalance, ts, ts, payment.debt_account_id, userId);

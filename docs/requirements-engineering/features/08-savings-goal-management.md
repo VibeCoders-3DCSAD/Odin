@@ -3,8 +3,7 @@
 ### 8.1 Savings Overview
 
 - View total savings
-- View savings accounts by type: Personal Savings / HYSA / Goal Savings / Time
-  Deposit
+- Display financial savings accounts as Savings without subtype labels
 - View total savings target and overall savings progress for Goal Savings accounts
 - View active and completed Goal Savings accounts
 - View upcoming goal dates
@@ -16,96 +15,54 @@
 
 - View the list of Savings Accounts
 - Create, view, edit, archive, and delete a Savings Account with confirmation
-- Select one Savings Account type: Personal Savings / HYSA / Goal Savings / Time
-  Deposit
+- Create Savings accounts without selecting a subtype
 - Create and edit Goal Savings accounts without a category input
 - Set a target, target date, contribution schedule, and priority for a Goal
   Savings account
-- Treat a Goal Savings account as its own holding account; it is not linked to
-  a separate financial account
+- Require an active financial account owned by the authenticated user when
+  creating a Savings Goal. Persist its `linked_account_id` and sync it across
+  devices; linking an account does not create a transaction or move money.
+- List only the current user's active, non-deleted accounts in the searchable,
+  bounded account selector. Show loading, retry, and empty states.
+- Validate ownership and active status again at local persistence, API, and
+  database boundaries. Revalidate when the selected account changes.
+- Preserve existing unlinked goals and existing links after an account is
+  archived. An unrelated goal edit must not discard or invalidate that link.
 - Mark a Goal Savings account as achieved when its balance reaches its target
 
 ### 8.3 Savings Account Creation Form
 
-- Account name
-- Savings account type: Personal Savings / HYSA / Goal Savings /
-  Time Deposit
-- Current balance
-- Institution
-- Opening date
-- Personal Savings: interest rate and minimum balance
-- HYSA: base and boosted interest rates, interest calculation basis, interest
-  credit frequency, and optional yield conditions
-- Goal Savings: target amount, target date, contribution schedule,
-  interest rate, and priority
-- Goal Savings: Emergency Fund is a category or purpose, not a Savings Account
-  type and not a debt
-- Emergency Fund Goal Savings: target method: Fixed Amount /
-  Essential-Expense Coverage
-- Emergency Fund Goal Savings: essential-expense coverage period: 3 / 4 / 5 /
-  6 months, when applicable
-- Time Deposit: principal, interest rate, start date, maturity date, term, and
-  early-withdrawal rule
-- Notes
+Use the same account action sheet for every Savings account. Do not ask for a
+subtype, minimum balance, deposit terms, or contribution schedule. After a
+successful creation, offer a linked Savings Goal with "Yes" or "Maybe next time".
+Contribution planning belongs in the Savings Goal form.
 
-Goal Savings categories remain provisional until validated through RRL, informal
-interviews, and SME review. Emergency Fund is a Goal Savings category.
-
-For an Emergency Fund goal using Essential-Expense Coverage, the suggested target
-equals the selected coverage period multiplied by the user's current monthly
-essential expenses. The user may override the suggested target. A change to the
-essential-expense baseline refreshes the suggestion but does not silently replace
-a user-approved target.
-
-### 8.3.1 Savings Account Type Inputs and Handling
-
-The Savings account type is a required single-select control. Selecting a type
-shows only that type's applicable inputs and preserves shared values. Before a
-type change clears fields that do not apply to the newly selected type, require
-confirmation and explain that those type-specific values will be removed. The
-selected type determines the account's form fields, validation, displayed
-details, and calculation rules.
-
-All Savings Accounts use these shared inputs:
+### 8.3.1 Savings Interest Inputs and Handling
 
 | Input | Control | Required | Handling |
 | --- | --- | --- | --- |
-| Account name | Single-line text input | Yes | Trim surrounding whitespace and use it as the account's display name. |
-| Savings account type | Single-select segmented control or picker | Yes | Show the selected type's inputs and apply its rules below. |
-| Current balance | Currency amount input | Yes | On creation, store as the account's starting balance. After creation, show the calculated current balance after contributions, withdrawals, and credited interest. |
-| Institution | Single-line text input | No | Store as reference information only; it does not affect calculations. |
-| Opening date | Date picker | No, except for Time Deposit | Store as the account opening date. For Time Deposit, use it as the start date. |
-| Notes | Multi-line text input | No | Store as reference information only; it does not affect calculations. |
+| Account name | Text input | Yes | Trim whitespace. |
+| Opening balance | Currency input | Yes | Store the starting ledger balance. |
+| Institution | Text input | No | Reference information. |
+| Opening date | Date picker | No | Store the opening date. |
+| Annual interest rate (%) | Decimal input | No | Accept a non-negative rate with at most two decimal places. Blank means unspecified; zero means no interest. |
+| Advanced options | Expand/collapse button | No | Collapsed initially; collapsing preserves selections. |
+| Balance basis | Daily Balance / Average Daily Balance (ADB) / Not sure | No | Reference only. Daily Balance refers to end-of-day balances; ADB refers to the average over a period. |
+| Interest method | Simple Interest / Compound Interest / Not sure | No | Reference only. Simple excludes interest on accrued interest; compound includes previously credited interest retained in the account. |
+| Rate structure | Fixed / Tiered or conditional / Not sure | No | Reference only. Tiered describes rates varying with balances or qualifying conditions. |
+| Interest notes | Multiline text input | No | Trim whitespace; maximum 1000 characters. |
 
-Personal Savings inputs:
+These three advanced selections are independent and can overlap. Store "Not
+sure" as null; do not assume a bank calculation method. Persist and sync the
+settings as validated `interest_reference` metadata owned by the current user.
+They never credit interest, alter balances, or reduce suggested goal contributions.
 
-| Input | Control | Required | Handling |
-| --- | --- | --- | --- |
-| Interest rate | Percentage amount input | Yes | Use as the annual rate for projected and credited interest. A value of `0` means the account earns no interest. |
-| Minimum balance | Currency amount input | Yes | Store as the bank's minimum-balance reference. Show it in account details and warn when the current balance falls below it; do not block a withdrawal solely because it would go below the minimum. |
-| Planned contribution amount | Currency amount input | Yes | Use as the planned contribution for each scheduled occurrence. It does not create a transaction without explicit user confirmation. |
-| Contribution schedule | Shared frequency selector with next contribution date | Yes | Select Weekly, Biweekly, Semi-Monthly, Monthly, Quarterly, Yearly, or Custom. Use the schedule for balance projections only. |
+Preserve existing minimum balances, rates, tiers, conditions, deposit terms, and
+contribution schedules when editing older accounts. These legacy fields are no
+longer inputs in the simplified form. For a legacy HYSA, the annual rate updates
+the saved base rate; other legacy rate and eligibility details remain unchanged.
 
-HYSA inputs are progressive: show Account Details and Interest first, then reveal only the optional rule that the user enables.
-
-| Input | Control | Required | Handling |
-| --- | --- | --- | --- |
-| Account name, bank or provider, current balance, and date opened | Shared text, currency, and date controls | Name and balance only | Store the account's display and starting-balance details. |
-| Regular interest rate | Percentage amount input | Yes | Use as the normal annual rate. Accept a number with or without a `%` suffix. |
-| Interest calculation basis | Single-select picker | Yes | Select Daily Balance, Average Daily Balance, Other, or I'm Not Sure. Preserve Other and unknown choices without assuming a calculation method. |
-| Interest credit frequency | Single-select picker | Yes | Select Daily, Monthly, Every 3 Months, Yearly, At Maturity, Other, or I'm Not Sure. |
-| Minimum balance needed and maximum eligible balance | Currency amount inputs | No | Store the applicable balance limits for the configured rate. |
-| Higher rate available? | Segmented Yes / No / I'm Not Sure control | Yes | Reveal higher-rate configuration only for Yes. Preserve an unsure answer as unknown. |
-| Higher interest rate and qualification frequency | Percentage input and selector | Required when higher rate is available | Store the annual rate and the required qualification period. |
-| Higher-rate requirements | Repeatable dynamic form | Required when higher rate is available | Add Money, Make Transactions, Spend Money, Maintain a Balance, Receive Salary or Income, or Other. Each requirement captures its amount or count and period where applicable; Other requires a description. |
-| Balance-based rates? | Segmented Yes / No / I'm Not Sure control | Yes | Reveal balance-rate configuration only for Yes. |
-| Rate application and balance ranges | Radio control and repeatable rows | Required when balance-based rates are enabled | Select Whole Balance, Tiered Balance, or I'm Not Sure. Label every range's From, Up to, and annual rate. The final range may have no upper limit; ranges cannot overlap. |
-| Limited-time offer? | Segmented Yes / No control | Yes | Reveal promotion inputs only for Yes. |
-| Promotional rate, dates, and requirements | Percentage input, date pickers, and optional requirement builder | Rate and dates required when a promotion is enabled | Require an inclusive start and end date and reuse the requirement builder when the promotion has conditions. |
-| Regular savings plan? | Toggle or segmented Yes / No control | No | Reveal contribution planning only when enabled. A disabled plan stores no schedule. |
-| Savings-plan amount, frequency, next deposit, and custom days | Currency input, selector, and date picker | Required when the plan is enabled | Use only for projections. Custom frequency requires a positive number of days. |
-
-Goal Savings inputs:
+Savings Goal inputs:
 
 Goal creation and editing do not ask for a Goal Category. Existing Emergency Fund
 goals retain their purpose and allocation priority.
@@ -118,87 +75,31 @@ goals retain their purpose and allocation priority.
 | Contribution frequency | Shared frequency selector | Yes | Select Daily, Weekly, Twice a Month, Monthly, or None. Twice a Month uses two selected calendar days. None disables scheduled contributions while allowing manual contributions; no planned amount is required. Daily needs no additional date inputs. Do not ask the user for a next contribution date. |
 | Weekly contribution day | Weekday selector: Sunday through Saturday | Weekly only | Schedule contributions on the selected weekday. |
 | Monthly contribution dates | Numeric date inputs, 1–31 | Twice a Month or Monthly | Twice a Month requires two ascending date numbers; Monthly requires one. In shorter months, use the last day when a selected date does not exist. |
-| Interest rate | Percentage amount input | No | When provided, use as the annual rate for projected and credited interest; otherwise project no interest. |
+| Interest rate on existing goals | Percentage amount input | No | Retain compatibility when editing existing goals. Do not show this field when adding a Savings Goal. |
 | Priority | Single-select picker | Yes | Use for savings allocation after Emergency Fund priority. |
 | Target method | Single-select picker | Emergency Fund only | For Emergency Fund, select Fixed Amount or Essential-Expense Coverage. Fixed Amount uses the entered target. |
 | Essential-expense coverage period | Single-select picker: 3 / 4 / 5 / 6 months | Essential-Expense Coverage only | Multiply the selected period by current monthly essential expenses to suggest a target. Do not replace a user-approved target without confirmation. |
 
-Time Deposit inputs:
-
-| Input | Control | Required | Handling |
-| --- | --- | --- | --- |
-| Principal | Currency amount input | Yes | Store as the deposited principal and opening balance. Do not allow a different opening-balance value for a Time Deposit. |
-| Interest rate | Percentage amount input | Yes | Use as the annual rate for maturity and interest projections. |
-| Start date | Date picker | Yes | Start the deposit term and interest projection. Use the shared opening date as this value. |
-| Maturity date | Date picker | Yes | End the deposit term and interest projection; it must be after the start date. |
-| Term | Numeric duration input with unit selector | Yes | Store the agreed term and use it to cross-check the maturity date against the start date. |
-| Early-withdrawal rule | Multi-line text input | Yes | Store the bank's restriction or penalty terms for reference. Show this rule and require confirmation before an early withdrawal; do not infer a monetary penalty from free text. |
-
 ### 8.4 Savings Account Form Placeholders
 
 - Account name: `Enter account name`
-- Savings account type: `Select savings account type`
-- Current balance: `Enter current balance`
+- Opening balance: `Enter opening balance`
 - Institution: `Enter institution name`
 - Opening date: `Select opening date`
-- Personal Savings interest rate: `Enter interest rate`
-- Personal Savings minimum balance: `Enter minimum balance`
-- Savings planned contribution amount: `Enter contribution amount`
-- Savings contribution frequency: `Select contribution frequency`
-- Savings next contribution date: `Select contribution date`
-- HYSA regular interest rate: `3.50`
-- HYSA interest calculation basis: `Select calculation method`
-- HYSA interest credit frequency: `Select credit frequency`
-- HYSA higher interest rate: `5.00`
-- HYSA requirement amount: `Amount in PHP`
-- HYSA transaction requirement: `Number of transactions`
-- HYSA other requirement: `Describe what your bank requires`
-- HYSA balance range start: `0`
-- HYSA balance range end: `99,999`
-- HYSA balance range rate: `3.50`
-- HYSA promotional rate: `0.00`
-- HYSA promotional period start: `Select promotion start date`
-- HYSA promotional period end: `Select promotion end date`
-- Goal Savings category: `Select savings category`
-- Goal Savings target amount: `Enter target amount`
-- Goal Savings target date: `Select target date`
-- Goal Savings planned contribution amount: `Enter contribution amount`
-- Goal Savings contribution frequency: `Select contribution frequency`
-- Goal Savings first or next contribution date: `Select contribution date`
-- Goal Savings interest rate: `Enter interest rate`
-- Priority: `Select goal priority`
-- Target method: `Select target method`
-- Essential-expense coverage period: `Select coverage period`
-- Time Deposit principal: `Enter principal amount`
-- Time Deposit interest rate: `Enter interest rate`
-- Time Deposit start date: `Select start date`
-- Time Deposit maturity date: `Select maturity date`
-- Time Deposit term: `Enter deposit term`
-- Time Deposit early-withdrawal rule: `Describe early-withdrawal rule`
-- Notes: `Add goal notes`
+- Annual interest rate: `Enter interest rate`
+- Interest notes: `e.g. Higher rate applies when bank conditions are met`
 
 ### 8.5 Savings Selectors
 
-- Savings account type selector
-- Goal priority selector
-- Goal Savings contribution frequency selector: Daily / Weekly / Twice a Month / Monthly / None
-- Goal Savings account selector for contributions, withdrawals, and transaction
-  links
-- Savings activity selector: Contribution / Withdrawal
-- Savings allocation strategy selector
-- HYSA interest calculation-basis selector: Daily Balance / Average Daily Balance / Other / I'm Not Sure
-- HYSA interest credit-frequency selector: Daily / Monthly / Every 3 Months / Yearly / At Maturity / Other / I'm Not Sure
-- HYSA higher-rate availability selector: Yes / No / I'm Not Sure
-- HYSA higher-rate qualification selector: Daily / Monthly / Every 3 Months / Yearly / Custom
-- HYSA requirement-type selector: Add Money / Make Transactions / Spend Money / Maintain a Balance / Receive Salary or Income / Other
-- HYSA balance-based-rate selector: Yes / No / I'm Not Sure
-- HYSA rate-application selector: Whole Balance / Tiered Balance / I'm Not Sure
-- HYSA limited-time-offer selector: Yes / No
-- Target method selector
-- Essential-expense coverage-period selector
-- Date-range selector for contribution history
-- Include only active Goal Savings accounts in allocation selectors
-- Show an empty selector state when no eligible goals or accounts exist
+- Financial account on Savings Goal creation: owned, active accounts only, using
+  the same searchable action sheet as Transaction Management's From account.
+- Advanced balance basis, interest method, and rate structure as defined above.
+- Goal priority and contribution frequency: Daily / Weekly / Twice a Month /
+  Monthly / None. Show contribution days before the planned amount.
+- Goal for contributions and withdrawals: active Savings Goals only.
+- Activity: Contribution / Withdrawal.
+- Allocation strategy, target method, coverage period, and history date range.
+- Show an empty selector state when no eligible goals or accounts exist.
 
 ### 8.6 Savings Contributions and Withdrawals
 
@@ -214,7 +115,7 @@ Time Deposit inputs:
   transaction is saved
 - Record a withdrawal from a Savings Account by opening Transaction
   Management with the selected account context
-- Require a withdrawal to use a Transfer transaction from the Savings Account
+- Require a standalone withdrawal to use a Transfer transaction from the Savings Account
   account to an eligible destination account
 - Create a withdrawal and its linked transfer together when the transfer is
   saved
@@ -223,6 +124,25 @@ Time Deposit inputs:
   confirmation
 - Display updated Goal Savings progress after linked transaction changes when
   the Savings Account type is Goal Savings
+
+#### Goal contribution account selection
+
+- The contribution form fixes **To account** to the savings goal's linked
+  financial account. The destination cannot be changed in the transaction form.
+- **From account** offers **Available money** in the linked account and eligible
+  active financial accounts. Credit cards are excluded.
+- Explain Available money as: "Money in this account that hasn’t been set aside
+  for a savings goal."
+- Allocating Available money increases the goal's saved amount and reduces the
+  account's unallocated pool without changing its cash balance.
+- Contributing from another account debits that source, credits the linked
+  account, and increases the goal's saved amount in one atomic operation.
+- Contributions cannot use money reserved for other goals. Recheck ownership,
+  active accounts, the linked destination, and available funds when saving and
+  syncing; the account selector is not an authorization boundary.
+- Edits and deletion update both the transaction and its goal activity together.
+  Allocation-only transactions must have zero cash effect in account balances,
+  interest calculations, reports, and savings account deposit history.
 
 ### 8.7 Savings Activity Transaction Context
 
@@ -233,8 +153,29 @@ Time Deposit inputs:
 
 The user must explicitly choose the savings activity. Savings Goals opens
 Transaction Management with the selected Savings Account and activity
-context. Ordinary
-transactions do not create or link to savings activities automatically.
+context. Ordinary income and deposits do not automatically increase goal progress.
+
+#### Expenses from a linked financial account
+
+- All linked goals share one unallocated balance: account balance minus the sum
+  of their saved amounts. Archived goals continue to reserve their funds.
+- Ordinary expenses consume unallocated money first and leave goal progress
+  unchanged while enough unallocated money remains.
+- If an expense uses reserved savings, require an explicit split across one or
+  more linked goals. Show the amount required, each goal's available savings,
+  and confirmation before saving. Never select goals or split equally by default.
+- Save the expense and selected goal withdrawals atomically, with ownership,
+  available balances, and exact split totals checked locally and on the server.
+- Editing an expense replaces its withdrawals. Reducing it to unallocated money
+  restores the withdrawn savings; deleting it restores all affected goals.
+- Automatic expense posting must stop when it would use reserved goal money.
+  Manual bill payments use the same explicit goal withdrawal confirmation.
+- Preserve withdrawal identities across edits so other devices converge without
+  duplicate activities. Retrying sync must not apply withdrawals twice.
+- If goals already exceed the account balance, show the existing shortage in the
+  withdrawal prompt and ask the user to review their allocations.
+- An explicitly confirmed account overdraft retains the existing transaction
+  behavior; withdrawals never exceed the available savings in the selected goals.
 
 ### 8.8 Savings Activity Context Placeholders
 
@@ -247,8 +188,11 @@ transactions do not create or link to savings activities automatically.
   empty
 - Require an account name, Savings Account type, and valid non-negative
   balance
-- Require a valid non-negative interest rate and minimum balance for Personal
-  Savings
+- An annual interest rate is optional; validate it as non-negative when provided.
+  Do not require a minimum balance in the simplified Savings form.
+- Validate advanced reference settings against the supported choices and limit
+  notes to 1000 characters. The remaining subtype-specific rules below apply
+  only to preserved legacy data, not the current form
 - Require a non-negative planned contribution amount, contribution frequency,
   and next contribution date only when a Personal Savings or HYSA savings plan is enabled
 - Require a valid non-negative HYSA base interest rate, interest calculation
@@ -293,6 +237,10 @@ transactions do not create or link to savings activities automatically.
 - Clear field errors when corrected
 
 ### 8.10 Savings Calculations
+
+Advanced interest reference options do not feed these calculations or create
+interest transactions. The subtype-specific projections below describe retained
+legacy data only; new accounts do not collect those detailed rules.
 
 - Personal Savings uses its interest rate for interest projections and credited
   interest.
@@ -455,8 +403,8 @@ allocation step.
   Management
 - Transaction-linking state: a related transaction is being created or linked
 - Validation-failure state: Savings Account or contribution inputs are invalid
-- HYSA-conditional-input state: only inputs enabled by the selected HYSA rules are visible
-- HYSA-unknown-rule state: a bank rule is explicitly unknown and is not assumed
+- Advanced-options state: optional reference fields are expanded or collapsed without losing values
+- Unknown-interest state: "Not sure" remains null without assuming a calculation method
 - Saving state: Savings Account or contribution changes are being saved
 - Active state: Goal Savings account is included in current planning and allocation
 - Behind state: Goal Savings account is below its required contribution schedule

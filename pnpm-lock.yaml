@@ -17,6 +17,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@odin/savings-interest':
+        specifier: workspace:*
+        version: link:../../packages/savings-interest
       '@supabase/supabase-js':
         specifier: 2.57.4
         version: 2.57.4
@@ -75,6 +78,9 @@ importers:
       '@expo/vector-icons':
         specifier: ^15.1.1
         version: 15.1.1(expo-font@55.0.8(expo@55.0.26)(react-native@0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0))(react@19.2.0)
+      '@odin/savings-interest':
+        specifier: workspace:*
+        version: link:../../packages/savings-interest
       '@react-native-community/datetimepicker':
         specifier: ^9.1.0
         version: 9.1.0(expo@55.0.26)(react-native@0.83.6(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.0))(react@19.2.0)
@@ -166,6 +172,8 @@ importers:
       typescript:
         specifier: ~5.9.2
         version: 5.9.2
+
+  packages/savings-interest: {}
 
 packages:
 

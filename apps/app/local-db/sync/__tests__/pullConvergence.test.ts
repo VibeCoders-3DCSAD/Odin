@@ -102,3 +102,11 @@ describe("credit-card payment pull convergence", () => {
     expect(sql).not.toContain("is_active");
   });
 });
+
+it("serializes optional savings interest reference metadata without changing calculation fields", () => {
+  const interest_reference = { balanceBasis: "daily_balance", method: "compound", rateStructure: "tiered", notes: null };
+  const row = normalizePullRow("savings_account_details", { account_id: "account-1", user_id: "user-1", interest_reference, interest_calculation_basis: null }, "user-1");
+  expect(row.interest_reference_json).toBe(JSON.stringify(interest_reference));
+  expect(row.interest_calculation_basis).toBeNull();
+  expect(normalizePullRow("savings_account_details", { account_id: "account-1", user_id: "user-1", interest_reference: null }, "user-1").interest_reference_json).toBeNull();
+});

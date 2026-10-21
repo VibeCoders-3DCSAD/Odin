@@ -56,23 +56,46 @@ describe("SavingsGoalsScreen", () => {
     }]);
   });
 
-  it("shows active savings accounts on the Savings & Goals overview", async () => {
+  it("shows one Savings Goals overview without separate savings accounts", async () => {
     const view = render(<SavingsGoalsScreen userId="user-1" deviceId="device-1" />);
 
     await waitFor(() => {
-      expect(view.getByText("Savings accounts")).toBeTruthy();
-      expect(view.getByText("Maribank HYSA")).toBeTruthy();
-      expect(view.getByLabelText("Open Maribank HYSA")).toBeTruthy();
+      expect(view.getByText("Savings Goals")).toBeTruthy();
+      expect(view.getByText("Total saved: ₱0.00")).toBeTruthy();
     });
+    expect(view.queryByText("Savings accounts")).toBeNull();
+    expect(view.queryByText("Goal savings")).toBeNull();
+    expect(view.queryByText("Maribank HYSA")).toBeNull();
+    expect(mockListFinancialAccounts).not.toHaveBeenCalled();
+    expect(mockListSavingsGoals).toHaveBeenCalledWith("user-1", "active");
+
   });
 
   it("opens a savable goal form from the Goals page", async () => {
     const view = render(<SavingsGoalsScreen userId="user-1" deviceId="device-1" />);
-    await waitFor(() => expect(view.getByLabelText("Add savings")).toBeTruthy());
-    fireEvent.press(view.getByLabelText("Add savings"));
+    await waitFor(() => expect(view.getByLabelText("Add savings goal")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Add savings goal"));
     expect(view.getByLabelText("Goal name")).toBeTruthy();
     expect(view.getByLabelText("Save savings goal")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Cancel"));
-    expect(view.getByText("Savings & Goals")).toBeTruthy();
+    expect(view.getByText("Savings Goals")).toBeTruthy();
   });
+
+  it("keeps archived savings goals accessible in the same screen", async () => {
+    const view = render(<SavingsGoalsScreen userId="user-1" deviceId="device-1" />);
+    await waitFor(() => expect(view.getByLabelText("Archived goals")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Archived goals"));
+    await waitFor(() => expect(mockListSavingsGoals).toHaveBeenCalledWith("user-1", "archived"));
+    expect(view.getByText("No archived savings goals yet.")).toBeTruthy();
+    expect(view.queryByLabelText("Add savings goal")).toBeNull();
+    fireEvent.press(view.getByLabelText("Active goals"));
+    await waitFor(() => expect(view.getByLabelText("Add savings goal")).toBeTruthy());
+  });
+
+  it("shows a loading error on the unified overview", async () => {
+    mockListSavingsGoals.mockRejectedValueOnce(new Error("unavailable"));
+    const view = render(<SavingsGoalsScreen userId="user-1" deviceId="device-1" />);
+    await waitFor(() => expect(view.getByText("Your savings goals could not be loaded. Please try again.")).toBeTruthy());
+  });
+
 });
