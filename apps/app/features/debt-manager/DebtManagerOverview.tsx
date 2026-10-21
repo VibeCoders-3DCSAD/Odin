@@ -14,12 +14,14 @@ import DebtPaymentTrend from "./DebtPaymentTrend";
 import GlobalDebtTrend, { type GlobalDebtPoint } from "./GlobalDebtTrend";
 import { buildDebtForecast } from "./debtForecast";
 import { buildDebtManagerSummary, type DebtManagerSummary } from "./debtManagerSummary";
-import { getPhilippineToday } from "./debtTrendRange";
+import { currentDebtTrendWindow, getPhilippineToday } from "./debtTrendRange";
 import { combineDebtBalanceSeries } from "./globalDebtForecast";
 import { getAcceptedFinancialPlanForPeriod, getCurrentFinancialPlanPeriod, type AcceptedFinancialPlan } from "../../local-db/repositories/financialPlans";
 import { getDebtStrategy, listDebtPriorities, type DebtPriority, type DebtStrategy } from "../../local-db/repositories/debtRepaymentPlans";
 import { allocateDebtRepayments, type DebtRepaymentAllocation } from "./debtRepaymentAllocation";
 import { getCreditCardPaymentRequirementCentavos } from "./creditCardPaymentRequirement";
+import UpcomingPaymentsCard from "./UpcomingPaymentsCard";
+import { buildUpcomingDebtPayments } from "./upcomingDebtPayments";
 
 type Props = { userId: string; onOpenCreditCards: () => void; onOpenNonCreditDebts: () => void };
 type SurplusRecommendation = { id: string; label: string; amountCentavos: number };
@@ -38,6 +40,11 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
   const [financialPlan, setFinancialPlan] = useState<AcceptedFinancialPlan | null>(null);
   const [debtStrategy, setDebtStrategy] = useState<DebtStrategy>("avalanche");
   const [debtPriorities, setDebtPriorities] = useState<DebtPriority[]>([]);
+  const today = getPhilippineToday();
+  const upcomingPayments = useMemo(() => {
+    const { start, end } = currentDebtTrendWindow("month", undefined, new Date(`${today}T00:00:00Z`));
+    return buildUpcomingDebtPayments({ periodStart: start, periodEnd: end, debts: trendDebts, creditCards: cards ?? [], creditCardCycles: cycles, creditCardCycleTransactions: transactions, creditCardStatements: statements, creditCardStrategies: strategies, creditCardPayments: payments, debtPayments }, today);
+  }, [today, cards, cycles, debtPayments, payments, statements, strategies, transactions, trendDebts]);
   const overview = useMemo<{ globalTrend: GlobalDebtPoint[]; summary: DebtManagerSummary; allocation: DebtRepaymentAllocation; surplusAllocation: DebtRepaymentAllocation; creditCardRequirementCentavos: number; surplusRecommendations: SurplusRecommendation[] }>(() => {
     const activeCards = cards ?? [];
     const asOfDate = getPhilippineToday();
@@ -96,6 +103,7 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>Debt Manager</Text>
     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>Review your total debt and payment commitments</Text>
     <DebtOverviewSummary summary={overview.summary} />
+    <UpcomingPaymentsCard payments={upcomingPayments} today={today} />
     <View style={{ backgroundColor: P.shell, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 3, marginTop: 14, padding: 14 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 14, fontWeight: "800" }}>{debtStrategy === "snowball" ? "Snowball" : "Avalanche"} repayment plan</Text>{financialPlan ? <><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Credit-card statement targets: PHP {(overview.creditCardRequirementCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Required non-credit payments: PHP {(overview.allocation.requiredPaymentCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{overview.allocation.shortfallCentavos > 0 ? `Financial Plan shortfall: PHP ${(overview.allocation.shortfallCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` : `Strategy surplus: PHP ${(overview.surplusAllocation.surplusCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}</Text>{overview.surplusRecommendations.length ? <View style={{ borderTopColor: P.line, borderTopWidth: 1, gap: 3, marginTop: 8, paddingTop: 8 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Recommended surplus allocation</Text>{overview.surplusRecommendations.map((recommendation) => <Text key={recommendation.id} style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{recommendation.label}: PHP {(recommendation.amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</Text>)}</View> : null}{financialPlanRepayments.length ? <View style={{ borderTopColor: P.line, borderTopWidth: 1, gap: 3, marginTop: 8, paddingTop: 8 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Financial Plan repayments</Text>{financialPlanRepayments.map((repayment) => <Text key={repayment.id} style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{repayment.label}: PHP {(repayment.amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}{repayment.dueDate ? ` due ${repayment.dueDate}` : ""}</Text>)}</View> : null}</> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Accept a Financial Plan for this month to calculate allocation and surplus.</Text>}</View>
     <DebtPaymentTrend points={overview.summary.paymentTrend} />
     <GlobalDebtTrend points={overview.globalTrend} />

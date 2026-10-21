@@ -1,4 +1,5 @@
 import { getRequiredDebtTotal, type RequiredDebtTotalInput } from "../requiredDebtTotal";
+import { buildUpcomingDebtPayments } from "../upcomingDebtPayments";
 import type { CreditCardCycle } from "../../../local-db/repositories/creditCardCycles";
 import type { CreditCardCycleTransaction } from "../../../local-db/repositories/creditCardCycles";
 import type { CreditCardPayment } from "../../../local-db/repositories/creditCardPayments";
@@ -75,6 +76,64 @@ function debt(id: string, paymentFrequency: PaymentFrequency, nextDueDate: strin
 function cycleTransaction(cycleId: string, amountCentavos: number, transactionDate = "2026-09-07"): CreditCardCycleTransaction {
   return { transaction_id: `transaction-${cycleId}`, account_id: "card-1", cycle_id: cycleId, purchase_type: "regular", installment_id: null, transaction_date: transactionDate, merchant_name: "Merchant", amount_centavos: amountCentavos };
 }
+
+describe("buildUpcomingDebtPayments", () => {
+  it("lists only unpaid payments due this month, including earlier overdue dates, in due-date order", () => {
+    const result = buildUpcomingDebtPayments(input({
+      debts: [debt("Loan", "monthly", "2026-04-05"), debt("Paid loan", "monthly", "2026-04-10"), debt("Next month", "monthly", "2026-05-01")],
+      debtPayments: [debtPayment("Paid loan", 1_000)],
+      creditCards: [card("Visa")],
+      creditCardCycles: [cycle("current", "Visa"), cycle("old", "Visa"), cycle("future", "Visa"), cycle("paid", "Visa")],
+      creditCardStatements: [statement("unpaid", "current"), statement("old", "old", "2026-03-15"), statement("future", "future", "2026-05-15"), statement("paid", "paid", "2026-04-16")],
+      creditCardPayments: [payment("unpaid", "current", 4_000), payment("paid", "paid", 10_000)],
+    }), "2026-04-21");
+    expect(result.map(({ name, dueDate, remainingCentavos }) => ({ name, dueDate, remainingCentavos }))).toEqual([
+      { name: "Loan", dueDate: "2026-04-05", remainingCentavos: 1_000 },
+      { name: "Visa", dueDate: "2026-04-15", remainingCentavos: 6_000 },
+    ]);
+  });
+
+  it("applies partial payments to the earliest weekly dues and keeps the unpaid remainder", () => {
+    const result = buildUpcomingDebtPayments(input({
+      debts: [debt("Weekly", "weekly", "2026-04-03")],
+      debtPayments: [debtPayment("Weekly", 1_500)],
+    }), "2026-04-21");
+    expect(result.map(({ dueDate, remainingCentavos }) => ({ dueDate, remainingCentavos }))).toEqual([
+      { dueDate: "2026-04-10", remainingCentavos: 500 },
+      { dueDate: "2026-04-17", remainingCentavos: 1_000 },
+      { dueDate: "2026-04-24", remainingCentavos: 1_000 },
+    ]);
+  });
+
+  it("does not count a partial final principal payment twice", () => {
+    expect(buildUpcomingDebtPayments(input({
+      debts: [debt("Final", "monthly", "2026-04-15", 100)],
+      debtPayments: [debtPayment("Final", 900)],
+    }), "2026-04-21")).toMatchObject([{ name: "Final", remainingCentavos: 100 }]);
+  });
+
+  it("ignores future-dated payments, unissued statements, cutoff estimates, and inactive debts", () => {
+    const result = buildUpcomingDebtPayments(input({
+      debts: [{ ...debt("Archived", "monthly", "2026-04-15"), status: "archived" }, { ...debt("Finished", "monthly", "2026-04-15"), status: "paid_off", currentBalanceCentavos: 0 }],
+      creditCards: [card("Visa")],
+      creditCardCycles: [cycle("current", "Visa"), { ...cycle("open", "Visa"), cutoff_date: "2026-04-25" }, cycle("future", "Visa")],
+      creditCardStatements: [statement("current", "current"), { ...statement("future", "future"), statement_date: "2026-04-25" }],
+      creditCardPayments: [payment("current", "current", 10_000, "2026-04-25")],
+      creditCardCycleTransactions: [cycleTransaction("open", 5_000, "2026-04-10")],
+    }), "2026-04-21");
+    expect(result).toMatchObject([{ name: "Visa", remainingCentavos: 10_000 }]);
+    expect(result).toHaveLength(1);
+  });
+
+  it("hides a statement once its saved payment target is met", () => {
+    expect(buildUpcomingDebtPayments(input({
+      creditCards: [card("Visa")], creditCardCycles: [cycle("cycle", "Visa")],
+      creditCardStatements: [statement("statement", "cycle")],
+      creditCardStrategies: [strategy("Visa", "pay_minimum")],
+      creditCardPayments: [payment("statement", "cycle", 2_000)],
+    }), "2026-04-21")).toEqual([]);
+  });
+});
 
 describe("getRequiredDebtTotal", () => {
   it("returns a centavo-safe total and obligation breakdown", () => {

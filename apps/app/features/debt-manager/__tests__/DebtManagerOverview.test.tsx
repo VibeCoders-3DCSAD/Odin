@@ -86,8 +86,8 @@ beforeEach(() => {
     expect(view.getByText("Date")).toBeTruthy();
     expect(view.getByText("Debt")).toBeTruthy();
     expect(view.getByText("Payment made")).toBeTruthy();
-    expect(view.getByText("Loan")).toBeTruthy();
-    expect(view.getByText("Visa")).toBeTruthy();
+    expect(view.getAllByText("Loan").length).toBeGreaterThan(0);
+    expect(view.getAllByText("Visa").length).toBeGreaterThan(0);
     expect(view.getByLabelText("2026-09-10, Loan, payment made PHP 3.00")).toBeTruthy();
     expect(view.getByText("Total debt trend")).toBeTruthy();
     });
@@ -97,6 +97,25 @@ beforeEach(() => {
     const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
 
     await waitFor(() => expect(view.getByText("Avalanche repayment plan")).toBeTruthy());
+  });
+
+  it("shows this month's unpaid payments without requiring a Financial Plan", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-10-21T04:00:00Z"));
+    mockListAllDebtPayments.mockResolvedValue([{
+      id: "payment-1", debt_account_id: "debt-1", transaction_id: "transaction-1",
+      payment_date: "2026-10-10", amount_centavos: 200, principal_centavos: 200,
+      interest_centavos: 0, notes: null, version: 1,
+    }]);
+    try {
+      const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
+      await waitFor(() => expect(view.getByText("Upcoming Payments")).toBeTruthy());
+      expect(view.getByLabelText("Loan, due 2026-10-01, PHP 3.00 unpaid, overdue")).toBeTruthy();
+      expect(view.getByText("PHP 3.00 remaining this month")).toBeTruthy();
+      expect(mockListAllDebtPayments).toHaveBeenCalledWith("user-1");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("lists repayments reserved by the accepted Financial Plan", async () => {
