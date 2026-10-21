@@ -1,8 +1,9 @@
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import React, { useState } from "react";
-import { Modal, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 import { createCreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
+import { ActionSheet } from "../../components/ActionSheet";
 
 const P = {
   shell: "#fcf8f0",
@@ -134,10 +135,9 @@ export default function CreditCardStatementForm({ userId, deviceId, cycleId, cyc
       {invalidFields.includes("due") ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.error, marginTop: 4 }}>Due date is required.</Text> : null}
 
       {picker && Platform.OS !== "ios" ? <DateTimePicker value={dateFromIso(selectedDate ?? today)} mode="date" minimumDate={picker === "statement" ? dateFromIso(cycleCutoffDate) : undefined} maximumDate={picker === "statement" ? dateFromIso(today) : undefined} onChange={selectDate(picker)} /> : null}
-      {picker && Platform.OS === "ios" ? (
-        <Modal visible transparent animationType="slide" onRequestClose={() => setPicker(null)}>
-          <Pressable onPress={() => setPicker(null)} style={{ flex: 1, backgroundColor: "rgba(0, 0, 0, 0.35)", justifyContent: "flex-end" }}>
-            <Pressable onPress={() => {}}>
+      {Platform.OS === "ios" ? (
+        <ActionSheet visible={picker !== null} onClose={() => setPicker(null)} backdropColor="rgba(0, 0, 0, 0.35)">
+          {picker ? <Pressable onPress={() => {}}>
               <BottomSheetSurface bottomSpacing={28} style={{ backgroundColor: P.shell, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 14 }}>
                   <Pressable accessibilityRole="button" accessibilityLabel="Cancel date selection" onPress={() => setPicker(null)}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.muted }}>Cancel</Text></Pressable>
@@ -146,9 +146,8 @@ export default function CreditCardStatementForm({ userId, deviceId, cycleId, cyc
                 </View>
                  <DateTimePicker value={dateFromIso(selectedDate ?? today)} mode="date" display="spinner" minimumDate={picker === "statement" ? dateFromIso(cycleCutoffDate) : undefined} maximumDate={picker === "statement" ? dateFromIso(today) : undefined} onChange={selectDate(picker)} />
               </BottomSheetSurface>
-            </Pressable>
-          </Pressable>
-        </Modal>
+          </Pressable> : null}
+        </ActionSheet>
       ) : null}
       {error ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.error, marginTop: 12 }}>{error}</Text> : null}
       {notice ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 12 }}>{notice}</Text> : null}

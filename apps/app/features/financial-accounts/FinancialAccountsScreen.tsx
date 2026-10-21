@@ -41,6 +41,7 @@ import { buildSavingsInterestDetails } from "./helpers/savingsAccountInterest";
 import SavingsInterestFields from "./SavingsInterestFields";
 import type { SavingsInterestReference } from "@odin/savings-interest";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
+import { ActionSheet } from "../../components/ActionSheet";
 
 const P = {
   shell: "#fcf8f0",
@@ -270,7 +271,7 @@ export default function FinancialAccountsScreen({ userId, deviceId, onBack, onSy
         }}
       />
       {newSavingsAccountId ? <SavingsGoalInvitation onAddGoal={() => { setGoalAccountId(newSavingsAccountId); setNewSavingsAccountId(null); }} onDismiss={() => setNewSavingsAccountId(null)} /> : null}
-      {sheetVisible ? <AccountFormSheet userId={userId} visible editing={editingAccount} onClose={() => { setSheetVisible(false); setEditingAccount(null); }} onSubmit={editingAccount ? handleUpdate : handleCreate} /> : null}
+      <AccountFormSheet userId={userId} visible={sheetVisible} editing={editingAccount} onClose={() => { setSheetVisible(false); setEditingAccount(null); }} onSubmit={editingAccount ? handleUpdate : handleCreate} />
     </>
   );
 }
@@ -309,8 +310,7 @@ function AccountTile({ account, negative, amountColor, isLast, onPress }: { acco
 
 function AccountActionsSheet({ account, onClose, onEdit, onDelete }: { account: FinancialAccount | null; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
-    <Modal visible={account !== null} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(27,28,26,0.28)" }}>
+    <ActionSheet visible={account !== null} onClose={onClose} backdropColor="rgba(27,28,26,0.28)">
         <BottomSheetSurface bottomSpacing={20} style={{ padding: 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: P.white }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18, backgroundColor: P.line }} />
           <Text numberOfLines={1} style={{ marginBottom: 16, fontFamily: "Manrope", fontSize: 17, fontWeight: "800", color: P.ink }}>{account?.name}</Text>
@@ -318,8 +318,7 @@ function AccountActionsSheet({ account, onClose, onEdit, onDelete }: { account: 
           <AccountAction label="Delete" destructive onPress={onDelete} />
           <AccountAction label="Cancel" onPress={onClose} />
         </BottomSheetSurface>
-      </Pressable>
-    </Modal>
+    </ActionSheet>
   );
 }
 
@@ -523,9 +522,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={closeSheet}>
-      <Pressable onPress={closeSheet} style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
+    <ActionSheet visible={visible} onClose={closeSheet} backdropColor="rgba(0,0,0,0.45)">
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "padding"}>
             <Pressable onPress={() => {}}>
               <BottomSheetSurface style={{ backgroundColor: P.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
@@ -666,8 +663,6 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
               </BottomSheetSurface>
             </Pressable>
           </KeyboardAvoidingView>
-        </View>
-      </Pressable>
-    </Modal>
+    </ActionSheet>
   );
 }

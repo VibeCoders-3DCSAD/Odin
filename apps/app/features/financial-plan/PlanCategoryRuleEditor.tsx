@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
+import { ActionSheet } from "../../components/ActionSheet";
 
 export type PlanCategoryRule = "FLEXIBLE" | "MINIMUM" | "FIXED";
 
@@ -11,6 +12,7 @@ export type PlanCategoryRuleUpdate = {
 };
 
 type Props = {
+  visible?: boolean;
   category: { label: string; minimum_amount_centavos?: number | null; fixed_amount_centavos?: number | null };
   onSave: (update: PlanCategoryRuleUpdate) => Promise<void>;
   onClose: () => void;
@@ -32,7 +34,7 @@ function parseCentavos(value: string): number | null {
   return Math.round(Number(value) * 100);
 }
 
-export function PlanCategoryRuleEditor({ category, onSave, onClose }: Props) {
+export function PlanCategoryRuleEditor({ visible = true, category, onSave, onClose }: Props) {
   const [rule, setRule] = useState<PlanCategoryRule>(() => currentRule(category));
   const [amount, setAmount] = useState(() => amountFor(category, currentRule(category)));
   const [saving, setSaving] = useState(false);
@@ -73,9 +75,8 @@ export function PlanCategoryRuleEditor({ category, onSave, onClose }: Props) {
     }
   };
 
-  return <Modal transparent animationType="slide" onRequestClose={onClose}>
-    <Pressable onPress={saving ? undefined : onClose} style={{ flex: 1, backgroundColor: "rgba(16, 29, 22, 0.42)" }}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, justifyContent: "flex-end" }}>
+  return <ActionSheet visible={visible} onClose={saving ? () => {} : onClose} backdropColor="rgba(16, 29, 22, 0.42)">
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <BottomSheetSurface bottomSpacing={20} style={{ backgroundColor: "#FCF8F0", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingHorizontal: 20, gap: 16 }}>
         <View style={{ alignItems: "center" }}><View style={{ width: 34, height: 4, borderRadius: 2, backgroundColor: "#D7DDD8" }} /></View>
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}><View style={{ flex: 1 }}><Text style={{ color: "#1B1C1A", fontFamily: "Manrope", fontSize: 18, fontWeight: "800" }}>{category.label}</Text><Text style={{ color: "#6B7A6F", fontFamily: "Manrope", fontSize: 12, marginTop: 3 }}>Set its default treatment for new Financial Plans.</Text></View><Pressable accessibilityRole="button" accessibilityLabel={`Close rule editor for ${category.label}`} disabled={saving} onPress={onClose} hitSlop={8}><Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Close</Text></Pressable></View>
@@ -87,6 +88,5 @@ export function PlanCategoryRuleEditor({ category, onSave, onClose }: Props) {
         <Pressable accessibilityRole="button" accessibilityLabel={`Save Financial Plan rule for ${category.label}`} disabled={saving} onPress={() => void save()} style={{ borderRadius: 12, backgroundColor: "#013220", opacity: saving ? 0.6 : 1, paddingVertical: 13 }}>{saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={{ color: "#FFFFFF", fontFamily: "Manrope", fontSize: 13, fontWeight: "800", textAlign: "center" }}>Save default</Text>}</Pressable>
         </BottomSheetSurface>
       </KeyboardAvoidingView>
-    </Pressable>
-  </Modal>;
+  </ActionSheet>;
 }

@@ -50,6 +50,6 @@ export default function SavingsContributionAccounts({ userId, goalId, accounts, 
       </View>
       <Note>Linked to this savings goal. {unallocated ? "Money in this account that hasn’t been set aside for a savings goal. The account balance stays the same." : "The contribution will be transferred into this account."}</Note>
     </View>
-    {picking ? <AccountSelectionSheet title="Contribution source" accounts={options} selectedId={sourceAccountId} onSelect={onSourceChange} onClose={() => setPicking(false)} /> : null}
+    <AccountSelectionSheet visible={picking} title="Contribution source" accounts={options} selectedId={sourceAccountId} onSelect={onSourceChange} onClose={() => setPicking(false)} />
   </>;
 }

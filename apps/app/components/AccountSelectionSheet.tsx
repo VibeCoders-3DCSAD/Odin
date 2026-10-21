@@ -1,12 +1,14 @@
-import { ActivityIndicator, Dimensions, KeyboardAvoidingView, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Dimensions, KeyboardAvoidingView, Pressable, ScrollView, Text, View } from "react-native";
 import { Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
 import type { ReactNode } from "react";
 import type { FinancialAccountKind } from "../local-db/repositories/financialFoundations";
 import { BottomSheetSurface } from "./BottomSheetSurface";
+import { ActionSheet } from "./ActionSheet";
 import { styles as ui, tileTints, v4, v4Font } from "./BudgieForm";
 
 type AccountOption = { id: string; name: string; kind?: FinancialAccountKind; amountLabel?: string };
 type Props = {
+  visible?: boolean;
   title: string;
   accounts: AccountOption[];
   selectedId: string | null;
@@ -35,10 +37,8 @@ function AccountKindIcon({ kind, color }: { kind: AccountOption["kind"]; color: 
   return <Wallet color={color} size={16} weight="bold" />;
 }
 
-export default function AccountSelectionSheet({ title, accounts, selectedId, onSelect, onClose, children, loading = false, error, onRetry, emptyMessage = "No financial accounts available", accountLabelPrefix = "" }: Props) {
-  return <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-    <Pressable accessibilityLabel="Close account picker" onPress={onClose} style={{ flex: 1 }}>
-      <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
+export default function AccountSelectionSheet({ visible = true, title, accounts, selectedId, onSelect, onClose, children, loading = false, error, onRetry, emptyMessage = "No financial accounts available", accountLabelPrefix = "" }: Props) {
+  return <ActionSheet visible={visible} onClose={onClose} backdropColor="rgba(27,28,26,0.4)" accessibilityLabel="Close account picker">
         <KeyboardAvoidingView behavior="padding">
           <BottomSheetSurface style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: Dimensions.get("window").height * 0.85 }}>
             <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
@@ -69,7 +69,5 @@ export default function AccountSelectionSheet({ title, accounts, selectedId, onS
             </ScrollView>
           </BottomSheetSurface>
         </KeyboardAvoidingView>
-      </View>
-    </Pressable>
-  </Modal>;
+  </ActionSheet>;
 }

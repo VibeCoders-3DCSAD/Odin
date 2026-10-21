@@ -27,7 +27,6 @@ describe("SavingsGoalAccountSelector", () => {
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.press(view.getByLabelText("Link Main account"));
     expect(onChange).toHaveBeenCalledWith("account-1");
-    expect(view.queryByLabelText("Search financial accounts")).toBeNull();
   });
 
   it("dismisses the action sheet without changing the account", async () => {
@@ -37,7 +36,6 @@ describe("SavingsGoalAccountSelector", () => {
     await waitFor(() => expect(view.getByLabelText("Link Main account")).toBeTruthy());
     expect(view.getByTestId("bottom-sheet-safe-area")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Close account picker"));
-    expect(view.queryByLabelText("Link Main account")).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
 

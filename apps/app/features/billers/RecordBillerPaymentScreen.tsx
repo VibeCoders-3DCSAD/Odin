@@ -143,7 +143,7 @@ export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledP
           </View>
         </ScrollView>
       )}
-      {savingsFunding ? <SavingsExpenseFundingSheet funding={savingsFunding} onCancel={() => setSavingsFunding(null)} onConfirm={(withdrawals) => { setSavingsFunding(null); void handleSave(withdrawals); }} /> : null}
+      <SavingsExpenseFundingSheet funding={savingsFunding} onCancel={() => setSavingsFunding(null)} onConfirm={(withdrawals) => { setSavingsFunding(null); void handleSave(withdrawals); }} />
       <AccountPickerSheet visible={pickingAccount} accounts={accounts} selectedId={sourceAccountId} onSelect={(id) => { setSourceAccountId(id); clearError("account"); }} onClose={() => setPickingAccount(false)} />
     </KeyboardAvoidingView>
   );

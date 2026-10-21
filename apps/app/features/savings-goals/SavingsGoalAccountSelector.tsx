@@ -43,7 +43,8 @@ export default function SavingsGoalAccountSelector({ userId, value, onChange, in
       <Text style={{ flex: 1, color: selected ? P.ink : P.muted, fontFamily: "Manrope", fontSize: 14 }}>{selected ? `${selected.name}${selected.status === "archived" ? " (archived)" : ""}` : value ? "Linked account unavailable" : "Choose an active account"}</Text>
       <Text style={{ color: P.muted }}>{expanded ? "▴" : "▾"}</Text>
     </Pressable>
-    {expanded ? <AccountSelectionSheet
+    <AccountSelectionSheet
+      visible={expanded}
       title="Financial account"
       accounts={accounts}
       selectedId={value}
@@ -56,7 +57,7 @@ export default function SavingsGoalAccountSelector({ userId, value, onChange, in
       emptyMessage={search ? "No matching active accounts." : "Create or activate a financial account in Accounts before creating a savings goal."}
     >
       <TextInput accessibilityLabel="Search financial accounts" value={search} onChangeText={setSearch} placeholder="Search accounts" style={{ backgroundColor: P.white, borderColor: P.line, borderRadius: 10, borderWidth: 1, minHeight: 46, paddingHorizontal: 12, fontFamily: "Manrope", color: P.ink }} />
-    </AccountSelectionSheet> : null}
+    </AccountSelectionSheet>
     <Text style={{ color: invalid ? P.error : P.muted, fontFamily: "Manrope", fontSize: 12 }}>{invalid ? "Select an active financial account." : "Link this savings goal to the account where you keep its funds."}</Text>
   </View>;
 }

@@ -51,6 +51,7 @@ import { initDatabase } from "../local-db/client";
 import { cleanupDiscardedSyncRows } from "../local-db/helpers";
 import { isOnline } from "../lib/network";
 import { BottomSheetSurface } from "./BottomSheetSurface";
+import { ActionSheet } from "./ActionSheet";
 
 const TOOLBAR_MAX_WIDTH = 430;
 const CONTENT_GUTTER = 20;
@@ -1174,9 +1175,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           </View>
         ) : null}
 
-        <Modal visible={syncDetailsVisible} transparent animationType="slide" presentationStyle="overFullScreen" onDismiss={() => setSyncDetailsVisible(false)} onRequestClose={() => setSyncDetailsVisible(false)}>
-          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "flex-end" }}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close sync details" onPress={() => setSyncDetailsVisible(false)} style={{ flex: 1 }} />
+        <ActionSheet visible={syncDetailsVisible} onClose={() => setSyncDetailsVisible(false)} backdropColor="rgba(0,0,0,0.38)" accessibilityLabel="Close sync details">
             <BottomSheetSurface bottomSpacing={22} style={{ backgroundColor: palette.shell, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, maxHeight: "78%" }}>
               <View {...syncSheetPanResponder.panHandlers} style={{ paddingVertical: 8, marginTop: -8, marginBottom: 10 }}>
                 <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center" }} />
@@ -1275,8 +1274,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
                 </Pressable>
               </View>
             </BottomSheetSurface>
-          </View>
-        </Modal>
+        </ActionSheet>
 
         <Modal visible={discardConfirmVisible} transparent animationType="fade" onRequestClose={() => setDiscardConfirmVisible(false)}>
           <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 }}>

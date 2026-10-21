@@ -35,6 +35,7 @@ import type { Subcategory } from "../../local-db/repositories/taxonomy";
 import CreditCardInstallmentFields, { type InstallmentFieldErrors, type InstallmentFormValue } from "./components/CreditCardInstallmentFields";
 import AccountSelectionSheet from "../../components/AccountSelectionSheet";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
+import { ActionSheet } from "../../components/ActionSheet";
 
 const QUICK_AMOUNTS = [100, 250, 500, 1000];
 
@@ -602,11 +603,11 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   }
 
   function renderAccountPicker() {
-    if (!accountPickerMode) return null;
     const isSource = accountPickerMode === "source";
     const pickable = accounts.filter((a) => !isStatementPayment || a.kind !== "credit_card");
 
     return <AccountSelectionSheet
+      visible={accountPickerMode !== null}
       title={isSource ? "From account" : "To account"}
       accounts={pickable.map((account) => ({ id: account.id, name: account.name, kind: account.kind, amountLabel: formatAccountAmount(account) }))}
       selectedId={isSource ? sourceAccountId : destAccountId}
@@ -618,7 +619,6 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   function renderDatePicker(mode: "transaction" | "posting") {
     const posting = mode === "posting";
     const visible = posting ? showPostingDatePicker : showDatePicker;
-    if (!visible) return null;
     const selectedDate = posting && postingDate ? new Date(`${postingDate}T00:00:00`) : date;
     const close = () => posting ? setShowPostingDatePicker(false) : setShowDatePicker(false);
     const select = (nextDate: Date) => {
@@ -630,6 +630,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     };
 
     if (Platform.OS === "android") {
+      if (!visible) return null;
       return (
         <DateTimePicker
           value={selectedDate}
@@ -644,9 +645,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
     }
 
     return (
-      <Modal visible transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
-        <Pressable onPress={close} style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "flex-end" }}>
+      <ActionSheet visible onClose={close} backdropColor="rgba(27,28,26,0.4)">
             <Pressable onPress={() => {}}>
               <BottomSheetSurface bottomSpacing={30} style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
                 <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
@@ -676,9 +675,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                 />
               </BottomSheetSurface>
             </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      </ActionSheet>
     );
   }
 
@@ -1020,7 +1017,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
         {renderDatePicker("transaction")}
         {renderDatePicker("posting")}
         {renderAccountPicker()}
-        {savingsFunding ? <SavingsExpenseFundingSheet funding={savingsFunding} onCancel={() => setSavingsFunding(null)} onConfirm={(withdrawals) => { setSavingsFunding(null); void handleSave(true, withdrawals); }} /> : null}
+        <SavingsExpenseFundingSheet funding={savingsFunding} onCancel={() => setSavingsFunding(null)} onConfirm={(withdrawals) => { setSavingsFunding(null); void handleSave(true, withdrawals); }} />
         <Modal visible={balanceWarning !== null} transparent animationType="fade" onRequestClose={() => setBalanceWarning(null)}>
           <Pressable onPress={() => setBalanceWarning(null)} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(27,28,26,0.4)" }}>
             <Pressable onPress={() => {}}>

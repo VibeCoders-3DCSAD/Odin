@@ -21,6 +21,7 @@ import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
 import { confirmRecurringSpending, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
+import { ActionSheet } from "../../components/ActionSheet";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
 
 const palette = {
@@ -564,11 +565,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       {loadingMore ? <ActivityIndicator color={palette.brand} style={{ marginVertical: 16 }} /> : null}
 
       {/* Filter bottom drawer */}
-      <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
-        <Pressable
-          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}
-          onPress={() => setShowFilters(false)}
-        >
+      <ActionSheet visible={showFilters} onClose={() => setShowFilters(false)} backdropColor="rgba(0,0,0,0.45)">
           <BottomSheetSurface
             bottomSpacing={32}
             style={{
@@ -765,8 +762,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               </Pressable>
             </View>
           </BottomSheetSurface>
-        </Pressable>
-      </Modal>
+      </ActionSheet>
 
       {/* Delete confirmation modal */}
       <Modal visible={deleteTarget !== null} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
