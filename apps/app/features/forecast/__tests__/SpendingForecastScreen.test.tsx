@@ -1,7 +1,7 @@
 import React from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import SpendingForecastScreen from "../SpendingForecastScreen";
-import { categorySeries, forecastInterpretation } from "../QuarterlyForecastCharts";
+import { categorySeries, forecastInterpretation, forecastReliabilityNote } from "../QuarterlyForecastCharts";
 import type { QuarterlyForecastPayload } from "../types";
 
 const mockGetSnapshot = jest.fn();
@@ -9,6 +9,9 @@ const mockUpsertSnapshot = jest.fn();
 const mockListForecastTransactions = jest.fn();
 const mockRequestQuarterlyForecast = jest.fn();
 const mockRequestForecastInterpretation = jest.fn();
+const mockListScheduledPayments = jest.fn();
+const mockListQuarterlySpending = jest.fn();
+const mockPastQuarters = jest.fn();
 
 jest.mock("../../../local-db/repositories/dashboardSnapshots", () => ({
   getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
@@ -17,6 +20,11 @@ jest.mock("../../../local-db/repositories/dashboardSnapshots", () => ({
 jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
   getForecastHistoryStartDate: () => "2025-10-01",
   listForecastTransactions: (...args: unknown[]) => mockListForecastTransactions(...args),
+  listQuarterlySpending: (...args: unknown[]) => mockListQuarterlySpending(...args),
+  pastQuarters: (...args: unknown[]) => mockPastQuarters(...args),
+}));
+jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
+  listScheduledPayments: (...args: unknown[]) => mockListScheduledPayments(...args),
 }));
 jest.mock("../api", () => ({
   requestQuarterlyForecast: (...args: unknown[]) => mockRequestQuarterlyForecast(...args),
@@ -36,22 +44,138 @@ const snapshot = { id: "s-1", user_id: "user-1", source: "forecast_quarterly", p
 
 describe("SpendingForecastScreen", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    mockUpsertSnapshot.mockReset().mockResolvedValue(undefined);
     mockGetSnapshot.mockResolvedValue(snapshot);
     mockListForecastTransactions.mockResolvedValue([{ transactionId: "t-1", date: "2026-09-04", amount: 100, category: "food", transactionType: "expense" }]);
     mockRequestQuarterlyForecast.mockResolvedValue({ response: { ok: true }, body: { payload: forecast } });
     mockRequestForecastInterpretation.mockRejectedValue(new Error("offline"));
+    mockListScheduledPayments.mockResolvedValue([]);
+    mockListQuarterlySpending.mockResolvedValue([]);
+    mockPastQuarters.mockReturnValue(["2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
+  });
+
+  it("shows stale cached charts while history and revalidation are pending", async () => {
+    mockGetSnapshot.mockResolvedValue({ ...snapshot, stale: true });
+    mockListQuarterlySpending.mockReturnValue(new Promise(() => {}));
+    mockRequestQuarterlyForecast.mockReturnValue(new Promise(() => {}));
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(view.getByText("PHP 15,000")).toBeTruthy());
+    expect(view.getByText("Updating forecast…")).toBeTruthy();
+    expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  it("keeps loading on a cache miss until the first forecast arrives", async () => {
+    mockGetSnapshot.mockResolvedValue(null);
+    let resolveForecast!: (value: { response: { ok: boolean }; body: { payload: QuarterlyForecastPayload } }) => void;
+    mockRequestQuarterlyForecast.mockImplementationOnce(() => new Promise((resolve) => { resolveForecast = resolve; }));
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1));
+    expect(view.getByLabelText("Loading spending forecast")).toBeTruthy();
+    expect(view.queryByText("Record posted transactions to unlock a spending forecast.")).toBeNull();
+    await act(async () => { resolveForecast({ response: { ok: true }, body: { payload: forecast } }); });
+    expect(view.getByText("PHP 15,000")).toBeTruthy();
+    expect(view.queryByLabelText("Loading spending forecast")).toBeNull();
+  });
+
+  it("retains the selected cached quarter when background revalidation replaces its amounts", async () => {
+    let resolveForecast!: (value: { response: { ok: boolean }; body: { payload: QuarterlyForecastPayload } }) => void;
+    mockRequestQuarterlyForecast.mockImplementationOnce(() => new Promise((resolve) => { resolveForecast = resolve; }));
+    const updated = { ...forecast, quarters: forecast.quarters.map((quarter) => ({ ...quarter, totalCentavos: 2_000_000 })) };
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+    await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1));
+    fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
+    expect(view.getByText("PHP 16,500")).toBeTruthy();
+
+    await act(async () => { resolveForecast({ response: { ok: true }, body: { payload: updated } }); });
+    expect(view.getByText("PHP 20,000")).toBeTruthy();
+    expect(view.getAllByText("Q1 2027 · Forecast")).toHaveLength(2);
+    expect(view.queryByText("Updating forecast…")).toBeNull();
+  });
+
+  it("retains stale charts when revalidation fails", async () => {
+    mockGetSnapshot.mockResolvedValue({ ...snapshot, stale: true });
+    mockRequestQuarterlyForecast.mockRejectedValue(new Error("offline"));
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(view.getByText("Forecast update failed. Your last forecast is still available.")).toBeTruthy());
+    expect(view.getByText("PHP 15,000")).toBeTruthy();
+    expect(view.getByText("Forecast data may be out of date.")).toBeTruthy();
+    expect(view.queryByText("Updating forecast…")).toBeNull();
+  });
+
+  it("clears the previous account's forecast immediately when the account changes", async () => {
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+    await waitFor(() => expect(view.getByText("PHP 15,000")).toBeTruthy());
+    mockGetSnapshot.mockReturnValue(new Promise(() => {}));
+
+    view.rerender(<SpendingForecastScreen userId="user-2" accessToken="other-token" embedded />);
+    expect(view.queryByText("PHP 15,000")).toBeNull();
+    expect(view.getByLabelText("Loading spending forecast")).toBeTruthy();
+    view.unmount();
+  });
+
+  it("requests a fresh forecast even when the cache cannot be read", async () => {
+    mockGetSnapshot.mockRejectedValue(new Error("cache unavailable"));
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(view.getByText("PHP 15,000")).toBeTruthy());
+    expect(view.queryByText("Forecast information is unavailable.")).toBeNull();
+    expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a retry message when the first forecast fails without cached data", async () => {
+    mockGetSnapshot.mockResolvedValue(null);
+    mockRequestQuarterlyForecast.mockRejectedValue(new Error("offline"));
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(view.getByText("Forecast update failed. Try refreshing again.")).toBeTruthy());
+    expect(view.queryByLabelText("Loading spending forecast")).toBeNull();
+    expect(view.queryByText("Forecast update failed. Your last forecast is still available.")).toBeNull();
+  });
+
+  it("shows actual quarters before the forecast, starting on the first forecast quarter", async () => {
+    mockListQuarterlySpending.mockResolvedValue([
+      { quarter: "2026Q2", totalCentavos: 0, categories: [] },
+      { quarter: "2026Q3", totalCentavos: 1_400_000, categories: [{ category: "food", amountCentavos: 900_000 }, { category: "transport", amountCentavos: 500_000 }] },
+    ]);
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    // The empty quarter before recording began is dropped; the forecast tab stays selected.
+    await waitFor(() => expect(view.getByLabelText("Actual spending for 1 quarters and projected spending for 2 quarters")).toBeTruthy());
+    expect(mockPastQuarters).toHaveBeenCalledWith(4);
+    expect(mockListQuarterlySpending).toHaveBeenCalledWith("user-1", ["2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
+    expect(view.getAllByText("Q4 2026 · Forecast")).toHaveLength(2);
+    fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
+    expect(view.getAllByText("Q1 2027 · Forecast")).toHaveLength(2);
+  });
+
+  it("forecasts billers and remittances at their scheduled amounts, outside the HFCE model", async () => {
+    const remittance = { frequency: "semi_monthly", dueDayOfMonth: 1, dueSecondDayOfMonth: 16, dueDayOfWeek: null, dueMonth: null, startsOn: "2025-09-01", endsOn: null, amountCentavos: 1_800_000 };
+    mockListScheduledPayments.mockResolvedValue([remittance]);
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalled());
+    expect(mockListForecastTransactions).toHaveBeenCalledWith("user-1", { fromDate: "2025-10-01", excludeScheduledPayments: true, excludeUnusualSpending: true });
+    const saved = mockUpsertSnapshot.mock.calls[0]![2] as QuarterlyForecastPayload;
+    // Six due dates a quarter at PHP 18,000, the same in every quarter.
+    for (const quarter of saved.quarters) expect(quarter.categories).toContainEqual({ category: "billers_remittances", amountCentavos: 10_800_000 });
+    expect(saved.quarters[0]!.totalCentavos).toBe(1_500_000 + 10_800_000);
+    expect(categorySeries(saved).find((line) => line.key === "billers_remittances")?.label).toBe("Billers & Remittances");
+    view.unmount();
   });
 
   it("saves Groq's wording of the notes and shows it in place of the app's own", async () => {
     const notes = forecastInterpretation(forecast);
     const rewritten = notes.map((note, index) => `Friendly note ${index + 1}`);
     mockRequestForecastInterpretation.mockResolvedValue({ response: { ok: true }, body: { payload: { notes: rewritten } } });
-    mockGetSnapshot.mockResolvedValueOnce(snapshot).mockResolvedValueOnce(snapshot).mockResolvedValue({ ...snapshot, payload_json: JSON.stringify({ ...forecast, interpretation: rewritten }) });
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
 
     await waitFor(() => expect(view.getByText("Friendly note 1")).toBeTruthy());
-    expect(mockRequestForecastInterpretation).toHaveBeenCalledWith("token", notes);
+    expect(mockRequestForecastInterpretation).toHaveBeenCalledWith("token", notes, expect.any(AbortSignal));
     expect(mockUpsertSnapshot).toHaveBeenLastCalledWith("user-1", "forecast_quarterly", { ...forecast, interpretation: rewritten });
   });
 
@@ -88,18 +212,104 @@ describe("SpendingForecastScreen", () => {
     await waitFor(() => expect(view.getByText(/first full month/)).toBeTruthy());
     expect(view.queryByText("Total projected spending")).toBeNull();
   });
+
+  it("rebuilds a zero forecast from newly synced regular spending when reports refresh", async () => {
+    const zero = { ...forecast, quarters: forecast.quarters.map((quarter) => ({ ...quarter, totalCentavos: 0, categories: [{ category: "communication", amountCentavos: 0 }] })) };
+    const corrected = { ...forecast, quarters: forecast.quarters.map((quarter) => ({ ...quarter, totalCentavos: 219_600, categories: [{ category: "communication", amountCentavos: 219_600 }] })) };
+    mockGetSnapshot.mockResolvedValue({ ...snapshot, payload_json: JSON.stringify(zero) });
+    mockRequestQuarterlyForecast.mockResolvedValueOnce({ response: { ok: true }, body: { payload: zero } }).mockResolvedValue({ response: { ok: true }, body: { payload: corrected } });
+    mockUpsertSnapshot.mockImplementation(async (_userId: string, _source: string, payload: QuarterlyForecastPayload) => {
+      mockGetSnapshot.mockResolvedValue({ ...snapshot, payload_json: JSON.stringify(payload) });
+    });
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" refreshKey={0} embedded />);
+    await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalledWith("user-1", "forecast_quarterly", zero));
+    const regularSpending = [
+      { transactionId: "phone-july", date: "2026-07-15", amount: 665, category: "communication", transactionType: "expense" },
+      { transactionId: "phone-august", date: "2026-08-15", amount: 770, category: "communication", transactionType: "expense" },
+      { transactionId: "phone-september", date: "2026-09-15", amount: 630, category: "communication", transactionType: "expense" },
+    ];
+    mockListForecastTransactions.mockResolvedValue(regularSpending);
+    view.rerender(<SpendingForecastScreen userId="user-1" accessToken="token" refreshKey={1} embedded />);
+    await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenLastCalledWith("token", { historicalTransactions: regularSpending }, expect.any(AbortSignal)));
+    await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenLastCalledWith("user-1", "forecast_quarterly", corrected));
+    expect(view.getAllByText("PHP 2,196")).toHaveLength(2);
+  });
+
+  it("shows one selected category and preserves the quarter when switching categories", async () => {
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+    await waitFor(() => expect(view.getByLabelText("Choose spending category: Food and groceries")).toBeTruthy());
+    expect(view.getByLabelText("Food and groceries spending over 2 quarters")).toBeTruthy();
+    expect(view.queryByText("Transportation")).toBeNull();
+    fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
+    fireEvent.press(view.getByLabelText("Choose spending category: Food and groceries"));
+    expect(view.getByLabelText("Choose spending category: Food and groceries").props.accessibilityState.expanded).toBe(true);
+    fireEvent.press(view.getByRole("radio", { name: "Transportation" }));
+    expect(view.getByLabelText("Transportation spending over 2 quarters")).toBeTruthy();
+    expect(view.queryByLabelText("Food and groceries spending over 2 quarters")).toBeNull();
+    expect(view.getByText("PHP 5,500")).toBeTruthy();
+    expect(view.queryByText("PHP 11,000")).toBeNull();
+    expect(view.getByLabelText("Choose spending category: Transportation").props.accessibilityState.expanded).toBe(false);
+    expect(view.queryByRole("radio", { name: "Food and groceries" })).toBeNull();
+    fireEvent.press(view.getByLabelText("Choose spending category: Transportation"));
+    expect(view.getByRole("radio", { name: "Food and groceries" })).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Choose spending category: Transportation"));
+    expect(view.queryByRole("radio", { name: "Food and groceries" })).toBeNull();
+  });
+
+  it("does not let a late response overwrite a forecast refreshed after sync", async () => {
+    let resolveOld!: (value: { response: { ok: boolean }; body: { payload: QuarterlyForecastPayload } }) => void;
+    mockRequestQuarterlyForecast.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" refreshKey={0} embedded />);
+    await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1));
+    const oldSignal = mockRequestQuarterlyForecast.mock.calls[0]![2];
+    view.rerender(<SpendingForecastScreen userId="user-1" accessToken="token" refreshKey={1} embedded />);
+    await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalledWith("user-1", "forecast_quarterly", forecast));
+    expect(oldSignal.aborted).toBe(true);
+    await act(async () => { resolveOld({ response: { ok: true }, body: { payload: { ...forecast, quarters: [] } } }); });
+    expect(mockUpsertSnapshot).toHaveBeenCalledTimes(1);
+    expect(view.queryByText("Forecast update failed. Your last forecast is still available.")).toBeNull();
+  });
+
+  it("allows scheduled bills and remittances to be selected and charted", async () => {
+    mockListScheduledPayments.mockResolvedValue([{ frequency: "monthly", dueDayOfMonth: 1, startsOn: "2025-09-01", endsOn: null, amountCentavos: 100_000 }]);
+    mockUpsertSnapshot.mockImplementationOnce(async (_userId: string, _source: string, payload: QuarterlyForecastPayload) => {
+      mockGetSnapshot.mockResolvedValue({ ...snapshot, payload_json: JSON.stringify(payload) });
+    });
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+    await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalled());
+    fireEvent.press(view.getByLabelText("Choose spending category: Food and groceries"));
+    fireEvent.press(view.getByRole("radio", { name: "Billers & Remittances" }));
+    expect(view.getByLabelText("Billers & Remittances spending over 2 quarters")).toBeTruthy();
+    expect(view.getByText("PHP 3,000")).toBeTruthy();
+    expect(view.getByText("Based on your scheduled bills and remittances.")).toBeTruthy();
+  });
+});
+
+describe("forecastReliabilityNote", () => {
+  it.each([
+    [{ quality: "INSUFFICIENT_DATA", seasonalUncertainty: true }, "Provisional forecast"],
+    [{ quality: "PERSONALIZED", seasonalUncertainty: true }, "Seasonal changes aren't shown yet"],
+  ] as const)("explains how far to trust a forecast with %o", (flags, text) => {
+    expect(forecastReliabilityNote({ ...forecast, ...flags })).toContain(text);
+  });
+
+  it("adds no note for a full year of history or an older snapshot", () => {
+    expect(forecastReliabilityNote({ ...forecast, quality: "PERSONALIZED", seasonalUncertainty: false })).toBeNull();
+    expect(forecastReliabilityNote(forecast)).toBeNull();
+  });
 });
 
 describe("categorySeries", () => {
-  it("folds categories past the seventh into Other so the quarter still adds up", () => {
+  it("keeps every category selectable with its own amounts", () => {
     const categories = ["food", "transport", "health", "education", "communication", "clothing_footwear", "recreation_culture", "alcohol_tobacco", "restaurants_hotels"];
     const series = categorySeries({
       ...forecast,
       quarters: [{ quarter: "2026Q4", totalCentavos: 4_500, categories: categories.map((category, index) => ({ category, amountCentavos: (categories.length - index) * 100 })) }],
     });
 
-    expect(series).toHaveLength(7);
-    expect(series.at(-1)).toEqual(expect.objectContaining({ key: "other", label: "Other", values: [600] }));
+    expect(series).toHaveLength(9);
+    expect(series.map((line) => line.key)).toEqual(categories);
+    expect(series.at(-1)).toEqual(expect.objectContaining({ key: "restaurants_hotels", label: "Eating out and hotels", values: [100] }));
     expect(series.reduce((sum, line) => sum + line.values[0]!, 0)).toBe(4_500);
   });
 });

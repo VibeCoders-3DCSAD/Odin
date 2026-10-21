@@ -26,7 +26,7 @@ const mlResponse = {
   response_id: "response-1",
   request_id: "user-1",
   user_id: "user-1",
-  forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 8500.25, user_baseline_amount: 7000, hfce_multiplier: 1.214321, hfce_forecast_amount_million_php: 12345.67, explanation: "Personalized food forecast." }],
+  forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 8500.25, user_baseline_amount: 7000, hfce_multiplier: 1.214321, hfce_forecast_amount_million_php: 12345.67, explanation: "Personalized food forecast.", baseline_method: "same_quarter_last_year", seasonal_uncertainty: false }],
   snapshot: { month: "2026-10", total_amount: 8500.25, category_forecasts: [{ category: "food", amount: 8500.25 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-09-29T00:00:00Z", quality: "PERSONALIZED" },
   model_version: "hfce-sarima-v4-category-quarterly",
   status: "SUCCESS",
@@ -63,7 +63,7 @@ describe("forecast ML adapter", () => {
     expect(requestBody).toEqual(expect.objectContaining({ user_id: "user-1", categories: ["food"] }));
     expect(requestBody.historical_transactions).toEqual(expect.arrayContaining([expect.objectContaining({ transaction_id: transaction.transactionId, category: "food" })]));
     expect(fetcher.mock.calls[0]![1].headers["X-Odin-History-Signature"]).toBe(createHmac("sha256", "test-secret").update(`odin_api:user-1:${fetcher.mock.calls[0]![1].body}`).digest("hex"));
-    expect(result).toEqual(expect.objectContaining({ status: "SUCCESS", forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 850025, userBaselineCentavos: 700000, hfceMultiplier: 1.214321, hfceForecastAmountMillionPhp: 12345.67, explanation: "Personalized food forecast." }] }));
+    expect(result).toEqual(expect.objectContaining({ status: "SUCCESS", forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 850025, userBaselineCentavos: 700000, hfceMultiplier: 1.214321, hfceForecastAmountMillionPhp: 12345.67, explanation: "Personalized food forecast.", baselineMethod: "same_quarter_last_year", seasonalUncertainty: false }] }));
   });
 
   it("asks for the requested target month and omits it otherwise", async () => {
@@ -96,6 +96,17 @@ describe("forecast ML adapter", () => {
     await getMlForecast("user-1", { historicalTransactions: [staleHealth, recentFood] }, fetcher);
     expect(JSON.parse(fetcher.mock.calls[0]![1].body).categories).toEqual(["food"]);
     await expect(getMlForecast("user-1", { historicalTransactions: [staleHealth] }, fetcher)).rejects.toMatchObject({ reason: "NO_RECENT_SPENDING" });
+  });
+
+  it("keeps a yearly category once the history reaches back a full year", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-07T12:00:00.000Z"));
+    process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
+    const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => mlResponse });
+    const christmasHealth = { ...currentOnlyCategoryTransaction, date: "2025-12-20" };
+    const yearAgoFood = { ...transaction, date: "2025-10-03" };
+    await getMlForecast("user-1", { historicalTransactions: [yearAgoFood, christmasHealth, { ...transaction, date: "2026-09-01" }] }, fetcher);
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body).categories).toEqual(["food", "health"]);
   });
 
   it("explains that a forecast needs a completed month when only current-month spend exists", async () => {

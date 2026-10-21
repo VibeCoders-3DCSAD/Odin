@@ -30,7 +30,7 @@ describe("POST /odin/api/forecast", () => {
   afterEach(() => { delete process.env.FORECASTING_ML_BASE_URL; delete process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET; jest.restoreAllMocks(); });
 
   it("requires auth and injects the authenticated user into the ML request", async () => {
-    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 1, user_baseline_amount: 1, hfce_multiplier: 1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast." }], snapshot: { month: "2026-10", total_amount: 1, category_forecasts: [{ category: "food", amount: 1 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-09-29T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 1, user_baseline_amount: 1, hfce_multiplier: 1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast.", baseline_method: "median_monthly", seasonal_uncertainty: true }], snapshot: { month: "2026-10", total_amount: 1, category_forecasts: [{ category: "food", amount: 1 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-09-29T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
     const response = await request(app).post("/odin/api/forecast").set(authHeader()).send(body);
     expect(response.status).toBe(200);
     expect(JSON.parse(String(fetchSpy.mock.calls[0]![1]?.body))).toMatchObject({ user_id: validUserId });
@@ -44,13 +44,14 @@ describe("POST /odin/api/forecast", () => {
 
   it("returns four quarterly totals from the quarterly route", async () => {
     jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] }).setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
-    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(async () => new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-11", quarter: "2026Q4", amount: 100, user_baseline_amount: 90, hfce_multiplier: 1.1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast." }], snapshot: { month: "2026-11", total_amount: 100, category_forecasts: [{ category: "food", amount: 100 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
+    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(async () => new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-11", quarter: "2026Q4", amount: 100, user_baseline_amount: 90, hfce_multiplier: 1.1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast.", baseline_method: "median_monthly", seasonal_uncertainty: true }], snapshot: { month: "2026-11", total_amount: 100, category_forecasts: [{ category: "food", amount: 100 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
     const response = await request(app).post("/odin/api/forecast/quarterly").set(authHeader()).send(body);
     jest.useRealTimers();
     expect(response.status).toBe(200);
     expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(response.body.payload.quarters.map((quarter: { quarter: string }) => quarter.quarter)).toEqual(["2026Q4", "2027Q1", "2027Q2", "2027Q3"]);
     expect(response.body.payload.quarters[0].totalCentavos).toBe(30_000);
+    expect(response.body.payload).toMatchObject({ quality: "PERSONALIZED", baselineMethod: "median_monthly", seasonalUncertainty: true });
   });
 
   it("returns the notes unchanged from the interpretation route when Groq is not configured", async () => {

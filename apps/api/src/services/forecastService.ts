@@ -15,8 +15,11 @@ export type ForecastRequest = {
   targetMonth?: string;
 };
 
+export type BaselineMethod = "same_quarter_last_year" | "median_monthly" | "recency_weighted_provisional";
+const BASELINE_METHODS: readonly BaselineMethod[] = ["same_quarter_last_year", "median_monthly", "recency_weighted_provisional"];
+
 export type ForecastPayload = {
-  forecasts: { category: string; month: string; quarter: string; amountCentavos: number; userBaselineCentavos: number; hfceMultiplier: number; hfceForecastAmountMillionPhp: number; explanation: string }[];
+  forecasts: { category: string; month: string; quarter: string; amountCentavos: number; userBaselineCentavos: number; hfceMultiplier: number; hfceForecastAmountMillionPhp: number; explanation: string; baselineMethod: BaselineMethod; seasonalUncertainty: boolean }[];
   snapshot: {
     month: string;
     totalAmountCentavos: number;
@@ -33,9 +36,13 @@ export type QuarterlyForecastPayload = {
   quarters: { quarter: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[] }[];
   modelVersion: string;
   generatedAt: string;
+  // INSUFFICIENT_DATA under six months of history; seasonalUncertainty under twelve.
+  quality: ForecastPayload["snapshot"]["quality"];
+  baselineMethod: BaselineMethod;
+  seasonalUncertainty: boolean;
 };
 
-const MAX_TRANSACTIONS = 500;
+const MAX_TRANSACTIONS = 2_000;
 const FORECAST_QUARTERS = 4;
 const MONTHS_PER_QUARTER = 3;
 const MAX_TEXT_LENGTH = 160;
@@ -71,7 +78,7 @@ export function parseForecastRequest(value: unknown): ForecastRequest {
   }
   const input = value as Record<string, unknown>;
   if (!Array.isArray(input.historicalTransactions) || input.historicalTransactions.length === 0 || input.historicalTransactions.length > MAX_TRANSACTIONS) {
-    throw new ForecastValidationError("historicalTransactions must contain between 1 and 500 transactions");
+    throw new ForecastValidationError("historicalTransactions must contain between 1 and 2000 transactions");
   }
   return {
     historicalTransactions: input.historicalTransactions.map(parseTransaction),
@@ -174,11 +181,16 @@ export async function getMlQuarterlyForecast(userId: string, request: ForecastRe
     }),
     modelVersion: payloads[0]!.modelVersion,
     generatedAt: new Date().toISOString(),
+    quality: payloads.some((payload) => payload.snapshot.quality === "INSUFFICIENT_DATA") ? "INSUFFICIENT_DATA" : payloads[0]!.snapshot.quality,
+    baselineMethod: payloads[0]!.forecasts[0]?.baselineMethod ?? "recency_weighted_provisional",
+    seasonalUncertainty: payloads.some((payload) => payload.forecasts.some((point) => point.seasonalUncertainty)),
   };
 }
 
-// Mirrors odin-ml: a category needs completed-month spend newer than this many months.
+// Mirrors odin-ml: a category needs completed-month spend newer than this many months, or, once the
+// history reaches back a full year, any completed-month spend within that year.
 const STALE_CATEGORY_MONTHS = 6;
+const BASELINE_LOOKBACK_MONTHS = 12;
 
 function monthsAgo(now: Date, months: number): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1)).toISOString().slice(0, 7);
@@ -195,7 +207,9 @@ function hasCompletedMonthSpend(transactions: ForecastTransaction[], now = new D
 
 function forecastableCategories(transactions: ForecastTransaction[], now = new Date()): string[] {
   const currentMonth = monthsAgo(now, 0);
-  const staleMonth = monthsAgo(now, STALE_CATEGORY_MONTHS);
+  const firstLookbackMonth = monthsAgo(now, BASELINE_LOOKBACK_MONTHS);
+  const fullYear = transactions.some((transaction) => transaction.transactionType === "expense" && transaction.date.slice(0, 7) === firstLookbackMonth);
+  const staleMonth = monthsAgo(now, fullYear ? BASELINE_LOOKBACK_MONTHS + 1 : STALE_CATEGORY_MONTHS);
   return [...new Set(transactions
     .filter((transaction) => {
       const month = transaction.date.slice(0, 7);
@@ -217,8 +231,8 @@ export function mapMlForecast(value: unknown): ForecastPayload {
   const forecasts = response.forecasts.map((point) => {
       if (!point || typeof point !== "object" || Array.isArray(point)) throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");
       const value = point as Record<string, unknown>;
-      if (typeof value.category !== "string" || !HFCE_CATEGORIES.has(value.category) || typeof value.month !== "string" || !/^\d{4}-\d{2}$/.test(value.month) || typeof value.quarter !== "string" || !/^\d{4}Q[1-4]$/.test(value.quarter) || typeof value.hfce_multiplier !== "number" || !Number.isFinite(value.hfce_multiplier) || typeof value.hfce_forecast_amount_million_php !== "number" || !Number.isFinite(value.hfce_forecast_amount_million_php) || typeof value.explanation !== "string" || !value.explanation.trim()) throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");
-      return { category: value.category, month: value.month, quarter: value.quarter, amountCentavos: cents(value.amount), userBaselineCentavos: cents(value.user_baseline_amount), hfceMultiplier: value.hfce_multiplier, hfceForecastAmountMillionPhp: value.hfce_forecast_amount_million_php, explanation: value.explanation };
+      if (typeof value.category !== "string" || !HFCE_CATEGORIES.has(value.category) || typeof value.month !== "string" || !/^\d{4}-\d{2}$/.test(value.month) || typeof value.quarter !== "string" || !/^\d{4}Q[1-4]$/.test(value.quarter) || typeof value.hfce_multiplier !== "number" || !Number.isFinite(value.hfce_multiplier) || typeof value.hfce_forecast_amount_million_php !== "number" || !Number.isFinite(value.hfce_forecast_amount_million_php) || typeof value.explanation !== "string" || !value.explanation.trim() || !BASELINE_METHODS.includes(value.baseline_method as BaselineMethod) || typeof value.seasonal_uncertainty !== "boolean") throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");
+      return { category: value.category, month: value.month, quarter: value.quarter, amountCentavos: cents(value.amount), userBaselineCentavos: cents(value.user_baseline_amount), hfceMultiplier: value.hfce_multiplier, hfceForecastAmountMillionPhp: value.hfce_forecast_amount_million_php, explanation: value.explanation, baselineMethod: value.baseline_method as BaselineMethod, seasonalUncertainty: value.seasonal_uncertainty };
     });
   const snapshot = response.snapshot as Record<string, unknown>;
   if (typeof snapshot.month !== "string" || !/^\d{4}-\d{2}$/.test(snapshot.month) || typeof snapshot.total_amount !== "number" || !Number.isFinite(snapshot.total_amount) || snapshot.total_amount < 0 || typeof snapshot.model_version !== "string" || !snapshot.model_version.trim() || typeof snapshot.generated_at !== "string" || Number.isNaN(Date.parse(snapshot.generated_at)) || !["PERSONALIZED", "FALLBACK", "COLD_START", "INSUFFICIENT_DATA"].includes(snapshot.quality as string) || !Array.isArray(snapshot.category_forecasts)) {

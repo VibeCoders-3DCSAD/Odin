@@ -1,8 +1,11 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import type { ForecastTransaction } from "../../features/forecast/types";
+import { listUnusualSpendings } from "./unusualSpending";
+import { SCHEDULED_PAYMENTS_CATEGORY } from "../../features/forecast/scheduledForecast";
 
-const MAX_FORECAST_TRANSACTIONS = 500;
+// Room for a full year of history, which the seasonal forecast compares against.
+const MAX_FORECAST_TRANSACTIONS = 2_000;
 const MAX_DESCRIPTION_LENGTH = 160;
 const MAX_RECOMMENDED_SUBCATEGORIES = 200;
 
@@ -32,6 +35,11 @@ function description(row: ForecastTransactionRow): string | undefined {
 
 type ListForecastTransactionsOptions = {
   fromDate?: string;
+  // Leave out biller and remittance payments, which the quarterly forecast adds back at their scheduled amounts.
+  excludeScheduledPayments?: boolean;
+  // Leave out one-off purchases the personal IQR check flags, unless the user confirmed them as recurring,
+  // so a same-quarter-last-year forecast does not expect them again.
+  excludeUnusualSpending?: boolean;
 };
 
 export function getForecastHistoryStartDate(now = new Date()): string {
@@ -70,9 +78,12 @@ export async function listRecentExpenseSubcategoryIds(userId: string, fromDate =
   return rows.flatMap((row) => typeof row.subcategory_id === "string" && row.subcategory_id ? [row.subcategory_id] : []);
 }
 
-export async function listForecastTransactions(userId: string, { fromDate }: ListForecastTransactionsOptions = {}): Promise<ForecastTransaction[]> {
+export async function listForecastTransactions(userId: string, { fromDate, excludeScheduledPayments = false, excludeUnusualSpending = false }: ListForecastTransactionsOptions = {}): Promise<ForecastTransaction[]> {
   const db = await getDb();
   const fromDateClause = fromDate ? " AND t.transaction_date >= ?" : "";
+  const scheduledClause = excludeScheduledPayments
+    ? " AND NOT EXISTS (SELECT 1 FROM scheduled_payment_records r WHERE r.user_id = t.user_id AND r.transaction_id = t.id AND r.deleted = 0)"
+    : "";
   const rows = await db.getAllAsync<ForecastTransactionRow>(
     `SELECT t.id, t.transaction_date, t.amount_centavos, t.transaction_type, t.created_at,
             t.merchant_name, t.counterparty_name, t.notes,
@@ -80,14 +91,17 @@ export async function listForecastTransactions(userId: string, { fromDate }: Lis
        FROM transactions t
        LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
        LEFT JOIN categories c ON c.id = s.category_id AND c.deleted = 0
-       WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'${fromDateClause}
+       WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'${fromDateClause}${scheduledClause}
           AND t.transaction_type IN ('income', 'expense')
        ORDER BY t.transaction_date DESC, t.created_at DESC
        LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
     ...(fromDate ? [userId, fromDate] : [userId]),
   );
+  const oneOffs = excludeUnusualSpending
+    ? new Set((await listUnusualSpendings(userId)).filter((insight) => !insight.confirmedRecurring).map((insight) => insight.transactionId))
+    : new Set<string>();
   return rows.reverse().flatMap((row) => {
-    if (!Number.isInteger(row.amount_centavos) || row.amount_centavos <= 0) return [];
+    if (!Number.isInteger(row.amount_centavos) || row.amount_centavos <= 0 || oneOffs.has(row.id)) return [];
     const conciseDescription = description(row);
     return [{
       transactionId: row.id,
@@ -97,6 +111,46 @@ export async function listForecastTransactions(userId: string, { fromDate }: Lis
       transactionType: row.transaction_type,
       ...(conciseDescription ? { description: conciseDescription } : {}),
     }];
+  });
+}
+
+export type QuarterSpending = { quarter: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[] };
+
+// The quarters (YYYYQn) that end before the current quarter, oldest first.
+export function pastQuarters(count: number, now = new Date()): string[] {
+  const current = now.getUTCFullYear() * 4 + Math.floor(now.getUTCMonth() / 3);
+  return Array.from({ length: count }, (_, index) => {
+    const quarter = current - count + index;
+    return `${Math.floor(quarter / 4)}Q${(quarter % 4) + 1}`;
+  });
+}
+
+// Actual spending per quarter in the same groups the forecast uses: HFCE categories, with biller and
+// remittance payments in their own group. Debt repayments and savings transfers have no category and are left out.
+export async function listQuarterlySpending(userId: string, quarters: string[]): Promise<QuarterSpending[]> {
+  if (quarters.length === 0) return [];
+  const first = quarters[0]!;
+  const last = quarters.at(-1)!;
+  const startDate = `${first.slice(0, 4)}-${String((Number(first.slice(5)) - 1) * 3 + 1).padStart(2, "0")}-01`;
+  const endDate = new Date(Date.UTC(Number(last.slice(0, 4)), Number(last.slice(5)) * 3, 0)).toISOString().slice(0, 10);
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ quarter: string; category: string; amount_centavos: number }>(
+    `SELECT substr(t.transaction_date, 1, 4) || 'Q' || ((CAST(substr(t.transaction_date, 6, 2) AS INTEGER) + 2) / 3) AS quarter,
+            CASE WHEN EXISTS (SELECT 1 FROM scheduled_payment_records r WHERE r.user_id = t.user_id AND r.transaction_id = t.id AND r.deleted = 0)
+                 THEN '${SCHEDULED_PAYMENTS_CATEGORY}' ELSE c.slug END AS category,
+            SUM(t.amount_centavos) AS amount_centavos
+       FROM transactions t
+       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
+       LEFT JOIN categories c ON c.id = s.category_id AND c.deleted = 0
+      WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
+        AND t.amount_centavos > 0 AND t.transaction_date >= ? AND t.transaction_date <= ?
+      GROUP BY quarter, category
+     HAVING category IS NOT NULL`,
+    userId, startDate, endDate,
+  );
+  return quarters.map((quarter) => {
+    const categories = rows.filter((row) => row.quarter === quarter).map((row) => ({ category: row.category, amountCentavos: row.amount_centavos }));
+    return { quarter, totalCentavos: categories.reduce((sum, point) => sum + point.amountCentavos, 0), categories };
   });
 }
 

@@ -15,6 +15,20 @@ describe("Financial Plan explanation service", () => {
 
   afterEach(() => { process.env.GROQ_API_KEY = originalApiKey; });
 
+  it.each([
+    [26.637525852785522, "26.6% higher"],
+    [-13.288683934125888, "13.3% lower"],
+    [39.245735473405276, "39.2% higher"],
+    [20, "20% higher"],
+  ])("formats forecast percentage %s for display", (percentageChange, expected) => {
+    const change = { ...evidence.forecastChanges[0]!, percentageChange, differenceCentavos: percentageChange > 0 ? 1_240 : -1_240 };
+    const message = forecastChangeExplanation(evidence, change);
+
+    expect(message).toContain(`${expected} than usual.`);
+    expect(message).toContain("We recommend a budget of ₱120 for Food.");
+    expect(change.percentageChange).toBe(percentageChange);
+  });
+
   it("uses only model insights supported by evidence IDs", async () => {
     process.env.GROQ_API_KEY = "test-key";
     const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ insights: [

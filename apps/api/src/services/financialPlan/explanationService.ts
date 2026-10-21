@@ -195,7 +195,7 @@ export function seasonalForecastMismatchExplanations(evidence: FinancialPlanEvid
 export function forecastChangeExplanation(evidence: FinancialPlanEvidence, change: FinancialPlanEvidence["forecastChanges"][number]): string {
   const direction = change.differenceCentavos > 0 ? "higher" : "lower";
   const estimate = change.baselineCentavos > 0 && change.percentageChange !== null
-    ? `We estimate your spending may be ${Math.abs(change.percentageChange)}% ${direction} than usual.`
+    ? `We estimate your spending may be ${Math.abs(change.percentageChange).toLocaleString("en-PH", { maximumFractionDigits: 1 })}% ${direction} than usual.`
     : `We estimate spending of ${peso(change.forecastCentavos)}.`;
   const allocationDifference = change.allocationCentavos - change.forecastCentavos;
   const allocationContext = allocationDifference === 0 ? ""

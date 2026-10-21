@@ -64,5 +64,12 @@ export function getQuarterlyForecastContent(snapshot: DashboardSnapshotWithMeta 
   });
   const interpretation = Array.isArray(value.interpretation) ? value.interpretation.filter((note): note is string => typeof note === "string" && note.trim().length > 0) : [];
   if (!quarters.length) return null;
-  return { quarters, modelVersion: value.modelVersion, generatedAt: value.generatedAt, ...(interpretation.length ? { interpretation } : {}) };
+  const quality = ["PERSONALIZED", "FALLBACK", "COLD_START", "INSUFFICIENT_DATA"].includes(value.quality as string) ? value.quality as QuarterlyForecastPayload["quality"] : undefined;
+  const baselineMethod = ["same_quarter_last_year", "median_monthly", "recency_weighted_provisional"].includes(value.baselineMethod as string) ? value.baselineMethod as QuarterlyForecastPayload["baselineMethod"] : undefined;
+  return {
+    quarters, modelVersion: value.modelVersion, generatedAt: value.generatedAt,
+    ...(quality ? { quality } : {}), ...(baselineMethod ? { baselineMethod } : {}),
+    ...(typeof value.seasonalUncertainty === "boolean" ? { seasonalUncertainty: value.seasonalUncertainty } : {}),
+    ...(interpretation.length ? { interpretation } : {}),
+  };
 }
