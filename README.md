@@ -19,6 +19,79 @@ Apply pending migrations before seeding (`pnpm exec supabase db push --local`).
 Savings contributions and debt/card repayments are uncategorized; repayment
 transactions use explicit payment markers so they do not inflate expense-category forecasts.
 
+Choose a persona with `--persona` (omit it to keep the original general demo):
+
+| Persona | Story |
+| --- | --- |
+| `seasonal-mom` | Marissa Santos: four children, PHP 60,000 monthly take-home pay, PHP 42,000 living costs, PHP 14,000 additional school costs each month in Q1–Q2, summer activities in April–May, and Christmas spending in December. |
+| `debt-burdened` | Carlo Reyes: PHP 25,000 income; half (PHP 12,500) goes to a personal loan and an online lending app loan against PHP 15,000 required, so PHP 2,500 goes overdue each month. The remaining PHP 12,500 covers bedspace rent, electricity, food, and commute, and cash hits zero before payday. About PHP 170,000 still outstanding; no savings. |
+| `healthy-worker` | Andrea Cruz: PHP 75,000 income, about PHP 35,000 living costs that drift ±15% month to month, regular discretionary spending, New Year, summer, Undas, and Christmas peaks, four one-off purchases (up to a PHP 42,000 laptop) that unusual-spending detection flags and the forecast leaves out, a funded PHP 210,000 emergency reserve, and PHP 20,000 monthly house-deposit contributions. |
+| `family-breadwinner` | Joel Mendoza: lives with their parents and sends PHP 18,000 home each payday (PHP 36,000 a month, 80% of their PHP 45,000 take-home pay), covering the household's rent, food, and utilities; the remaining PHP 9,000 pays their commute, work meals, phone, and personal care. |
+
+```bash
+pnpm --filter api seed -- --persona family-breadwinner --dry-run
+pnpm --filter api seed -- --persona family-breadwinner --confirm family-breadwinner@odin.demo
+```
+
+Each persona always uses the same demo login:
+
+| Persona | Email | Password |
+| --- | --- | --- |
+| `seasonal-mom` | `seasonal-mom@odin.demo` | `501bBg7OVnYhVQ3RSk5*` |
+| `debt-burdened` | `debt-burdened@odin.demo` | `rT_nLxeJ_3t7MP6cWb7_` |
+| `healthy-worker` | `healthy-worker@odin.demo` | `9hYZw-og6Wg-SZuwVx7$` |
+| `family-breadwinner` | `family-breadwinner@odin.demo` | `HaxJi2ZDwEoNrfw9Ne2!` |
+
+Seeding creates the account if it is missing (already email-confirmed), resets
+an existing persona account to its demo password, and prints the credentials
+when it finishes. `--email` and `--password` are rejected with `--persona`.
+Without `--persona`, `--email` is required; a new account without `--password`
+(or `SEED_PASSWORD`) gets a generated one, and an existing account keeps its
+password. Persona seeding also sets the display name and submitted demo
+onboarding answers so first login opens the dashboard. Demo histories cover
+the last eight full quarters and the current quarter to date, so the forecast
+chart can show two years of actual quarterly spending. The seed targets the
+Supabase instance configured in the API environment.
+
+Persona flexible spending uses 2025 NCR FIES anchors exported from `odin-ml`.
+Each anchor averages the 50 households with the same household size and nearest
+annual income to the persona's annual salary (sizes: mother 5, debt worker 1,
+healthy worker 1, breadwinner and parents 3). These are unweighted descriptive
+cohorts for synthetic demos. They are not survey-weighted population estimates;
+FIES household income is also broader than an individual's net salary.
+
+For each category, the quarterly target is `annual FIES amount × current-price
+HFCE for that quarter / current-price HFCE for the full year`. Integer centavos
+reconcile to the annual category anchor. Complete 2023–2025 HFCE years use their
+own weights; unavailable or partial years, including 2026, explicitly reuse the
+2025 seasonal template. The 2025 annual anchors stay constant across the demo
+history, without inflation adjustments. These are synthetic quarterly estimates.
+
+The 2025 cleaned food anchor overlaps its outside-meals restaurant proxy. The
+export subtracts that proxy from food before aggregation, then recalculates the
+unmapped expenditure remainder. That remainder is retained separately and is
+not assigned to any category. Aggregate anchors, source file SHA-256 hashes,
+selection rules, and observed HFCE values live in
+`apps/api/scripts/fixtures/persona-spending.json`; seeding does not require the
+sibling repository or access individual household records.
+
+Refresh the aggregate fixture after updating the cleaned ML data (from the Odin
+repository root):
+
+```bash
+pnpm --filter api exec tsx scripts/export-persona-spending.ts /absolute/path/to/odin-ml
+```
+
+Only the supported flexible categories are projected onto each persona's daily
+cash budget. Bills, tuition timing, seasonal events, one-off purchases, debt,
+family support, and savings keep their story constraints. Monthly plans use the
+same projected category mix. The CLI prints full-quarter FIES benchmarks beside
+generated category spending, including differences caused by these constraints.
+Current-quarter actuals include only transactions through today. Debt repayments
+and savings transfers are excluded from the category comparison; the breadwinner's
+family support remains a `misc_other` expense. Total quarterly spending is still
+governed by each persona's budget, rather than forced to match the FIES benchmarks.
+
 ## Repositories
 
 - `apps/app`: Expo app for React Native mobile

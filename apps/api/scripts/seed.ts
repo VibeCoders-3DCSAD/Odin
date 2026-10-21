@@ -1,8 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import { provisionPersonaProfile } from "./seed-persona-profile.js";
+import { buildPersonaSeedData, demoPersonas, parseDemoPersona, type DemoPersona } from "./seed-personas.js";
 import { assertSeedConfirmation } from "./resolve-seed-user.js";
+import { summarizePersonaSpending } from "./helpers/persona-spending.js";
 import {
   buildSeedData,
   incomeSubcategories,
@@ -24,14 +27,26 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const valueFor = (flag: string) => {
     const index = args.indexOf(flag);
-    return index === -1 ? undefined : args[index + 1];
+    if (index === -1) return undefined;
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
+    return value;
   };
-  const email = valueFor("--email")?.trim().toLowerCase();
-  const password = valueFor("--password");
-  if (!email || !password) throw new Error("Usage: pnpm seed -- --email <email> --password <password> [--seed number] [--dry-run] [--confirm <email>]. Seeding replaces existing seeded history; deleted history cannot be restored.");
+  const persona = parseDemoPersona(valueFor("--persona"));
+  if (persona && (args.includes("--email") || args.includes("--password"))) throw new Error("--persona always uses its fixed demo email and password; omit --email and --password.");
+  const email = persona ? demoPersonas[persona].email : valueFor("--email")?.trim().toLowerCase();
+  const password = persona ? demoPersonas[persona].password : valueFor("--password") ?? process.env.SEED_PASSWORD;
+  if (!email) throw new Error("Usage: pnpm seed -- (--persona seasonal-mom|debt-burdened|healthy-worker|family-breadwinner | --email <email> [--password <password>]) [--seed number] [--dry-run] [--confirm <email>]. Seeding replaces existing seeded history; deleted history cannot be restored. Personas use fixed demo credentials; otherwise a new account without a password gets a generated one.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("--email must be a valid email address");
   const seed = Number(valueFor("--seed") ?? "42");
   if (!Number.isSafeInteger(seed)) throw new Error("--seed must be an integer");
-  return { email, password, seed, dryRun: args.includes("--dry-run"), confirmation: valueFor("--confirm") };
+  return { email, password, seed, persona, dryRun: args.includes("--dry-run"), confirmation: valueFor("--confirm") };
+}
+
+// A random password with every character class, for new accounts created without one.
+function generatePassword() {
+  const required = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnpqrstuvwxyz", "23456789", "!@#$%*-_"].map((set) => set[randomInt(set.length)]);
+  return `${randomBytes(12).toString("base64url")}${required.join("")}`;
 }
 
 function chunks<T>(rows: T[]) {
@@ -59,22 +74,31 @@ async function selectIds(query: PromiseLike<{ data: Record<string, unknown>[] | 
   return (data ?? []).map((row) => row[column] as string).filter(Boolean);
 }
 
-async function ensureUser(supabase: SupabaseClient, email: string, password: string, dryRun: boolean) {
+// Returns the user and whether this run created it. An existing user keeps their password, except a persona
+// account, which is reset to its fixed demo password.
+async function ensureUser(supabase: SupabaseClient, email: string, password: string, dryRun: boolean, persona?: DemoPersona) {
   for (let page = 1; ; page += 1) {
     const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1_000 });
     if (error) throw error;
     const existing = data.users.find((user) => user.email?.toLowerCase() === email);
     if (existing) {
       console.log(`Using existing user ${existing.id}.`);
-      return existing.id;
+      if (persona && !dryRun) {
+        const { error: updateError } = await supabase.auth.admin.updateUserById(existing.id, { password, email_confirm: true });
+        if (updateError) throw new Error(`Could not reset the demo password: ${updateError.message}`);
+      }
+      return { id: existing.id, created: false, password };
     }
     if (data.users.length < 1_000) break;
   }
-  if (dryRun) return null;
-  const { data: created, error: createError } = await supabase.auth.admin.createUser({ email, password, email_confirm: true });
+  if (dryRun) {
+    console.log(`Would create a verified user for ${email}.`);
+    return { id: null, created: false, password };
+  }
+  const { data: created, error: createError } = await supabase.auth.admin.createUser({ email, password, email_confirm: true, ...(persona ? { user_metadata: { display_name: demoPersonas[persona].name, demo_persona: persona } } : {}) });
   if (createError || !created.user) throw createError ?? new Error("User creation returned no user");
   console.log(`Created verified user ${created.user.id}.`);
-  return created.user.id;
+  return { id: created.user.id, created: true, password };
 }
 
 async function provisionTaxonomy(supabase: SupabaseClient, userId: string) {
@@ -152,6 +176,7 @@ async function writeSeedData(supabase: SupabaseClient, userId: string, data: See
   // Parents before children; transactions before the card, debt, and biller rows that link to them.
   await insertRows(supabase, "financial_accounts", data.accounts);
   await insertRows(supabase, "income_sources", data.incomeSources);
+  await insertRows(supabase, "savings_goals", data.savingsGoals);
   await insertRows(supabase, "debt_accounts", data.debtAccounts);
   await insertRows(supabase, "credit_card_details", data.creditCardDetails);
   await insertRows(supabase, "credit_card_cycles", data.creditCardCycles);
@@ -162,12 +187,14 @@ async function writeSeedData(supabase: SupabaseClient, userId: string, data: See
   await insertRows(supabase, "credit_card_statements", data.creditCardStatements);
   await insertRows(supabase, "credit_card_payments", data.creditCardPayments);
   await insertRows(supabase, "debt_payments", data.debtPayments);
+  await insertRows(supabase, "savings_goal_activities", data.savingsGoalActivities);
   await insertRows(supabase, "scheduled_payments", data.scheduledPayments);
   await insertRows(supabase, "scheduled_payment_records", data.scheduledPaymentRecords);
   await insertRows(supabase, "financial_plans", data.financialPlans);
   await insertRows(supabase, "financial_plan_forecast_points", data.planForecastPoints);
   await insertRows(supabase, "financial_plan_allocations", data.planAllocations);
   await insertRows(supabase, "financial_plan_debt_reservations", data.planDebtReservations);
+  await insertRows(supabase, "financial_plan_savings_reservations", data.planSavingsReservations);
 }
 
 // Available credit can only change through a credit-card invariant operation. Correcting a linked purchase's amount
@@ -180,7 +207,7 @@ async function applyAvailableCreditAdjustments(supabase: SupabaseClient, userId:
 }
 
 async function main() {
-  const { email, password, seed, dryRun, confirmation } = parseArgs();
+  const { email, password, seed, persona, dryRun, confirmation } = parseArgs();
   assertSeedConfirmation({ type: "email", value: email }, confirmation, dryRun);
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -190,9 +217,9 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
     global: { fetch: (input, init) => fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) }) },
   });
-  const existingUserId = await ensureUser(supabase, email, password, dryRun);
-  const userId = existingUserId ?? randomUUID();
-  if (existingUserId) {
+  const user = await ensureUser(supabase, email, password ?? generatePassword(), dryRun, persona);
+  const userId = user.id ?? randomUUID();
+  if (user.id) {
     const { data: profile, error: profileError } = await supabase.from("profiles").select("user_id").eq("user_id", userId).maybeSingle();
     if (profileError) throw profileError;
     if (!profile) throw new Error(`No profile exists for user ${userId}`);
@@ -200,18 +227,39 @@ async function main() {
 
   if (!dryRun) await provisionTaxonomy(supabase, userId);
   const subcategoryIds = await loadSubcategoryIds(supabase, userId, dryRun);
-  const data = buildSeedData({ userId, today: manilaToday(), seed, subcategoryIds });
+  const options = { userId, today: manilaToday(), seed, subcategoryIds };
+  const data = persona ? buildPersonaSeedData({ ...options, persona }) : buildSeedData(options);
   const peso = (amountCentavos: number) => `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
   console.log(`Prepared ${data.transactions.length} transactions from ${data.summary.start} through ${data.summary.end}:`);
   console.log(`  ${data.accounts.length} accounts, ${data.incomeSources.length} income sources, ${data.scheduledPayments.length} billers and remittances (${data.scheduledPaymentRecords.length} payments)`);
+  console.log(`  ${data.savingsGoals.length} savings goals (${data.savingsGoalActivities.length} contributions)`);
   console.log(`  ${data.debtAccounts.length} debts (${data.debtPayments.length} payments)`);
   console.log(`  ${data.creditCardCycles.length} card cycles, ${data.creditCardStatements.length} statements, ${data.creditCardPayments.length} card payments, ${data.financialPlans.length} financial plans`);
   for (const [name, balance] of Object.entries(data.summary.endingBalances)) console.log(`  ${name}: ${peso(balance)}`);
+  if (persona) {
+    console.log("2025 NCR FIES annual category anchors, disaggregated with within-year current-price HFCE weights.");
+    console.log("Targets below are unconstrained household benchmarks. Flexible category mixes use these weights within the persona's cash budget; fixed bills, story events, repayments and transfers retain their constraints.");
+    console.log("Partial quarters show actual spending to date against a full-quarter target. Missing/partial HFCE years reuse the complete 2025 seasonal template; no observed quarters or inflation are invented. Unmapped FIES expenditure is excluded.");
+    console.table(summarizePersonaSpending(persona, data.transactions, subcategoryIds).map((row) => ({
+      quarter: row.period, category: row.category, hfce: `${row.hfceYear}${row.usesSeasonalTemplate ? " template" : ""}`,
+      target_php: row.targetCentavos / 100, generated_php: row.actualCentavos / 100,
+      difference_php: (row.actualCentavos - row.targetCentavos) / 100,
+    })));
+  }
   if (dryRun) return;
 
   await clearSeededData(supabase, userId);
   await writeSeedData(supabase, userId, data);
+  if (persona) await provisionPersonaProfile(supabase, userId, persona);
   console.log(`Seeded financial history for ${userId}.`);
+  printCredentials(email, user.created || persona ? user.password : undefined, persona);
+}
+
+function printCredentials(email: string, password: string | undefined, persona?: DemoPersona) {
+  console.log("\nLogin credentials:");
+  if (persona) console.log(`  Persona:  ${demoPersonas[persona].name} (${persona})`);
+  console.log(`  Email:    ${email}`);
+  console.log(`  Password: ${password ?? "unchanged (existing account keeps its password)"}`);
 }
 
 main().catch((error: unknown) => {

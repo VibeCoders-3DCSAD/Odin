@@ -1,0 +1,347 @@
+{
+  "surveyYear": 2025,
+  "region": "NCR",
+  "selection": "Unweighted mean of 50 households of the specified exact household size, nearest to persona annual net salary by absolute log income ratio; household_id breaks ties. Descriptive seed anchors, not population estimates.",
+  "sources": {
+    "households": {
+      "path": "RAW/cleaned/households.csv",
+      "sha256": "1a177a7f14d10d98d5630aacdfb446194bc134e6a22b051a53955cf69fefbcd9"
+    },
+    "categories": {
+      "path": "RAW/cleaned/household_categories.csv",
+      "sha256": "d6f19762a33fcddb3966427cb6d17038f1a5d2504400aefd8d504d1676792c2f"
+    },
+    "hfce": {
+      "path": "training/datasets/hfce_v4/hfce_category_forecast_2000_2026.csv",
+      "sha256": "ed99dc7d9fe7da2efe89eb79aa69a1f03b6eaf587a1b1825f3238a6e2570a6aa"
+    }
+  },
+  "fallbackHfceYear": 2025,
+  "profiles": {
+    "seasonal-mom": {
+      "householdSize": 5,
+      "count": 50,
+      "incomeRangePhp": [
+        708650,
+        731410
+      ],
+      "annualIncomePhp": 719128.96,
+      "annualTotalExpensePhp": 566737.7119999999,
+      "unmappedResidualPhp": 60887.28220000001,
+      "annualCategoriesPhp": {
+        "food": 153354.42979999998,
+        "alcohol_tobacco": 4707.34,
+        "clothing_footwear": 10974.84,
+        "housing_water_utilities": 140818.12,
+        "furnishings_household": 13138.4,
+        "health": 15477.24,
+        "transport": 37114.36,
+        "communication": 21312.66,
+        "recreation_culture": 4714.6,
+        "education": 21888,
+        "restaurants_hotels": 59616.74,
+        "miscellaneous_goods_services": 22733.7
+      }
+    },
+    "debt-burdened": {
+      "householdSize": 1,
+      "count": 50,
+      "incomeRangePhp": [
+        293720,
+        306970
+      ],
+      "annualIncomePhp": 300920.06,
+      "annualTotalExpensePhp": 244387.43120000002,
+      "unmappedResidualPhp": 31318.119499999997,
+      "annualCategoriesPhp": {
+        "food": 53915.57170000001,
+        "alcohol_tobacco": 3954.86,
+        "clothing_footwear": 3710.6,
+        "housing_water_utilities": 80110.32,
+        "furnishings_household": 5233.72,
+        "health": 5356.6,
+        "transport": 14053.62,
+        "communication": 7918.72,
+        "recreation_culture": 2299.3,
+        "education": 2043,
+        "restaurants_hotels": 26384.92,
+        "miscellaneous_goods_services": 8088.08
+      }
+    },
+    "healthy-worker": {
+      "householdSize": 1,
+      "count": 50,
+      "incomeRangePhp": [
+        811000,
+        998473
+      ],
+      "annualIncomePhp": 901261.34,
+      "annualTotalExpensePhp": 722822.8914,
+      "unmappedResidualPhp": 107812.19969999998,
+      "annualCategoriesPhp": {
+        "food": 86191.2317,
+        "alcohol_tobacco": 3295.14,
+        "clothing_footwear": 15151.72,
+        "housing_water_utilities": 287989.46,
+        "furnishings_household": 52990.44,
+        "health": 25390.1,
+        "transport": 45142.24,
+        "communication": 24211.66,
+        "recreation_culture": 7426.48,
+        "education": 200,
+        "restaurants_hotels": 47930.8,
+        "miscellaneous_goods_services": 19091.42
+      }
+    },
+    "family-breadwinner": {
+      "householdSize": 3,
+      "count": 50,
+      "incomeRangePhp": [
+        533877,
+        546415
+      ],
+      "annualIncomePhp": 540340.64,
+      "annualTotalExpensePhp": 438619.2331999999,
+      "unmappedResidualPhp": 53494.8002,
+      "annualCategoriesPhp": {
+        "food": 118131.77299999999,
+        "alcohol_tobacco": 3813.36,
+        "clothing_footwear": 7765.04,
+        "housing_water_utilities": 118355.3,
+        "furnishings_household": 10896.52,
+        "health": 13876.16,
+        "transport": 24356.78,
+        "communication": 17521.36,
+        "recreation_culture": 2535.5,
+        "education": 8977,
+        "restaurants_hotels": 40757.66,
+        "miscellaneous_goods_services": 18137.98
+      }
+    }
+  },
+  "hfceCurrentPrices": {
+    "2023": {
+      "alcohol_tobacco": [
+        78369,
+        77479,
+        81691,
+        116684
+      ],
+      "clothing_footwear": [
+        58896,
+        50175,
+        66181,
+        88841
+      ],
+      "communication": [
+        127704,
+        133589,
+        101839,
+        133865
+      ],
+      "education": [
+        226218,
+        205563,
+        239731,
+        245349
+      ],
+      "food": [
+        1536533,
+        1685146,
+        1568293,
+        2063577
+      ],
+      "furnishings_household": [
+        110872,
+        106257,
+        127923,
+        137856
+      ],
+      "health": [
+        183907,
+        156776,
+        241079,
+        216430
+      ],
+      "housing_water_utilities": [
+        498032,
+        648514,
+        563329,
+        578496
+      ],
+      "miscellaneous_goods_services": [
+        622425,
+        580193,
+        601969,
+        776162
+      ],
+      "recreation_culture": [
+        75297,
+        52575,
+        63229,
+        95553
+      ],
+      "restaurants_hotels": [
+        424979,
+        243540,
+        354025,
+        455338
+      ],
+      "transport": [
+        473256,
+        384273,
+        523724,
+        422727
+      ]
+    },
+    "2024": {
+      "alcohol_tobacco": [
+        83200,
+        85524,
+        85724,
+        123573
+      ],
+      "clothing_footwear": [
+        61359,
+        49496,
+        71710,
+        93939
+      ],
+      "communication": [
+        134523,
+        144067,
+        106850,
+        139735
+      ],
+      "education": [
+        248112,
+        216137,
+        262173,
+        273161
+      ],
+      "food": [
+        1613761,
+        1796719,
+        1681389,
+        2160295
+      ],
+      "furnishings_household": [
+        117912,
+        111889,
+        134989,
+        147395
+      ],
+      "health": [
+        203367,
+        176663,
+        275282,
+        248325
+      ],
+      "housing_water_utilities": [
+        538924,
+        691026,
+        602521,
+        614258
+      ],
+      "miscellaneous_goods_services": [
+        680727,
+        645332,
+        663725,
+        858846
+      ],
+      "recreation_culture": [
+        85759,
+        63556,
+        67281,
+        106416
+      ],
+      "restaurants_hotels": [
+        501361,
+        284991,
+        407061,
+        501333
+      ],
+      "transport": [
+        514111,
+        443153,
+        559287,
+        463966
+      ]
+    },
+    "2025": {
+      "alcohol_tobacco": [
+        92366,
+        85636,
+        83953,
+        120253
+      ],
+      "clothing_footwear": [
+        65217,
+        52194,
+        72156,
+        94741
+      ],
+      "communication": [
+        142558,
+        150787,
+        111954,
+        145667
+      ],
+      "education": [
+        274427,
+        248037,
+        287688,
+        300009
+      ],
+      "food": [
+        1739445,
+        1901040,
+        1761848,
+        2257594
+      ],
+      "furnishings_household": [
+        122249,
+        120288,
+        137708,
+        147487
+      ],
+      "health": [
+        229617,
+        198417,
+        314926,
+        269476
+      ],
+      "housing_water_utilities": [
+        560593,
+        714177,
+        620446,
+        631566
+      ],
+      "miscellaneous_goods_services": [
+        728607,
+        687796,
+        705938,
+        913943
+      ],
+      "recreation_culture": [
+        95533,
+        68460,
+        70520,
+        116085
+      ],
+      "restaurants_hotels": [
+        543083,
+        311922,
+        438239,
+        550139
+      ],
+      "transport": [
+        557835,
+        483535,
+        579338,
+        496667
+      ]
+    }
+  },
+  "categoryAdjustment": "The 2025 cleaned food anchor includes FOOD_OUTSIDE, also used as the restaurants_hotels proxy. Subtract restaurants_hotels from food before averaging, then recompute non-negative residual = TOTEX - sum(disjoint categories). Accept source rounding differences of at most PHP 0.01 per household."
+}

@@ -1,5 +1,7 @@
 // Builds a deterministic year-plus of seeded financial history in memory. seed.ts writes it to Supabase.
 import { createHash, randomUUID } from "node:crypto";
+import { DAY_MS, addDays, addMonths, centavos, createRandom, daysOfMonth, manilaNoon, monthDate, monthStartOf, nextMonthlyDate, toTime } from "./helpers/seed-generation.js";
+export { addDays, manilaToday } from "./helpers/seed-generation.js";
 
 export const seedMarker = "dummy-financial-data";
 export const legacySeedMarker = "dummy-financial-data-v1";
@@ -25,7 +27,7 @@ export const requiredSubcategorySlugs = [
   "misc_personal_care", "education_tuition", "food_groceries", "food_fresh_produce",
   "restaurants_cafes", "restaurants_fast_food", "restaurants_street_food", "restaurants_delivery",
   "restaurants_casual_dining", "household_cleaning_supplies", "household_kitchenware", "clothing_accessories",
-  "clothing_childrens",
+  "clothing_childrens", "clothing_womens", "communication_device", "restaurants_catering",
 ] as const;
 
 type Row = Record<string, unknown>;
@@ -44,6 +46,8 @@ export type Transaction = Row & {
 
 export type SeedData = {
   accounts: Row[];
+  savingsGoals: Row[];
+  savingsGoalActivities: Row[];
   incomeSources: Row[];
   debtAccounts: Row[];
   creditCardDetails: Row[];
@@ -59,58 +63,12 @@ export type SeedData = {
   planForecastPoints: Row[];
   planAllocations: Row[];
   planDebtReservations: Row[];
+  planSavingsReservations: Row[];
   // Card purchases to insert at a lower amount and then correct, so the server's purchase-amount trigger
   // lowers available credit by the card's outstanding balance (it can't be written directly).
   availableCreditAdjustments: { transactionId: string; insertAmountCentavos: number; amountCentavos: number }[];
   summary: { start: string; end: string; endingBalances: Record<string, number> };
 };
-
-const DAY_MS = 86_400_000;
-
-function toTime(date: string) {
-  return Date.parse(`${date}T00:00:00Z`);
-}
-
-export function addDays(date: string, days: number) {
-  return new Date(toTime(date) + days * DAY_MS).toISOString().slice(0, 10);
-}
-
-function monthStartOf(date: string) {
-  return `${date.slice(0, 7)}-01`;
-}
-
-function addMonths(monthStart: string, months: number) {
-  const date = new Date(toTime(monthStart));
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1)).toISOString().slice(0, 10);
-}
-
-// The given day of the month, clamped to the month's last day.
-function monthDate(monthStart: string, day: number) {
-  const date = new Date(toTime(monthStart));
-  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), Math.min(day, lastDay))).toISOString().slice(0, 10);
-}
-
-function daysOfMonth(monthStart: string) {
-  const days: string[] = [];
-  for (let date = monthStart; date.slice(0, 7) === monthStart.slice(0, 7); date = addDays(date, 1)) days.push(date);
-  return days;
-}
-
-// The first date on the given day of the month that falls after today.
-function nextMonthlyDate(today: string, day: number) {
-  const thisMonth = monthDate(monthStartOf(today), day);
-  return thisMonth > today ? thisMonth : monthDate(addMonths(monthStartOf(today), 1), day);
-}
-
-function manilaNoon(date: string) {
-  return `${date}T12:00:00+08:00`;
-}
-
-// Due dates follow the Asia/Manila calendar day, the same day the server's auto-post job uses.
-export function manilaToday() {
-  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
 
 function uuidV5(name: string, namespace: string) {
   const hash = createHash("sha1").update(Buffer.from(namespace.replace(/-/g, ""), "hex")).update(name, "utf8").digest();
@@ -123,18 +81,6 @@ function uuidV5(name: string, namespace: string) {
 function scheduledPaymentPostIds(scheduledPaymentId: string, dueDate: string) {
   const key = `scheduled-payment:${scheduledPaymentId}:${dueDate}`;
   return { transactionId: uuidV5(`${key}:transaction`, SCHEDULED_PAYMENT_POST_NAMESPACE), recordId: uuidV5(`${key}:record`, SCHEDULED_PAYMENT_POST_NAMESPACE) };
-}
-
-function createRandom(seed: number) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 0x1_0000_0000;
-  };
-}
-
-function centavos(pesos: number) {
-  return Math.round(pesos * 100);
 }
 
 function wholePesos(amountCentavos: number) {
@@ -490,9 +436,9 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
   }
 
   return {
-    accounts, incomeSources, debtAccounts, creditCardDetails, creditCardCycles, transactions, creditCardTransactions,
+    accounts, savingsGoals: [], savingsGoalActivities: [], incomeSources, debtAccounts, creditCardDetails, creditCardCycles, transactions, creditCardTransactions,
     creditCardStatements, creditCardPayments, debtPayments, scheduledPayments, scheduledPaymentRecords,
-    financialPlans, planForecastPoints, planAllocations, planDebtReservations, availableCreditAdjustments,
+    financialPlans, planForecastPoints, planAllocations, planDebtReservations, planSavingsReservations: [], availableCreditAdjustments,
     summary: { start, end: today, endingBalances: Object.fromEntries(accounts.map((account) => [account.name, account.current_balance_centavos as number])) },
   };
 }
