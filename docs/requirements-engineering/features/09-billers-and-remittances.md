@@ -66,14 +66,15 @@
 - Stop future automatic postings when the user disables automatic posting, archives the commitment, or deletes it.
 - Preserve recorded payments and transactions when future automatic posting stops.
 
-### 9.7 Payments Using Money Reserved for Savings
+### 9.7 Available Money Before Posting
 
-- Respect money reserved for savings goals within the selected payment account.
-- Use unallocated money first when funding a payment.
-- When a manual payment requires reserved money, allow users to review and explicitly confirm which savings goals fund the remaining amount.
-- Update the payment, expense transaction, and affected savings goals together.
-- Do not automatically withdraw money reserved for savings goals when posting a scheduled payment.
-- Leave an automatic payment unposted when it requires a savings allocation decision so the user can review and record it manually.
+- Require sufficient available, unallocated money in the selected account before
+  recording a manual payment or posting an automatic payment.
+- Exclude money reserved for savings goals from the amount available for payments.
+- Leave a payment unposted when available money is insufficient; do not record a
+  payment or expense transaction, change the account balance, or withdraw savings.
+- Explain that the user must add enough available money before the payment can
+  be posted.
 
 ### 9.8 Archive, Restore, and Delete
 
@@ -91,5 +92,6 @@
 - Show clear loading, saving, empty, success, and error feedback.
 - Explain when a commitment, category, payment account, or eligible occurrence is unavailable and guide users to an appropriate action.
 - Preserve valid entries when an action fails and allow users to correct or retry it.
-- Keep payment status, account balances, and related savings progress consistent when a payment is recorded or removed.
+- Keep payment status and account balances consistent when a payment is recorded
+  or removed, without changing savings goal allocations.
 - Make clear that recording a payment tracks a financial transaction in the application; it does not send money to a biller or remittance recipient.

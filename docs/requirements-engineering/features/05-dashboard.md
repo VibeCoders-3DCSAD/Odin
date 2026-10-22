@@ -1,6 +1,6 @@
 ## 5. Dashboard
 
-This document describes the current Dashboard's functional behavior.
+This document describes the Dashboard's functional requirements.
 
 ### 5.1 Financial Overview
 
@@ -25,9 +25,11 @@ This document describes the current Dashboard's functional behavior.
   required debt payments relative to income, and money remaining after expenses
   and debt payments.
 - Display credit-card results separately when multiple assessments are available.
-- Distinguish credit-card behavior based on self-report from recorded history.
+- Show a note for each classification result indicating whether it is based on
+  questionnaire answers or recorded financial data.
 - Show Still learning guidance when a result or sufficient history is unavailable.
-- Allow users to update their savings and debt profile classification using recorded financial information.
+- Automatically update savings and debt profile classification as the underlying
+  financial information changes, without requiring a user update request.
 - Show loading feedback while classification is loading or updating and a recovery message when
   an update fails.
 
@@ -81,5 +83,40 @@ This document describes the current Dashboard's functional behavior.
 - Explain that posted financial activity is needed when no forecast is available.
 - Offer Refresh when the forecast is outdated or unavailable.
 - Display a View forecast details action.
-- Keep detailed forecast analysis and unusual-spending alerts within
+- Keep detailed forecast analysis and unusual-spending review within
   [Financial Reports](13-financial-reports.md).
+
+### 5.9 Needs Attention & Upcoming
+
+- Display a summary of issues requiring the user's attention, upcoming income,
+  and financial commitments, scoped to the authenticated user's records.
+- Show failed automatic posting for a biller or remittance immediately when
+  insufficient funds in its configured source account prevent posting. Identify
+  the commitment, amount, source account, and reason for failure.
+- Surface unusual-spending observations from Financial Reports, identifying the
+  expense or subcategory and amount. Ask, "Will this be a frequent expense?"
+  and link to the existing frequent-spending confirmation flow in
+  [Financial Reports](13-financial-reports.md#1310-frequent-spending-confirmation).
+- Show upcoming debt repayments, scheduled savings contributions, and unpaid
+  credit-card payment deadlines starting seven calendar days before their due
+  dates and continuing through the due date.
+- Show upcoming income from scheduled income sources starting seven calendar
+  days before the expected receipt date and continuing through that date. Display
+  the income source, expected amount, destination account, and expected date.
+  Remove the reminder when the corresponding income is recorded, and keep
+  expected income separate from posted income and available balances.
+- Base reminders on recorded schedules and payment or contribution status.
+  Exclude completed occurrences; keep partially paid obligations visible with
+  their remaining amount, and avoid duplicate debt and credit-card reminders
+  for the same payment obligation.
+- Show each commitment reminder's debt, savings goal, or credit-card name, amount remaining
+  where available, due date, and days until due.
+- Place failed auto-posts and unusual-spending observations under Needs Attention
+  and scheduled reminders under Upcoming, ordered by nearest due or expected
+  receipt date.
+- Allow users to open the related commitment, observation, debt, savings goal,
+  credit-card, or income source details to review and act on the item.
+- Refresh items when their underlying records change and remove resolved
+  failures or completed reminders from the active summary.
+- Show loading, empty, and error feedback; distinguish unavailable information
+  from having no items requiring attention, upcoming income, or commitments.
