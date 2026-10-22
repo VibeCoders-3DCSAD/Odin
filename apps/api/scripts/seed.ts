@@ -6,6 +6,7 @@ import { provisionPersonaProfile } from "./seed-persona-profile.js";
 import { buildPersonaSeedData, demoPersonas, parseDemoPersona, type DemoPersona } from "./seed-personas.js";
 import { assertSeedConfirmation } from "./resolve-seed-user.js";
 import { summarizePersonaSpending } from "./helpers/persona-spending.js";
+import { buildSeedRecurringSpending } from "./helpers/seed-recurring-spending.js";
 import {
   buildSeedData,
   incomeSubcategories,
@@ -172,7 +173,7 @@ async function clearSeededData(supabase: SupabaseClient, userId: string) {
   await deleteByIds(supabase, "financial_accounts", userId, "id", accountIds);
 }
 
-async function writeSeedData(supabase: SupabaseClient, userId: string, data: SeedData) {
+async function writeSeedData(supabase: SupabaseClient, userId: string, data: SeedData, recurringSpending: ReturnType<typeof buildSeedRecurringSpending>) {
   // Parents before children; transactions before the card, debt, and biller rows that link to them.
   await insertRows(supabase, "financial_accounts", data.accounts);
   await insertRows(supabase, "income_sources", data.incomeSources);
@@ -184,6 +185,7 @@ async function writeSeedData(supabase: SupabaseClient, userId: string, data: See
   await insertRows(supabase, "transactions", data.transactions.map((transaction) => ({ ...transaction, amount_centavos: insertAmounts.get(transaction.id) ?? transaction.amount_centavos })));
   await insertRows(supabase, "credit_card_transactions", data.creditCardTransactions);
   await applyAvailableCreditAdjustments(supabase, userId, data.availableCreditAdjustments);
+  await insertRows(supabase, "anomaly_evaluations", recurringSpending);
   await insertRows(supabase, "credit_card_statements", data.creditCardStatements);
   await insertRows(supabase, "credit_card_payments", data.creditCardPayments);
   await insertRows(supabase, "debt_payments", data.debtPayments);
@@ -229,12 +231,14 @@ async function main() {
   const subcategoryIds = await loadSubcategoryIds(supabase, userId, dryRun);
   const options = { userId, today: manilaToday(), seed, subcategoryIds };
   const data = persona ? buildPersonaSeedData({ ...options, persona }) : buildSeedData(options);
+  const recurringSpending = buildSeedRecurringSpending(userId, data.transactions, subcategoryIds, options.today);
   const peso = (amountCentavos: number) => `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
   console.log(`Prepared ${data.transactions.length} transactions from ${data.summary.start} through ${data.summary.end}:`);
   console.log(`  ${data.accounts.length} accounts, ${data.incomeSources.length} income sources, ${data.scheduledPayments.length} billers and remittances (${data.scheduledPaymentRecords.length} payments)`);
   console.log(`  ${data.savingsGoals.length} savings goals (${data.savingsGoalActivities.length} contributions)`);
   console.log(`  ${data.debtAccounts.length} debts (${data.debtPayments.length} payments)`);
   console.log(`  ${data.creditCardCycles.length} card cycles, ${data.creditCardStatements.length} statements, ${data.creditCardPayments.length} card payments, ${data.financialPlans.length} financial plans`);
+  console.log(`  ${recurringSpending.length} unusual medicine purchases confirmed as frequent spending`);
   for (const [name, balance] of Object.entries(data.summary.endingBalances)) console.log(`  ${name}: ${peso(balance)}`);
   if (persona) {
     console.log("2025 NCR FIES annual category anchors, disaggregated with within-year current-price HFCE weights.");
@@ -249,7 +253,7 @@ async function main() {
   if (dryRun) return;
 
   await clearSeededData(supabase, userId);
-  await writeSeedData(supabase, userId, data);
+  await writeSeedData(supabase, userId, data, recurringSpending);
   if (persona) await provisionPersonaProfile(supabase, userId, persona);
   console.log(`Seeded financial history for ${userId}.`);
   printCredentials(email, user.created || persona ? user.password : undefined, persona);
