@@ -33,6 +33,48 @@ function selfReportedRevolvingMonths(answers: OnboardingAnswers) {
   }
 }
 
+async function resolveEmergencyFundBalance(userId: string, supabase: SupabaseClient): Promise<number | null> {
+  const { data: goal, error: goalError } = await supabase
+    .from("savings_goals")
+    .select("id, starting_amount_centavos")
+    .eq("user_id", userId)
+    .eq("is_emergency_fund", true)
+    .eq("status", "active")
+    .eq("deleted", false)
+    .maybeSingle();
+  if (goalError || !goal) {
+    console.info("financial classification emergency fund source", {
+      user_id: userId,
+      goal_id: null,
+      starting_amount_centavos: null,
+      contribution_centavos: null,
+      withdrawal_centavos: null,
+    });
+    return null;
+  }
+
+  const { data: activities, error: activityError } = await supabase
+    .from("savings_goal_activities")
+    .select("activity_kind, amount_centavos")
+    .eq("user_id", userId)
+    .eq("savings_goal_id", goal.id)
+    .eq("deleted", false);
+  if (activityError) return null;
+
+  const contributionCentavos = (activities ?? []).filter((activity) => activity.activity_kind === "contribution").reduce((sum, activity) => sum + Number(activity.amount_centavos), 0);
+  const withdrawalCentavos = (activities ?? []).filter((activity) => activity.activity_kind === "withdrawal").reduce((sum, activity) => sum + Number(activity.amount_centavos), 0);
+  const balanceCentavos = Number(goal.starting_amount_centavos) + contributionCentavos - withdrawalCentavos;
+  console.info("financial classification emergency fund source", {
+    user_id: userId,
+    goal_id: goal.id,
+    starting_amount_centavos: goal.starting_amount_centavos,
+    contribution_centavos: contributionCentavos,
+    withdrawal_centavos: withdrawalCentavos,
+    balance_centavos: balanceCentavos,
+  });
+  return Math.max(0, balanceCentavos) / 100;
+}
+
 function onboardingAssessmentInput(answers: OnboardingAnswers) {
   const grossIncome = wholeNumber(answers, "monthly_income");
   const essentialCosts = wholeNumber(answers, "monthly_essential_living_costs");
@@ -75,6 +117,17 @@ export async function createFinancialConditionAssessment(userId: string, supabas
   const { data: input, error } = await supabase.rpc("get_financial_classification_v2_input", { p_user_id: userId });
   if (error || !input || typeof input !== "object" || Array.isArray(input)) return null;
 
+  const emergencyFundBalance = await resolveEmergencyFundBalance(userId, supabase);
+  const classificationInput = emergencyFundBalance === null
+    ? input
+    : { ...input, liquid_emergency_savings: emergencyFundBalance };
+
+  console.info("financial classification inputs", {
+    user_id: userId,
+    available_emergency_fund: classificationInput.liquid_emergency_savings,
+    monthly_essential_expenses: classificationInput.average_monthly_recurring_essential_expenses,
+  });
+
   // The ML service uses the onboarding self-report only when no card history exists,
   // so refreshes keep a credit-card result for users without recorded statements.
   const { data: onboarding } = await supabase
@@ -87,7 +140,7 @@ export async function createFinancialConditionAssessment(userId: string, supabas
     .maybeSingle();
   const answers = onboarding?.raw_answers && typeof onboarding.raw_answers === "object" ? onboarding.raw_answers as OnboardingAnswers : {};
 
-  return saveAssessment(userId, { ...input, self_reported_revolving_months: selfReportedRevolvingMonths(answers) }, supabase);
+  return saveAssessment(userId, { ...classificationInput, self_reported_revolving_months: selfReportedRevolvingMonths(answers) }, supabase);
 }
 
 export function createOnboardingFinancialConditionAssessment(userId: string, answers: OnboardingAnswers, supabase: SupabaseClient) {
