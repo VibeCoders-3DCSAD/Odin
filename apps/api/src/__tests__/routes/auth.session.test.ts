@@ -75,8 +75,12 @@ describe("POST /odin/api/auth/session", () => {
         profile: { id: validProfileId },
         onboarding: { status: "in_progress" },
         privacy_settings: { personalization_enabled: true },
+        verified_at: expect.any(String),
+        offline_access_expires_at: expect.any(String),
       },
     });
+    expect(Date.parse(response.body.payload.offline_access_expires_at)
+      - Date.parse(response.body.payload.verified_at)).toBe(30 * 24 * 60 * 60 * 1000);
   });
 
   it("returns 200 and bootstraps profile idempotently", async () => {

@@ -510,8 +510,13 @@ router.post("/session", async (request: Request, response: Response) => {
     return;
   }
 
+  const verifiedAt = Date.now();
   response.status(200).json({
-    payload: bootstrapPayload,
+    payload: {
+      ...bootstrapPayload,
+      verified_at: new Date(verifiedAt).toISOString(),
+      offline_access_expires_at: new Date(verifiedAt + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
   });
 });
 
