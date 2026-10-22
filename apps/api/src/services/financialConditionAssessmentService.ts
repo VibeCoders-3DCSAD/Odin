@@ -18,19 +18,20 @@ function wholeNumber(answers: OnboardingAnswers, key: string) {
 }
 
 function selfReportedRevolvingMonths(answers: OnboardingAnswers) {
-  switch (answers.credit_card_payment_behavior) {
-    case "never":
-      return 0;
-    case "every_month":
-      return 12;
-    case "some_months":
-    case "not_sure": {
-      const months = wholeNumber(answers, "credit_card_revolving_months");
-      return months !== null && months <= 12 ? months : null;
-    }
-    default:
-      return null;
+  if (answers.credit_card_revolving_months === undefined) {
+    if (answers.credit_card_payment_behavior === "never") return 0;
+    if (answers.credit_card_payment_behavior === "every_month") return 12;
   }
+  if (answers.questionnaire_version !== "2" && answers.credit_card_payment_behavior === "no_credit_card") return null;
+  const months = wholeNumber(answers, "credit_card_revolving_months");
+  return months !== null && months <= 12 ? months : null;
+}
+
+function selfReportedRevolvingRange(answers: OnboardingAnswers) {
+  const value = answers.credit_card_revolving_months;
+  return typeof value === "string" && ["no_credit_card", "always_before_due", "1_to_11_months", "over_a_year"].includes(value)
+    ? { self_reported_revolving_range: value }
+    : {};
 }
 
 async function resolveEmergencyFundBalance(userId: string, supabase: SupabaseClient): Promise<number | null> {
@@ -76,27 +77,29 @@ async function resolveEmergencyFundBalance(userId: string, supabase: SupabaseCli
 }
 
 function onboardingAssessmentInput(answers: OnboardingAnswers) {
-  const grossIncome = wholeNumber(answers, "monthly_income");
+  const disposableIncome = wholeNumber(answers, "monthly_income");
   const essentialCosts = wholeNumber(answers, "monthly_essential_living_costs");
-  const emergencySavings = wholeNumber(answers, "liquid_emergency_savings");
-  const debtPayments = answers.paying_off_debt === "false" ? 0 : wholeNumber(answers, "monthly_debt_payments");
-  const deductions = answers.monthly_deduction_amounts;
-  const nonDebtDeductions = deductions && typeof deductions === "object" && !Array.isArray(deductions)
-    ? Object.entries(deductions).reduce((total, [key, amount]) => key === "salary_loan" || typeof amount !== "string" || !/^\d+$/.test(amount) ? total : total + Number(amount), 0)
-    : 0;
+  const runwayMonths: Record<string, number> = { "1_month": 1, "2_months": 2, "3_months": 3, more_than_3_months: 3 };
+  const months = typeof answers.emergency_savings_runway === "string" ? runwayMonths[answers.emergency_savings_runway] : undefined;
+  // The capped 3+ response is enough to evaluate the three-month threshold.
+  const emergencySavings = months !== undefined && essentialCosts !== null ? months * essentialCosts : null;
+  const debtPercentage = wholeNumber(answers, "monthly_debt_payment_percentage");
+  const debtPayments = answers.paying_off_debt === "false" ? 0 : disposableIncome !== null && debtPercentage !== null
+    ? disposableIncome * debtPercentage / 100
+    : null;
 
   return {
     classification_as_of: new Date().toISOString().slice(0, 10),
     liquid_emergency_savings: emergencySavings,
     average_monthly_recurring_essential_expenses: essentialCosts,
-    // Salary-loan deductions are included in the declared debt payment below.
-    monthly_disposable_income: grossIncome === null ? null : Math.max(grossIncome - nonDebtDeductions, 0),
+    // Income is already after deductions; subtract debt only when computing margin.
+    monthly_disposable_income: disposableIncome,
     required_monthly_debt_payments: debtPayments,
     monthly_basic_living_costs: essentialCosts,
     credit_card_accounts: [],
     self_reported_revolving_months: selfReportedRevolvingMonths(answers),
+    ...selfReportedRevolvingRange(answers),
     assessment_source: "onboarding_questionnaire",
-    self_reported_credit_card_behavior: answers.credit_card_payment_behavior ?? null,
   };
 }
 
@@ -140,7 +143,7 @@ export async function createFinancialConditionAssessment(userId: string, supabas
     .maybeSingle();
   const answers = onboarding?.raw_answers && typeof onboarding.raw_answers === "object" ? onboarding.raw_answers as OnboardingAnswers : {};
 
-  return saveAssessment(userId, { ...classificationInput, self_reported_revolving_months: selfReportedRevolvingMonths(answers) }, supabase);
+  return saveAssessment(userId, { ...classificationInput, self_reported_revolving_months: selfReportedRevolvingMonths(answers), ...selfReportedRevolvingRange(answers) }, supabase);
 }
 
 export function createOnboardingFinancialConditionAssessment(userId: string, answers: OnboardingAnswers, supabase: SupabaseClient) {

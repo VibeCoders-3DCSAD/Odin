@@ -1,3 +1,4 @@
+import SavingsContributionGoalPicker from "./components/SavingsContributionGoalPicker";
 import SavingsContributionAccounts from "./components/SavingsContributionAccounts";
 import SavingsExpenseFundingSheet from "./components/SavingsExpenseFundingSheet";
 import { getSavingsExpenseFunding, type SavingsExpenseFunding, type SavingsExpenseWithdrawal } from "../../local-db/repositories/savingsExpenseFunding";
@@ -56,9 +57,12 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
   const { showToast } = useToast();
   const online = useConnectivityStore((s) => s.online);
   const isEdit = !!transaction;
-  const contributionGoalId = savingsActivityContext?.kind === "contribution" ? savingsActivityContext.savingsGoalId : transaction?.destination_savings_goal_id ?? null;
+  const [isSavingsContribution, setIsSavingsContribution] = useState(false);
+  const [selectedSavingsGoalId, setSelectedSavingsGoalId] = useState<string | null>(null);
 
   const [txType, setTxType] = useState<TransactionType>(savingsActivityContext ? "transfer" : statementPaymentContext ? "expense" : (transaction?.transaction_type as TransactionType) ?? "expense");
+  const contributionGoalId = savingsActivityContext?.kind === "contribution" ? savingsActivityContext.savingsGoalId : transaction?.destination_savings_goal_id ?? (isSavingsContribution && txType === "transfer" ? selectedSavingsGoalId : null);
+
   const [statementPayment, setStatementPayment] = useState<CreditCardStatement | null>(null);
   const [existingStatementPayment, setExistingStatementPayment] = useState<CreditCardPayment | null>(null);
   const [isDebtPayment, setIsDebtPayment] = useState(Boolean(debtPaymentDebtId || debtPaymentContext));
@@ -386,12 +390,16 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
       setFormError("Select a destination account");
       return;
     }
+    if (isSavingsContribution && txType === "transfer" && !contributionGoalId) {
+      setFormError("Select a savings goal");
+      return;
+    }
     if (txType === "transfer" && !savingsActivityContext) {
       if (!sourceAccountId) {
         setFormError("Select a source account");
         return;
       }
-      if (!destAccountId) {
+      if (!contributionGoalId && !destAccountId) {
         setFormError("Select a destination account");
         return;
       }
@@ -547,6 +555,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
           counterparty_name: description.trim() || undefined,
           notes: notes.trim() || undefined,
         });
+      } else if (contributionGoalId && !savingsActivityContext) {
+        await createSavingsGoalTransfer(userId, deviceId, { savings_goal_id: contributionGoalId, kind: "contribution", account_id: sourceAccountId, amount_centavos: centavos, transaction_date: dateStr, notes: [description.trim(), notes.trim()].filter(Boolean).join(" — ") || undefined });
       } else if (savingsActivityContext) {
         const accountId = savingsActivityContext.kind === "contribution" ? sourceAccountId : destAccountId;
         if (!accountId) {
@@ -835,7 +845,14 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
             </AmountHero>
 
             <FormCard>
-              {!isEdit && !isStatementPayment && !savingsActivityContext ? <TransactionTypeSelector value={txType} onChange={setTxType} /> : null}
+              {!isEdit && !isStatementPayment && !savingsActivityContext ? <TransactionTypeSelector value={txType} onChange={(type) => {
+                setTxType(type);
+                setIsSavingsContribution(false);
+                setSelectedSavingsGoalId(null);
+                setSourceAccountId("");
+                setDestAccountId("");
+                setFormError(null);
+              }} /> : null}
 
               <View style={ui.chips}>
                 {QUICK_AMOUNTS.map((quickAmount) => (
@@ -860,8 +877,8 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               <PickerField label="Date" value={formatDate(date)} onPress={() => setShowDatePicker(true)} />
 
               {txType === "transfer" && contributionGoalId ? (
-                <SavingsContributionAccounts userId={userId} goalId={contributionGoalId} transactionId={transaction?.id} accounts={accounts} sourceAccountId={sourceAccountId} onSourceChange={setSourceAccountId} />
-              ) : txType === "transfer" ? (
+                <SavingsContributionAccounts key={contributionGoalId} userId={userId} goalId={contributionGoalId} transactionId={transaction?.id} accounts={accounts} sourceAccountId={sourceAccountId} onSourceChange={setSourceAccountId} />
+              ) : txType === "transfer" && isSavingsContribution ? null : txType === "transfer" ? (
                 <>
                   <PickerField
                     label="From account"
@@ -923,10 +940,29 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
               </FormCard>
             ) : null}
 
+            {!isEdit && !isStatementPayment && !savingsActivityContext && !debtPaymentDebtId && !debtPaymentContext ? (
+              <FormCard title="This is a savings contribution" right={<Switch value={isSavingsContribution} accessibilityLabel="This is a savings contribution" onToggle={() => {
+                setIsSavingsContribution((current) => !current);
+                setTxType("transfer");
+                setIsDebtPayment(false);
+                setSelectedSavingsGoalId(null);
+                setSourceAccountId("");
+                setDestAccountId("");
+                setFormError(null);
+              }} />}>
+                <Note>Use available money in the linked account, or transfer money from another account.</Note>
+                {isSavingsContribution ? <SavingsContributionGoalPicker userId={userId} goalId={selectedSavingsGoalId} onChange={(id) => {
+                  setSelectedSavingsGoalId(id);
+                  setSourceAccountId("");
+                  setFormError(null);
+                }} /> : null}
+              </FormCard>
+            ) : null}
+
             {txType === "expense" && !isStatementPayment && !selectedSourceIsCreditCard() ? (
               <FormCard
-                title="Record as a debt payment"
-                right={<Switch value={isDebtPayment} disabled={debtLocked} accessibilityLabel="Record as a debt payment" onToggle={() => { setIsDebtPayment((current) => !current); setDebtPaymentId(""); setDebtPrincipal(""); setDebtInterestOrFees("0"); }} />}
+                title="This is a payment for my debt"
+                right={<Switch value={isDebtPayment} disabled={debtLocked} accessibilityLabel="This is a payment for my debt" onToggle={() => { setIsDebtPayment((current) => !current); setDebtPaymentId(""); setDebtPrincipal(""); setDebtInterestOrFees("0"); }} />}
               >
                 <Note>Choose this when this expense pays down one of your debts.</Note>
                 {isDebtPayment ? (

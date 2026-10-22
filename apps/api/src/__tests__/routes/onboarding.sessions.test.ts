@@ -43,6 +43,32 @@ describe("POST /odin/api/onboarding/sessions", () => {
     jest.clearAllMocks();
   });
 
+  it("saves normalized custom event names and selected months with the owner's session", async () => {
+    mockAuth();
+    mockRpc.mockReturnValue(createMockQuery({ data: { id: "session-1" }, error: null }));
+    const answers = { custom_seasonal_events: [{ id: "custom_tuition", name: " Tuition   payment ", months: [8, 1] }], high_expense_seasons: ["custom_tuition"] };
+    const response = await request(app).post(`${basePath}/sessions`).set(authHeader()).send({ payload: { raw_answers: answers } });
+    expect(response.status).toBe(201);
+    expect(mockRpc).toHaveBeenCalledWith("create_onboarding_session", expect.objectContaining({ p_raw_answers: { ...answers, custom_seasonal_events: [{ id: "custom_tuition", name: "Tuition payment", months: [1, 8] }] } }));
+  });
+
+  it.each([
+    { custom_seasonal_events: [{ id: "custom_a", name: "Tuition", months: [] }] },
+    { custom_seasonal_events: [{ id: "custom_a", name: "Tuition", months: [13] }] },
+    { custom_seasonal_events: [{ id: "custom_a", name: "Tuition", months: [1, 1] }] },
+    { custom_seasonal_events: [{ id: "custom_a", name: "<script>", months: [1] }] },
+    { custom_seasonal_events: [{ id: "custom_a", name: "Tuition", months: [1], user_id: "other-user" }] },
+    { custom_seasonal_events: [{ id: "custom_a", name: "Tuition", months: [1] }, { id: "custom_b", name: " tuition ", months: [8] }] },
+    { high_expense_seasons: ["custom_missing"] },
+    { monthly_debt_payment_percentage: "101" },
+    { monthly_income: "NaN" },
+  ])("rejects invalid custom events, references, and amounts: %j", async (answers) => {
+    mockAuth();
+    const response = await request(app).post(`${basePath}/sessions`).set(authHeader()).send({ payload: { raw_answers: answers } });
+    expect(response.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   it("accepts distinct higher and lower seasons", async () => {
     mockAuth();
     const answers = { high_expense_seasons: ["christmas_ber_months"], low_expense_seasons: ["summer"] };
@@ -220,6 +246,28 @@ describe("PATCH /odin/api/onboarding/sessions/:id", () => {
   });
 
   const sessionId = "session-1";
+
+  it("resolves custom event selections from the authenticated user's saved session on a partial update", async () => {
+    mockAuth();
+    const event = { id: "custom_tuition", name: "Tuition payment", months: [1, 8] };
+    const existing = { custom_seasonal_events: [event] };
+    const update = createMockQuery({ data: { id: sessionId }, error: null });
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: { id: sessionId, status: "in_progress", raw_answers: existing }, error: null })).mockReturnValueOnce(update);
+    const response = await request(app).patch(`${basePath}/sessions/${sessionId}`).set(authHeader()).send({ payload: { raw_answers: { saving_seasons: [event.id] } } });
+    expect(response.status).toBe(200);
+    expect(update.update).toHaveBeenCalledWith({ raw_answers: { ...existing, saving_seasons: [event.id] } });
+    expect(update.eq).toHaveBeenCalledWith("user_id", validUserId);
+  });
+
+  it("clears retired fields when a new questionnaire replaces a legacy draft", async () => {
+    mockAuth();
+    const update = createMockQuery({ data: { id: sessionId }, error: null });
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: { id: sessionId, status: "in_progress", raw_answers: { monthly_deductions: ["tax"], monthly_deduction_amounts: { tax: "1000" }, credit_card_payment_behavior: "no_credit_card" } }, error: null })).mockReturnValueOnce(update);
+    const answers = { questionnaire_version: "2", monthly_income: "40000", credit_card_revolving_months: "4" };
+    const response = await request(app).patch(`${basePath}/sessions/${sessionId}`).set(authHeader()).send({ payload: { raw_answers: answers } });
+    expect(response.status).toBe(200);
+    expect(update.update).toHaveBeenCalledWith({ raw_answers: answers });
+  });
 
   it("rejects conflicts with previously saved higher seasons on partial updates", async () => {
     mockAuth();

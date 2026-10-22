@@ -1,6 +1,16 @@
 import { explainFinancialPlan, fallbackFinancialPlanExplanations, isUserFacingFinancialPlanExplanation, zeroAllocationExplanations, seasonalForecastMismatchExplanations, forecastChangeExplanation, type FinancialPlanEvidence } from "../../../services/financialPlan/explanationService.js";
 import { seasonalPreferencesFromAnswers } from "../../../services/financialPlan/recommendationService.js";
 
+it("passes custom event names and selected months as seasonal evidence only in those months", () => {
+  const answers = { custom_seasonal_events: [{ id: "custom_tuition", name: "Tuition payment", months: [1, 8] }], high_expense_seasons: ["custom_tuition"], saving_seasons: ["custom_tuition"] };
+  expect(seasonalPreferencesFromAnswers(answers, "2026-08-01")).toEqual([
+    { evidenceId: "saving_seasons:custom_tuition", season: "Tuition payment", seasonWindow: "January, August", preference: "saving" },
+    { evidenceId: "high_expense_seasons:custom_tuition", season: "Tuition payment", seasonWindow: "January, August", preference: "higher_expense" },
+  ]);
+  expect(seasonalPreferencesFromAnswers(answers, "2026-07-01")).toEqual([]);
+  expect(seasonalPreferencesFromAnswers({ high_expense_seasons: ["custom_tuition"] }, "2026-08-01")).toEqual([]);
+});
+
 const evidence: FinancialPlanEvidence = {
   planPeriodLabel: "December 2026",
   surplusCentavos: 5_000,

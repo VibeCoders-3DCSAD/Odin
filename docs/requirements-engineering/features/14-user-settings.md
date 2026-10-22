@@ -1,16 +1,15 @@
-## 9. User Settings
+## 14. User Settings
 
-### 9.1 Account and Profile
+### 14.1 Account and Profile
 
 - View and edit the user profile
 - View registered account information
 - Change the password
-- Manage connected authentication providers
-- View email verification status
-- View and manage the financial profile
-- Resume incomplete onboarding
+- Log out of the account while protecting unsynced changes
+- Open Categories from Settings to manage categories and subcategories as defined
+  in [Income and Expense Categories](11-income-and-expense-categories.md)
 
-### 9.2 Settings Forms
+### 14.2 Settings Forms
 
 - Display name
 - Password change credentials
@@ -20,7 +19,7 @@
 - Notification preferences
 - Data-retention preference, when available
 
-### 9.3 Settings Form Placeholders
+### 14.3 Settings Form Placeholders
 
 - Display name: `Enter display name`
 - Current password: `Enter current password`
@@ -32,7 +31,7 @@
 - Data-retention preference: `Select data-retention preference `
 - Problem report: `Describe the problem`
 
-### 9.4 Settings Selectors
+### 14.4 Settings Selectors
 
 - Personalization: On / Off
 - Model-training consent: Granted / Not granted
@@ -45,10 +44,9 @@
 - Overspending notification preference
 - In-app notification preference
 - Push notification preference
-- Connected authentication provider selector
 - Export format selector, when multiple formats are supported
 
-### 9.5 Settings Validation
+### 14.5 Settings Validation
 
 - Require a valid display name when it is changed
 - Require the current password for password changes
@@ -60,7 +58,7 @@
 - Display validation feedback beside the affected field
 - Clear field errors when corrected
 
-### 9.6 Privacy and Consent
+### 14.6 Privacy and Consent
 
 - View privacy settings
 - Manage personalization consent
@@ -71,7 +69,7 @@
 - View consent history and status
 - View research eligibility separately from app access
 
-### 9.7 Notification Preferences
+### 14.7 Notification Preferences
 
 - Manage savings notification preferences
 - Manage budget notification preferences
@@ -80,7 +78,7 @@
 - Manage overspending notification preferences
 - Manage in-app and push notification preferences
 
-### 9.8 Data and Account Governance
+### 14.8 Data and Account Governance
 
 - Export financial data
 - View export status
@@ -90,7 +88,7 @@
 - Cancel a pending deletion when supported
 - Protect unsynced changes before account actions
 
-### 9.9 Sync and Connectivity
+### 14.9 Sync and Connectivity
 
 - View synchronization status
 - View pending and failed sync activity
@@ -100,7 +98,18 @@
 - Discard failed local changes with confirmation
 - View offline and network-required states
 
-### 9.10 Help and About
+### 14.10 Help and About
+
+- Provide Replay tutorial under Settings → Help and About, following
+  [User Onboarding](04-user-onboarding.md)
+- Start a replay at the Dashboard stage with fresh tour progress, without
+  resetting financial data, questionnaire answers, or preferences
+- Provide Resume tutorial under the same Help and About section when unfinished
+  progress exists, continuing from the last unfinished step
+- Keep replaying or resuming the guided tour separate from completing the Savings
+  and Debt Profile Questionnaire
+- Allow users to replay or resume the tour offline after the application is
+  accessible locally
 
 - View frequently asked questions
 - View offline help content
@@ -111,14 +120,12 @@
 - View the decision-support disclaimer
 - View privacy information and applicable terms
 
-### 9.11 Settings States
+### 14.11 Settings States
 
 - Initial state: settings are ready for use
 - Loading state: profile, preferences, consent, or sync data is loading
 - Hydration state: authenticated account state is being resolved before protected settings render
-- Empty-provider state: no connected authentication provider is available
-- Unverified-email state: the account email requires verification
-- Incomplete-profile state: required profile or financial-profile information is missing
+- Incomplete-profile state: required profile information is missing
 - Unsaved-changes state: editable settings differ from saved values
 - Saving state: a settings change is being saved
 - Password-change state: password credentials are being updated
@@ -135,7 +142,7 @@
 - Error state: settings data could not be loaded or saved
 - Success state: the requested settings action completed
 
-### 9.12 Settings Messages
+### 14.12 Settings Messages
 
 #### Validation Messages
 
@@ -144,13 +151,10 @@
 
 #### Error Messages
 
-- No authentication provider: `No sign-in option is connected. Connect an authentication provider and try again.`
-- Unverified email: `Your email is not verified yet. Verify your email before using protected settings.`
 - Incomplete profile: `Your profile is missing required information. Complete the missing details and try again.`
 - Export failed: `Your data export could not be prepared. Try the export again.`
 - Sync failed: `Your changes could not be sent. Check your connection and try again.`
 - Settings error: `Your settings could not be loaded or saved. Try again.`
-- Empty provider: `No connected sign-in provider is available. Connect one before managing provider settings.`
 - Loading failure: `Your settings are still loading. Wait a moment and try again.`
 - Export failure: `Your data export failed to prepare. Try the export again.`
 

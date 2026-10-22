@@ -27,6 +27,9 @@ import {
 import { FinancialHealthCard, type Classification } from "../dashboard/components/FinancialHealthCard";
 import { STEPS, type StepConfig } from "./types";
 import { availableOnboardingStep, currentSeasonalAnswers, withOnboardingAnswer } from "./helpers/seasonalAnswers";
+import { SEASONAL_QUESTION_KEYS } from "./helpers/seasonalAnswers";
+import { normalizeCustomEvents } from "@odin/spending-insights/seasons";
+import { CustomSeasonalEventForm } from "./components/CustomSeasonalEventForm";
 
 const AQUA50 = "#EFFEF7";
 const AQUA600 = "#08B16A";
@@ -54,6 +57,7 @@ function isStepComplete(step: StepConfig, answers: Record<string, unknown>) {
   const value = answers[step.questionKey];
   if (step.kind === "review") return true;
   if (step.kind === "card_multi_select") return Array.isArray(value) && value.length > 0;
+  if (step.options) return step.options.some((option) => option.key === value);
   if (step.kind === "amount_list") {
     const selected = (answers[step.amountSourceKey ?? ""] as string[] | undefined) ?? [];
     const selectedKeys = selected.filter((key) => key !== "none");
@@ -126,7 +130,9 @@ export default function OnboardingFlow({
               onComplete();
               return;
             }
-            const { response: cr, body: cb } = await createSession(accessToken);
+            const retainedAnswers = { questionnaire_version: "2", custom_seasonal_events: normalizeCustomEvents(sess.raw_answers?.custom_seasonal_events) };
+            const { response: cr, body: cb } = await createSession(accessToken, retainedAnswers);
+            setAnswers(retainedAnswers);
             if (cr.ok && cb.payload?.session) setSessionId(cb.payload.session.id);
             else {
               setInitError(cb?.message ?? "Failed to start reassessment.");
@@ -144,7 +150,9 @@ export default function OnboardingFlow({
             if (idx >= 0) setStepIndex(idx);
           }
         } else {
-          const { response: cr, body: cb } = await createSession(accessToken);
+          const initialAnswers = { questionnaire_version: "2" };
+          const { response: cr, body: cb } = await createSession(accessToken, initialAnswers);
+          setAnswers(initialAnswers);
           if (cancelled) return;
           if (cr.ok && cb.payload?.session) {
             setSessionId(cb.payload.session.id);
@@ -446,6 +454,18 @@ export default function OnboardingFlow({
           />
         )}
 
+        {SEASONAL_QUESTION_KEYS.includes(step.questionKey) && (
+          <CustomSeasonalEventForm
+            key={step.questionKey}
+            events={normalizeCustomEvents(answers.custom_seasonal_events)}
+            onAdd={(event) => {
+              saveAnswer("custom_seasonal_events", [...normalizeCustomEvents(answers.custom_seasonal_events), event]);
+              const selected = Array.isArray(answers[step.questionKey]) ? answers[step.questionKey] as string[] : [];
+              saveAnswer(step.questionKey, [...selected.filter((key) => key !== "none"), event.id]);
+            }}
+          />
+        )}
+
         {step.kind === "input" && step.key === "date_of_birth" ? (
           <DateStep
             step={step}
@@ -475,7 +495,7 @@ export default function OnboardingFlow({
                   }
                 : (t: string) => saveAnswer(
                     step.questionKey,
-                    step.inputSuffix === "PHP" ? t.replace(/[^0-9]/g, "") : t,
+                    step.allowUnknown && t === "not_sure" ? t : step.inputSuffix ? t.replace(/[^0-9]/g, "") : t,
                   )
             }
           />
@@ -884,7 +904,7 @@ function InputStep({
           backgroundColor: CARD,
         }}
       >
-        {step.inputSuffix === "PHP" ? (
+        {step.inputSuffix === "PHP" || step.inputSuffix === "%" ? (
           <>
             <Text
               style={{
@@ -895,10 +915,10 @@ function InputStep({
                 paddingLeft: 16,
               }}
             >
-              PHP
+              {step.inputSuffix}
             </Text>
             <TextInput
-              value={value ? Number(value).toLocaleString() : ""}
+              value={value !== "not_sure" && value ? Number(value).toLocaleString() : ""}
               onChangeText={(t) => onChangeText(t.replace(/[^0-9]/g, ""))}
               keyboardType="numeric"
               placeholder="0"
@@ -931,6 +951,20 @@ function InputStep({
           />
         )}
       </View>
+      {step.allowUnknown ? (
+        <Pressable
+          accessibilityRole="radio"
+          accessibilityLabel="I don't know"
+          accessibilityState={{ selected: value === "not_sure" }}
+          onPress={() => onChangeText("not_sure")}
+          style={{ marginTop: 12, padding: 16, minHeight: 56, borderRadius: 14, borderWidth: 1.5, borderColor: value === "not_sure" ? AQUA600 : LINE, backgroundColor: value === "not_sure" ? AQUA50 : CARD, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+        >
+          <Text style={{ color: value === "not_sure" ? AQUA950 : INK2, fontFamily: "Manrope", fontWeight: "700", fontSize: 18 }}>
+            I don't know
+          </Text>
+          {value === "not_sure" ? <Check size={20} color={AQUA600} weight="bold" /> : null}
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -997,14 +1031,18 @@ function ReviewStep({
     if (step && option) rows.push({ label, value: option.label, stepIndex: STEPS.indexOf(step) });
   };
   const addMultiOptionRow = (label: string, questionKey: string) => {
-    const step = stepFor(questionKey);
+    const originalStep = stepFor(questionKey);
+    const step = originalStep ? availableOnboardingStep(originalStep, answers) : undefined;
     const selections = answers[questionKey];
     if (!step || !Array.isArray(selections)) return;
     const labels = selections
-      .map((selection) => step.options?.find((option) => option.key === selection)?.label)
+      .map((selection) => {
+        const option = step.options?.find((item) => item.key === selection);
+        return option ? `${option.label}${option.description ? ` (${option.description})` : ""}` : undefined;
+      })
       .filter(Boolean)
       .join(", ");
-    if (labels) rows.push({ label, value: labels, stepIndex: STEPS.indexOf(step) });
+    if (labels && originalStep) rows.push({ label, value: labels, stepIndex: STEPS.indexOf(originalStep) });
   };
   const addAmountMapRows = (questionKey: string) => {
     const step = stepFor(questionKey);
@@ -1021,12 +1059,9 @@ function ReviewStep({
   const displayName = answers.display_name;
   if (displayName && displayName !== "") rows.push({ label: "Name", value: displayName as string, stepIndex: STEPS.findIndex((step) => step.questionKey === "display_name") });
 
-  const dob = answers.date_of_birth;
-  if (dob && dob !== "") rows.push({ label: "Date of Birth", value: dob as string, stepIndex: STEPS.findIndex((step) => step.questionKey === "date_of_birth") });
-
   if (incomeText)
     rows.push({
-      label: "Monthly Income Before Deductions",
+      label: "Monthly Income After Deductions",
       value: `PHP ${Number(incomeText).toLocaleString()}`,
       stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_income"),
     });
@@ -1036,11 +1071,11 @@ function ReviewStep({
   const emergencySavings = answers.liquid_emergency_savings;
   if (typeof emergencySavings === "string") rows.push({ label: "Emergency Savings", value: `PHP ${Number(emergencySavings).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "liquid_emergency_savings") });
   const essentialCosts = answers.monthly_essential_living_costs;
-  if (typeof essentialCosts === "string") rows.push({ label: "Monthly Essential Costs", value: `PHP ${Number(essentialCosts).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_essential_living_costs") });
+  if (typeof essentialCosts === "string") rows.push({ label: "Monthly Essential Costs", value: essentialCosts === "not_sure" ? "Not sure" : `PHP ${Number(essentialCosts).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_essential_living_costs") });
   addOptionRow("Currently Paying Off Debt", "paying_off_debt");
-  addOptionRow("Credit Card Payments", "credit_card_payment_behavior");
-  const revolvingMonthsStep = stepFor("credit_card_revolving_months");
-  if (revolvingMonthsStep && isStepVisible(revolvingMonthsStep, answers)) addOptionRow("Months With a Card Balance", "credit_card_revolving_months");
+  const debtPercentage = answers.monthly_debt_payment_percentage;
+  if (answers.paying_off_debt === "true" && typeof debtPercentage === "string") rows.push({ label: "Debt Payment Percentage", value: debtPercentage === "not_sure" ? "Not sure" : `${debtPercentage}%`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_debt_payment_percentage") });
+  addOptionRow("Credit Card Payments", "credit_card_revolving_months");
 
   addMultiOptionRow("Higher-Expense Seasons", "high_expense_seasons");
   addMultiOptionRow("Lower-Expense Seasons", "low_expense_seasons");

@@ -29,6 +29,8 @@ export function categorySeasonalPreferences(evidence: FinancialPlanEvidence, cha
   const reference = MONTHLY_SPENDING_REFERENCE.find((item) => item.month === month);
   if (!category || !reference || ![...reference.higher, ...reference.lower].includes(category)) return [];
   return evidence.seasonalPreferences.filter((preference) => {
+    // A custom name cannot establish the category mapping of a built-in season.
+    if (preference.evidenceId.includes(":custom_")) return false;
     const season = SEASON_KEYS[preference.season];
     const rule = season ? SEASON_CATEGORY_RULES[season] : undefined;
     return preference.preference === direction && rule?.months.includes(month)

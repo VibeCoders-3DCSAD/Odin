@@ -43,18 +43,14 @@ const mockCreateOnboardingAssessment = createOnboardingFinancialConditionAssessm
 
 const validRawAnswers = {
   display_name: "Juan",
-  date_of_birth: "1995-06-15",
   monthly_income: "50000",
-  monthly_deductions: ["none"],
-  monthly_deduction_amounts: {},
-  emergency_savings_runway: "1_to_3_months",
-  liquid_emergency_savings: "20000",
+  emergency_savings_runway: "2_months",
   monthly_essential_living_costs: "30000",
   paying_off_debt: "false",
-  credit_card_payment_behavior: "never",
-  high_expense_seasons: ["q4"],
-  low_expense_seasons: ["q2"],
-  saving_seasons: ["q2"],
+  credit_card_revolving_months: "0",
+  high_expense_seasons: ["christmas_ber_months"],
+  low_expense_seasons: ["summer"],
+  saving_seasons: ["summer"],
 };
 
 function mockAuth() {
@@ -88,6 +84,15 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
   });
 
   const sessionId = "session-1";
+
+  it.each(["no_credit_card", "always_before_due", "1_to_11_months", "over_a_year"])("accepts the consolidated %s credit-card response", async (range) => {
+    mockAuth();
+    mockRpcSuccess();
+    mockFrom.mockReturnValueOnce(createMockQuery({ data: { id: sessionId, status: "in_progress", raw_answers: { ...validRawAnswers, credit_card_revolving_months: range } }, error: null }));
+    const response = await request(app).post(`${basePath}/sessions/${sessionId}/submit`).set(authHeader()).send({ payload: { confirm_data_use: true } });
+    expect(response.status).toBe(200);
+    expect(mockCreateOnboardingAssessment).toHaveBeenCalledWith(validUserId, expect.objectContaining({ credit_card_revolving_months: range }), expect.anything());
+  });
 
   it("requires lower-expense seasons before submitting an in-progress questionnaire", async () => {
     mockAuth();
@@ -144,7 +149,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
     expect(mockCreateOnboardingAssessment).toHaveBeenCalledWith(validUserId, expect.objectContaining({ monthly_income: "50000" }), expect.anything());
   });
 
-  it("requires total debt payments when the user is paying off debt", async () => {
+  it("requires a debt payment percentage when the user is paying off debt", async () => {
     mockAuth();
     mockFrom.mockReturnValueOnce(createMockQuery({
       data: {
@@ -164,7 +169,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
       .send({ payload: { confirm_data_use: true } });
 
     expect(response.status).toBe(400);
-    expect(response.body.fields).toEqual(["monthly_debt_payments"]);
+    expect(response.body.fields).toEqual(["monthly_debt_payment_percentage"]);
   });
 
   it("returns 400 when confirm_data_use is missing", async () => {
@@ -326,6 +331,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
           monthly_essential_living_costs: "30000",
           paying_off_debt: "false",
           credit_card_payment_behavior: "never",
+          credit_card_revolving_months: "0",
           protected_categories: ["none"],
           protected_category_costs: {},
           high_expense_seasons: ["q4"],
@@ -345,10 +351,10 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
     expect(mockRpc).toHaveBeenCalledWith("submit_onboarding_session_v2", expect.any(Object));
   });
 
-  it("requires the revolving-months follow-up when credit-card payments vary", async () => {
+  it("requires the consolidated credit-card answer", async () => {
     mockAuth();
     mockFrom.mockReturnValueOnce(createMockQuery({
-      data: { id: "session-1", status: "in_progress", raw_answers: { ...validRawAnswers, credit_card_payment_behavior: "some_months" } },
+      data: { id: "session-1", status: "in_progress", raw_answers: { ...validRawAnswers, credit_card_revolving_months: "" } },
       error: null,
     }));
 
@@ -424,6 +430,7 @@ describe("POST /odin/api/onboarding/sessions/:id/submit", () => {
           monthly_essential_living_costs: "0",
           paying_off_debt: "false",
           credit_card_payment_behavior: "no_credit_card",
+          credit_card_revolving_months: "no_credit_card",
           protected_categories: ["none"],
           protected_category_costs: {},
           high_expense_seasons: ["none"],

@@ -11,6 +11,7 @@ type RuleAssessment = {
 type CreditCardAssessment = RuleAssessment & {
   account_id?: string;
   source?: "observed_history" | "self_reported";
+  reported_duration?: "no_credit_card" | "always_before_due" | "1_to_11_months" | "over_a_year" | null;
 };
 
 export type Classification = {
@@ -59,6 +60,18 @@ function describeCard(assessment: CreditCardAssessment): { title: string; detail
   }
   const months = typeof assessment.value === "number" ? assessment.value : null;
   const basis = assessment.source === "self_reported" ? " Based on what you shared during setup." : "";
+  if (assessment.reported_duration === "no_credit_card") {
+    return { title: "No credit card", detail: `You said you don't use a credit card.${basis}`, color: P.muted };
+  }
+  if (assessment.reported_duration === "always_before_due") {
+    return { title: "Paid on time", detail: `You said you always pay on or before the due date.${basis}`, color: P.aqua700 };
+  }
+  if (assessment.reported_duration === "1_to_11_months") {
+    return { title: "Sometimes carries a balance", detail: `You reported carrying an unpaid balance for 1–11 months.${basis}`, color: P.sun };
+  }
+  if (assessment.reported_duration === "over_a_year") {
+    return { title: "Balance carried over a year", detail: `You reported carrying an unpaid balance for over a year.${basis}`, color: P.red };
+  }
   if (assessment.label === "TRANSACTOR") {
     return { title: "Paid in full", detail: `You paid off the full balance every month in the last year.${basis}`, color: P.aqua700 };
   }

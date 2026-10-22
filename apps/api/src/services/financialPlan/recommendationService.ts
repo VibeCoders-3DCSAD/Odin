@@ -14,6 +14,7 @@ import { createFinancialConditionAssessment } from "../financialConditionAssessm
 import { getServiceRoleClient } from "../../lib/supabase.js";
 import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledForecast, subtractScheduledRequirements } from "./helpers/scheduledCategoryAmounts.js";
 import { scheduledPaymentReservations, type ScheduledPaymentRow } from "./scheduledPaymentDates.js";
+import { normalizeCustomEvents, eventMonthLabel } from "@odin/spending-insights/seasons.js";
 
 const MANILA = "Asia/Manila";
 const MAX_HISTORY = 500;
@@ -192,13 +193,20 @@ function mapRecommendation(categories: MlPlanCategory[], allocationAmounts: unkn
 
 export function seasonalPreferencesFromAnswers(answers: Record<string, unknown>, periodStart: string): FinancialPlanEvidence["seasonalPreferences"] {
   const month = Number(periodStart.slice(5, 7));
+  const customEvents = new Map(normalizeCustomEvents(answers.custom_seasonal_events).map((event) => [event.id, event]));
   const higher = Array.isArray(answers.high_expense_seasons) ? answers.high_expense_seasons : [];
   const preferences = { saving_seasons: "saving", high_expense_seasons: "higher_expense", low_expense_seasons: "lower_expense" } as const;
   return (Object.keys(preferences) as Array<keyof typeof preferences>).flatMap((key) => {
     const selections = answers[key];
     if (!Array.isArray(selections)) return [];
     return [...new Set(selections)].flatMap((value) => {
-      if (typeof value !== "string" || !SEASONAL_LABELS[value] || !SEASONAL_MONTHS[value]?.includes(month)) return [];
+      if (typeof value !== "string") return [];
+      const custom = customEvents.get(value);
+      if (custom) {
+        if (!custom.months.includes(month) || (key === "low_expense_seasons" && higher.includes(value))) return [];
+        return [{ evidenceId: `${key}:${value}`, season: custom.name, seasonWindow: eventMonthLabel(custom.months), preference: preferences[key] }];
+      }
+      if (!SEASONAL_LABELS[value] || !SEASONAL_MONTHS[value]?.includes(month)) return [];
       if (key === "low_expense_seasons" && higher.includes(value)) return [];
       return [{ evidenceId: `${key}:${value}`, season: SEASONAL_LABELS[value]!, seasonWindow: SEASONAL_WINDOWS[value]!, preference: preferences[key] }];
     });

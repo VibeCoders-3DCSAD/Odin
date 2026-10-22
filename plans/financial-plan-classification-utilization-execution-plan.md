@@ -11,7 +11,7 @@ plan.
 
 ## Source Of Truth
 
-- Financial Plan requirements: `docs/requirements-engineering/features/18-financial-plan-management.md`
+- Financial Plan requirements: `docs/requirements-engineering/features/12-intelligent-financial-planning.md`
 - Financial condition contract: `../odin-ml/docs/models/classification-v2.md`
 - Financial Plan orchestration: `apps/api/src/services/financialPlan/recommendationService.ts`
 - Classification API and persistence: `apps/api/src/routes/financial-classification.ts`

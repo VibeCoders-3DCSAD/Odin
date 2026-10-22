@@ -1,6 +1,7 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { AccountDeletionRequest, ConsentRecord, DataExportRequest, PrivacySettings } from "./types";
 import { hasCurrentTermsConsent } from "./constants";
+import type { SeasonalPreferences } from "@odin/spending-insights/seasons";
 
 export async function getPrivacySettings(accessToken: string) {
   const controller = new AbortController();
@@ -80,6 +81,18 @@ function apiFetch<T>(
 export function getConsents(accessToken: string) {
   return apiFetch<{ payload?: { consents: ConsentRecord[] }; error?: string; message?: string }>(
     accessToken, "/odin/api/me?include=consents",
+  );
+}
+
+export function getPreferences(accessToken: string) {
+  return apiFetch<{ payload?: { preferences: SeasonalPreferences | null; submitted_at: string | null }; message?: string }>(
+    accessToken, "/odin/api/onboarding/preferences",
+  );
+}
+
+export function savePreferences(accessToken: string, preferences: SeasonalPreferences) {
+  return apiFetch<{ payload?: { preferences: SeasonalPreferences; submitted_at: string | null }; message?: string }>(
+    accessToken, "/odin/api/onboarding/preferences", { method: "PATCH", body: { payload: { preferences } } },
   );
 }
 

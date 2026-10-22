@@ -1,7 +1,22 @@
 import type { SQLiteDatabase } from "expo-sqlite";
+import { initDatabase } from "../client";
 import { LocalDbError } from "../helpers";
 import { assertActiveSavingsGoalAccount } from "./savingsGoalAccounts";
 import { readSavingsExpenseFunding } from "./savingsExpenseFunding";
+
+export type SavingsContributionGoalOption = { id: string; name: string; linkedAccountName: string };
+
+export async function listSavingsContributionGoals(userId: string): Promise<SavingsContributionGoalOption[]> {
+  const db = await initDatabase();
+  return db.getAllAsync<SavingsContributionGoalOption>(
+    `SELECT g.id, g.name, a.name AS linkedAccountName FROM savings_goals g
+     JOIN financial_accounts a ON a.id = g.linked_account_id AND a.user_id = g.user_id
+     WHERE g.user_id = ? AND g.deleted = 0 AND g.status = 'active'
+       AND a.deleted = 0 AND a.status = 'active' AND a.kind <> 'credit_card'
+     ORDER BY g.name COLLATE NOCASE, g.id LIMIT 100`,
+    userId,
+  );
+}
 
 export type SavingsGoalContribution = { savings_goal_id: string; activity_id: string };
 

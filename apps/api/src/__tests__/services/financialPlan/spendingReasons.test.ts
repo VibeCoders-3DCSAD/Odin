@@ -19,6 +19,16 @@ const evidence: FinancialPlanEvidence = {
 };
 
 describe("monthly spending reason selection", () => {
+  it("does not treat custom names as category-specific spending causes", () => {
+    const custom = { ...evidence, seasonalPreferences: [{ evidenceId: "high_expense_seasons:custom_event", season: "Undas / All Souls' Day", seasonWindow: "November", preference: "higher_expense" as const }] };
+    expect(possibleSeasonalReasons(custom, change)).toBe("");
+  });
+
+  it("accepts all bounded custom events after the client echoes the explanation context", () => {
+    const answers = { custom_seasonal_events: Array.from({ length: 20 }, (_, index) => ({ id: `custom_${index}`, name: `Family event ${index}`, months: [11] })), high_expense_seasons: Array.from({ length: 20 }, (_, index) => `custom_${index}`), saving_seasons: Array.from({ length: 20 }, (_, index) => `custom_${index}`) };
+    const context = { ...evidence, seasonalPreferences: seasonalPreferencesFromAnswers(answers, "2026-11-01") };
+    expect(parseFinancialPlanExplanationRequest({ evidence: context, leading: [] }).evidence.seasonalPreferences).toHaveLength(40);
+  });
   it("covers all twelve months using the application's twelve canonical categories", () => {
     expect(MONTHLY_SPENDING_REFERENCE.map(({ month }) => month)).toEqual(Array.from({ length: 12 }, (_, index) => index + 1));
     expect(HFCE_CATEGORY_SLUGS).toHaveLength(12);

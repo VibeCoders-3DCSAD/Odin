@@ -1,4 +1,5 @@
 import { HFCE_CATEGORY_SLUGS } from "./spendingReasonCatalog.js";
+import { MAX_CUSTOM_EVENTS } from "@odin/spending-insights/seasons.js";
 import { explainFinancialPlan, fallbackFinancialPlanExplanations, isUserFacingFinancialPlanExplanation, seasonalForecastMismatchExplanations, budgetConstraintExplanations, type FinancialPlanEvidence } from "./explanationService.js";
 
 // The recommendation is returned without waiting for the Groq explanation. The client sends this back to
@@ -14,7 +15,7 @@ const MAX_LEADING = 5;
 const MAX_TEXT = 400;
 const MAX_LABEL = 128;
 const MAX_RATIONALE = 1_000;
-const MAX_SEASONAL_PREFERENCES = 20;
+const MAX_SEASONAL_PREFERENCES = 3 * (MAX_CUSTOM_EVENTS + 12);
 const MAX_FORECAST_CHANGES = 50;
 
 export class FinancialPlanExplanationRequestError extends Error {}

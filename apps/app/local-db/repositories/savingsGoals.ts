@@ -210,7 +210,12 @@ export async function getEmergencyFundBaseline(userId: string, referenceDate = n
   const db = await getDb();
   const { from, to } = completedCalendarMonthRange(referenceDate);
   const row = await db.getFirstAsync<{ total: number }>(
-    "SELECT COALESCE(SUM(amount_centavos), 0) AS total FROM transactions WHERE user_id = ? AND transaction_type = 'expense' AND status = 'posted' AND deleted = 0 AND transaction_date >= ? AND transaction_date < ?",
+    `SELECT COALESCE(SUM(t.amount_centavos), 0) AS total
+     FROM transactions t
+     LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0 AND (s.user_id = t.user_id OR s.is_system = 1)
+     JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id) AND c.deleted = 0 AND (c.user_id = t.user_id OR c.is_system = 1)
+     WHERE t.user_id = ? AND t.transaction_type = 'expense' AND t.status = 'posted' AND t.deleted = 0
+       AND c.classification = 'essential' AND t.transaction_date >= ? AND t.transaction_date < ?`,
     userId, from, to,
   );
   return calculateEmergencyFundBaseline(row?.total ?? 0);

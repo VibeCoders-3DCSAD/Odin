@@ -10,10 +10,10 @@ describe("seasonal onboarding answers", () => {
   });
 
   it("excludes higher seasons from lower choices and keeps none available", () => {
-    const step = availableOnboardingStep(lowerStep, { high_expense_seasons: ["q2", "q4"] });
-    expect(step.options?.map(({ key }) => key)).toEqual(expect.arrayContaining(["q3", "none"]));
-    expect(step.options?.map(({ key }) => key)).not.toEqual(expect.arrayContaining(["q2"]));
-    expect(step.options?.map(({ key }) => key)).not.toEqual(expect.arrayContaining(["q4"]));
+    const step = availableOnboardingStep(lowerStep, { high_expense_seasons: ["summer", "christmas_ber_months"] });
+    expect(step.options?.map(({ key }) => key)).toEqual(expect.arrayContaining(["rainy_season", "none"]));
+    expect(step.options?.map(({ key }) => key)).not.toEqual(expect.arrayContaining(["summer"]));
+    expect(step.options?.map(({ key }) => key)).not.toEqual(expect.arrayContaining(["christmas_ber_months"]));
   });
 
   it("clears conflicting lower answers when going back to change higher seasons", () => {
@@ -35,7 +35,16 @@ describe("seasonal onboarding answers", () => {
   });
 });
 
-it("requires new calendar-period answers when resuming legacy seasonal preferences", () => {
-  expect(currentSeasonalAnswers({ high_expense_seasons: ["christmas_ber_months"], low_expense_seasons: ["summer"], saving_seasons: ["none"], monthly_income: "50000" }))
-    .toEqual({ high_expense_seasons: [], low_expense_seasons: [], saving_seasons: ["none"], monthly_income: "50000" });
+it("preserves named seasons and asks again for retired quarter choices", () => {
+  expect(currentSeasonalAnswers({ high_expense_seasons: ["christmas_ber_months"], low_expense_seasons: ["summer", "q2"], saving_seasons: ["none"], monthly_income: "50000" }))
+    .toEqual({ questionnaire_version: "2", high_expense_seasons: ["christmas_ber_months"], low_expense_seasons: ["summer"], saving_seasons: ["none"], monthly_income: "50000" });
+});
+
+it("keeps custom events when resuming and excludes their conflicting expense choice", () => {
+  const custom = { id: "custom_tuition", name: "Tuition payment", months: [1, 8] };
+  const answers = { custom_seasonal_events: [custom], high_expense_seasons: [custom.id], low_expense_seasons: ["summer"], saving_seasons: [custom.id] };
+  expect(currentSeasonalAnswers(answers)).toEqual({ ...answers, questionnaire_version: "2" });
+  const saving = STEPS.find((step) => step.questionKey === "saving_seasons")!;
+  expect(availableOnboardingStep(saving, answers).options).toContainEqual({ key: custom.id, label: custom.name, description: "January, August" });
+  expect(availableOnboardingStep(lowerStep, answers).options?.some((option) => option.key === custom.id)).toBe(false);
 });

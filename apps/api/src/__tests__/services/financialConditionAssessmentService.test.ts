@@ -19,6 +19,12 @@ async function submittedInput(cardAnswers: Record<string, string>) {
 }
 
 describe("onboarding financial condition assessment", () => {
+  beforeEach(() => mockClassify.mockReset());
+  it.each(["no_credit_card", "always_before_due", "1_to_11_months", "over_a_year"])("preserves the %s response without inventing an exact month count", async (range) => {
+    const input = await submittedInput({ credit_card_revolving_months: range });
+    expect(input.self_reported_revolving_range).toBe(range);
+    expect(input.self_reported_revolving_months).toBeNull();
+  });
   it.each([
     [{ credit_card_payment_behavior: "never" }, 0],
     [{ credit_card_payment_behavior: "every_month" }, 12],
@@ -29,7 +35,16 @@ describe("onboarding financial condition assessment", () => {
   ])("sends the self-reported revolving months for %j", async (cardAnswers, expected) => {
     const input = await submittedInput(cardAnswers);
     expect(input.self_reported_revolving_months).toBe(expected);
-    expect(input.self_reported_credit_card_behavior).toBe(cardAnswers.credit_card_payment_behavior);
+  });
+
+  it("uses take-home income and the declared debt percentage without deducting old amounts again", async () => {
+    const input = await submittedInput({ monthly_income: "40000", paying_off_debt: "true", monthly_debt_payment_percentage: "25", emergency_savings_runway: "2_months" });
+    expect(input).toMatchObject({ monthly_disposable_income: 40000, required_monthly_debt_payments: 10000, liquid_emergency_savings: 60000 });
+  });
+
+  it("preserves unknown values as missing inputs instead of zero", async () => {
+    const input = await submittedInput({ paying_off_debt: "true", monthly_debt_payment_percentage: "not_sure", monthly_essential_living_costs: "not_sure", emergency_savings_runway: "not_sure", credit_card_revolving_months: "not_sure" });
+    expect(input).toMatchObject({ required_monthly_debt_payments: null, monthly_basic_living_costs: null, liquid_emergency_savings: null, self_reported_revolving_months: null });
   });
 });
 
@@ -49,6 +64,11 @@ describe("refreshed financial condition assessment", () => {
   }
 
   beforeEach(() => mockClassify.mockReset());
+  it("preserves a duration range when refreshing the classification", async () => {
+    mockClassify.mockResolvedValue({ ok: false, reason: "not_configured" });
+    await createFinancialConditionAssessment("user-1", supabaseWith({ credit_card_revolving_months: "over_a_year" }));
+    expect(mockClassify.mock.calls[0]![1]).toMatchObject({ self_reported_revolving_range: "over_a_year", self_reported_revolving_months: null });
+  });
 
   it("keeps the onboarding self-report so the credit card result survives a refresh", async () => {
     mockClassify.mockResolvedValue({ ok: false, reason: "not_configured" });

@@ -165,7 +165,7 @@ Do not commit real secrets.
 
 - Auth experience: email+password login, registration, password reset, Google Sign-In, consent gate
 - Privacy consent screen (first-time modal)
-- 11-step onboarding flow with financial profile assessment
+- Onboarding questionnaire with financial condition assessment and seasonal preferences
 - Dashboard shell with drawer navigation and bottom toolbar
 - Taxonomy screen: CRUD for category groups, categories, and subcategories (local-first with offline sync via SQLite)
 - Privacy settings: 5 toggles (personalization, model training, research, notifications, data retention)
@@ -173,6 +173,24 @@ Do not commit real secrets.
 - Account offboarding: multi-step deletion flow
 - Placeholder pages for: Transactions, History, Spending Forecast, Anomaly Alerts, Budget Advice, Savings & Goals, Debt Manager, Insurance, Assistant, and Add Transaction
 - Offline sync engine: SQLite-based queue, push/pull sync with cursor-based API
+
+The questionnaire uses New Year, Summer, Back-to-School, Rainy Season, Undas,
+and Christmas and Ber Months as seasonal choices. Users can add up to 20 custom
+events with a plain-text name and one or more months. Events are saved in the
+authenticated user's onboarding answers, reused across the seasonal questions
+and reassessments, and supplied as user-reported context to Groq only for the
+selected months. They do not establish a category-specific spending cause.
+Settings → Preferences lets users edit their seasonal choices and add, edit, or
+remove custom events. Save preferences updates only the seasonal fields of the
+latest submitted questionnaire, which also supplies Groq's planning context.
+Names and classification inputs are excluded from this settings response and
+editor; unfinished reassessments do not replace submitted preferences.
+
+The essential-cost and debt-percentage inputs offer a selectable “I don't know”
+card; selecting it highlights the choice, and Continue advances the questionnaire.
+Credit-card setup uses four choices: no card, always pay on or before the due date,
+1–11 months with an unpaid balance, or over a year. The API and ML service preserve
+the selected duration range rather than inventing an exact month count.
 - Toast notification system
 - Deep link handling for password recovery and email verification
 

@@ -3,6 +3,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import SavingsGoalForm from "../SavingsGoalForm";
 import { LocalDbError } from "../../../local-db/helpers";
+import { getEmergencyFundBaseline } from "../../../local-db/repositories/savingsGoals";
 import type { SavingsGoal } from "../../../local-db/repositories/savingsGoals";
 
 jest.mock("../../../local-db/repositories/savingsGoalAccounts", () => ({
@@ -42,10 +43,43 @@ function selectTargetDate(view: ReturnType<typeof render>, date: Date) {
 
 describe("SavingsGoalForm contribution frequency", () => {
   beforeEach(() => {
+    jest.mocked(getEmergencyFundBaseline).mockReset().mockResolvedValue(0);
     mockCreate.mockReset();
     mockCreate.mockResolvedValue({ goal });
     mockUpdate.mockReset();
     mockUpdate.mockResolvedValue({ goal });
+  });
+
+  it("suggests six months of essentials only when checked and applies the target on request", async () => {
+    jest.mocked(getEmergencyFundBaseline).mockResolvedValue(123_456);
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
+    fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
+    expect(getEmergencyFundBaseline).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText("This is my emergency fund"));
+    await waitFor(() => expect(view.getByText("Suggested target: PHP 7407.36")).toBeTruthy());
+    expect(getEmergencyFundBaseline).toHaveBeenCalledWith("user-1", new Date("2026-10-18T00:00:00Z"));
+    expect(view.getByLabelText("Target amount").props.value).toBe("1000");
+    fireEvent.press(view.getByLabelText("Use suggested target amount"));
+    expect(view.getByLabelText("Target amount").props.value).toBe("7407.36");
+    fireEvent.press(view.getByLabelText("This is my emergency fund"));
+    expect(view.queryByLabelText("Use suggested target amount")).toBeNull();
+    expect(view.getByLabelText("Target amount").props.value).toBe("7407.36");
+  });
+
+  it("allows manual targets when there are no essential expenses", async () => {
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
+    fireEvent.press(view.getByLabelText("This is my emergency fund"));
+    await waitFor(() => expect(view.getByText(/No essential expenses recorded/)).toBeTruthy());
+    expect(view.queryByLabelText("Use suggested target amount")).toBeNull();
+  });
+
+  it("handles unavailable expense history without blocking manual entry", async () => {
+    jest.mocked(getEmergencyFundBaseline).mockRejectedValue(new Error("database unavailable"));
+    const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
+    fireEvent.press(view.getByLabelText("This is my emergency fund"));
+    await waitFor(() => expect(view.getByText(/Unable to calculate a suggested target/)).toBeTruthy());
+    fireEvent.changeText(view.getByLabelText("Target amount"), "5000");
+    expect(view.getByLabelText("Target amount").props.value).toBe("5000");
   });
 
   it("saves a newly filled goal and notifies the screen", async () => {

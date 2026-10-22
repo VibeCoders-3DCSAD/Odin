@@ -2,11 +2,11 @@
 
 ## Goal
 
-Implement section 18.8 of `docs/requirements-engineering/features/18-financial-plan-management.md`: let users browse accepted Financial Plans from completed plan periods and review each one against what actually happened (planned vs actual vs variance for spending, savings contributions and debt payments). The feature is local-first and works offline, reading only data already synced to the device.
+Implement section 18.8 of `docs/requirements-engineering/features/12-intelligent-financial-planning.md`: let users browse accepted Financial Plans from completed plan periods and review each one against what actually happened (planned vs actual vs variance for spending, savings contributions and debt payments). The feature is local-first and works offline, reading only data already synced to the device.
 
 ## Source Of Truth
 
-- Spec: `18-financial-plan-management.md` §18.1 (accepted plans persist an immutable snapshot and stay viewable offline) and §18.8 (past plans).
+- Spec: `12-intelligent-financial-planning.md` §18.1 (accepted plans persist an immutable snapshot and stay viewable offline) and §18.8 (past plans).
 - Local schema: `apps/app/local-db/migrations/066_financial_plans.ts`, `068_financial_plan_surplus.ts`.
 - Remote schema: `supabase/migrations/20261023000000_add_financial_plan_sync.sql`. Plans are create-only server-side, so the allocations and reservations tables already work as the immutable historical baseline.
 - Actuals sources:

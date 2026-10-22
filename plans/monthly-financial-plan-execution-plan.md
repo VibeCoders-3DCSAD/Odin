@@ -11,9 +11,9 @@ user's Fixed or Minimum requirements.
 
 ## Source Of Truth
 
-- Product requirements: `docs/requirements-engineering/features/18-financial-plan-management.md`
-- Forecast requirements: `docs/requirements-engineering/features/14-spending-forecast.md`
-- Budget requirements: `docs/requirements-engineering/features/18-financial-plan-management.md`
+- Product requirements: `docs/requirements-engineering/features/12-intelligent-financial-planning.md`
+- Forecast requirements: `docs/requirements-engineering/features/13-financial-reports.md`
+- Budget requirements: `docs/requirements-engineering/features/12-intelligent-financial-planning.md`
 - Financial condition contract: `../odin-ml/docs/models/classification-v2.md`
 - Forecast service: `../odin-ml/app/services/forecast_service.py`
 - Optimizer service: `../odin-ml/app/services/budget_service.py`
@@ -75,7 +75,7 @@ and migration verification.
 
 ### 1. Define The Next-Month Plan And Allocation Rules
 
-- Touch `docs/requirements-engineering/features/18-financial-plan-management.md`,
+- Touch `docs/requirements-engineering/features/12-intelligent-financial-planning.md`,
   `docs/models/budget-optimizer.md`, and `../odin-ml/app/schemas/budget.py`.
 - Define one `next calendar month` helper contract using the app's canonical
   timezone, and reject any plan request whose period is not exactly that month;

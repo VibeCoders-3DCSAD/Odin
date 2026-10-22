@@ -5,14 +5,16 @@ import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { ONBOARDING_ERRORS, VALID_EMPLOYMENT_CLASSIFICATIONS, VALID_METRO_MANILA_PRESENCE } from "../lib/constants.js";
 import { getServiceRoleClient } from "../lib/supabase.js";
 import { createOnboardingFinancialConditionAssessment } from "../services/financialConditionAssessmentService.js";
+import { CUSTOM_EVENT_ID } from "@odin/spending-insights/seasons.js";
+import { normalizeSeasonalAnswers, validateSeasonalAnswers } from "../services/helpers/seasonalAnswers.js";
 
 const router = Router();
 
 const ONBOARDING_ANSWER_KEYS = new Set([
-  "display_name", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
+  "display_name", "questionnaire_version", "date_of_birth", "is_filipino", "metro_manila_presence", "metro_manila_locality_code",
   "primary_employment_classification", "employment_status", "monthly_income",
-  "monthly_deductions", "monthly_deduction_amounts", "emergency_savings_runway", "liquid_emergency_savings", "monthly_debt_payments",
-  "monthly_essential_living_costs", "paying_off_debt", "credit_card_payment_behavior", "credit_card_revolving_months", "protected_categories",
+  "monthly_deductions", "monthly_deduction_amounts", "emergency_savings_runway", "liquid_emergency_savings", "monthly_debt_payment_percentage",
+  "monthly_essential_living_costs", "paying_off_debt", "credit_card_payment_behavior", "credit_card_revolving_months", "monthly_debt_payments", "protected_categories", "custom_seasonal_events",
   "protected_category_costs", "high_expense_seasons", "low_expense_seasons", "saving_seasons", "has_dependents",
 ]);
 
@@ -22,18 +24,19 @@ const AMOUNT_MAP_OPTIONS: Record<string, readonly string[]> = {
   monthly_deduction_amounts: ["tax", "sss", "philhealth", "pag_ibig", "salary_loan", "other"],
   protected_category_costs: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous"],
 };
-const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && !AMOUNT_MAP_ANSWER_KEYS.has(key) && key !== "has_dependents"));
+const STRING_ANSWER_KEYS = new Set([...ONBOARDING_ANSWER_KEYS].filter((key) => !ARRAY_ANSWER_KEYS.has(key) && !AMOUNT_MAP_ANSWER_KEYS.has(key) && key !== "has_dependents" && key !== "custom_seasonal_events"));
 const EXPENSE_SEASONS = ["q1", "q2", "q3", "q4", "rainy_season", "back_to_school", "undas", "christmas_ber_months", "new_year", "summer", "annual_payments", "family_celebrations", "other", "none"];
 const ANSWER_OPTIONS: Record<string, readonly string[]> = {
+  questionnaire_version: ["2"],
   is_filipino: ["true", "false"],
   metro_manila_presence: VALID_METRO_MANILA_PRESENCE,
   primary_employment_classification: VALID_EMPLOYMENT_CLASSIFICATIONS,
   employment_status: ["employed_full_time", "employed_part_time", "self_employed", "unemployed", "retired", "student"],
   monthly_deductions: ["tax", "sss", "philhealth", "pag_ibig", "salary_loan", "other", "none"],
-  emergency_savings_runway: ["less_than_1_month", "1_to_3_months", "3_to_6_months", "more_than_6_months", "not_sure"],
-  paying_off_debt: ["true", "false"],
+  emergency_savings_runway: ["1_month", "2_months", "3_months", "more_than_3_months", "not_sure", "less_than_1_month", "1_to_3_months", "3_to_6_months", "more_than_6_months"],
   credit_card_payment_behavior: ["no_credit_card", "never", "some_months", "every_month", "not_sure"],
-  credit_card_revolving_months: Array.from({ length: 13 }, (_, months) => String(months)),
+  paying_off_debt: ["true", "false"],
+  credit_card_revolving_months: ["no_credit_card", "always_before_due", "1_to_11_months", "over_a_year", ...Array.from({ length: 13 }, (_, months) => String(months)), "not_sure"],
   protected_categories: ["dependents_children", "dependents_elderly", "pwd", "solo_parent", "indigenous", "none"],
   high_expense_seasons: EXPENSE_SEASONS,
   low_expense_seasons: EXPENSE_SEASONS,
@@ -52,6 +55,7 @@ function amountMapIsComplete(rawAnswers: Record<string, unknown>, selectionKey: 
 function validateOnboardingPayload(
   raw_answers: unknown,
   current_step_key: unknown,
+  checkReferences = true,
 ): string | null {
   if (raw_answers !== undefined && (typeof raw_answers !== "object" || raw_answers === null || Array.isArray(raw_answers))) {
     return "raw_answers must be a plain object when provided.";
@@ -75,14 +79,20 @@ function validateOnboardingPayload(
       if (key === "has_dependents" && typeof value !== "boolean") return "has_dependents must be a boolean.";
       const options = ANSWER_OPTIONS[key];
       if (options && typeof value === "string" && value !== "" && !options.includes(value)) return `Invalid ${key}.`;
-      if (options && Array.isArray(value) && value.some((item) => !options.includes(item))) return `Invalid ${key}.`;
-      if (["monthly_income", "liquid_emergency_savings", "monthly_essential_living_costs", "monthly_debt_payments"].includes(key) && typeof value === "string" && value !== "" && !/^\d+$/.test(value)) {
+      if (options && Array.isArray(value) && value.some((item) => !options.includes(item) && !(EXPENSE_SEASONS === options && CUSTOM_EVENT_ID.test(item)))) return `Invalid ${key}.`;
+      if (["monthly_income", "liquid_emergency_savings", "monthly_debt_payments"].includes(key) && typeof value === "string" && value !== "" && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || !Number.isSafeInteger(Number(value) * 100))) {
         return `${key} must be a non-negative whole number.`;
       }
+      if (["monthly_essential_living_costs", "monthly_debt_payment_percentage"].includes(key) && typeof value === "string" && value !== "" && value !== "not_sure" && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || !Number.isSafeInteger(Number(value) * 100))) {
+        return `${key} must be a non-negative whole number or not_sure.`;
+      }
+      if (key === "monthly_debt_payment_percentage" && value !== "not_sure" && Number(value) > 100) return "Debt payment percentage must be between 0 and 100, or not_sure.";
     }
   }
   if (raw_answers && typeof raw_answers === "object" && !Array.isArray(raw_answers)) {
     const answers = raw_answers as Record<string, unknown>;
+    const seasonalError = validateSeasonalAnswers(answers, checkReferences);
+    if (seasonalError) return seasonalError;
     for (const key of ["high_expense_seasons", "low_expense_seasons", "saving_seasons"]) {
       const selections = answers[key];
       if (Array.isArray(selections) && selections.includes("none") && selections.length > 1) return `${key} cannot combine none with other seasons.`;
@@ -115,7 +125,7 @@ router.post("/onboarding/sessions", requireAuth, async (request: AuthenticatedRe
 
   const { data: session, error: rpcError } = await authenticatedSupabase
     .rpc("create_onboarding_session", {
-      p_raw_answers: raw_answers ?? {},
+      p_raw_answers: normalizeSeasonalAnswers(raw_answers ?? {}),
       p_current_step_key: current_step_key ?? null,
     })
     .single();
@@ -137,7 +147,7 @@ router.patch("/onboarding/sessions/:id", requireAuth, async (request: Authentica
   const sessionId = request.params.id;
   const { raw_answers, current_step_key } = request.body?.payload ?? {};
 
-  const validationError = validateOnboardingPayload(raw_answers, current_step_key);
+  const validationError = validateOnboardingPayload(raw_answers, current_step_key, false);
   if (validationError) {
     response.status(400).json({
       error: "Bad Request",
@@ -180,13 +190,13 @@ router.patch("/onboarding/sessions/:id", requireAuth, async (request: Authentica
   const updateData: Record<string, unknown> = {};
 
   if (raw_answers !== undefined) {
-    const mergedAnswers = { ...(existing.raw_answers as Record<string, unknown> | undefined), ...raw_answers };
+    const mergedAnswers = normalizeSeasonalAnswers({ ...(existing.raw_answers as Record<string, unknown> | undefined), ...raw_answers });
     const mergedError = validateOnboardingPayload(mergedAnswers, current_step_key);
     if (mergedError) {
       response.status(400).json({ error: "Bad Request", message: mergedError });
       return;
     }
-    updateData.raw_answers = mergedAnswers;
+    updateData.raw_answers = normalizeSeasonalAnswers(mergedAnswers);
   }
 
   if (current_step_key !== undefined) {
@@ -273,22 +283,18 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
   }
   const requiredFields = [
     "display_name",
-    "date_of_birth",
     "monthly_income",
-    "monthly_deductions",
-    "monthly_deduction_amounts",
     "emergency_savings_runway",
-    "liquid_emergency_savings",
     "monthly_essential_living_costs",
     "paying_off_debt",
-    "credit_card_payment_behavior",
+    "credit_card_revolving_months",
     "high_expense_seasons",
     "low_expense_seasons",
     "saving_seasons",
   ];
   const missing = requiredFields.filter((f) => {
     const v = rawAnswers[f];
-    if (["monthly_income", "liquid_emergency_savings", "monthly_essential_living_costs"].includes(f))
+    if (["monthly_income", "liquid_emergency_savings"].includes(f))
       return typeof v !== "string" || v === "";
     if (ARRAY_ANSWER_KEYS.has(f))
       return !Array.isArray(v) || v.length === 0;
@@ -304,34 +310,15 @@ router.post("/onboarding/sessions/:id/submit", requireAuth, async (request: Auth
     });
     return;
   }
-  if (!amountMapIsComplete(rawAnswers, "monthly_deductions", "monthly_deduction_amounts")) {
+  if (rawAnswers.paying_off_debt === "true" && (typeof rawAnswers.monthly_debt_payment_percentage !== "string" || rawAnswers.monthly_debt_payment_percentage === "")) {
     response.status(400).json({
       error: "Bad Request",
-      message: "Enter an amount for each selected deduction.",
+      message: "Enter the percentage of monthly income allocated to debt.",
+      fields: ["monthly_debt_payment_percentage"],
     });
     return;
   }
 
-  if (rawAnswers.paying_off_debt === "true" && (typeof rawAnswers.monthly_debt_payments !== "string" || rawAnswers.monthly_debt_payments === "")) {
-    response.status(400).json({
-      error: "Bad Request",
-      message: "Enter your total required monthly debt payments.",
-      fields: ["monthly_debt_payments"],
-    });
-    return;
-  }
-
-  if (
-    (rawAnswers.credit_card_payment_behavior === "some_months" || rawAnswers.credit_card_payment_behavior === "not_sure")
-    && (typeof rawAnswers.credit_card_revolving_months !== "string" || rawAnswers.credit_card_revolving_months === "")
-  ) {
-    response.status(400).json({
-      error: "Bad Request",
-      message: "Select how many of the last 12 months you had an unpaid credit-card balance.",
-      fields: ["credit_card_revolving_months"],
-    });
-    return;
-  }
 
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   if (typeof rawAnswers.date_of_birth === "string") {

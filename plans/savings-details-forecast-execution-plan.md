@@ -13,7 +13,7 @@ explicit estimate limitation rather than guessed eligibility.
 ## Source Of Truth
 
 - Feature index: `docs/requirements-engineering/features/index-feature-modules.md`.
-- Savings requirements: `docs/requirements-engineering/features/08-savings-goal-management.md`, especially sections 8.3.1, 8.9, 8.10, and 8.13-8.16.
+- Savings requirements: `docs/requirements-engineering/features/07-savings-goals-management.md`, especially sections 8.3.1, 8.9, 8.10, and 8.13-8.16.
 - Debt forecast reference: `apps/app/features/debt-manager/debtForecast.ts`, `NonCreditDebtForecastSection.tsx`, `DebtForecastChart.tsx`, `DebtForecastTable.tsx`, and `debtTrendRange.ts`.
 - Current savings detail/data paths: `apps/app/features/savings-goals/SavingsGoalsScreen.tsx`, `apps/app/local-db/repositories/savingsGoals.ts`, `savingsGoalActivities.ts`, `savingsAccountDetails.ts`, `financialFoundations.ts`, and `ledger.ts`.
 - Existing contribution cadence contract: `apps/app/features/savings-goals/contributionSchedule.ts`.

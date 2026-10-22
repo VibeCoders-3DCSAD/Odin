@@ -6,6 +6,7 @@ import m053 from "../../migrations/053_savings_goal_model";
 import m084 from "../../migrations/084_savings_goal_account_link";
 import m086 from "../../migrations/086_expense_savings_funding";
 import { createExpense, createSavingsGoalTransfer, updateTransaction, deleteTransaction, listSavingsAccountMovements } from "../ledger";
+import { listSavingsContributionGoals } from "../savingsGoalContributions";
 import { readSavingsExpenseFunding } from "../savingsExpenseFunding";
 
 let mockSqlite: DatabaseSync;
@@ -173,6 +174,16 @@ describe("linked savings funding", () => {
     await updateTransaction("user", "device", transaction.id, { source_account_id: "second", savings_goal_withdrawals: [] });
     expect(balance()).toBe(2_000_000);
     expect(activities()).toEqual([]);
+  });
+
+  it("only lists this user's active goals linked to active eligible accounts", async () => {
+    const options = await listSavingsContributionGoals("user");
+    expect(options.map((goal) => goal.id).sort()).toEqual(["emergency", "travel"]);
+    expect(await listSavingsContributionGoals("missing-user")).toEqual([]);
+    mockSqlite.exec("UPDATE savings_goals SET status = 'archived' WHERE id = 'travel'");
+    expect((await listSavingsContributionGoals("user")).map((goal) => goal.id)).toEqual(["emergency"]);
+    mockSqlite.exec("UPDATE financial_accounts SET status = 'archived' WHERE id = 'account'");
+    expect(await listSavingsContributionGoals("user")).toEqual([]);
   });
 
   it("reserves archived goals and reports an existing account shortfall", async () => {
