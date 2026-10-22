@@ -1,10 +1,23 @@
 import { Router, type Response } from "express";
+import { validateCommitmentBudgets } from "../services/financialPlan/commitments.js";
+import { getFinancialPlanCommitments } from "../services/financialPlan/commitmentsPreview.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { FinancialPlanInputError, FinancialPlanUnavailableError, financialPlanPeriod, getFinancialPlanRecommendation } from "../services/financialPlan/recommendationService.js";
 import { FinancialPlanMlError } from "../services/financialPlan/mlAdapter.js";
 import { explainFinancialPlanRequest, FinancialPlanExplanationRequestError, parseFinancialPlanExplanationRequest } from "../services/financialPlan/explanationRequest.js";
 
 const router = Router();
+
+router.post("/commitments", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
+  try {
+    const month = request.body?.planMonth;
+    if (month !== undefined && typeof month !== "string") throw new FinancialPlanInputError("Plan month is invalid");
+    response.json({ payload: await getFinancialPlanCommitments(request.userId!, request.supabase!, month) });
+  } catch (error) {
+    console.error("financial plan commitments failed", { user_id: request.userId, error });
+    response.status(error instanceof FinancialPlanInputError ? 422 : 503).json({ message: "Your commitments could not be loaded. Try again." });
+  }
+});
 
 router.post("/recommendation", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   try {
@@ -14,7 +27,8 @@ router.post("/recommendation", requireAuth, async (request: AuthenticatedRequest
       if (typeof planMonth !== "string") throw new FinancialPlanInputError("Plan month is invalid");
       financialPlanPeriod(planMonth);
     }
-    response.status(200).json({ payload: await getFinancialPlanRecommendation(request.userId!, request.supabase!, plannedAmountCentavos, includedSubcategoryIds, includedCategoryIds, manualAllocations, { skipDebtRepayments, skipSavingsContributions }, ...(planMonth === undefined ? [] : [planMonth])) });
+    const commitmentBudgets = validateCommitmentBudgets(request.body.commitmentBudgets);
+    response.status(200).json({ payload: await getFinancialPlanRecommendation(request.userId!, request.supabase!, plannedAmountCentavos, includedSubcategoryIds, includedCategoryIds, manualAllocations, { skipDebtRepayments, skipSavingsContributions, ...(commitmentBudgets.length ? { commitmentBudgets } : {}) }, ...(planMonth === undefined ? [] : [planMonth])) });
   } catch (error) {
     const status = error instanceof FinancialPlanInputError ? 422 : error instanceof FinancialPlanMlError || error instanceof FinancialPlanUnavailableError ? 503 : 500;
     console.error("financial plan recommendation failed", { user_id: request.userId, request_id: request.header("x-request-id")?.slice(0, 128) ?? null, status, error_class: error instanceof Error ? error.constructor.name : "UnknownError" });

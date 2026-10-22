@@ -89,6 +89,12 @@ describe("Financial Plan sync payload", () => {
     await expect(prepareOperation({} as never, "user-1", { ...operation, payload })).rejects.toThrow("Financial Plan allocations and surplus exceed available funds");
   });
 
+  it("rejects commitment edits that leave the old available funds unchanged", async () => {
+    const operation = financialPlanOperation();
+    const payload = { ...operation.payload, input_snapshot: { ...operation.payload.input_snapshot, plannedAmountCentavos: 100_000 }, recommendation: { ...operation.payload.recommendation, availableFundsCentavos: 90_000, debtReservations: [{ debtAccountId: "loan", amountCentavos: 30_000, dueDate: operation.payload.period_end }] } };
+    await expect(prepareOperation({} as never, "user-1", { ...operation, payload })).rejects.toThrow("Financial Plan commitments exceed the planning amount");
+  });
+
   it("rejects duplicate allocation targets before sync", async () => {
     const operation = financialPlanOperation();
     const allocation = { subcategoryId: "subcategory-1", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 0, floorAmountCentavos: 0 };

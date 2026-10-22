@@ -1,8 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { DotsThreeVertical } from "phosphor-react-native";
 import type { Category, Subcategory } from "../../local-db/repositories/taxonomy";
-import type { ManualPlanAllocation, ReservationSkips } from "./api";
+import type { ManualPlanAllocation } from "./api";
 import { PlanCategoryRuleEditor, type PlanCategoryRuleUpdate } from "./PlanCategoryRuleEditor";
 
 type Props = {
@@ -21,8 +21,8 @@ type Props = {
   planningAmountError: string | null;
   onPlannedAmountChange: (amount: string) => void;
   onContinue: (manualAllocations: ManualPlanAllocation[]) => void;
-  reservationSkips?: ReservationSkips;
-  onReservationSkipChange?: (type: keyof ReservationSkips, shouldSkip: boolean) => void;
+  commitmentSection?: ReactNode;
+  commitmentBudgetError?: boolean;
 };
 
 const EMPTY_IDS = new Set<string>();
@@ -80,7 +80,7 @@ const CategoryRow = memo(function CategoryRow({ category, selected, recommended,
 const INITIAL_CATEGORY_COUNT = 1;
 const CATEGORIES_PER_FRAME = 2;
 
-export function PlanCategorySelection({ topLevelCategories, subcategories, includedCategoryIds = EMPTY_IDS, includedIds, recommendedCategoryIds = EMPTY_IDS, recommendedIds, onToggle, onToggleCategory, onSaveCategoryRule = saveNothing, onSaveRule, plannedAmount, availableMoneyCentavos, planningAmountError, onPlannedAmountChange, onContinue, reservationSkips = { debtRepayments: false, savingsContributions: false }, onReservationSkipChange = () => {} }: Props) {
+export function PlanCategorySelection({ topLevelCategories, subcategories, includedCategoryIds = EMPTY_IDS, includedIds, recommendedCategoryIds = EMPTY_IDS, recommendedIds, onToggle, onToggleCategory, onSaveCategoryRule = saveNothing, onSaveRule, plannedAmount, availableMoneyCentavos, planningAmountError, onPlannedAmountChange, onContinue, commitmentSection, commitmentBudgetError = false }: Props) {
   const uncategorizedSubcategories = subcategories.filter((subcategory) => !subcategory.category_id);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
@@ -133,6 +133,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
     ...topLevelCategories.filter((category) => includedCategoryIds.has(category.id) && requirement(category) === null && !recommendedCategoryIds.has(category.id)).map((category) => ({ target: "category" as const, id: category.id, amountCentavos: parsedManualAmount("category", category.id) ?? 0 })),
   ];
   const hasInvalidManualAmount = manualAllocations().some((allocation) => allocation.amountCentavos <= 0);
+  const cannotContinue = includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null || hasInvalidManualAmount || commitmentBudgetError;
 
   function renderSubcategory(subcategory: Subcategory) {
     return <SubcategoryRow key={subcategory.id} subcategory={subcategory} selected={includedIds.has(subcategory.id)} recommended={recommendedIds.has(subcategory.id)} editing={editingId === subcategory.id} manualAmount={manualAmount("subcategory", subcategory.id)} handlers={subcategoryHandlers} />;
@@ -157,16 +158,11 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
         <Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11, marginTop: 5 }}>Available money: PHP {(availableMoneyCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
         {planningAmountError ? <Text accessibilityRole="alert" style={{ color: "#D9001F", fontFamily: "Manrope", fontSize: 11, marginTop: 5 }}>{planningAmountError}</Text> : null}
        </View>
-       <View style={{ backgroundColor: "#FFF8E7", borderColor: "#F2D9A3", borderRadius: 13, borderWidth: 1, marginTop: 16, padding: 13 }}>
-         <Text style={{ color: "#6F4A00", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Plan commitments</Text>
-         <Text style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 4 }}>Debt repayments and savings contributions are included unless you explicitly skip them.</Text>
-         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: reservationSkips.debtRepayments }} accessibilityLabel="Skip Debt Repayments" onPress={() => onReservationSkipChange("debtRepayments", !reservationSkips.debtRepayments)} style={{ alignItems: "center", backgroundColor: reservationSkips.debtRepayments ? "#EEFFF8" : "#FCF8F0", borderColor: reservationSkips.debtRepayments ? "#0E6D46" : "#EAEAE6", borderRadius: 13, borderWidth: 1, flexDirection: "row", gap: 10, marginTop: 12, padding: 13 }}><View style={{ alignItems: "center", backgroundColor: reservationSkips.debtRepayments ? "#0E6D46" : "#FFFFFF", borderColor: reservationSkips.debtRepayments ? "#0E6D46" : "#A8B0AA", borderRadius: 5, borderWidth: 2, height: 20, justifyContent: "center", width: 20 }}><Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800" }}>{reservationSkips.debtRepayments ? "x" : ""}</Text></View><Text style={{ color: "#1B1C1A", flex: 1, fontFamily: "Manrope", fontSize: 13, fontWeight: "700" }}>Skip debt repayments for this plan</Text></Pressable>
-         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: reservationSkips.savingsContributions }} accessibilityLabel="Skip Savings Contributions" onPress={() => onReservationSkipChange("savingsContributions", !reservationSkips.savingsContributions)} style={{ alignItems: "center", backgroundColor: reservationSkips.savingsContributions ? "#EEFFF8" : "#FCF8F0", borderColor: reservationSkips.savingsContributions ? "#0E6D46" : "#EAEAE6", borderRadius: 13, borderWidth: 1, flexDirection: "row", gap: 10, marginTop: 10, padding: 13 }}><View style={{ alignItems: "center", backgroundColor: reservationSkips.savingsContributions ? "#0E6D46" : "#FFFFFF", borderColor: reservationSkips.savingsContributions ? "#0E6D46" : "#A8B0AA", borderRadius: 5, borderWidth: 2, height: 20, justifyContent: "center", width: 20 }}><Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800" }}>{reservationSkips.savingsContributions ? "x" : ""}</Text></View><Text style={{ color: "#1B1C1A", flex: 1, fontFamily: "Manrope", fontSize: 13, fontWeight: "700" }}>Skip savings contributions for this plan</Text></Pressable>
-       </View>
+       {commitmentSection}
        {topLevelCategories.slice(0, visibleCategoryCount).map(renderCategory)}
       {visibleCategoryCount >= topLevelCategories.length && uncategorizedSubcategories.length > 0 ? <View style={{ marginTop: 16 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#1B1C1A" }}>Other expense categories</Text>{uncategorizedSubcategories.map(renderSubcategory)}</View> : null}
         {hasInvalidManualAmount ? <Text accessibilityRole="alert" style={{ color: "#D9001F", fontFamily: "Manrope", fontSize: 11, marginTop: 10 }}>Enter an amount greater than zero for each new category.</Text> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Create Financial Plan recommendation" disabled={includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null || hasInvalidManualAmount} onPress={() => onContinue(manualAllocations())} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null || hasInvalidManualAmount ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>Create recommendation</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Create Financial Plan recommendation" disabled={cannotContinue} onPress={() => onContinue(manualAllocations())} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: cannotContinue ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>Create recommendation</Text></Pressable>
     </View>
   );
 }

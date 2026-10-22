@@ -145,6 +145,13 @@ function validate(input: CreateFinancialPlanInput): void {
     assertCentavos(reservation.amountCentavos, "debt reservation amount");
   }
   for (const reservation of input.savingsReservations) { if (!reservation.savingsGoalId) throw new LocalDbError("VALIDATION_ERROR", "savings reservation requires a goal"); assertCentavos(reservation.amountCentavos, "savings reservation amount"); }
+  const obligations = input.inputSnapshot.obligations.reservations;
+  const scheduledTotal = Array.isArray(obligations) ? obligations.reduce((total: number, row: { amountCentavos: number }) => {
+    assertCentavos(row.amountCentavos, "scheduled reservation amount");
+    return total + row.amountCentavos;
+  }, 0) : 0;
+  const committed = [...input.debtReservations, ...input.savingsReservations].reduce((total, row) => total + row.amountCentavos, scheduledTotal);
+  if (availableFunds + committed > input.inputSnapshot.plannedAmountCentavos + 0.001) throw new LocalDbError("VALIDATION_ERROR", "Financial Plan commitments exceed the planning amount");
 }
 
 async function validateReferences(db: SQLite.SQLiteDatabase, userId: string, input: CreateFinancialPlanInput): Promise<void> {

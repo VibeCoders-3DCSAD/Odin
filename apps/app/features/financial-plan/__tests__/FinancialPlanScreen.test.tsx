@@ -14,6 +14,7 @@ const mockListFinancialAccounts = jest.fn();
 const mockListCategories = jest.fn();
 const mockListSubcategories = jest.fn();
 const mockRequestFinancialPlanRecommendation = jest.fn();
+const mockRequestFinancialPlanCommitments = jest.fn();
 const mockRunSync = jest.fn();
 
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
@@ -49,12 +50,14 @@ jest.mock("../../debt-manager/debtTrendRange", () => ({ getPhilippineToday: () =
 
 const mockRequestFinancialPlanExplanations = jest.fn();
 jest.mock("../api", () => ({
+  requestFinancialPlanCommitments: (...args: unknown[]) => mockRequestFinancialPlanCommitments(...args),
   requestFinancialPlanRecommendation: (...args: unknown[]) => mockRequestFinancialPlanRecommendation(...args),
   requestFinancialPlanExplanations: (...args: unknown[]) => mockRequestFinancialPlanExplanations(...args),
 }));
 
 describe("FinancialPlanScreen", () => {
   beforeEach(() => {
+    mockRequestFinancialPlanCommitments.mockReset().mockResolvedValue({ period: { start: "2026-10-01", end: "2026-10-31" }, debtReservations: [], savingsReservations: [] });
     mockListRecentExpenseSubcategoryIds.mockResolvedValue([]);
     mockListRecentExpenseCategoryIds.mockResolvedValue([]);
     mockCreateFinancialPlan.mockReset().mockResolvedValue({ id: "new-plan" });
@@ -166,7 +169,7 @@ describe("FinancialPlanScreen", () => {
     ] } } });
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByText("Monthly rent")).toBeTruthy());
-    expect(view.getByText("Due 2026-10-20")).toBeTruthy();
+    expect(view.getByText(/Due 2026-10-20/)).toBeTruthy();
     expect(view.getAllByText("₱300.00")).toHaveLength(2);
     expect(view.getByText("₱1,000.00")).toBeTruthy();
     const text = JSON.stringify(view.toJSON());
@@ -409,8 +412,7 @@ describe("FinancialPlanScreen", () => {
     alert.mockRestore();
   });
 
-  it("includes commitments by default and lets the user skip savings before generating a plan", async () => {
-    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  it("shows commitment due dates and lets the user budget each amount", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
     mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
@@ -427,19 +429,81 @@ describe("FinancialPlanScreen", () => {
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByLabelText("Create Financial Plan recommendation")).toBeTruthy());
 
-    expect(view.getByLabelText("Skip Savings Contributions").props.accessibilityState?.checked).toBe(false);
-    expect(view.getByLabelText("Skip Debt Repayments")).toBeTruthy();
-    fireEvent.press(view.getByLabelText("Skip Savings Contributions"));
-    expect(alert).toHaveBeenCalledWith("Skip savings contributions?", expect.stringContaining("delay"), expect.any(Array));
-    const actions = alert.mock.calls[0]![2] as { onPress?: () => void }[];
-    await act(async () => {
-      actions[1]!.onPress?.();
-    });
-
-    expect(view.getByLabelText("Skip Savings Contributions").props.accessibilityState?.checked).toBe(true);
     fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(1));
-    expect(mockRequestFinancialPlanRecommendation.mock.calls[0]![5]).toEqual({ debtRepayments: false, savingsContributions: true });
-    alert.mockRestore();
+    await waitFor(() => expect(view.getByText(/Due 2026-11-12/)).toBeTruthy());
+    expect(view.getByText("Debt repayments")).toBeTruthy();
+    const debtAmount = view.getByLabelText("Debt account budget amount in pesos");
+    expect(debtAmount.props.value).toBe("100.00");
+    fireEvent.changeText(debtAmount, "75.00");
+    expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("75.00");
+  });
+
+  it("shows amounts due before generation and submits the user's budgets", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
+    mockRequestFinancialPlanCommitments.mockResolvedValue({ period: { start: "2026-10-01", end: "2026-10-31" }, debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-10-20" }], savingsReservations: [{ savingsGoalId: "goal-1", amountCentavos: 5_000, dueDate: "2026-10-25" }] });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByText("Amount due: ₱100.00")).toBeTruthy());
+    expect(mockRequestFinancialPlanRecommendation).not.toHaveBeenCalled();
+    const debt = view.getByLabelText("Debt account budget amount in pesos");
+    fireEvent(debt, "focus");
+    fireEvent.changeText(debt, "");
+    expect(view.getByLabelText("Create Financial Plan recommendation").props.accessibilityState.disabled).toBe(true);
+    fireEvent.changeText(debt, "7");
+    fireEvent.changeText(debt, "75.");
+    expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("75.");
+    fireEvent.changeText(debt, "75.25");
+    expect(view.getByText("Amount due: ₱100.00")).toBeTruthy();
+    expect(view.getByText(/may result in a missed payment/)).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+    await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalled());
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5].commitmentBudgets).toEqual([{ key: "debt:debt-1:2026-10-20", amountCentavos: 7_525 }, { key: "savings:goal-1:2026-10-25", amountCentavos: 5_000 }]);
+  });
+
+  it("recalculates remaining funds and prevents saving an increased commitment above the budget", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
+    mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
+      status: "RECOMMENDATION_READY", period: { start: "2026-10-01", end: "2026-10-31" }, inputSnapshot: { debtRequirements: { reservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-10-20" }] } }, explanations: [],
+      recommendation: { availableFundsCentavos: 90_000, allocations: [{ categoryId: "food", allocationRule: "FLEXIBLE", floorAmountCentavos: 0, allocatedAmountCentavos: 80_000 }], debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-10-20" }], savingsReservations: [] },
+    } } });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Create Financial Plan recommendation")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+    await waitFor(() => expect(view.getByText("Remaining Money in Plan")).toBeTruthy());
+    fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "300");
+    expect(view.getByText("-₱100.00")).toBeTruthy();
+    expect(view.getByLabelText("Accept and save Financial Plan").props.accessibilityState.disabled).toBe(true);
+    expect(view.getByText("Amount due: ₱100.00")).toBeTruthy();
+  });
+
+  it("retains original amounts due when reopening a plan with a smaller budget", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: { debtRequirements: { reservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-10-20" }] } }, recommendation: { availableFundsCentavos: 92_500, allocations: [], debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 7_500, dueDate: "2026-10-20" }], savingsReservations: [] } });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByText("Amount due: ₱100.00")).toBeTruthy());
+    expect(view.getAllByText("₱75.00").length).toBeGreaterThan(0);
+    expect(view.queryByLabelText("Debt account budget amount in pesos")).toBeNull();
+  });
+
+  it("lets the user reduce a commitment to resolve an infeasible plan", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null }]);
+    const due = { debtAccountId: "loan", amountCentavos: 50_000, dueDate: "2026-10-20" };
+    mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: { status: "INFEASIBLE", period: { start: "2026-10-01", end: "2026-10-31" }, inputSnapshot: { debtRequirements: { reservations: [due] } }, explanations: [], recommendation: { availableFundsCentavos: 50_000, requiredFundsCentavos: 125_000, shortfallCentavos: 25_000, allocations: [{ subcategoryId: "rent", allocationRule: "MINIMUM", floorAmountCentavos: 75_000, allocatedAmountCentavos: 75_000 }], debtReservations: [due], savingsReservations: [] } } } });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Create Financial Plan recommendation")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+    await waitFor(() => expect(view.getByText("This plan cannot cover all requirements")).toBeTruthy());
+    fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "250");
+    expect(view.queryByText("This plan cannot cover all requirements")).toBeNull();
+    expect(view.getByLabelText("Accept and save Financial Plan").props.accessibilityState.disabled).toBe(false);
+    expect(view.getByText("Amount due: ₱500.00")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Accept and save Financial Plan"));
+    await waitFor(() => expect(mockCreateFinancialPlan).toHaveBeenCalled());
+    expect(mockCreateFinancialPlan.mock.calls[0][2]).toMatchObject({ inputSnapshot: { debtRequirements: { reservations: [due] } }, recommendation: { availableFundsCentavos: 75_000 }, debtReservations: [{ ...due, amountCentavos: 25_000 }] });
   });
 });

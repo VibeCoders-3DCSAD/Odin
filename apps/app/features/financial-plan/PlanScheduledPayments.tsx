@@ -13,5 +13,5 @@ function isScheduledReservation(value: unknown): value is ScheduledReservation {
 export function PlanScheduledPayments({ obligations }: { obligations: unknown }) {
   const snapshot = obligations && typeof obligations === "object" ? obligations as Record<string, unknown> : {};
   const reservations = Array.isArray(snapshot.reservations) ? snapshot.reservations.filter(isScheduledReservation) : [];
-  return <PlanReservations title="Billers and Remittances" reservations={reservations.map((row) => ({ ...row, label: row.label ?? "Biller or remittance" }))} showSurplus={false} emptyText="No saved biller or remittance reservations for this period." />;
+  return <PlanReservations title="Billers and Remittances" description="Scheduled bills and remittances included in this plan." reservations={reservations.map((row) => ({ ...row, label: row.label ?? "Biller or remittance" }))} showSurplus={false} emptyText="No saved biller or remittance reservations for this period." />;
 }

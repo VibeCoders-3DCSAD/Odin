@@ -144,8 +144,7 @@ describe("PlanCategorySelection", () => {
     expect(view.getByLabelText("Create Financial Plan recommendation").props.accessibilityState?.disabled).toBe(true);
   });
 
-  it("keeps plan commitments included by default and exposes skip choices", () => {
-    const onReservationSkipChange = jest.fn();
+  it("leaves commitment budgeting to the generated plan review", () => {
     const view = render(<PlanCategorySelection
       topLevelCategories={[food]}
       subcategories={[groceries]}
@@ -159,13 +158,10 @@ describe("PlanCategorySelection", () => {
       planningAmountError={null}
       onPlannedAmountChange={jest.fn()}
       onContinue={jest.fn()}
-      onReservationSkipChange={onReservationSkipChange}
     />);
 
-    expect(view.getByLabelText("Skip Debt Repayments").props.accessibilityState?.checked).toBe(false);
-    expect(view.getByLabelText("Skip Savings Contributions").props.accessibilityState?.checked).toBe(false);
-    fireEvent.press(view.getByLabelText("Skip Debt Repayments"));
-    expect(onReservationSkipChange).toHaveBeenCalledWith("debtRepayments", true);
+    expect(view.queryByLabelText("Skip Debt Repayments")).toBeNull();
+    expect(view.queryByLabelText("Skip Savings Contributions")).toBeNull();
   });
 
   it("renders every category after the first frames and still toggles one rendered later", async () => {

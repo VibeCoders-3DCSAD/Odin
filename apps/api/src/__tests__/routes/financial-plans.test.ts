@@ -78,6 +78,17 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
     expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true });
   });
 
+  it("passes validated commitment budgets and rejects malformed amounts", async () => {
+    const commitmentBudgets = [{ key: "debt:loan:2026-10-20", amountCentavos: 7_500 }];
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, commitmentBudgets });
+    expect(response.status).toBe(200);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: false, skipSavingsContributions: false, commitmentBudgets });
+    for (const amountCentavos of [-1, 1.5, "7500", null]) {
+      expect((await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, commitmentBudgets: [{ ...commitmentBudgets[0], amountCentavos }] })).status).toBe(422);
+    }
+    expect((await request(app).post("/odin/api/financial-plans/commitments").send({})).status).toBe(401);
+  });
+
   it("rejects invalid one-time category amounts", async () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["pet-care"], plannedAmountCentavos: 100_000, manualAllocations: [{ target: "subcategory", id: "pet-care", amountCentavos: 0 }] });
 

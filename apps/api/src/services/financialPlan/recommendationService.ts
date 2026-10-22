@@ -1,4 +1,9 @@
 import { buildFinancialPlanExplanationContext } from "./helpers/explanationContext.js";
+import { FinancialPlanInputError, FinancialPlanUnavailableError } from "./errors.js";
+import { addScheduleMonths } from "./commitmentSchedule.js";
+export { FinancialPlanInputError, FinancialPlanUnavailableError } from "./errors.js";
+export { scheduledReservationDates } from "./commitmentSchedule.js";
+import { applyCommitmentBudgets, commitmentKey, debtCommitments, savingsCommitments, statementCommitments, validateCommitmentBudgets, type CommitmentBudget } from "./commitments.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ForecastUnavailableError, ForecastUpstreamError, ForecastValidationError, getMlForecast, type ForecastPayload } from "../forecastService.js";
 import { recommendPlanCategories, type MlExpenseForecastSnapshot, type MlPlanCategory } from "./mlAdapter.js";
@@ -28,7 +33,7 @@ type FinancialAccount = Timestamped & { kind: string; current_balance_centavos: 
 type Transaction = Timestamped & { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null; source_savings_goal_id?: string | null; destination_savings_goal_id?: string | null };
 type OnboardingSession = { raw_answers: Record<string, unknown> | null };
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
-type ReservationSkips = { skipDebtRepayments?: boolean; skipSavingsContributions?: boolean };
+type ReservationSkips = { skipDebtRepayments?: boolean; skipSavingsContributions?: boolean; commitmentBudgets?: CommitmentBudget[] };
 type AnomalyEvaluation = { transaction_id: string; is_anomaly: boolean };
 type TransactionWithAnomalies = Transaction & { anomaly_evaluations: AnomalyEvaluation[] | null };
 
@@ -45,8 +50,6 @@ function selectEligibleDebt(debts: Debt[], strategy: "avalanche" | "snowball", p
   })[0]?.id ?? null;
 }
 
-export class FinancialPlanInputError extends Error {}
-export class FinancialPlanUnavailableError extends Error {}
 
 export function isFinancialPlanInfeasible(availableCentavos: number, minimumRequiredCentavos: number): boolean {
   return availableCentavos <= 0 || minimumRequiredCentavos > availableCentavos;
@@ -113,56 +116,7 @@ export function remainingCommitmentCentavos(amountCentavos: number, paidCentavos
   return Math.max(amountCentavos - paidCentavos, 0);
 }
 
-function addScheduleDays(date: string, days: number): string {
-  const next = new Date(`${date}T00:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next.toISOString().slice(0, 10);
-}
 
-function addScheduleMonths(date: string, months: number, dayOfMonth?: number | null): string {
-  const next = new Date(`${date}T00:00:00Z`);
-  const day = dayOfMonth ?? next.getUTCDate();
-  next.setUTCDate(1);
-  next.setUTCMonth(next.getUTCMonth() + months);
-  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-  next.setUTCDate(Math.min(day, lastDay));
-  return next.toISOString().slice(0, 10);
-}
-
-function dateAtScheduleDay(year: number, month: number, day: number): string {
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
-}
-
-type RecurrenceSchedule = { dayOfMonth?: number | null; intervalCount?: number | null; customIntervalDays?: number | null; semiMonthlyDays?: [number, number] | null };
-
-function advanceReservationDate(date: string, frequency: string, schedule: RecurrenceSchedule): string | null {
-  const interval = schedule.intervalCount && schedule.intervalCount > 0 ? schedule.intervalCount : 1;
-  if (frequency === "daily") return addScheduleDays(date, interval);
-  if (frequency === "weekly") return addScheduleDays(date, 7 * interval);
-  if (frequency === "biweekly") return addScheduleDays(date, 14 * interval);
-  if (frequency === "monthly") return addScheduleMonths(date, interval, schedule.dayOfMonth);
-  if (frequency === "quarterly") return addScheduleMonths(date, 3 * interval);
-  if (frequency === "yearly") return addScheduleMonths(date, 12 * interval);
-  if (frequency === "custom") return schedule.customIntervalDays && schedule.customIntervalDays > 0 ? addScheduleDays(date, schedule.customIntervalDays) : null;
-  if (frequency !== "semi_monthly") return null;
-
-  const days = [...(schedule.semiMonthlyDays ?? [1, 15])].sort((left, right) => left - right);
-  const current = new Date(`${date}T00:00:00Z`);
-  const candidates = days.map((day) => dateAtScheduleDay(current.getUTCFullYear(), current.getUTCMonth(), day));
-  return candidates.find((candidate) => candidate > date) ?? dateAtScheduleDay(current.getUTCFullYear(), current.getUTCMonth() + interval, days[0]!);
-}
-
-export function scheduledReservationDates(nextDate: string | null, frequency: string | null, period: { start: string; end: string }, schedule: RecurrenceSchedule = {}): string[] {
-  if (!nextDate || !frequency) return [];
-  const dates: string[] = [];
-  let date: string | null = nextDate;
-  for (let index = 0; date && date <= period.end && index < 10_000; index += 1) {
-    if (date >= period.start) dates.push(date);
-    date = advanceReservationDate(date, frequency, schedule);
-  }
-  return dates;
-}
 
 function fallbackForecast(period: { start: string; end: string }, categories: MlPlanCategory[]): MlExpenseForecastSnapshot {
   return {
@@ -308,15 +262,17 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     .reduce((sum, account) => sum + account.current_balance_centavos, 0);
   if (availableMoney <= 0) throw new FinancialPlanInputError("No eligible financial-account balance is available");
   if (!Number.isSafeInteger(plannedAmountCentavos) || plannedAmountCentavos <= 0 || plannedAmountCentavos > availableMoney) throw new FinancialPlanInputError("Planning amount exceeds available money");
-  const debtReservations = reservationSkips.skipDebtRepayments ? [] : ((debtsResult.data ?? []) as Debt[]).flatMap((debt) => debt.current_balance_centavos > 0 ? scheduledReservationDates(debt.next_due_date, debt.payment_frequency, period, debt.payment_schedule ?? {}).map((dueDate) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos), dueDate })) : []);
+  const dueDebts = debtCommitments((debtsResult.data ?? []) as Debt[], period);
   const cardPayments = (cardPaymentsResult.data ?? []) as Array<CardPayment & { payment_date: string }>;
-  const paidByStatement = new Map<string, number>();
-  for (const payment of cardPayments) if (payment.statement_id) paidByStatement.set(payment.statement_id, (paidByStatement.get(payment.statement_id) ?? 0) + payment.amount_centavos);
-  const statementReservations = reservationSkips.skipDebtRepayments ? [] : ((statementsResult.data ?? []) as Statement[]).flatMap((statement) => {
-    const amountCentavos = remainingCommitmentCentavos(statement.minimum_due_centavos, paidByStatement.get(statement.id) ?? 0);
-    return amountCentavos > 0 ? [{ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos, dueDate: statement.due_date }] : [];
-  });
-  const savingsReservations = reservationSkips.skipSavingsContributions ? [] : ((goalsResult.data ?? []) as Goal[]).flatMap((goal) => (goal.planned_contribution_amount_centavos ?? 0) > 0 ? scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { dayOfMonth: goal.contribution_day_of_month, intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null }).map((dueDate) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos!, dueDate })) : []);
+  const dueStatements = statementCommitments((statementsResult.data ?? []) as Statement[], cardPayments);
+  const dueSavings = savingsCommitments((goalsResult.data ?? []) as Goal[], period);
+  const budgets = validateCommitmentBudgets(reservationSkips.commitmentBudgets);
+  const ownedKeys = new Set([...dueDebts, ...dueStatements, ...dueSavings].map(commitmentKey));
+  if (budgets.some((budget) => !ownedKeys.has(budget.key))) throw new FinancialPlanInputError("Commitment changed or is unavailable");
+  const debtReservations = reservationSkips.skipDebtRepayments ? [] : applyCommitmentBudgets(dueDebts, budgets);
+  const statementReservations = reservationSkips.skipDebtRepayments ? [] : applyCommitmentBudgets(dueStatements, budgets);
+  const savingsReservations = reservationSkips.skipSavingsContributions ? [] : applyCommitmentBudgets(dueSavings, budgets);
+  const commitmentRequirements = { debts: [...dueDebts, ...dueStatements], savings: dueSavings };
   const scheduledPayments = (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { name: string; subcategory_id: string | null }>;
   const scheduledPaymentById = new Map(scheduledPayments.map((payment) => [payment.id, payment]));
   const obligations = scheduledPaymentReservations(scheduledPayments, (scheduledPaidResult.data ?? []) as { scheduled_payment_id: string; occurrence_date: string; amount_centavos: number }[], period).map((reservation) => ({ ...reservation, label: scheduledPaymentById.get(reservation.scheduledPaymentId)?.name, subcategoryId: scheduledPaymentById.get(reservation.scheduledPaymentId)?.subcategory_id }));
@@ -391,7 +347,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const minimumRequired = categories.reduce((sum, category) => sum + category.floorCentavos, 0);
   if (isFinancialPlanInfeasible(available, minimumRequired)) {
     const forecast = fallbackForecast(period, categories);
-    const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: classificationResult.data ?? { status: "unavailable" } };
+    const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: commitmentRequirements.debts }, savingsRequirements: { reservations: commitmentRequirements.savings }, classification: classificationResult.data ?? { status: "unavailable" } };
     const requiredFundsCentavos = reserved + minimumRequired;
     const shortfallCentavos = Math.max(0, requiredFundsCentavos - plannedAmountCentavos);
     const explanationEvidence: FinancialPlanEvidence = { ...explanationContext, planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, shortfall: { plannedAmountCentavos, requiredFundsCentavos, shortfallCentavos }, seasonalPreferences, forecastChanges: [] };
@@ -471,7 +427,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     if (!category) return [];
     return [{ categoryName: categoryLabelById.get(category.id) ?? category.id, allocationCentavos: allocation.allocatedAmountCentavos, requiredFloorCentavos: category.floorCentavos, forecastCentavos: category.forecastCentavos }];
   }));
-  const plannedInputSnapshot = { ...inputSnapshot, debtRequirements: { reservations: baseDebtReservations, surplusCentavos: debtSurplusCentavos }, savingsRequirements: { reservations: savingsReservations, surplusCentavos: savingsSurplusCentavos } };
+  const plannedInputSnapshot = { ...inputSnapshot, debtRequirements: { reservations: commitmentRequirements.debts, surplusCentavos: debtSurplusCentavos }, savingsRequirements: { reservations: commitmentRequirements.savings, surplusCentavos: savingsSurplusCentavos } };
   const categoryBySlug = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.slug, category]));
   const forecastChanges = forecastDetails.flatMap((detail) => {
     const category = categoryBySlug.get(detail.category);

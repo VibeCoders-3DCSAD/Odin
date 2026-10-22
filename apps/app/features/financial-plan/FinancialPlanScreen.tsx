@@ -7,12 +7,14 @@ import { listCategories, listSubcategories, updateCategory, updateSubcategory, t
 import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
 import { runSync } from "../../local-db/sync/runSync";
 import { getPhilippineToday } from "../debt-manager/debtTrendRange";
-import { requestFinancialPlanExplanations, requestFinancialPlanRecommendation, type ManualPlanAllocation, type ReservationSkips } from "./api";
+import { requestFinancialPlanCommitments, requestFinancialPlanExplanations, requestFinancialPlanRecommendation, type ManualPlanAllocation, type ReservationSkips } from "./api";
+import { commitmentKey, parseBudgetAmount, requirementReservations, updateCommitmentBudget, type CommitmentPreview } from "./helpers/commitmentBudget";
 import { planSpendingInsights } from "./helpers/planSpendingInsights";
 import { DevPlanMonthSettings } from "./DevPlanMonthSettings";
 import { PlanAllocations } from "./PlanAllocations";
 import { PlanEssentialShortfall } from "./PlanEssentialShortfall";
 import { PlanCategorySelection } from "./PlanCategorySelection";
+import { PlanCommitmentBudgetSection } from "./PlanCommitmentBudgetSection";
 import { PlanScheduledPayments } from "./PlanScheduledPayments";
 import { PlanReservations } from "./PlanReservations";
 import { applyFinancialPlanLabels, applyFinancialPlanSpending, formatPeso, remainingUnallocatedCentavos, toCentavos } from "./financialPlanPresentation";
@@ -61,6 +63,11 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
   const [plannedAmount, setPlannedAmount] = useState("");
   const [manualAllocations, setManualAllocations] = useState<ManualPlanAllocation[]>([]);
   const [reservationSkips, setReservationSkips] = useState<ReservationSkips>({ debtRepayments: false, savingsContributions: false });
+  const [commitmentPreview, setCommitmentPreview] = useState<CommitmentPreview | null>(null);
+  const [commitmentDraft, setCommitmentDraft] = useState<CommitmentPreview | null>(null);
+  const [invalidCommitmentFields, setInvalidCommitmentFields] = useState<Record<string, boolean>>({});
+  const hasInvalidCommitments = Object.values(invalidCommitmentFields).some(Boolean);
+  const setCommitmentValidity = (key: string, valid: boolean) => setInvalidCommitmentFields((current) => ({ ...current, [key]: !valid }));
   const [savedPlanId, setSavedPlanId] = useState<string | null>(null);
   const [devPlanMonth, setDevPlanMonth] = useState<string | undefined>();
   const selectedMonth = __DEV__ && devPlanMonth ? devPlanMonth : getPhilippineToday().slice(0, 7);
@@ -77,7 +84,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       : null;
 
   const loadRecommendation = useCallback(async (nextManualAllocations: ManualPlanAllocation[] = manualAllocations, nextReservationSkips: ReservationSkips = reservationSkips) => {
-    if (plannedAmountCentavos === null || planningAmountError) return;
+    if (plannedAmountCentavos === null || planningAmountError || hasInvalidCommitments) return;
     requestAbort.current?.abort();
     const controller = new AbortController();
     requestAbort.current = controller;
@@ -125,7 +132,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     } finally {
       if (requestAbort.current === controller) requestAbort.current = null;
     }
-  }, [accessToken, deviceId, includedCategoryIds, includedIds, manualAllocations, plannedAmountCentavos, planningAmountError, reservationSkips, selectedMonth, devPlanMonth, userId]);
+  }, [accessToken, deviceId, includedCategoryIds, includedIds, manualAllocations, plannedAmountCentavos, planningAmountError, reservationSkips, selectedMonth, devPlanMonth, userId, hasInvalidCommitments]);
 
   useEffect(() => {
     let active = true;
@@ -140,6 +147,13 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
         setState("saved");
         return;
       }
+      const preview = await requestFinancialPlanCommitments(accessToken, __DEV__ ? devPlanMonth : undefined);
+      const previewLabels = await getFinancialPlanLabels(userId, { recommendation: { allocations: [], ...preview } });
+      if (!active) return;
+      const labeled = applyFinancialPlanLabels({ allocations: [], ...preview }, previewLabels);
+      setCommitmentPreview(labeled);
+      setCommitmentDraft(labeled);
+      setInvalidCommitmentFields({});
       setTopLevelCategories(topLevelResult);
       setCategories(result);
       const validRecentIds = new Set(recentIds.filter((id) => result.some((category) => category.id === id)));
@@ -165,7 +179,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       setState("error");
     });
     return () => { active = false; requestAbort.current?.abort(); };
-  }, [reloadKey, selectedMonth, userId]);
+  }, [reloadKey, selectedMonth, userId, accessToken, devPlanMonth]);
 
   useEffect(() => {
     if (observedSyncVersion.current === syncVersion) return;
@@ -201,6 +215,17 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     setError(null);
     setPlan({ ...plan, recommendation: { ...plan.recommendation, [field]: value } });
     setState("ready");
+  };
+
+  const updateReservationAmount = (kind: "debtReservations" | "savingsReservations", index: number, amount: string) => {
+    if (!plan || state === "saved" || state === "saving") return;
+    const value = parseBudgetAmount(amount);
+    if (value == null) return;
+    const updated = updateCommitmentBudget(plan, kind, index, value);
+    setPlan(updated);
+    if (state !== "stale") setState(updated.status === "INFEASIBLE" ? "infeasible" : "ready");
+    const budgets = [...updated.recommendation.debtReservations, ...updated.recommendation.savingsReservations].map((row) => ({ key: commitmentKey(row), amountCentavos: row.amountCentavos }));
+    setReservationSkips((current) => ({ ...current, commitmentBudgets: budgets }));
   };
 
   const toggleSubcategory = (id: string) => {
@@ -244,7 +269,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
   };
 
   const savePlan = async () => {
-    if (!plan || state !== "ready" || isDevPreview) return;
+    if (!plan || state !== "ready" || isDevPreview || hasInvalidCommitments || remainingUnallocatedCentavos(plan.recommendation.availableFundsCentavos, plan.recommendation.allocations, plan.recommendation.debtSurplusCentavos, plan.recommendation.savingsSurplusCentavos) < 0) return;
     setState("saving");
     setError(null);
     try {
@@ -301,7 +326,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     ]);
   };
 
-  const confirmReservationSkip = (type: keyof ReservationSkips, regenerate = true) => {
+  const confirmReservationSkip = (type: "debtRepayments" | "savingsContributions", regenerate = true) => {
     const debtRepayments = type === "debtRepayments" ? plan?.recommendation.debtReservations ?? [] : [];
     const message = type === "debtRepayments"
       ? `Debt payments are underfunded and may result in missed payments. ${debtRepayments.length} debt payment${debtRepayments.length === 1 ? "" : "s"} will be excluded from this plan.`
@@ -328,8 +353,21 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
 
   if (state === "loading") return <View style={{ paddingTop: 32, alignItems: "center" }}><ActivityIndicator color="#0E6D46" /><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 10 }}>Preparing your plan...</Text></View>;
   const pastPlansAction = onOpenPastPlans ? <Pressable accessibilityRole="button" accessibilityLabel="View past Financial Plans" onPress={onOpenPastPlans} style={{ alignSelf: "flex-end", paddingVertical: 4 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 12, color: "#0E6D46" }}>Past plans</Text></Pressable> : null;
-  if (state === "selecting") return <View>{pastPlansAction}{advancedSettings}<PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} onContinue={(manualAllocations) => void loadRecommendation(manualAllocations)} reservationSkips={reservationSkips} onReservationSkipChange={(type, shouldSkip) => shouldSkip ? confirmReservationSkip(type, false) : setReservationSkips((current) => ({ ...current, [type]: false }))} /></View>;
-  if (!plan) return <View style={{ marginTop: 16, backgroundColor: "#FBE9E7", borderRadius: 16, padding: 16 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#D9001F" }}>Plan unavailable</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#414942", marginTop: 5 }}>{error ?? "Your Financial Plan could not be generated."}</Text>{advancedSettings}<Pressable accessibilityRole="button" accessibilityLabel="Retry Financial Plan" onPress={() => void loadRecommendation()} style={{ marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#0E6D46" }}>Try again</Text></Pressable></View>;
+  if (state === "selecting") {
+    const updateDraft = (kind: "debtReservations" | "savingsReservations", index: number, amount: string) => {
+      const amountCentavos = parseBudgetAmount(amount);
+      if (amountCentavos === null) return;
+      setCommitmentDraft((current) => current ? { ...current, [kind]: current[kind].map((row, rowIndex) => rowIndex === index ? { ...row, amountCentavos } : row) } : current);
+    };
+    const reserved = [...(commitmentDraft?.debtReservations ?? []), ...(commitmentDraft?.savingsReservations ?? [])].reduce((sum, row) => sum + row.amountCentavos, 0);
+    const overBudget = plannedAmountCentavos !== null && reserved > plannedAmountCentavos;
+    const commitmentSection = <PlanCommitmentBudgetSection requirements={commitmentPreview} draft={commitmentDraft} remainingCentavos={(plannedAmountCentavos ?? 0) - reserved} onAmountChange={updateDraft} onValidityChange={setCommitmentValidity} />;
+    return <View>{pastPlansAction}{advancedSettings}<PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} commitmentSection={commitmentSection} commitmentBudgetError={hasInvalidCommitments || overBudget} onContinue={(allocations) => {
+      const commitmentBudgets = [...(commitmentDraft?.debtReservations ?? []), ...(commitmentDraft?.savingsReservations ?? [])].map((row) => ({ key: commitmentKey(row), amountCentavos: row.amountCentavos }));
+      void loadRecommendation(allocations, { ...reservationSkips, ...(commitmentBudgets.length ? { commitmentBudgets } : {}) });
+    }} /></View>;
+  }
+  if (!plan) return <View style={{ marginTop: 16, backgroundColor: "#FBE9E7", borderRadius: 16, padding: 16 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#D9001F" }}>Plan unavailable</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#414942", marginTop: 5 }}>{error ?? "Your Financial Plan could not be generated."}</Text>{advancedSettings}<Pressable accessibilityRole="button" accessibilityLabel="Retry Financial Plan" onPress={() => { if (commitmentPreview) void loadRecommendation(); else { setState("loading"); setReloadKey((key) => key + 1); } }} style={{ marginTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: "#0E6D46" }}>Try again</Text></Pressable></View>;
 
   const { recommendation } = plan;
   const remainingUnallocated = state === "saved" ? planSpentCentavos === null ? null : recommendation.availableFundsCentavos - planSpentCentavos : remainingUnallocatedCentavos(recommendation.availableFundsCentavos, recommendation.allocations, recommendation.debtSurplusCentavos, recommendation.savingsSurplusCentavos);
@@ -375,14 +413,14 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
          {reservationSkips.debtRepayments || reservationSkips.savingsContributions ? <View accessibilityRole="alert" style={{ backgroundColor: "#FFF8E7", borderColor: "#F2D9A3", borderRadius: 14, borderWidth: 1, marginTop: 16, padding: 14 }}><Text style={{ color: "#6F4A00", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Skipped plan commitments</Text>{reservationSkips.debtRepayments ? <Text style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 6 }}>Debt payments are underfunded and may result in missed payments.</Text> : null}{reservationSkips.savingsContributions ? <Text style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 6 }}>Savings contributions are not included in this plan. Missing a contribution may delay when your savings goals are met.</Text> : null}</View> : null}
           {state === "infeasible" ? <View accessibilityRole="alert" style={{ marginTop: 16, borderRadius: 16, padding: 16, backgroundColor: "#FFF0F2" }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: "#D9001F" }}>This plan cannot cover all requirements</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#414942", marginTop: 5 }}>Shortfall: {formatPeso(recommendation.shortfallCentavos ?? 0)}. Fixed and minimum commitments were not reduced.</Text>{!reservationSkips.debtRepayments && recommendation.debtReservations.length ? <Pressable accessibilityRole="button" accessibilityLabel="Skip Debt Repayments" onPress={() => confirmReservationSkip("debtRepayments")} style={{ borderColor: "#B45309", borderRadius: 11, borderWidth: 1, marginTop: 14, padding: 12 }}><Text style={{ color: "#B45309", fontFamily: "Manrope", fontWeight: "800", textAlign: "center" }}>Skip Debt Repayments</Text></Pressable> : null}{!reservationSkips.savingsContributions && recommendation.savingsReservations.length ? <Pressable accessibilityRole="button" accessibilityLabel="Skip Savings Contributions" onPress={() => confirmReservationSkip("savingsContributions")} style={{ borderColor: "#B45309", borderRadius: 11, borderWidth: 1, marginTop: 10, padding: 12 }}><Text style={{ color: "#B45309", fontFamily: "Manrope", fontWeight: "800", textAlign: "center" }}>Skip Savings Contributions</Text></Pressable> : null}<Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 13, color: "#1B1C1A", marginTop: 14 }}>Have another number in mind?</Text><TextInput accessibilityLabel="New planning amount in pesos" value={plannedAmount} onChangeText={setPlannedAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#8A938C" style={{ backgroundColor: "#FFFFFF", borderColor: planningAmountError ? "#D9001F" : "#D7DDD8", borderRadius: 10, borderWidth: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 15, marginTop: 7, padding: 11 }} />{planningAmountError ? <Text accessibilityRole="alert" style={{ color: "#D9001F", fontFamily: "Manrope", fontSize: 11, marginTop: 5 }}>{planningAmountError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel="Refresh plan with new amount" disabled={planningAmountError !== null} onPress={() => void loadRecommendation()} style={{ backgroundColor: "#013220", borderRadius: 11, padding: 12, marginTop: 10, opacity: planningAmountError ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>Refresh plan</Text></Pressable></View> : null}
           <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: "#1B1C1A", marginTop: 16 }}>Savings &amp; Debt</Text>
-          <PlanReservations title="Savings reservations" reservations={recommendation.savingsReservations} surplusCentavos={recommendation.savingsSurplusCentavos} onSurplusAmountChange={state === "saved" ? undefined : (amount) => updateSurplus("savingsSurplusCentavos", amount)} />
-          <PlanReservations title="Debt reservations" reservations={recommendation.debtReservations} surplusCentavos={recommendation.debtSurplusCentavos} onSurplusAmountChange={state === "saved" ? undefined : (amount) => updateSurplus("debtSurplusCentavos", amount)} />
+          <PlanReservations title="Savings contributions" description="Your planned contributions and scheduled amounts for this month." requirements={requirementReservations(plan.inputSnapshot.savingsRequirements)} reservations={recommendation.savingsReservations} surplusCentavos={recommendation.savingsSurplusCentavos} onReservationAmountChange={state === "saved" || state === "saving" ? undefined : (index, amount) => updateReservationAmount("savingsReservations", index, amount)} onValidityChange={setCommitmentValidity} onSurplusAmountChange={state === "saved" || state === "saving" ? undefined : (amount) => updateSurplus("savingsSurplusCentavos", amount)} />
+          <PlanReservations title="Debt repayments" description="Your planned repayments and original amounts due for this month." requirements={requirementReservations(plan.inputSnapshot.debtRequirements)} reservations={recommendation.debtReservations} surplusCentavos={recommendation.debtSurplusCentavos} onReservationAmountChange={state === "saved" || state === "saving" ? undefined : (index, amount) => updateReservationAmount("debtReservations", index, amount)} onValidityChange={setCommitmentValidity} onSurplusAmountChange={state === "saved" || state === "saving" ? undefined : (amount) => updateSurplus("debtSurplusCentavos", amount)} />
           <PlanScheduledPayments obligations={plan.inputSnapshot.obligations} />
         <PlanAllocations allocations={recommendation.allocations} restrictions={plan.inputSnapshot.restrictions} showSpendingProgress={state === "saved" && planSpentCentavos !== null} readOnly={state === "saved"} onFlexibleAmountChange={(index, amount) => { const value = toCentavos(amount); if (value != null) updateAllocation(index, { allocatedAmountCentavos: value }); }} onWeightChange={(index, weight) => { const value = Number(weight); if (Number.isFinite(value) && value >= 0 && value <= 100) updateAllocation(index, { subcategoryWeightBps: Math.round(value * 100) }); }} />
        {state === "stale" ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#B45309", marginTop: 16 }}>Your source data changed. Refresh this unaccepted recommendation before saving.</Text> : null}
        {overAllocated && state !== "saved" ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#D9001F", marginTop: 16 }}>Reduce allocations or surplus amounts before saving this plan.</Text> : null}
        {error ? <Text accessibilityRole="alert" style={{ fontFamily: "Manrope", fontSize: 12, color: "#D9001F", marginTop: 16 }}>{error}</Text> : null}
-       {state !== "infeasible" && state !== "saved" && (!isDevPreview || state === "stale") ? <Pressable accessibilityRole="button" accessibilityLabel={state === "stale" ? "Refresh Financial Plan recommendation" : "Accept and save Financial Plan"} disabled={state === "saving" || overAllocated} onPress={() => state === "stale" ? void loadRecommendation() : void savePlan()} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: state === "saving" || overAllocated ? 0.6 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>{state === "saving" ? "Saving..." : state === "stale" ? "Refresh recommendation" : "Accept and save plan"}</Text></Pressable> : null}
+       {state !== "infeasible" && state !== "saved" && (!isDevPreview || state === "stale") ? <Pressable accessibilityRole="button" accessibilityLabel={state === "stale" ? "Refresh Financial Plan recommendation" : "Accept and save Financial Plan"} disabled={state === "saving" || overAllocated || hasInvalidCommitments} onPress={() => state === "stale" ? void loadRecommendation() : void savePlan()} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: state === "saving" || overAllocated || hasInvalidCommitments ? 0.6 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>{state === "saving" ? "Saving..." : state === "stale" ? "Refresh recommendation" : "Accept and save plan"}</Text></Pressable> : null}
     </View>
   );
 }

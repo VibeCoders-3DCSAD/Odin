@@ -335,7 +335,7 @@ const DEBT_PRIORITY_FIELDS = new Set(["priorities"]);
 const CREDIT_CARD_SETTLEMENT_FIELDS = new Set(["installment_id", "settlement_date", "remaining_principal_centavos", "settlement_amount_centavos", "pretermination_fee_centavos", "status"]);
 const CREDIT_CARD_STATEMENT_STRATEGY_FIELDS = new Set(["statement_id", "strategy", "custom_amount_centavos", "percentage_bps"]);
 const DEBT_ACCOUNT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"];
-const SAVINGS_GOAL_FIELDS = new Set(["linked_account_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "status", "archived_at"]);
+const SAVINGS_GOAL_FIELDS = new Set(["linked_account_id", "name", "goal_type", "target_amount_centavos", "starting_amount_centavos", "target_date", "priority", "emergency_fund_baseline_centavos", "auto_save_amount_centavos", "planned_contribution_amount_centavos", "contribution_frequency", "contribution_interval_count", "contribution_day_of_month", "contribution_second_day_of_month", "contribution_day_of_week", "custom_interval_days", "next_contribution_date", "interest_rate_bps", "notes", "emergency_fund_target_method", "essential_expense_coverage_months", "is_emergency_fund", "status", "archived_at"]);
 const SCHEDULED_PAYMENT_FIELDS = new Set(["name", "subcategory_id", "source_account_id", "amount_centavos", "frequency", "due_day_of_month", "due_second_day_of_month", "due_day_of_week", "due_month", "starts_on", "ends_on", "auto_post", "auto_post_from", "is_family_support", "is_dependent_support", "protected_by_default", "notes", "status"]);
 const SCHEDULED_PAYMENT_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
 const SCHEDULED_PAYMENT_RECORD_FIELDS = new Set(["scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes"]);
@@ -1582,6 +1582,18 @@ async function validateFinancialPlanPayload(
   for (const reservation of recommendationDocument.savingsReservations as Record<string, unknown>[]) {
     requireString(reservation, "savingsGoalId"); assertPlanAmount(reservation, "amountCentavos");
   }
+  const plannedAmount = (inputSnapshot as Record<string, unknown>).plannedAmountCentavos;
+  // Older immutable plans did not snapshot the planning amount.
+  if (plannedAmount !== undefined) {
+    if (!Number.isSafeInteger(plannedAmount) || (plannedAmount as number) <= 0) throw new Error("Financial Plan planning amount is invalid");
+    const obligations = ((inputSnapshot as Record<string, unknown>).obligations as Record<string, unknown>).reservations;
+    const scheduledTotal = Array.isArray(obligations) ? obligations.reduce((total: number, row: Record<string, unknown>) => {
+      assertPlanAmount(row, "amountCentavos");
+      return total + (row.amountCentavos as number);
+    }, 0) : 0;
+    const committed = [...recommendationDocument.debtReservations as Record<string, unknown>[], ...recommendationDocument.savingsReservations as Record<string, unknown>[]].reduce((total, row) => total + (row.amountCentavos as number), scheduledTotal);
+    if ((recommendationDocument.availableFundsCentavos as number) + committed > (plannedAmount as number) + 0.001) throw new Error("Financial Plan commitments exceed the planning amount");
+  }
   const allocations = recommendationDocument.allocations as Record<string, unknown>[];
   const categoryIds = allocations.flatMap((allocation) => typeof allocation.categoryId === "string" ? [allocation.categoryId] : []);
   const subcategoryIds = allocations.flatMap((allocation) => typeof allocation.subcategoryId === "string" ? [allocation.subcategoryId] : []);
@@ -1823,6 +1835,7 @@ async function validateSavingsGoalPayload(payload: Record<string, unknown>, crea
     }
   }
   if (sanitized.name !== undefined && (typeof sanitized.name !== "string" || !sanitized.name.trim())) throw new Error("name must be a non-empty string");
+  if (sanitized.is_emergency_fund !== undefined && typeof sanitized.is_emergency_fund !== "boolean") throw new Error("is_emergency_fund must be boolean");
   if (typeof sanitized.name === "string") sanitized.name = sanitized.name.trim();
   if (sanitized.goal_type !== undefined && !SAVINGS_GOAL_TYPES.includes(sanitized.goal_type as string)) throw new Error("goal_type is invalid");
   if (sanitized.priority !== undefined && !SAVINGS_GOAL_PRIORITIES.includes(sanitized.priority as string)) throw new Error("priority is invalid");

@@ -35,6 +35,23 @@ it("retains the accepted biller amounts and names after reopening offline, indep
   expect(await getFinancialPlan("user-2", id)).toBeNull();
 });
 
+it("persists the original debt amount separately from the user's budget across save and reopen", async () => {
+  harness.sqlite.prepare("INSERT INTO debt_accounts (id, user_id, name, current_balance_centavos, created_at, updated_at) VALUES ('loan', 'user-1', 'Loan', 100000, '2026-10-01', '2026-10-01')").run();
+  const due = { debtAccountId: "loan", amountCentavos: 10_000, dueDate: "2026-10-20" };
+  const budget = { ...due, amountCentavos: 7_500 };
+  const snapshot = { ...inputSnapshot, debtRequirements: { reservations: [due] } };
+  const planned = { ...recommendation, availableFundsCentavos: 62_500, debtReservations: [budget] };
+  const { createFinancialPlan } = await import("../financialPlans");
+  const { id } = await createFinancialPlan("user-1", "device-1", { periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: snapshot, recommendation: planned, allocations: [], debtReservations: [budget], savingsReservations: [] });
+  jest.resetModules();
+  const { getFinancialPlan } = await import("../financialPlans");
+  const saved = await getFinancialPlan("user-1", id);
+  expect(saved?.inputSnapshot.debtRequirements).toEqual({ reservations: [due] });
+  expect(saved?.recommendation.debtReservations).toEqual([budget]);
+  expect(saved?.recommendation.availableFundsCentavos).toBe(62_500);
+  await expect(createFinancialPlan("user-1", "device-1", { periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: snapshot, recommendation: { ...planned, availableFundsCentavos: 90_000 }, allocations: [], debtReservations: [budget], savingsReservations: [] })).rejects.toThrow("Financial Plan commitments exceed the planning amount");
+});
+
 it("restores a synced plan's full snapshot on another device, including category allocations", async () => {
   const syncedRecommendation = { ...recommendation, allocations: [{ categoryId: "housing", allocationRule: "FLEXIBLE", allocatedAmountCentavos: 40_000, floorAmountCentavos: 0 }], savingsReservations: [{ savingsGoalId: "emergency", amountCentavos: 1_000 }], debtReservations: [{ debtAccountId: "loan", amountCentavos: 2_000 }] };
   const remote = normalizePullRow("financial_plans", {

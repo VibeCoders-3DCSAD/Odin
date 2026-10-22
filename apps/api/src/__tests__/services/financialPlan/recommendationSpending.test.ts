@@ -149,6 +149,18 @@ describe("Financial Plan recommendations with recorded spending", () => {
     expect(result.explanations.join(" ")).not.toMatch(/Education|budgets below estimated spending/);
   });
 
+  it("applies user commitment budgets before optimization and keeps original amounts in the snapshot", async () => {
+    const debt = { id: "loan", current_balance_centavos: 200_000, minimum_payment_centavos: 50_000, payment_frequency: "monthly", payment_schedule: {}, next_due_date: "2026-11-05" };
+    const goal = { id: "goal", planned_contribution_amount_centavos: 20_000, contribution_frequency: "monthly", contribution_interval_count: 1, contribution_day_of_month: 16, next_contribution_date: "2026-11-16" };
+    const result = await getFinancialPlanRecommendation("user", client(50_000, null, { debt_accounts: [debt], savings_goals: [goal] }), 500_000, ["internet"], [], [], { commitmentBudgets: [{ key: "debt:loan:2026-11-05", amountCentavos: 30_000 }, { key: "savings:goal:2026-11-16", amountCentavos: 0 }] }, "2026-11");
+    expect(result.recommendation.availableFundsCentavos).toBe(470_000);
+    expect(result.recommendation.debtReservations[0].amountCentavos).toBe(30_000);
+    expect(result.recommendation.savingsReservations[0].amountCentavos).toBe(0);
+    expect(result.inputSnapshot.debtRequirements.reservations[0].amountCentavos).toBe(50_000);
+    expect(result.inputSnapshot.savingsRequirements.reservations[0].amountCentavos).toBe(20_000);
+    await expect(getFinancialPlanRecommendation("user", client(0), 500_000, [], [], [], { commitmentBudgets: [{ key: "debt:someone-elses-loan:2026-11-05", amountCentavos: 0 }] }, "2026-11")).rejects.toThrow("Commitment changed or is unavailable");
+  });
+
   it("uses November for the forecast and includes November loan payments and savings contributions", async () => {
     const novemberClient = client(171_701, null, {
       financial_accounts: [{ kind: "cash", current_balance_centavos: 5_000_000 }],
