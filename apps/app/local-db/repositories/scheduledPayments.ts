@@ -305,13 +305,21 @@ export function scheduledPaymentPostIds(scheduledPaymentId: string, dueDate: str
 // Offline fallback for the server's auto-post job: posts each auto-post occurrence due by today that is still unpaid.
 export async function postDueScheduledPayments(userId: string, deviceId: string, today = localToday()): Promise<number> {
   const db = await getDb();
-  const payments = await db.getAllAsync<Row>("SELECT * FROM scheduled_payments WHERE user_id = ? AND deleted = 0 AND status = 'active' AND auto_post = 1 AND auto_post_from IS NOT NULL", userId);
+  const payments = await db.getAllAsync<Row & { source_balance_centavos: number }>(
+    `SELECT p.*, a.current_balance_centavos AS source_balance_centavos FROM scheduled_payments p
+     JOIN financial_accounts a ON a.id = p.source_account_id AND a.user_id = p.user_id
+     WHERE p.user_id = ? AND p.deleted = 0 AND p.status = 'active' AND p.auto_post = 1 AND p.auto_post_from IS NOT NULL
+       AND a.deleted = 0 AND a.status = 'active' AND a.kind <> 'credit_card' ORDER BY p.id`, userId,
+  );
+  const balances = new Map(payments.map((payment) => [payment.source_account_id, payment.source_balance_centavos]));
   let posted = 0;
   for (const payment of payments) {
     const dueDates = dueDatesBetween(map(payment), payment.auto_post_from!, today).slice(-MAX_CATCH_UP);
     if (!dueDates.length) continue;
     try {
       await prepareCreditCardCycle(userId, deviceId, payment.source_account_id, today);
+      let remainingBalance = balances.get(payment.source_account_id)!;
+      let paymentPosted = 0;
       await db.withTransactionAsync(async () => {
         const paid = (await listPaidByOccurrence(userId, db)).get(payment.id) ?? new Map<string, number>();
         for (const dueDate of dueDates) {
@@ -319,10 +327,14 @@ export async function postDueScheduledPayments(userId: string, deviceId: string,
           const ids = scheduledPaymentPostIds(payment.id, dueDate);
           // Either id already present means this occurrence was posted here or pulled from the server, even if since deleted.
           if (remaining <= 0 || await db.getFirstAsync("SELECT id FROM scheduled_payment_records WHERE id = ?", ids.recordId) || await db.getFirstAsync("SELECT id FROM transactions WHERE id = ?", ids.transactionId)) continue;
+          if (remaining > remainingBalance) throw new LocalDbError("VALIDATION_ERROR", "The source account has insufficient funds for automatic posting.");
           await writePayment(db, userId, deviceId, payment, { scheduledPaymentId: payment.id, occurrenceDate: dueDate, amountCentavos: remaining, paymentDate: dueDate, sourceAccountId: payment.source_account_id, notes: null }, "auto", ids);
-          posted += 1;
+          remainingBalance -= remaining;
+          paymentPosted += 1;
         }
       });
+      balances.set(payment.source_account_id, remainingBalance);
+      posted += paymentPosted;
     } catch (error) {
       // One payment that cannot post (for example a closed account) must not block the others.
       console.warn("[SCHEDULED-PAYMENTS] auto-post skipped", payment.id, error);
