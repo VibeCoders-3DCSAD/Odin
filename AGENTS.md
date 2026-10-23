@@ -294,7 +294,7 @@ Secondary repository for:
 
 ### Frontend and Main Backend
 
-- Node.js `24.15.0` LTS
+- Node.js `24.22.1` LTS
 - pnpm `10.26.1`
 - TypeScript `5.9.2`
 - React `19.2.0`
@@ -332,8 +332,8 @@ Secondary repository for:
 
 The workspace pins runtime versions with repo-local files:
 
-- `odin/.nvmrc`: Node.js `24.15.0`
-- `odin/.node-version`: Node.js `24.15.0`
+- `odin/.nvmrc`: Node.js `24.22.1`
+- `odin/.node-version`: Node.js `24.22.1`
 - `odin/package.json`: pnpm `10.26.1` via `packageManager`
 - `odin-ml/.python-version`: Python `3.14.4`
 

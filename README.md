@@ -100,7 +100,7 @@ governed by each persona's budget, rather than forced to match the FIES benchmar
 
 ## Tech Stack
 
-- Node.js `24.15.0` LTS
+- Node.js `24.22.1` LTS
 - pnpm `10.26.1`
 - TypeScript `5.9.2`
 - React `19.2.0`
@@ -114,7 +114,7 @@ governed by each persona's budget, rather than forced to match the FIES benchmar
 
 Install these before working in this repository:
 
-- Node.js `24.15.0` LTS
+- Node.js `24.22.1` LTS
 - Corepack enabled
 - pnpm `10.26.1`
 
@@ -123,6 +123,27 @@ Version pins in this repo:
 - `.nvmrc`
 - `.node-version`
 - `package.json` via `packageManager`
+
+With nvm, install and select the pinned runtime before running pnpm:
+
+```bash
+nvm install
+nvm use
+node --version # v24.22.1
+```
+
+Node.js `24.22.1` is the minimum security baseline for the 24.x line. It fixes
+[CVE-2026-111497 (Node2Shell)](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases),
+a bundled Brotli decoder flaw that can permit remote code execution. The API's
+Express JSON parser accepts Brotli-compressed requests by default, so upgrade
+its runtime even if application dependencies have not changed.
+
+For VPS deployments, install and select `.nvmrc` for the build **and the running
+service**. Check `systemctl cat odin-api` for an `ExecStart` or `PATH` pinned to an
+older Node binary; update it to the installed version, reload systemd if the
+unit changed, and restart the service. Verify the running process's Node
+executable and version after restart; changing `.nvmrc` or passing `/health`
+alone does not prove that the runtime was upgraded.
 
 Optional but typically needed for mobile work:
 

@@ -32,7 +32,7 @@
 
 | Layer | Choice | Version |
 |-------|--------|---------|
-| Runtime | Node.js (LTS) | 24.15.0 |
+| Runtime | Node.js (LTS) | 24.22.1 |
 | Package manager | pnpm | 10.26.1 |
 | HTTP framework | Express | 5.1.0 |
 | Language | TypeScript | 5.9.2 |
