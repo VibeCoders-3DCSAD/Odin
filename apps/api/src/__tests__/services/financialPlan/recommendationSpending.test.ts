@@ -41,6 +41,56 @@ describe("Financial Plan recommendations with recorded spending", () => {
     } } as SupabaseClient;
   }
 
+  it.each([
+    [true, true, 500_000, 0, 0],
+    [false, true, 491_000, 2, 0],
+    [true, false, 497_500, 0, 1],
+    [false, false, 488_500, 2, 1],
+  ])("honors debt exclusion %s and savings exclusion %s before invoking the optimizer", async (skipDebtRepayments, skipSavingsContributions, available, debtCount, savingsCount) => {
+    const result = await getFinancialPlanRecommendation("user", client(50_000, null, {
+      debt_accounts: [{ id: "loan", current_balance_centavos: 100_000, minimum_payment_centavos: 10_000, next_due_date: "2026-10-20", payment_frequency: "monthly", payment_schedule: {} }],
+      credit_card_statements: [{ id: "statement", minimum_due_centavos: 3_000, due_date: "2026-10-22" }],
+      savings_goals: [{ id: "goal", planned_contribution_amount_centavos: 5_000, next_contribution_date: "2026-10-25", contribution_frequency: "monthly" }],
+    }), 500_000, ["internet"], [], [], { skipDebtRepayments, skipSavingsContributions, commitmentBudgets: [
+      { key: "debt:loan:2026-10-20", amountCentavos: 7_000 },
+      { key: "statement:statement:2026-10-22", amountCentavos: 2_000 },
+      { key: "savings:goal:2026-10-25", amountCentavos: 2_500 },
+    ] });
+
+    expect(result.recommendation.debtReservations).toHaveLength(debtCount);
+    expect(result.recommendation.savingsReservations).toHaveLength(savingsCount);
+    expect(result.inputSnapshot.commitmentSelection).toEqual({ debtRepayments: !skipDebtRepayments, savingsContributions: !skipSavingsContributions });
+    expect(result.recommendation.availableFundsCentavos).toBe(available);
+    expect(result.recommendation.debtSurplusCentavos).toBe(0);
+    expect(result.recommendation.savingsSurplusCentavos).toBe(0);
+    expect(recommendPlanCategories).toHaveBeenCalledWith("user", result.period, available,
+      [expect.objectContaining({ id: "internet" })], expect.any(Object));
+  });
+
+  it.each(["debt", "savings"])("rejects selected %s without a reviewed amount instead of budgeting it automatically", async (kind) => {
+    await expect(getFinancialPlanRecommendation("user", client(50_000, null, {
+      debt_accounts: [{ id: "loan", current_balance_centavos: 100_000, minimum_payment_centavos: 10_000, next_due_date: "2026-10-20", payment_frequency: "monthly" }],
+      savings_goals: [{ id: "goal", planned_contribution_amount_centavos: 5_000, next_contribution_date: "2026-10-25", contribution_frequency: "monthly" }],
+    }), 500_000, ["internet"], [], [], { skipDebtRepayments: kind !== "debt", skipSavingsContributions: kind !== "savings", commitmentBudgets: [] })).rejects.toThrow("Review all selected savings and debt amounts");
+    expect(recommendPlanCategories).not.toHaveBeenCalled();
+  });
+
+  it.each(["savings", "debt"])("does not recommend surplus to excluded %s", async (destination) => {
+    (recommendPlanCategories as jest.Mock).mockResolvedValue({ recommendation: { feasibility: "FEASIBLE", unallocated_surplus: 100, allocations: [{ category_id: "internet", amount: 1680 }] } });
+    const result = await getFinancialPlanRecommendation("user", client(50_000, null, {
+      debt_accounts: [{ id: "loan", current_balance_centavos: 100_000, minimum_payment_centavos: 10_000, next_due_date: "2026-10-20", payment_frequency: "monthly", allows_extra_payments: true, annual_interest_rate_bps: 1_200 }],
+      savings_goals: [{ id: "goal", goal_type: "emergency_fund", current_amount_centavos: 0, target_amount_centavos: 200_000, planned_contribution_amount_centavos: 5_000, next_contribution_date: "2026-10-25", contribution_frequency: "monthly" }],
+      financial_condition_assessments: [{ id: "assessment", assessed_at: "2026-10-18T00:00:00Z", rule_set_version: "financial_rules_v1", output_snapshot: {
+        financial_margin: { status: "SUCCESS", label: "POSITIVE_FINANCIAL_MARGIN" },
+        emergency_savings: { status: "SUCCESS", label: destination === "savings" ? "EMERGENCY_FUND_INADEQUATE" : "EMERGENCY_FUND_ADEQUATE" },
+        debt_burden: { status: "SUCCESS", label: "FINANCIALLY_OVERBURDENED" },
+      } }],
+    }), 500_000, ["internet"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true });
+
+    expect(result.recommendation.surplusRecommendation.advisoryDestination).toBeNull();
+    expect(result.recommendation.surplusRecommendation.unallocatedSurplusCentavos).toBe(10_000);
+  });
+
   it.each([50_000, 171_701])("keeps the monthly forecast and optimizer allocation when spending is %i centavos", async (spent) => {
     const result = await getFinancialPlanRecommendation("user", client(spent), 500_000, ["internet"]);
     expect(recommendPlanCategories).toHaveBeenCalledWith("user", result.period, 500_000,

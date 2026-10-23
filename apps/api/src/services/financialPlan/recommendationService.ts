@@ -275,8 +275,12 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const dueStatements = statementCommitments((statementsResult.data ?? []) as Statement[], cardPayments);
   const dueSavings = savingsCommitments((goalsResult.data ?? []) as Goal[], period);
   const budgets = validateCommitmentBudgets(reservationSkips.commitmentBudgets);
+  const commitmentSelection = { debtRepayments: !reservationSkips.skipDebtRepayments, savingsContributions: !reservationSkips.skipSavingsContributions };
   const ownedKeys = new Set([...dueDebts, ...dueStatements, ...dueSavings].map(commitmentKey));
   if (budgets.some((budget) => !ownedKeys.has(budget.key))) throw new FinancialPlanInputError("Commitment changed or is unavailable");
+  const reviewedKeys = new Set(budgets.map((budget) => budget.key));
+  const selectedCommitments = [...(reservationSkips.skipDebtRepayments === false ? [...dueDebts, ...dueStatements] : []), ...(reservationSkips.skipSavingsContributions === false ? dueSavings : [])];
+  if (selectedCommitments.some((row) => !reviewedKeys.has(commitmentKey(row)))) throw new FinancialPlanInputError("Review all selected savings and debt amounts before recommending category budgets");
   const debtReservations = reservationSkips.skipDebtRepayments ? [] : applyCommitmentBudgets(dueDebts, budgets);
   const statementReservations = reservationSkips.skipDebtRepayments ? [] : applyCommitmentBudgets(dueStatements, budgets);
   const savingsReservations = reservationSkips.skipSavingsContributions ? [] : applyCommitmentBudgets(dueSavings, budgets);
@@ -355,7 +359,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const minimumRequired = categories.reduce((sum, category) => sum + category.floorCentavos, 0);
   if (isFinancialPlanInfeasible(available, minimumRequired)) {
     const forecast = fallbackForecast(period, categories);
-    const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: commitmentRequirements.debts }, savingsRequirements: { reservations: commitmentRequirements.savings }, classification: classificationResult.data ?? { status: "unavailable" } };
+    const inputSnapshot = { plannedAmountCentavos, commitmentSelection, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: commitmentRequirements.debts }, savingsRequirements: { reservations: commitmentRequirements.savings }, classification: classificationResult.data ?? { status: "unavailable" } };
     const requiredFundsCentavos = reserved + minimumRequired;
     const shortfallCentavos = Math.max(0, requiredFundsCentavos - plannedAmountCentavos);
     const explanationEvidence: FinancialPlanEvidence = { ...explanationContext, planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, shortfall: { plannedAmountCentavos, requiredFundsCentavos, shortfallCentavos }, seasonalPreferences, forecastChanges: [] };
@@ -413,12 +417,12 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const sourceUpdatedAt = latestSourceUpdate(subcategoriesResult.data ?? [], categoriesResult.data ?? [], accountsResult.data ?? [], debtsResult.data ?? [], goalsResult.data ?? [], transactionsResult.data ?? []);
   const goals = (goalsResult.data ?? []) as Goal[];
   const debts = (debtsResult.data ?? []) as Debt[];
-  const eligibleEmergencyGoalId = goals.find((goal) => goal.goal_type === "emergency_fund" && goal.current_amount_centavos < goal.target_amount_centavos)?.id ?? null;
+  const eligibleEmergencyGoalId = reservationSkips.skipSavingsContributions ? null : goals.find((goal) => goal.goal_type === "emergency_fund" && goal.current_amount_centavos < goal.target_amount_centavos)?.id ?? null;
   const [strategyResult, prioritiesResult] = await debtPreferencesPromise;
   const strategy = strategyResult.data?.strategy === "snowball" ? "snowball" : "avalanche";
   const priorityIds = (prioritiesResult.data ?? []).map((priority) => priority.debt_account_id).filter((id): id is string => typeof id === "string");
-  const eligibleDebtId = strategyResult.error || prioritiesResult.error ? null : selectEligibleDebt(debts, strategy, priorityIds);
-  const inputSnapshot = { plannedAmountCentavos, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
+  const eligibleDebtId = reservationSkips.skipDebtRepayments || strategyResult.error || prioritiesResult.error ? null : selectEligibleDebt(debts, strategy, priorityIds);
+  const inputSnapshot = { plannedAmountCentavos, commitmentSelection, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
   // Recommendations use monthly targets; recorded spending is tracked separately.
   const ml = await recommendPlanCategories(userId, period, available, plannedCategories, forecast);
   const recommendation = ml.recommendation as { feasibility?: string; required_funds?: number; shortfall?: number; unallocated_surplus?: number; allocations?: unknown };

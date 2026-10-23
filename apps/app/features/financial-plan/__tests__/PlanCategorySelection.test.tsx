@@ -115,10 +115,10 @@ describe("PlanCategorySelection", () => {
     />);
 
     expect(view.getByText("You haven't used Groceries before. How much do you want to set aside?")).toBeTruthy();
-    expect(view.getByLabelText("Create Financial Plan recommendation").props.accessibilityState?.disabled).toBe(true);
+    expect(view.getByLabelText("Continue to Plan").props.accessibilityState?.disabled).toBe(true);
 
     fireEvent.changeText(view.getByLabelText("One-time plan amount for Groceries in pesos"), "750.50");
-    fireEvent.press(view.getByLabelText("Create Financial Plan recommendation"));
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
 
     expect(onContinue).toHaveBeenCalledWith([{ target: "subcategory", id: "groceries", amountCentavos: 75_050 }]);
   });
@@ -141,7 +141,20 @@ describe("PlanCategorySelection", () => {
 
     expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy();
     expect(view.getByText("Your planning amount cannot exceed available money.")).toBeTruthy();
-    expect(view.getByLabelText("Create Financial Plan recommendation").props.accessibilityState?.disabled).toBe(true);
+    expect(view.getByLabelText("Continue to Plan").props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it("restores a one-time category amount when returning from plan review", () => {
+    const onContinue = jest.fn();
+    const view = render(<PlanCategorySelection
+      topLevelCategories={[food]} subcategories={[groceries]} includedIds={new Set(["groceries"])} recommendedIds={new Set()}
+      onToggle={jest.fn()} onToggleCategory={jest.fn()} onSaveRule={jest.fn()}
+      plannedAmount="1000.00" availableMoneyCentavos={100_000} planningAmountError={null} onPlannedAmountChange={jest.fn()}
+      initialManualAllocations={[{ target: "subcategory", id: "groceries", amountCentavos: 75_050 }]} onContinue={onContinue}
+    />);
+    expect(view.getByLabelText("One-time plan amount for Groceries in pesos").props.value).toBe("750.50");
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    expect(onContinue).toHaveBeenCalledWith([{ target: "subcategory", id: "groceries", amountCentavos: 75_050 }]);
   });
 
   it("leaves commitment budgeting to the generated plan review", () => {

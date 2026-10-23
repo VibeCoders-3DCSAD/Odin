@@ -34,6 +34,7 @@ export type FinancialPlanRecommendation = {
   status: FinancialPlanStatus;
   period: { start: string; end: string };
   inputSnapshot: {
+    commitmentSelection?: { debtRepayments: boolean; savingsContributions: boolean };
     plannedAmountCentavos: number;
     forecast: Record<string, unknown>;
     restrictions: Record<string, unknown>;

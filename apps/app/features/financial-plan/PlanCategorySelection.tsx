@@ -21,8 +21,8 @@ type Props = {
   planningAmountError: string | null;
   onPlannedAmountChange: (amount: string) => void;
   onContinue: (manualAllocations: ManualPlanAllocation[]) => void;
+  initialManualAllocations?: ManualPlanAllocation[];
   commitmentSection?: ReactNode;
-  commitmentBudgetError?: boolean;
 };
 
 const EMPTY_IDS = new Set<string>();
@@ -80,10 +80,10 @@ const CategoryRow = memo(function CategoryRow({ category, selected, recommended,
 const INITIAL_CATEGORY_COUNT = 1;
 const CATEGORIES_PER_FRAME = 2;
 
-export function PlanCategorySelection({ topLevelCategories, subcategories, includedCategoryIds = EMPTY_IDS, includedIds, recommendedCategoryIds = EMPTY_IDS, recommendedIds, onToggle, onToggleCategory, onSaveCategoryRule = saveNothing, onSaveRule, plannedAmount, availableMoneyCentavos, planningAmountError, onPlannedAmountChange, onContinue, commitmentSection, commitmentBudgetError = false }: Props) {
+export function PlanCategorySelection({ topLevelCategories, subcategories, includedCategoryIds = EMPTY_IDS, includedIds, recommendedCategoryIds = EMPTY_IDS, recommendedIds, onToggle, onToggleCategory, onSaveCategoryRule = saveNothing, onSaveRule, plannedAmount, availableMoneyCentavos, planningAmountError, onPlannedAmountChange, onContinue, initialManualAllocations = [], commitmentSection }: Props) {
   const uncategorizedSubcategories = subcategories.filter((subcategory) => !subcategory.category_id);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
+  const [manualAmounts, setManualAmounts] = useState<Record<string, string>>(() => Object.fromEntries(initialManualAllocations.map(({ target, id, amountCentavos }) => [`${target}:${id}`, (amountCentavos / 100).toFixed(2)])));
   const [visibleCategoryCount, setVisibleCategoryCount] = useState(INITIAL_CATEGORY_COUNT);
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
     ...topLevelCategories.filter((category) => includedCategoryIds.has(category.id) && requirement(category) === null && !recommendedCategoryIds.has(category.id)).map((category) => ({ target: "category" as const, id: category.id, amountCentavos: parsedManualAmount("category", category.id) ?? 0 })),
   ];
   const hasInvalidManualAmount = manualAllocations().some((allocation) => allocation.amountCentavos <= 0);
-  const cannotContinue = includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null || hasInvalidManualAmount || commitmentBudgetError;
+  const cannotContinue = includedIds.size + includedCategoryIds.size === 0 || planningAmountError !== null || hasInvalidManualAmount;
 
   function renderSubcategory(subcategory: Subcategory) {
     return <SubcategoryRow key={subcategory.id} subcategory={subcategory} selected={includedIds.has(subcategory.id)} recommended={recommendedIds.has(subcategory.id)} editing={editingId === subcategory.id} manualAmount={manualAmount("subcategory", subcategory.id)} handlers={subcategoryHandlers} />;
@@ -162,7 +162,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
        {topLevelCategories.slice(0, visibleCategoryCount).map(renderCategory)}
       {visibleCategoryCount >= topLevelCategories.length && uncategorizedSubcategories.length > 0 ? <View style={{ marginTop: 16 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#1B1C1A" }}>Other expense categories</Text>{uncategorizedSubcategories.map(renderSubcategory)}</View> : null}
         {hasInvalidManualAmount ? <Text accessibilityRole="alert" style={{ color: "#D9001F", fontFamily: "Manrope", fontSize: 11, marginTop: 10 }}>Enter an amount greater than zero for each new category.</Text> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Create Financial Plan recommendation" disabled={cannotContinue} onPress={() => onContinue(manualAllocations())} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: cannotContinue ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>Create recommendation</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Continue to Plan" disabled={cannotContinue} onPress={() => onContinue(manualAllocations())} style={{ backgroundColor: "#013220", borderRadius: 14, padding: 14, marginTop: 18, opacity: cannotContinue ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", color: "#FFFFFF", textAlign: "center" }}>Continue to Plan</Text></Pressable>
     </View>
   );
 }

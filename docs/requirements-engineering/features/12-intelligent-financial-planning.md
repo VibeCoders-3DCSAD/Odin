@@ -30,12 +30,17 @@
 
 ### 12.4 Debt and Savings Commitment Review
 
-- Before generating a plan, show scheduled debt repayments and savings contributions with their amounts due and dates.
+- During setup, offer independent, initially unchecked options to include savings contributions and debt repayments; collect amounts after `Continue to Plan`.
+- On the plan page, show only the selected commitment sections with their scheduled amounts and dates before generating category allocations.
+- Generate category allocations only after `Recommend Budget Allocation`; generate immediately after setup if neither commitment option is selected.
+- Clearly identify exclusions and explain that excluding debt repayments from the plan does not cancel existing payment obligations.
+- Default omitted API inclusion preferences to excluded. Require an explicit reviewed amount for every selected scheduled commitment before generating category budgets; do not silently substitute schedule amounts.
+- Apply exclusions to optional surplus guidance as well as scheduled reservations.
 - Allow users to choose how much to set aside for each payment and goal, and review or adjust these budgets again before accepting the plan.
 - Show the original amount due or scheduled contribution alongside the user's chosen budget.
 - Warn when a debt budget is below the amount due and may result in a missed payment.
 - Warn when a savings budget is below the contribution schedule and may delay goal completion.
-- Show how much money remains for billers, remittances, and spending categories after debt and savings budgets.
+- Show a live breakdown of the planning amount, savings, debt, other scheduled commitments, and the amount available for categories; account for scheduled payments already made.
 - Prevent acceptance when total allocations and extra amounts exceed the available plan funds.
 - Keep plan reservations separate from actual payments and savings contributions; accepting a plan does not move money.
 
@@ -74,7 +79,7 @@
 
 ### 12.8 Savings Contribution Plan
 
-- Include scheduled contributions for active savings goals due during the plan month, including emergency fund goals.
+- When savings contributions are selected, include scheduled contributions for active savings goals due during the plan month, including emergency fund goals.
 - Show the selected contribution budgets and their scheduled dates.
 - Use Savings and Debt Profile Classification to inform optional surplus guidance, including an eligible emergency fund as a possible destination.
 - Allow users to choose an extra savings amount after required reservations and category allocations.
@@ -83,7 +88,7 @@
 
 ### 12.9 Debt Repayment Plan
 
-- Include active loan repayments and authoritative credit-card statement minimums due during the plan period, accounting for recorded payments where applicable.
+- When debt repayments are selected, include active loan repayments and authoritative credit-card statement minimums due during the plan period, accounting for recorded payments where applicable.
 - Show original payment requirements, selected repayment budgets, due dates, and underfunding warnings.
 - Use Savings and Debt Profile Classification to inform optional surplus guidance without automatically bypassing other commitments.
 - Allow users to choose an extra debt repayment amount separately from scheduled repayment budgets.
@@ -97,8 +102,10 @@
 - Show remaining unallocated money and optional surplus guidance separately from scheduled commitments.
 - Leave optional surplus amounts under the user's control, including when classification information is incomplete or outdated.
 - Require users to refresh an unaccepted recommendation when its source information changes.
+- Require `Update Budget Allocation` after a scheduled savings or debt budget changes; prevent acceptance until category allocations have been regenerated successfully.
 - Prevent acceptance while the plan is infeasible, contains invalid amounts, or exceeds available plan funds.
 - Save the accepted plan for its month and allow users to reopen it without regenerating its original allocations or commitments.
+- Retain inclusion choices with newly accepted plans and hide excluded savings and debt sections when reopening them.
 
 ### 12.11 Accepted Plan Spending Review
 

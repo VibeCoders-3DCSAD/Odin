@@ -19,7 +19,7 @@ function BudgetAmountField({ label, amount, onChange, onValidityChange }: { labe
   useEffect(() => { if (!focused.current) setDraft((current) => parseBudgetAmount(current) === amount ? current : (amount / 100).toFixed(2)); }, [amount]);
   const invalid = parseBudgetAmount(draft) === null;
   return <View style={{ flexBasis: 112 }}>
-    <Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11 }}>Your budget (PHP)</Text>
+    <Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11 }}>Amount for this plan (PHP)</Text>
     <TextInput value={draft} onFocus={() => { focused.current = true; }} onBlur={() => { focused.current = false; }}
       onChangeText={(value) => {
         setDraft(value);

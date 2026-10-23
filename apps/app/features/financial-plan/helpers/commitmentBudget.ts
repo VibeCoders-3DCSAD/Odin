@@ -1,6 +1,6 @@
 import type { FinancialPlanRecommendation, FinancialPlanReservation } from "../types";
 
-export type CommitmentPreview = { period: { start: string; end: string }; debtReservations: FinancialPlanReservation[]; savingsReservations: FinancialPlanReservation[] };
+export type CommitmentPreview = { period: { start: string; end: string }; debtReservations: FinancialPlanReservation[]; savingsReservations: FinancialPlanReservation[]; obligations?: FinancialPlanReservation[] };
 export type CommitmentBudget = { key: string; amountCentavos: number };
 
 export function commitmentKey(row: FinancialPlanReservation): string {

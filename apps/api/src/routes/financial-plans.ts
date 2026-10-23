@@ -28,7 +28,10 @@ router.post("/recommendation", requireAuth, async (request: AuthenticatedRequest
       financialPlanPeriod(planMonth);
     }
     const commitmentBudgets = validateCommitmentBudgets(request.body.commitmentBudgets);
-    response.status(200).json({ payload: await getFinancialPlanRecommendation(request.userId!, request.supabase!, plannedAmountCentavos, includedSubcategoryIds, includedCategoryIds, manualAllocations, { skipDebtRepayments, skipSavingsContributions, ...(commitmentBudgets.length ? { commitmentBudgets } : {}) }, ...(planMonth === undefined ? [] : [planMonth])) });
+    if ((!skipDebtRepayments || !skipSavingsContributions) && request.body.commitmentBudgets === undefined) {
+      throw new FinancialPlanInputError("Review savings and debt amounts before recommending category budgets");
+    }
+    response.status(200).json({ payload: await getFinancialPlanRecommendation(request.userId!, request.supabase!, plannedAmountCentavos, includedSubcategoryIds, includedCategoryIds, manualAllocations, { skipDebtRepayments, skipSavingsContributions, ...(request.body.commitmentBudgets === undefined ? {} : { commitmentBudgets }) }, ...(planMonth === undefined ? [] : [planMonth])) });
   } catch (error) {
     const status = error instanceof FinancialPlanInputError ? 422 : error instanceof FinancialPlanMlError || error instanceof FinancialPlanUnavailableError ? 503 : 500;
     console.error("financial plan recommendation failed", { user_id: request.userId, request_id: request.header("x-request-id")?.slice(0, 128) ?? null, status, error_class: error instanceof Error ? error.constructor.name : "UnknownError" });
@@ -78,7 +81,7 @@ function parseRecommendationInput(value: unknown): { includedSubcategoryIds: str
   const parseSkip = (key: "skipDebtRepayments" | "skipSavingsContributions") => {
     const skip = (value as Record<string, unknown>)[key];
     if (skip !== undefined && typeof skip !== "boolean") throw new FinancialPlanInputError("Reservation skips are invalid");
-    return skip ?? false;
+    return skip ?? true;
   };
   return { includedSubcategoryIds, includedCategoryIds, plannedAmountCentavos, manualAllocations, skipDebtRepayments: parseSkip("skipDebtRepayments"), skipSavingsContributions: parseSkip("skipSavingsContributions") };
 }
