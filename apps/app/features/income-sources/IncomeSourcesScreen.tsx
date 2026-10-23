@@ -1,89 +1,113 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
-import { CurrencyDollar, Plus, TrendUp } from "phosphor-react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { CaretRight, CurrencyDollar, TrendUp } from "phosphor-react-native";
 import { listIncomeSources, deleteIncomeSource, type IncomeSource } from "../../local-db/repositories/financialFoundations";
 import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
 import { getIncomeSummary } from "../../local-db/repositories/incomeSummary";
-import KebabTooltip from "../../components/KebabTooltip";
+import { Banner, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import AvailableBalanceCard from "../../components/AvailableBalanceCard";
-import { FREQUENCY_LABELS } from "./presentation";
-
-const P = {
-  shell: "#fcf8f0", brand: "#013220", brandMedium: "#0E6D46",
-  ink: "#1B1C1A", ink2: "#414942", muted: "#6B7A6F",
-  line: "#EAEAE6", error: "#D9001F", card: "#F1F0EB", white: "#FFFFFF",
-};
-
-function formatPeso(centavos: number): string {
-  const pesos = centavos / 100;
-  const sign = pesos < 0 ? "-" : "";
-  const formatted = `${sign}₱${Math.abs(pesos).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return formatted.length > 23 ? formatted.slice(0, 20) + "..." : formatted;
-}
+import IncomeSourceActions from "./IncomeSourceActions";
+import { incomeScheduleLabel, formatIncomeAmount } from "./presentation";
 
 type Props = { userId: string; deviceId: string; onBack: () => void; onAdd: () => void; onEdit: (id: string) => void; onSyncRequested?: () => void };
 
-export default function IncomeSourcesScreen({ userId, deviceId, onBack, onAdd, onEdit, onSyncRequested }: Props) {
+export default function IncomeSourcesScreen({ userId, deviceId, onAdd, onEdit, onSyncRequested }: Props) {
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [debts, setDebts] = useState<DebtAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<IncomeSource | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [incomeSources, debtAccounts] = await Promise.all([listIncomeSources(userId), listDebtAccounts(userId)]);
-    setSources(incomeSources);
-    setDebts(debtAccounts);
-    setLoading(false);
+    setError(null);
+    try {
+      const [incomeSources, debtAccounts] = await Promise.all([listIncomeSources(userId), listDebtAccounts(userId)]);
+      setSources(incomeSources);
+      setDebts(debtAccounts);
+    } catch {
+      setError("Your income sources could not be loaded. Try again.");
+    } finally {
+      setLoading(false);
+    }
   }, [userId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const incomeSummary = getIncomeSummary(sources, debts);
+  const summary = getIncomeSummary(sources, debts);
+  const sourceCount = `${sources.length} income ${sources.length === 1 ? "source" : "sources"}`;
 
-  const handleDelete = (s: IncomeSource) => {
-    Alert.alert(`Delete ${s.name}?`, "This income source will be permanently removed.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { await deleteIncomeSource(userId, deviceId, s.id); await load(); onSyncRequested?.(); } },
-    ]);
-  };
+  function closeActions() { setSelected(null); setConfirming(false); }
+
+  async function confirmDelete() {
+    if (!selected || deletingId) return;
+    setDeletingId(selected.id);
+    try {
+      await deleteIncomeSource(userId, deviceId, selected.id);
+      closeActions();
+      await load();
+      onSyncRequested?.();
+    } catch {
+      closeActions();
+      setError("Your income source could not be deleted. Try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
-    <>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <Text style={{ fontSize: 18, fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>Income Sources</Text>
-        <TouchableOpacity onPress={onAdd} accessibilityRole="button" accessibilityLabel="Add income source" hitSlop={8} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: P.brand, alignItems: "center", justifyContent: "center" }}>
-          <Plus size={18} color={P.white} weight="bold" />
-        </TouchableOpacity>
-      </View>
-      <AvailableBalanceCard
-        label="Estimated monthly income after debt deductions"
-        amount={formatPeso(incomeSummary.netMonthlyCentavos).replace("₱", "")}
-        detail={`${formatPeso(incomeSummary.grossMonthlyCentavos)} after taxes, before ${formatPeso(incomeSummary.salaryLoanDeductionsCentavos)} in salary-loan deductions`}
-        marginBottom={16}
-      />
-      {loading ? null : sources.length === 0 ? (
-        <View style={{ alignItems: "center", paddingTop: 40 }}>
-          <TrendUp size={40} color={P.muted} />
-          <Text style={{ marginTop: 12, fontSize: 15, fontFamily: "Manrope", color: P.muted }}>No income sources yet</Text>
-          <Text style={{ marginTop: 4, fontSize: 13, fontFamily: "Manrope", color: P.muted }}>Tap + to add your first income source</Text>
+    <View style={{ gap: 11 }}>
+      <AvailableBalanceCard variant="compact" label="Estimated monthly income after debt deductions" amount={loading ? "—" : formatIncomeAmount(summary.netMonthlyCentavos)} detail={loading ? "Loading income sources…" : sourceCount} />
+      {!loading && sources.length > 0 ? <Text style={s.detail}>{`PHP ${formatIncomeAmount(summary.grossMonthlyCentavos)} after taxes, before PHP ${formatIncomeAmount(summary.salaryLoanDeductionsCentavos)} in salary-loan deductions`}</Text> : null}
+      {loading || sources.length > 0 ? (
+        <View style={s.sectionHead}>
+          <Text style={s.sectionTitle}>Income sources</Text>
+          <Pressable onPress={onAdd} accessibilityRole="button" accessibilityLabel="Add income source" hitSlop={8}><Text style={s.add}>Add</Text></Pressable>
         </View>
-      ) : (
-        sources.map((s) => (
-          <View key={s.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: P.white, borderRadius: 12, marginBottom: 8, padding: 12, borderWidth: 1, borderColor: P.line }}>
-            <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: P.card, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-              <CurrencyDollar size={22} color={P.brandMedium} weight="fill" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontFamily: "Manrope", fontWeight: "600", color: P.ink }}>{s.name}</Text>
-              <Text style={{ fontSize: 12, fontFamily: "Manrope", color: P.muted, marginTop: 2 }}>{FREQUENCY_LABELS[s.frequency]} · {formatPeso(s.expectedAmountCentavos)}</Text>
-            </View>
-            <KebabTooltip
-              kebabDirection="horizontal"
-              tooltipLocation="bottomRight"
-              onEdit={() => onEdit(s.id)}
-              onDelete={() => handleDelete(s)}
-            />
-          </View>
-        ))
-      )}
-    </>
+      ) : null}
+      {error ? <Banner tone="error">{error}</Banner> : null}
+      {error ? <Pressable accessibilityRole="button" onPress={() => { setLoading(true); void load(); }} style={[ui.button, ui.buttonGhost]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Retry</Text></Pressable> : null}
+      {loading ? (
+        <View style={s.loading}><ActivityIndicator color={v4.brand} /><Text style={s.detail}>Loading your income sources…</Text></View>
+      ) : sources.length === 0 && !error ? (
+        <View style={s.empty}>
+          <TrendUp size={36} color={v4.ink2} />
+          <Text style={s.emptyTitle}>No income sources yet</Text>
+          <Text style={s.detail}>Add your salary to plan a budget.</Text>
+          <Pressable onPress={onAdd} accessibilityRole="button" style={[ui.button, { alignSelf: "stretch", marginTop: 6 }]}><Text style={ui.buttonText}>Add an income source</Text></Pressable>
+        </View>
+      ) : sources.length > 0 ? (
+        <View style={s.list}>
+          {sources.map((source, index) => (
+            <Pressable key={source.id} onPress={() => { setSelected(source); setConfirming(false); }} accessibilityRole="button" accessibilityLabel={`Actions for ${source.name}`} disabled={deletingId === source.id} style={[s.row, index > 0 ? s.divider : null]}>
+              <View style={s.tile}><CurrencyDollar size={18} color="#FFFFFF" weight="bold" /></View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={ui.listTitle}>{source.name}</Text>
+                <Text numberOfLines={1} style={s.subtitle}>{incomeScheduleLabel(source)}</Text>
+              </View>
+              <Text style={s.amount}>{`PHP ${formatIncomeAmount(source.expectedAmountCentavos)}`}</Text>
+              <CaretRight size={15} color={v4.ink2} />
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      <IncomeSourceActions name={selected?.name ?? null} confirming={confirming} busy={deletingId === selected?.id} onClose={closeActions} onEdit={() => { if (selected) { const id = selected.id; closeActions(); onEdit(id); } }} onRequestDelete={() => setConfirming(true)} onConfirmDelete={() => { void confirmDelete(); }} />
+    </View>
   );
 }
+
+const s = StyleSheet.create({
+  sectionHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  sectionTitle: { fontFamily: v4Font, fontSize: 15, fontWeight: "800", color: v4.ink },
+  add: { fontFamily: v4Font, fontSize: 11.5, fontWeight: "700", color: v4.brand },
+  detail: { fontFamily: v4Font, fontSize: 12, color: v4.ink2 },
+  loading: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 20 },
+  empty: { alignItems: "center", gap: 8, paddingVertical: 26 },
+  emptyTitle: { fontFamily: v4Font, fontSize: 16, fontWeight: "800", color: v4.ink },
+  list: { backgroundColor: v4.surface, borderWidth: 1, borderColor: v4.ink2, borderRadius: 16, overflow: "hidden" },
+  row: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 12, paddingHorizontal: 14 },
+  divider: { borderTopWidth: 1, borderTopColor: "#DBD7CD" },
+  tile: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#004D1B", alignItems: "center", justifyContent: "center" },
+  subtitle: { fontFamily: v4Font, fontSize: 11, color: v4.ink2, marginTop: 1 },
+  amount: { fontFamily: v4Font, fontSize: 12.5, fontWeight: "700", color: v4.ink, fontVariant: ["tabular-nums"], flexShrink: 1, textAlign: "right" },
+});

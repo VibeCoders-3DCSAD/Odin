@@ -11,7 +11,7 @@ import {
   type IncomeFrequency,
 } from "../../local-db/repositories/financialFoundations";
 import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
-import { FREQUENCIES, FREQUENCY_LABELS } from "./presentation";
+import { FREQUENCIES, FREQUENCY_LABELS, formatIncomeAmount } from "./presentation";
 
 type Props = { userId: string; deviceId: string; incomeSourceId?: string; onClose: () => void; onSaved: (message: string) => void };
 type Field = "name" | "account" | "category" | "schedule" | "amount";
@@ -22,7 +22,7 @@ const ACCOUNT_KIND_LABELS: Record<string, string> = {
 };
 
 function formatPhp(centavos: number): string {
-  return `PHP ${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `PHP ${formatIncomeAmount(centavos)}`;
 }
 
 function parseCentavos(value: string): number | null {
