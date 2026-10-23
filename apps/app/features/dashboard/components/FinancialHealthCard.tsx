@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../../lib/api";
+import { useConnectivityStore } from "../../../services/connectivity";
 
 type RuleAssessment = {
   status?: "SUCCESS" | "INSUFFICIENT_DATA" | "INSUFFICIENT_HISTORY";
@@ -107,28 +108,38 @@ async function request<T>(accessToken: string, path: string, method: "GET" | "PO
 export function FinancialHealthCard({ accessToken, initialClassification }: { accessToken: string; initialClassification?: Classification }) {
   const [classification, setClassification] = useState<Classification | null>(initialClassification ?? null);
   const [loading, setLoading] = useState(!initialClassification);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const online = useConnectivityStore((state) => state.online);
 
   useEffect(() => {
     if (initialClassification) return;
-    request<{ payload?: { assessment?: LatestAssessment | null } }>(accessToken, "/odin/api/financial-classification/v2/latest", "GET")
-      .then((body) => setClassification(body?.payload?.assessment?.output_snapshot ?? null))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [accessToken, initialClassification]);
-
-  async function refresh() {
-    setRefreshing(true);
-    setError(null);
-    const body = await request<{ payload?: { assessment?: LatestAssessment } }>(accessToken, "/odin/api/financial-classification/v2/assess", "POST");
-    if (!body?.payload?.assessment?.output_snapshot) {
-      setError("Could not refresh your check-in right now.");
-    } else {
-      setClassification(body.payload.assessment.output_snapshot);
+    if (!online) {
+      setLoading(false);
+      return;
     }
-    setRefreshing(false);
-  }
+    let active = true;
+
+    async function refresh() {
+      setLoading(true);
+      setError(null);
+      const body = await request<{ payload?: { assessment?: LatestAssessment } }>(accessToken, "/odin/api/financial-classification/v2/assess", "POST");
+      if (!active) return;
+      const snapshot = body?.payload?.assessment?.output_snapshot;
+      if (snapshot) {
+        setClassification(snapshot);
+      } else {
+        const latest = await request<{ payload?: { assessment?: LatestAssessment | null } }>(accessToken, "/odin/api/financial-classification/v2/latest", "GET");
+        if (!active) return;
+        const previous = latest?.payload?.assessment?.output_snapshot;
+        if (previous) setClassification(previous);
+        setError("Unable to refresh your profile. Your connection or the server may be unavailable.");
+      }
+      setLoading(false);
+    }
+
+    void refresh();
+    return () => { active = false; };
+  }, [accessToken, initialClassification, online]);
 
   const cards = classification?.credit_card_behavior ?? [];
   const rows = [
@@ -144,11 +155,9 @@ export function FinancialHealthCard({ accessToken, initialClassification }: { ac
 
   return (
     <View style={{ marginTop: 24, padding: 20, borderRadius: 32, backgroundColor: P.aqua50 }}>
+      {!initialClassification && <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: P.ink, marginBottom: 12 }}>Savings &amp; Debt Profile</Text>}
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
         <Text style={{ flex: 1, flexShrink: 1, fontFamily: "Manrope", fontSize: 12, color: P.ink2 }}>{initialClassification ? "Your financial classification, based on your questionnaire answers" : "A quick check-in using your income sources and recorded expenses"}</Text>
-        {!initialClassification && <Pressable accessibilityRole="button" accessibilityLabel="Refresh check-in" onPress={refresh} disabled={refreshing} style={{ marginLeft: 12 }}>
-          {refreshing ? <ActivityIndicator color={P.aqua700} /> : <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.aqua700 }}>Update</Text>}
-        </Pressable>}
       </View>
       {loading ? <ActivityIndicator color={P.aqua700} /> : rows.map((item, index) => {
         const { label } = item;
@@ -162,7 +171,7 @@ export function FinancialHealthCard({ accessToken, initialClassification }: { ac
           </View>
         );
       })}
-      {error ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.red, marginTop: 12 }}>We could not update this right now. Please try again.</Text> : null}
+      {error ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.red, marginTop: 12 }}>{error}</Text> : null}
     </View>
   );
 }
