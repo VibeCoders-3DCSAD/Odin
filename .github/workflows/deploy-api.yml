@@ -1,0 +1,84 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".nvmrc"
+      - ".node-version"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/lightsail
+          chmod 600 ~/.ssh/lightsail
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Pull, build, and restart
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          SHA: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/lightsail -o IdentitiesOnly=yes "ubuntu@$HOST" "bash -s" -- "$SHA" <<'EOF'
+          set -euo pipefail
+          sha="$1"
+          repo=/srv/budgie/Odin
+
+          echo "==> Pull"
+          sudo -u budgie git -C "$repo" fetch --prune origin main
+          sudo -u budgie git -C "$repo" merge --ff-only "$sha"
+
+          echo "==> Build"
+          # --noEmitOnError keeps the running dist/ intact if the build fails.
+          # odin-api runs ~/.nvm/current/bin/node, so repoint it at the .nvmrc version.
+          sudo -iu budgie bash -s -- "$repo" <<'BUILD'
+          set -eo pipefail
+          source ~/.nvm/nvm.sh
+          cd "$1"
+          nvm install
+          nvm alias default "$(cat .nvmrc)"
+          ln -sfn "$(dirname "$(dirname "$(nvm which "$(cat .nvmrc)")")")" ~/.nvm/current
+          COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack enable pnpm
+          pnpm install --frozen-lockfile
+          pnpm --filter api exec tsc -p tsconfig.json --noEmitOnError
+          BUILD
+
+          echo "==> Restart"
+          sudo systemctl restart odin-api
+
+          for _ in $(seq 1 15); do
+            if curl -fsS http://127.0.0.1:3001/health; then
+              echo
+              echo "Deployed $(sudo -u budgie git -C "$repo" log -1 --oneline)"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Health check failed" >&2
+          sudo systemctl status odin-api --no-pager || true
+          sudo tail -n 50 /var/log/budgie/api.log || true
+          exit 1
+          EOF
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/lightsail
