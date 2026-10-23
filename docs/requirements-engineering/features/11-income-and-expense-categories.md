@@ -2,7 +2,10 @@
 
 ### 11.1 Category Browsing
 
-- Allow users to view their categories and open a category to review its subcategories.
+- Group category browsing into Income and Expenses.
+- Further group expense categories into Essentials and Non-Essentials.
+- Allow users to view, navigate, and search categories and subcategories within the selected Income or Expenses section.
+- Allow users to open a category to review its subcategories.
 - Show category and subcategory names, descriptions, icons, and colors.
 - Show the number of subcategories within each category.
 - Identify protected subcategories and indicate when a category contains protected subcategories.
@@ -12,6 +15,8 @@
 ### 11.2 Custom Category Creation
 
 - Allow users to create custom categories with meaningful names and descriptions.
+- Keep the selected Income or Expenses section clear during category creation.
+- For expense categories, allow users to select Essentials or Non-Essentials and keep that grouping clear during creation.
 - Require a non-empty name and description before saving.
 - Allow users to choose an icon and color to help identify the category throughout the application.
 - Make newly created categories available in the category list and allow users to add subcategories within them.
@@ -37,6 +42,9 @@
 
 - Make eligible income and expense categories available to the features that classify transactions, income sources, and financial commitments.
 - Filter transaction category choices according to whether the user is recording income or an expense.
+- Preserve the Income and Expenses grouping in category and filter selectors.
+- Within Expenses, preserve the Essentials and Non-Essentials grouping in category and filter selectors.
+- Show an empty selector state when no eligible category exists for the current selection.
 - Allow ordinary transfers to be recorded without a category, as defined in Cash Flow Management.
 - Use category assignments to organize financial summaries, spending analysis, forecasts, and Financial Planning.
 - Display category appearance consistently where category icons and colors are used.
