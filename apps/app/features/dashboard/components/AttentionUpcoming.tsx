@@ -1,5 +1,6 @@
 import React from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { dashboardColors as P, dashboardStyles } from "../dashboardAppearance";
 import { localToday } from "../../billers/schedule";
 import { formatPeso } from "../dashboardFormatting";
 import { useDashboardReminders } from "../hooks/useDashboardReminders";
@@ -23,10 +24,10 @@ export function ReminderSection({ title, section, loading, empty, onRetry, onOpe
     <View style={styles.card}>
       {section?.unavailable ? <View style={styles.message}><Text style={styles.detail}>Some {title.toLowerCase()} information is unavailable.</Text><Pressable accessibilityRole="button" accessibilityLabel={`Retry ${title}`} onPress={onRetry} disabled={loading}><Text style={styles.action}>Try again</Text></Pressable></View> : null}
       {!loading && section && !section.unavailable && section.items.length === 0 ? <Text style={styles.detail}>{empty}</Text> : null}
-      {section?.items.map((item) => {
+      {section?.items.map((item, index) => {
         const days = Math.round((Date.parse(`${item.date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
         const date = new Date(`${item.date}T00:00:00+08:00`).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric" });
-        return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Review ${item.title}`} onPress={() => onOpen(item.target)} style={styles.row}>
+        return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Review ${item.title}`} onPress={() => onOpen(item.target)} style={[styles.row, index > 0 && { borderTopWidth: 1, borderTopColor: P.divider }]}>
           <View style={styles.rowHeading}><Text style={styles.name}>{item.title}</Text><Text style={[styles.amount, upcoming && item.target.kind === "income" ? styles.income : null]}>{formatPeso(item.amountCentavos, 2)}</Text></View>
           <Text style={styles.detail}>{item.detail}</Text>
           <Text style={styles.date}>{date}{upcoming ? ` · ${days === 0 ? "Today" : days === 1 ? "In 1 day" : `In ${days} days`}` : ""}</Text>
@@ -39,18 +40,18 @@ export function ReminderSection({ title, section, loading, empty, onRetry, onOpe
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 24, marginTop: 24 },
+  container: { gap: 22, marginTop: 22 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  title: { fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: "#1B1C1A" },
-  card: { padding: 20, borderRadius: 32, backgroundColor: "#F8EFDC", gap: 14 },
+  title: dashboardStyles.sectionTitle,
+  card: { ...dashboardStyles.card, gap: 10 },
   message: { gap: 8 },
-  row: { gap: 6, paddingVertical: 8 },
+  row: { gap: 6, paddingVertical: 12 },
   rowHeading: { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", gap: 8 },
-  name: { flexGrow: 1, flexShrink: 1, fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: "#1B1C1A" },
-  amount: { fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#1B1C1A" },
-  income: { color: "#066B40" },
-  detail: { fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: "#414942" },
-  date: { fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F" },
-  action: { fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#066B40" },
-  note: { fontFamily: "Manrope", fontSize: 12, lineHeight: 18, color: "#6B7A6F" },
+  name: { flexGrow: 1, flexShrink: 1, fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.ink },
+  amount: { fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: P.ink },
+  income: { color: P.green },
+  detail: { fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: P.secondary },
+  date: { fontFamily: "Manrope", fontSize: 12, color: P.secondary },
+  action: { fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: P.green },
+  note: { fontFamily: "Manrope", fontSize: 12, lineHeight: 18, color: P.secondary },
 });

@@ -37,6 +37,7 @@ import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
 import AnomalyAlertsScreen from "../features/alerts/AnomalyAlertsScreen";
 import type { DashboardItemTarget } from "../features/dashboard/types";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
+import { dashboardColors } from "../features/dashboard/dashboardAppearance";
 import FinancialPlanScreen from "../features/financial-plan/FinancialPlanScreen";
 import PastFinancialPlansScreen from "../features/financial-plan/PastFinancialPlansScreen";
 import PastFinancialPlanDetailScreen from "../features/financial-plan/PastFinancialPlanDetailScreen";
@@ -1007,9 +1008,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     return <ShellPlaceholderPage title={meta.title} subtitle={meta.subtitle} />;
   }
 
+  const shellColor = currentPage === "dashboard" ? dashboardColors.page : palette.shell;
+
   return (
     <View className="flex-1">
-      <SafeAreaView style={{ backgroundColor: palette.shell }} className="flex-1">
+      <SafeAreaView style={{ backgroundColor: shellColor }} className="flex-1">
         {isFullScreen ? (
           <View style={{ flex: 1 }}>
             {renderPage()}
@@ -1018,7 +1021,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           <>
         {activeTab ? (
           /* Top bar: profile and sync, logo, notifications */
-          <View style={{ backgroundColor: palette.shell, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center" }}>
+          <View style={{ backgroundColor: shellColor, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center", borderBottomWidth: currentPage === "dashboard" ? 1 : 0, borderBottomColor: dashboardColors.divider }}>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 11 }}>
               <Pressable
                 accessibilityRole="button"
@@ -1119,7 +1122,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         {activeTab ? (
           <View className="absolute bottom-0 left-0 right-0 items-center">
             <View
-              style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: palette.shell, paddingBottom: bottomInset + 8, minHeight: 62 + bottomInset }}
+              style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: shellColor, paddingBottom: bottomInset + 8, minHeight: 62 + bottomInset }}
               className="w-full px-6 pt-[7px] flex-row items-start justify-between border-t border-[#EAEAE6]"
             >
               {tabs.flatMap(({ tab, page, label, Icon }, index) => {

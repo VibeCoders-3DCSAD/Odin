@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
+import { dashboardColors, dashboardStyles } from "../dashboardAppearance";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../../lib/api";
 import { useConnectivityStore } from "../../../services/connectivity";
 
@@ -154,8 +155,8 @@ export function FinancialHealthCard({ accessToken, initialClassification }: { ac
   ];
 
   return (
-    <View style={{ marginTop: 24, padding: 20, borderRadius: 32, backgroundColor: P.aqua50 }}>
-      {!initialClassification && <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 16, color: P.ink, marginBottom: 12 }}>Savings &amp; Debt Profile</Text>}
+    <View style={initialClassification ? { marginTop: 24, padding: 20, borderRadius: 32, backgroundColor: P.aqua50 } : [dashboardStyles.card, { marginTop: 22, backgroundColor: dashboardColors.mint }]}>
+      {!initialClassification && <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink, marginBottom: 12 }}>Savings &amp; Debt Profile</Text>}
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
         <Text style={{ flex: 1, flexShrink: 1, fontFamily: "Manrope", fontSize: 12, color: P.ink2 }}>{initialClassification ? "Your financial classification, based on your questionnaire answers" : "A quick check-in using your income sources and recorded expenses"}</Text>
       </View>
