@@ -12,6 +12,8 @@ import { DashboardPartialData } from "./components/DashboardPartialData";
 import { SpendingPie, TrendChart } from "./components/DashboardCharts";
 import { ForecastPanel } from "./components/ForecastPanel";
 import { FinancialHealthCard } from "./components/FinancialHealthCard";
+import { AttentionUpcoming } from "./components/AttentionUpcoming";
+import type { DashboardItemTarget } from "./types";
 import { SafeToSpendCard } from "./components/SafeToSpendCard";
 import { getForecastContent, getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
 import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getPreviousMonthName } from "./dashboardFormatting";
@@ -48,10 +50,14 @@ type Props = {
   deviceId: string;
   accessToken: string;
   onNavigate: (page: string) => void;
+  syncVersion?: number;
+  onOpenReminder: (target: DashboardItemTarget) => void;
 };
 
-export default function DashboardScreen({ userId, deviceId, accessToken, onNavigate }: Props) {
+export default function DashboardScreen({ userId, deviceId, accessToken, onNavigate, syncVersion = 0, onOpenReminder }: Props) {
   const { summary: s, trends, snapshots, loading, refreshing, summaryUnavailable, summaryStale, snapshotsUnavailable, error, refresh } = useDashboardData({ userId, deviceId, accessToken });
+
+  const reminders = <AttentionUpcoming userId={userId} reloadKey={`${syncVersion}:${refreshing}`} onOpen={onOpenReminder} />;
 
   if (loading) {
     return (
@@ -62,7 +68,7 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
   }
 
   if (summaryUnavailable) {
-    return <DashboardPartialData trends={trends} snapshots={snapshots} snapshotsUnavailable={snapshotsUnavailable} onRefresh={refresh} onNavigate={onNavigate} />;
+    return <View><DashboardPartialData trends={trends} snapshots={snapshots} snapshotsUnavailable={snapshotsUnavailable} onRefresh={refresh} onNavigate={onNavigate} />{reminders}</View>;
   }
 
   const prevMonthName = getPreviousMonthName();
@@ -81,7 +87,7 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
     && s.transactionCount === 0
     && s.categorySpending.length === 0;
 
-  if (isEmpty && !summaryUnavailable) return <DashboardEmptyState onNavigate={onNavigate} />;
+  if (isEmpty && !summaryUnavailable) return <View><DashboardEmptyState onNavigate={onNavigate} />{reminders}</View>;
 
   // Forecast from snapshot
    const forecastSnap = snapshots.forecast;
@@ -159,6 +165,8 @@ export default function DashboardScreen({ userId, deviceId, accessToken, onNavig
       <View style={{ flexDirection: "row", gap: 11, marginTop: 14 }}>
         <SnapshotCard title="Savings goals" stale={staleSnapshot(savingsSnap)} unavailable={savingsUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("savings-goals")} actionLabel={!savingsSnap || savingsCount === 0 ? "Create a goal" : undefined} copy={savingsText ?? (savingsUnavailable ? "Savings goal information is unavailable." : !savingsSnap || savingsCount === 0 ? "No savings goals yet. Create one when you're ready." : savingsCount === null ? "Savings goal summary is unavailable. Refresh to try again." : `${savingsCount} savings goal${savingsCount === 1 ? "" : "s"} in progress${savingsCentavos === null ? "." : ` · ${formatPeso(savingsCentavos)} saved.`}`)} />
       </View>
+
+      {reminders}
 
       <FinancialHealthCard accessToken={accessToken} />
 

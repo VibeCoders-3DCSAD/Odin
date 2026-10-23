@@ -3,19 +3,28 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ArrowLeft, BellRinging, Check } from "phosphor-react-native";
 import { confirmRecurringSpending, listPersistedUnusualSpendings, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
 
-type Props = { userId: string; deviceId: string; onBack?: () => void };
+type Props = { userId: string; deviceId: string; onBack?: () => void; initialTransactionId?: string };
 const P = { ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", card: "#F8EFDC", warning: "#C25E00" };
 
 function formatCurrency(amountCentavos: number): string {
   return `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function AnomalyAlertsScreen({ userId, deviceId, onBack }: Props) {
+export default function AnomalyAlertsScreen({ userId, deviceId, onBack, initialTransactionId }: Props) {
   const [alerts, setAlerts] = useState<UnusualSpendingInsight[]>([]);
   const [selected, setSelected] = useState<UnusualSpendingInsight | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [openedInitial, setOpenedInitial] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !openedInitial && initialTransactionId) {
+      setSelected(alerts.find((alert) => alert.transactionId === initialTransactionId) ?? null);
+      setOpenedInitial(true);
+    }
+  }, [alerts, initialTransactionId, loading, openedInitial]);
 
   const load = useCallback(async () => {
     try {

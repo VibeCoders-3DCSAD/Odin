@@ -34,6 +34,8 @@ import { postDueScheduledPayments } from "../local-db/repositories/scheduledPaym
 import { postDueRecurringIncome } from "../local-db/repositories/recurringIncome";
 import ShellPlaceholderPage from "./ShellPlaceholderPage";
 import FinancialReportsScreen from "../features/reports/FinancialReportsScreen";
+import AnomalyAlertsScreen from "../features/alerts/AnomalyAlertsScreen";
+import type { DashboardItemTarget } from "../features/dashboard/types";
 import DashboardScreen from "../features/dashboard/DashboardScreen";
 import FinancialPlanScreen from "../features/financial-plan/FinancialPlanScreen";
 import PastFinancialPlansScreen from "../features/financial-plan/PastFinancialPlansScreen";
@@ -97,6 +99,7 @@ type Page =
   | "financial-accounts"
   | "income-sources"
   | "income-source-form"
+  | "spending-alerts"
   | "scheduled-payments"
   | "scheduled-payment-form"
   | "scheduled-payment-detail"
@@ -215,6 +218,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Good morning" },
   transactions: { title: "Transactions", subtitle: "Your transaction history" },
   history: { title: "History", subtitle: "Past activity" },
+  "spending-alerts": { title: "Spending alerts", subtitle: "Review unusual spending" },
   "financial-reports": { title: "Financial Reports", subtitle: "Financial outlook and alerts" },
    "budget-advice": { title: "Budgeting", subtitle: "Set up your budget" },
     "financial-plan": { title: "Financial Plan", subtitle: "Plan this month's money" },
@@ -264,6 +268,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [deletionSuccessDate, setDeletionSuccessDate] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncVersion, setSyncVersion] = useState(0);
+  const [dashboardTarget, setDashboardTarget] = useState<DashboardItemTarget | null>(null);
   const [syncPending, setSyncPending] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [queueCount, setQueueCount] = useState(0);
@@ -941,6 +946,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
       return <BillerFormScreen userId={userId} deviceId={deviceId} scheduledPaymentId={editingScheduledPaymentId ?? undefined} onClose={close} onSaved={(message) => { showToast(message, "success"); close(); handleSync(); }} />;
     }
 
+    if (currentPage === "spending-alerts") {
+      return <AnomalyAlertsScreen userId={userId} deviceId={deviceId} initialTransactionId={dashboardTarget?.kind === "observation" ? dashboardTarget.id : undefined} onBack={() => setCurrentPage("dashboard")} />;
+    }
+
     if (currentPage === "debt-manager") {
       return <DebtManagerOverview userId={userId} onOpenCreditCards={() => setCurrentPage("credit-cards")} onOpenNonCreditDebts={() => setCurrentPage("non-credit-card-debts")} />;
     }
@@ -974,12 +983,20 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "savings-goals") {
-      return <SavingsGoalsScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onRecordActivity={(savingsGoalId, kind) => { setSavingsActivityContext({ savingsGoalId, kind }); setTransactionToEdit(null); setStatementPaymentContext(null); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }} onOpenTransaction={(transactionId) => { getTransaction(userId, transactionId).then((transaction) => { if (!transaction) return; setSavingsActivityContext(null); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }).catch(() => {}); }} />;
+      return <SavingsGoalsScreen initialGoalId={dashboardTarget?.kind === "savings" ? dashboardTarget.id : undefined} userId={userId} deviceId={deviceId} syncVersion={syncVersion} onRecordActivity={(savingsGoalId, kind) => { setSavingsActivityContext({ savingsGoalId, kind }); setTransactionToEdit(null); setStatementPaymentContext(null); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }} onOpenTransaction={(transactionId) => { getTransaction(userId, transactionId).then((transaction) => { if (!transaction) return; setSavingsActivityContext(null); setStatementPaymentContext(null); setTransactionToEdit(transaction); setTransactionReturnPage("savings-goals"); setCurrentPage("add-transaction"); }).catch(() => {}); }} />;
     }
 
 
     if (currentPage === "dashboard") {
-      return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} onNavigate={setCurrentPage as (page: string) => void} />;
+      return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} onNavigate={(page) => { setDashboardTarget(null); setCurrentPage(page as Page); }} onOpenReminder={(target) => {
+        setDashboardTarget(target);
+        if (target.kind === "biller") { setSelectedScheduledPaymentId(target.id); setCurrentPage("scheduled-payment-detail"); }
+        if (target.kind === "income") { setEditingIncomeSourceId(target.id); setCurrentPage("income-source-form"); }
+        if (target.kind === "debt") { setSelectedDebtId(target.id); setCurrentPage("non-credit-card-debt-detail"); }
+        if (target.kind === "credit_card") { setSelectedCreditCardId(target.id); setCurrentPage("credit-card-detail"); }
+        if (target.kind === "savings") setCurrentPage("savings-goals");
+        if (target.kind === "observation") setCurrentPage("spending-alerts");
+      }} />;
     }
 
     if (currentPage === "financial-reports") {

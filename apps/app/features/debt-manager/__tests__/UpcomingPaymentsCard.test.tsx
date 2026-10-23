@@ -4,8 +4,8 @@ import UpcomingPaymentsCard from "../UpcomingPaymentsCard";
 
 it("shows remaining amounts, a monthly total, and overdue labels", () => {
   const view = render(<UpcomingPaymentsCard today="2026-10-21" payments={[
-    { id: "loan", name: "Loan", kind: "non_credit_card", dueDate: "2026-10-15", remainingCentavos: 12_345 },
-    { id: "card", name: "Visa", kind: "credit_card_statement", dueDate: "2026-10-25", remainingCentavos: 50_000 },
+    { id: "loan", accountId: "loan", name: "Loan", kind: "non_credit_card", dueDate: "2026-10-15", remainingCentavos: 12_345 },
+    { id: "card", accountId: "card", name: "Visa", kind: "credit_card_statement", dueDate: "2026-10-25", remainingCentavos: 50_000 },
   ]} />);
   expect(view.getByText("Upcoming Payments")).toBeTruthy();
   expect(view.getByText("PHP 623.45 remaining this month")).toBeTruthy();

@@ -3,6 +3,7 @@ import { getRequiredDebtTotal, type RequiredDebtTotalInput } from "./requiredDeb
 export type UpcomingDebtPayment = {
   id: string;
   name: string;
+  accountId: string;
   kind: "credit_card_statement" | "non_credit_card";
   dueDate: string;
   remainingCentavos: number;
@@ -43,7 +44,7 @@ export function buildUpcomingDebtPayments(input: RequiredDebtTotalInput, asOfDat
       paidCentavos -= appliedPayment;
       const remainingCentavos = Math.min(remainingBalance, target - appliedPayment);
       remainingBalance -= remainingCentavos;
-      return remainingCentavos > 0 ? [{ id: `${obligation.kind}:${obligation.accountId}:${dueDate}:${obligationIndex}`, name, kind: obligation.kind, dueDate, remainingCentavos }] : [];
+      return remainingCentavos > 0 ? [{ id: `${obligation.kind}:${obligation.accountId}:${dueDate}:${obligationIndex}`, name, accountId: obligation.accountId, kind: obligation.kind, dueDate, remainingCentavos }] : [];
     });
   }).sort((left, right) => left.dueDate.localeCompare(right.dueDate) || left.name.localeCompare(right.name));
 }

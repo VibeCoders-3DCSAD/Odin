@@ -1,6 +1,6 @@
-export function formatPeso(centavos: number): string {
+export function formatPeso(centavos: number, fractionDigits = 0): string {
   const pesos = Math.abs(centavos) / 100;
-  return `${centavos < 0 ? "-" : ""}₱${pesos.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `${centavos < 0 ? "-" : ""}₱${pesos.toLocaleString("en-PH", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits })}`;
 }
 
 export function formatPesoCompact(centavos: number): string {

@@ -142,7 +142,7 @@ export function advanceContributionSchedule(date: string, schedule: SavingsContr
   return dateAtDay(current.getUTCFullYear(), current.getUTCMonth() + interval, schedule.contributionDayOfMonth!);
 }
 
-function scheduledDates(schedule: SavingsContributionSchedule, from: string, through: string): string[] {
+export function getScheduledContributionDates(schedule: SavingsContributionSchedule, from: string, through: string): string[] {
   const error = validateContributionSchedule(schedule);
   if (error || !schedule.nextContributionDate || from > through) return [];
   const dates: string[] = [];
@@ -175,7 +175,7 @@ export function getTargetDateContributionAmount(
   asOfDate: string,
 ): number | null {
   if (!isIsoDate(targetDate) || !isIsoDate(asOfDate) || !Number.isSafeInteger(remainingAmountCentavos) || remainingAmountCentavos <= 0) return null;
-  const dates = scheduledDates(schedule, asOfDate, targetDate);
+  const dates = getScheduledContributionDates(schedule, asOfDate, targetDate);
   return dates.length ? Math.ceil(remainingAmountCentavos / dates.length) : null;
 }
 
@@ -190,7 +190,7 @@ export function getRequiredSavingsContributions(
     if (goal.status !== "active" || goal.isAchieved || goal.remainingAmountCentavos <= 0 || !goal.nextContributionDate) return [];
     const minimumPerOccurrenceCentavos = getMinimumContributionPerOccurrence(goal, periodStart);
     if (minimumPerOccurrenceCentavos === null || !goal.targetDate) return [];
-    const allDates = scheduledDates(goal, periodStart, goal.targetDate);
+    const allDates = getScheduledContributionDates(goal, periodStart, goal.targetDate);
     const scheduledDatesInPeriod = allDates.filter((date) => date >= periodStart && date <= periodEnd);
     if (!scheduledDatesInPeriod.length) return [];
     const configuredMinimumCentavos = Math.min(goal.remainingAmountCentavos, minimumPerOccurrenceCentavos * scheduledDatesInPeriod.length);
@@ -212,7 +212,7 @@ export function getRequiredSavingsAccountContributions(
   const contributions = accounts.flatMap((account) => {
     const scheduleError = validateContributionSchedule(account);
     if (scheduleError || account.plannedContributionAmountCentavos <= 0) return [];
-    const scheduledDatesInPeriod = scheduledDates(account, periodStart, periodEnd);
+    const scheduledDatesInPeriod = getScheduledContributionDates(account, periodStart, periodEnd);
     if (!scheduledDatesInPeriod.length) return [];
     const configuredMinimumCentavos = account.plannedContributionAmountCentavos * scheduledDatesInPeriod.length;
     return [{

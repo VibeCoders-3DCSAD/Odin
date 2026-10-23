@@ -11,11 +11,11 @@ import SavingsAllocationReview from "./SavingsAllocationReview";
 import type { SavingsAllocationProposal } from "./savingsEnvelopeAllocation";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF" } as const;
-type Props = { userId: string; deviceId: string; syncVersion?: number; onRecordActivity?: (goalId: string, kind: "contribution" | "withdrawal", amountCentavos?: number) => void; onOpenTransaction?: (transactionId: string) => void };
+type Props = { userId: string; deviceId: string; syncVersion?: number; initialGoalId?: string; onRecordActivity?: (goalId: string, kind: "contribution" | "withdrawal", amountCentavos?: number) => void; onOpenTransaction?: (transactionId: string) => void };
 type Page = "list" | "create" | "detail" | "edit";
 const money = (amount: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount / 100);
 
-export default function SavingsGoalsScreen({ userId, deviceId, syncVersion = 0, onRecordActivity, onOpenTransaction }: Props) {
+export default function SavingsGoalsScreen({ userId, deviceId, syncVersion = 0, initialGoalId, onRecordActivity, onOpenTransaction }: Props) {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [selected, setSelected] = useState<SavingsGoal | null>(null);
   const [activities, setActivities] = useState<SavingsActivity[]>([]);
@@ -29,6 +29,9 @@ export default function SavingsGoalsScreen({ userId, deviceId, syncVersion = 0, 
   async function load() { setLoading(true); try { setGoals(await listSavingsGoals(userId, view)); setMessage(null); } catch { setMessage("Your savings goals could not be loaded. Please try again."); } finally { setLoading(false); } }
   useEffect(() => { load().catch(() => {}); }, [userId, syncVersion, view]);
   async function openGoal(id: string) { const [goal, nextActivities] = await Promise.all([getSavingsGoal(userId, id), listSavingsGoalActivities(userId, id)]); if (goal) { setSelected(goal); setActivities(nextActivities); setConfirmingDelete(false); setConfirmingArchive(false); setPage("detail"); } }
+  useEffect(() => {
+    if (initialGoalId) void openGoal(initialGoalId).catch(() => setMessage("Your savings goal could not be loaded. Please try again."));
+  }, [initialGoalId, userId]);
   async function remove() { if (!selected) return; setDeleting(true); try { await deleteSavingsGoal(userId, deviceId, selected.id); await load(); setSelected(null); setPage("list"); } catch { setMessage("Your savings goal could not be deleted. Please try again."); } finally { setDeleting(false); } }
   async function archive() { if (!selected) return; setDeleting(true); try { await archiveSavingsGoal(userId, deviceId, selected.id); await load(); setSelected(null); setPage("list"); } catch { setMessage("Your savings goal could not be archived. Please try again."); } finally { setDeleting(false); } }
   async function restore() { if (!selected) return; setDeleting(true); try { await restoreSavingsGoal(userId, deviceId, selected.id); setView("active"); setSelected(null); setPage("list"); } catch { setMessage("Your savings goal could not be restored. Please try again."); } finally { setDeleting(false); } }

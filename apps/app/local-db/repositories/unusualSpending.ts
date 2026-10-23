@@ -35,8 +35,8 @@ async function listTransactions(userId: string, fromDate: string): Promise<Spend
     `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id,
             s.label AS subcategory_label, a.name AS account_name
        FROM transactions t
-       JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
-       JOIN categories c ON c.id = s.category_id AND c.deleted = 0
+       JOIN subcategories s ON s.id = t.subcategory_id AND s.user_id = t.user_id AND s.deleted = 0
+       JOIN categories c ON c.id = s.category_id AND c.user_id = t.user_id AND c.deleted = 0
        LEFT JOIN financial_accounts a ON a.id = t.source_account_id
          AND a.user_id = t.user_id AND a.deleted = 0
       WHERE t.user_id = ? AND t.transaction_type = 'expense' AND t.status = 'posted'
@@ -87,10 +87,11 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
        FROM anomaly_evaluations e
        JOIN transactions t ON t.id = e.transaction_id
          AND t.user_id = e.user_id AND t.deleted = 0
-       JOIN subcategories s ON s.id = e.subcategory_id AND s.deleted = 0
+       JOIN subcategories s ON s.id = e.subcategory_id AND s.user_id = e.user_id AND s.deleted = 0
        LEFT JOIN financial_accounts a ON a.id = t.source_account_id
          AND a.user_id = t.user_id AND a.deleted = 0
       WHERE e.user_id = ? AND e.deleted = 0
+        AND t.transaction_type = 'expense' AND t.status = 'posted' AND t.subcategory_id = e.subcategory_id
       ORDER BY t.transaction_date ASC, t.id ASC`,
     userId,
   );
