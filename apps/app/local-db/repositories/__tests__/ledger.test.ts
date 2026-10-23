@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { createSqliteHarness } from "./sqliteHarness";
 
 const mockInitDatabase = jest.fn<(...args: any[]) => any>();
 const mockEnqueueOperation = jest.fn<(...args: any[]) => any>();
@@ -180,6 +181,35 @@ describe("transaction list pagination", () => {
     mockInitDatabase.mockReset();
   });
 
+  test.each([null, "Monthly savings"])("names savings contributions after their goal with notes %s", async (notes) => {
+    const harness = createSqliteHarness();
+    try {
+      await harness.migrateAll();
+      mockInitDatabase.mockResolvedValue(harness.db);
+      harness.sqlite.exec(`
+        INSERT INTO savings_goals (id, user_id, name, goal_type, target_amount_centavos, created_at, updated_at)
+        VALUES ('goal-1', 'user-1', 'Emergency Fund', 'custom', 100000, 'now', 'now');
+      `);
+      harness.sqlite.prepare(`INSERT INTO transactions
+        (id, user_id, transaction_type, transaction_date, amount_centavos, destination_savings_goal_id, notes, created_at, updated_at)
+        VALUES ('contribution-1', 'user-1', 'transfer', '2026-10-22', 1000, 'goal-1', ?, 'now', 'now')`).run(notes);
+      const { listTransactions } = await import("../ledger");
+
+      expect(await listTransactions("user-1")).toEqual([
+        expect.objectContaining({ id: "contribution-1", name: "Contribution to Emergency Fund" }),
+      ]);
+      expect(await listTransactions("user-2")).toEqual([]);
+
+      harness.sqlite.exec("UPDATE savings_goals SET name = 'Vacation', status = 'archived' WHERE id = 'goal-1'");
+      expect((await listTransactions("user-1"))[0]?.name).toBe("Contribution to Vacation");
+
+      harness.sqlite.exec("UPDATE savings_goals SET user_id = 'user-2' WHERE id = 'goal-1'");
+      expect((await listTransactions("user-1"))[0]?.name).not.toContain("Vacation");
+    } finally {
+      harness.sqlite.close();
+    }
+  });
+
   test("returns only list fields with joined display labels", async () => {
     const db = { getAllAsync: jest.fn(async () => []) };
     mockInitDatabase.mockResolvedValue(db);
@@ -188,7 +218,7 @@ describe("transaction list pagination", () => {
     await listTransactions("user-1", { limit: 50, offset: 100, sort_by: "transaction_date", sort_dir: "desc" });
 
     expect(db.getAllAsync).toHaveBeenCalledWith(
-      expect.stringContaining("COALESCE(NULLIF(t.merchant_name, ''), NULLIF(t.counterparty_name, ''), NULLIF(t.notes, ''), s.label, 'Transaction') AS name"),
+      expect.stringContaining("COALESCE('Contribution to ' || g.name, NULLIF(t.merchant_name, ''), NULLIF(t.counterparty_name, ''), NULLIF(t.notes, ''), s.label, 'Transaction') AS name"),
       "user-1",
     );
     expect(db.getAllAsync).toHaveBeenCalledWith(
