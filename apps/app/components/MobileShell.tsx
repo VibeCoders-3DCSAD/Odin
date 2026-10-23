@@ -997,9 +997,9 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               {syncButton}
             </View>
             <Image
-              source={require("../assets/odin-logo.png")}
+              source={require("../assets/budgie-logo.png")}
               accessibilityLabel="Budgie logo"
-              style={{ width: 68, height: 22, resizeMode: "contain" }}
+              style={{ width: 30, height: 30, resizeMode: "contain" }}
             />
             <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end" }}>
               <Pressable

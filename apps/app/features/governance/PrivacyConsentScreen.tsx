@@ -176,7 +176,7 @@ export default function PrivacyConsentScreen({
             color: INK2, marginBottom: 16,
           }}
         >
-          Odin processes your financial data to deliver budgeting insights and forecasts. We never
+          Budgie processes your financial data to deliver budgeting insights and forecasts. We never
           sell your data.{" "}
         </Text>
         <Pressable

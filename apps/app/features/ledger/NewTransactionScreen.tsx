@@ -925,7 +925,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
                     onPress={() => setShowPostingDatePicker(true)}
                   />
                   <Text style={[ui.note, { marginTop: 5, color: v4.mut }]}>
-                    Use YYYY-MM-DD when the issuer provides a posting date. Otherwise Odin uses the transaction date as an estimate.
+                    Use YYYY-MM-DD when the issuer provides a posting date. Otherwise Budgie uses the transaction date as an estimate.
                   </Text>
                 </View>
                 {creditCardPurchaseType === "installment" ? <CreditCardInstallmentFields value={installment} errors={installmentErrors} readOnly={editInstallmentLocked} onChange={(next) => {

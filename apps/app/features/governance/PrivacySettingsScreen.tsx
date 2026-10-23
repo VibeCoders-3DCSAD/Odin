@@ -401,7 +401,7 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
           marginBottom: 8,
         }}
       >
-        Odin provides budgeting tools, not professional financial advice. Decisions are your own.
+        Budgie provides budgeting tools, not professional financial advice. Decisions are your own.
       </Text>
     </View>
   );

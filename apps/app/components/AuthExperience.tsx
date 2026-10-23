@@ -17,7 +17,7 @@ import { isOnline } from "../lib/network";
 
 const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
 const requestTimeoutMs = 10_000;
-const odinLogo = require("../assets/odin-logo.png");
+const budgieLogo = require("../assets/budgie-logo.png");
 
 type AuthMode = "login" | "register" | "reset_password" | "reset_complete";
 type AuthModeWithRecovery = AuthMode | "verification_pending" | "session_expired";
@@ -131,7 +131,7 @@ function getErrorMessage(error: unknown, fallback = "Authentication failed. Plea
   }
 
   if (error instanceof TypeError || (error instanceof Error && /network|fetch/i.test(error.message))) {
-    return "We could not reach Odin. Check your internet connection and try again.";
+    return "We could not reach Budgie. Check your internet connection and try again.";
   }
 
   return error instanceof Error && error.message.trim() ? error.message : fallback;
@@ -608,7 +608,7 @@ export default function AuthExperience({
       return;
     }
 
-    setNotice({ tone: "default", message: "Creating your Odin account..." });
+    setNotice({ tone: "default", message: "Creating your Budgie account..." });
 
     try {
       const { response, body } = await postJson("/register", {
@@ -816,7 +816,7 @@ export default function AuthExperience({
         } catch (error) {
           setNotice({
             tone: "default",
-            message: `Logged out from Odin. Native Google sign-out failed: ${getErrorMessage(error)}`,
+            message: `Logged out from Budgie. Native Google sign-out failed: ${getErrorMessage(error)}`,
           });
           return;
         }
@@ -840,14 +840,14 @@ export default function AuthExperience({
     ? "Session expired"
     : "Create account";
   const subtitle = mode === "login"
-    ? "Sign in to your Odin account"
+    ? "Sign in to your Budgie account"
     : mode === "reset_complete"
     ? "Choose a new password for your account."
     : mode === "verification_pending"
     ? "Confirm your email address to continue."
     : mode === "session_expired"
     ? "Sign in again to continue securely."
-    : "Set up your Odin account";
+    : "Set up your Budgie account";
 
   return (
     <View className="flex-1 bg-card">
@@ -858,9 +858,9 @@ export default function AuthExperience({
             <View className="items-center gap-5">
             <View className="w-[64px] h-[64px] rounded-[32px] border-[3px] border-aqua950 items-center justify-center">
               <Image
-                accessibilityLabel="Odin logo"
+                accessibilityLabel="Budgie logo"
                 resizeMode="contain"
-                source={odinLogo}
+                source={budgieLogo}
                 className="w-[48px] h-[48px]"
               />
             </View>
@@ -903,7 +903,7 @@ export default function AuthExperience({
                 <View className="flex-row items-start gap-3 p-5 rounded-[16px] bg-accent">
                   <MaterialCommunityIcons color={palette.brand} name="email-check-outline" size={24} />
                   <Text className="flex-1 text-text text-sm leading-[20px] font-medium">
-                    Check {pendingVerificationEmail ? pendingVerificationEmail : "your inbox"} for Odin's verification link. The link confirms email ownership and unlocks sign-in.
+                    Check {pendingVerificationEmail ? pendingVerificationEmail : "your inbox"} for Budgie's verification link. The link confirms email ownership and unlocks sign-in.
                   </Text>
                 </View>
                 <AuthButton disabled={isBusy || !pendingVerificationEmail} label="Resend verification email" loading={isBusy} onPress={handleResendVerification} />
@@ -1162,7 +1162,7 @@ export default function AuthExperience({
                   </Pressable>
                 ) : (
                   <Text className="text-subtle text-xs leading-[18px]">
-                    By creating an account, you agree to continue through Odin's verification and onboarding flow.
+                    By creating an account, you agree to continue through Budgie's verification and onboarding flow.
                   </Text>
                 )}
 
@@ -1205,7 +1205,7 @@ export default function AuthExperience({
 
                 <View className="flex-row flex-wrap items-center justify-center gap-2">
                   <Text className="text-subtle text-xs">
-                    {mode === "login" ? "New to Odin?" : "Already have an account?"}
+                    {mode === "login" ? "New to Budgie?" : "Already have an account?"}
                   </Text>
                   <Pressable onPress={() => setMode(mode === "login" ? "register" : "login")}>
                     <Text className="text-brand text-xs font-bold">

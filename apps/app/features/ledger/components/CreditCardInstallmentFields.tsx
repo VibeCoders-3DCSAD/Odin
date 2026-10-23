@@ -38,7 +38,7 @@ export default function CreditCardInstallmentFields({ value, errors, onChange, r
   };
   return <View style={{ gap: 13, borderRadius: 16, borderWidth: 1, borderColor: palette.line, padding: 14, backgroundColor: "#fcf8f0" }}>
     <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.ink }}>Installment details</Text>
-    <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.muted }}>{readOnly ? "Installment transactions cannot be edited after creation because amortizations and available-credit holds may already be linked to billing cycles." : "Odin holds the full purchase principal against available credit. Change remaining principal/months only when recording an older installment with paid months."}</Text>
+    <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.muted }}>{readOnly ? "Installment transactions cannot be edited after creation because amortizations and available-credit holds may already be linked to billing cycles." : "Budgie holds the full purchase principal against available credit. Change remaining principal/months only when recording an older installment with paid months."}</Text>
     <Field label="ORIGINAL PRINCIPAL" value={value.originalPrincipal} onChangeText={() => undefined} placeholder="Transaction amount" error={errors.originalPrincipal} decimal editable={false} />
     <View style={{ flexDirection: "row", gap: 10 }}>
       <Field label="TERM (MONTHS)" value={value.termMonths} onChangeText={(termMonths) => update({ termMonths })} placeholder="Enter installment term" error={errors.termMonths} editable={!readOnly} />

@@ -24,7 +24,7 @@ const plugins = googleIosUrlScheme
   : ["expo-secure-store"];
 
 const config = {
-  name: "app",
+  name: "Budgie",
   slug: "app",
   version: "1.0.0",
   scheme: "odin",
