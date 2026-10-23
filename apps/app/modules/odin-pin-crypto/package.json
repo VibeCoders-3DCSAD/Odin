@@ -1,0 +1,6 @@
+{
+  "name": "odin-pin-crypto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native PIN key derivation for the Odin mobile app"
+}

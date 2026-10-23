@@ -4,6 +4,7 @@ import { ArrowsClockwise, CaretLeft, ChartLine, CheckCircle, Cloud, House, ListB
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Image,
   Modal,
@@ -45,6 +46,7 @@ import DebtManagerOverview from "../features/debt-manager/DebtManagerOverview";
 import NonCreditDebtListScreen from "../features/debt-manager/NonCreditDebtListScreen";
 import NonCreditDebtDetailScreen from "../features/debt-manager/NonCreditDebtDetailScreen";
 import { useConnectivityStore } from "../services/connectivity";
+import { authorizeLocalRequest } from "../lib/localAccess";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
 import { initDatabase } from "../local-db/client";
@@ -113,6 +115,7 @@ type MobileShellProps = {
   onLoggedOut: () => void;
   onRequestReassessment?: () => void;
   signOut?: () => Promise<void>;
+  onLock?: () => void;
 };
 
 type SyncQueueIssue = {
@@ -237,7 +240,7 @@ const pageMeta: Record<Page, { title: string; subtitle: string }> = {
   settings: { title: "Settings", subtitle: "Privacy & Account" },
 };
 
-export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, onRequestReassessment, signOut }: MobileShellProps) {
+export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut, onRequestReassessment, signOut, onLock }: MobileShellProps) {
   const { bottom: bottomInset } = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
@@ -583,14 +586,18 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   async function finishLogout() {
+    if (!useConnectivityStore.getState().online) throw new Error("Connect to the internet to log out.");
+    const token = await authorizeLocalRequest(userId, accessToken);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    const response = await fetch(`${API_BASE_URL}/odin/api/auth/logout`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/odin/api/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+    } finally { clearTimeout(timeoutId); }
 
     if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
 
@@ -673,9 +680,15 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
   }
 
+  function confirmLogout() {
+    if (!online) { showToast("Connect to the internet to log out."); return; }
+    Alert.alert("Log out of Budgie?", "Your local access will be locked. Pending changes must finish syncing before you log out.",
+      [{ text: "Cancel", style: "cancel" }, { text: "Log out", style: "destructive", onPress: () => { void handleLogout(); } }]);
+  }
+
   async function handleLogout() {
     if (!online) {
-      showToast("This action can only be done while online");
+      showToast("Connect to the internet to log out.");
       return;
     }
     setIsLoggingOut(true);
@@ -822,9 +835,13 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
       return (
         <View>
-          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={handleLogout} onRequestReassessment={onRequestReassessment} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} beforeDangerZone={syncSection} />
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={confirmLogout} onRequestReassessment={onRequestReassessment} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} beforeDangerZone={syncSection} />
           {!settingsSubPage ? (
             <View style={{ marginTop: 20 }}>
+              {onLock && <Pressable accessibilityRole="button" accessibilityLabel="Lock app" onPress={onLock}
+                className="min-h-[54px] rounded-[14px] bg-[#013220] items-center justify-center mb-3">
+                <Text className="text-white text-base font-bold">Lock app</Text>
+              </Pressable>}
               {logoutError ? (
                 <View style={{ backgroundColor: "#FFF0F2", borderRadius: 14, padding: 14, marginBottom: 12 }}>
                   <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: "#D9001F" }}>{logoutError}</Text>
@@ -833,8 +850,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log out"
-                disabled={isLoggingOut}
-                onPress={handleLogout}
+                disabled={!online || isLoggingOut}
+                onPress={confirmLogout}
                 className={`min-h-[54px] rounded-[14px] border border-[#EAEAE6] bg-[#F1F0EB] items-center justify-center ${(!online || isLoggingOut) ? "opacity-50" : "active:opacity-90"}`}
               >
                 {isLoggingOut ? (

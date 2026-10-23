@@ -1,4 +1,6 @@
 import * as SQLite from "expo-sqlite";
+import { getDatabaseCredentials } from "./databaseAccess";
+import { tracePinStep } from "../lib/helpers/pinSetupTrace";
 
 export type Migration = {
   version: number;
@@ -17,13 +19,16 @@ let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 export async function getDatabase(
   migrations: Migration[],
 ): Promise<SQLite.SQLiteDatabase> {
+  const credentials = getDatabaseCredentials();
   if (db) return db;
   if (!dbPromise) {
     dbPromise = (async () => {
-      const opened = await SQLite.openDatabaseAsync("odin.db");
+      const opened = credentials
+        ? await (await tracePinStep("database.load-encryption-module", () => import("./encryptedDatabase"))).openEncryptedDatabase(credentials.userId, credentials.key)
+        : await SQLite.openDatabaseAsync("odin.db");
       try {
         await opened.execAsync("PRAGMA busy_timeout = 5000");
-        await opened.execAsync(MIGRATIONS_TABLE);
+        await tracePinStep("database.ensure-migrations-table", () => opened.execAsync(MIGRATIONS_TABLE));
         await runMigrations(opened, migrations);
         db = opened;
         return opened;
@@ -51,7 +56,7 @@ async function runMigrations(
 
   for (const m of migrations.sort((a, b) => a.version - b.version)) {
     if (appliedVersions.has(m.version)) continue;
-    await runMigrationWithRetry(db, m);
+    await tracePinStep(`database.migrate.${m.version}`, () => runMigrationWithRetry(db, m));
   }
 }
 
@@ -173,11 +178,12 @@ export async function loadMigrations(): Promise<Migration[]> {
 }
 
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
-  return getDatabase(await loadMigrations());
+  return getDatabase(await tracePinStep("database.load-migrations", loadMigrations));
 }
 
-export function closeDatabase(): Promise<void> {
-  if (!db) return Promise.resolve();
+export async function closeDatabase(): Promise<void> {
+  if (dbPromise) await dbPromise.catch(() => {});
+  if (!db) return;
   const d = db;
   db = null;
   dbPromise = null;

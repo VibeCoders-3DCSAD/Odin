@@ -19,9 +19,10 @@ if (requiresIosGoogleConfig && !googleIosUrlScheme) {
   );
 }
 
-const plugins = googleIosUrlScheme
+const plugins: (string | [string, Record<string, unknown>])[] = googleIosUrlScheme
   ? [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }], "expo-secure-store"]
   : ["expo-secure-store"];
+plugins.push(["expo-sqlite", { useSQLCipher: true }], "./plugins/withOfflineDataProtection");
 
 const config = {
   name: "Budgie",
@@ -43,6 +44,7 @@ const config = {
 
   },
   android: {
+    allowBackup: false,
     package: "com.odin.finances",
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",

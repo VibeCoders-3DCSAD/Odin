@@ -480,6 +480,7 @@ Put these concerns here:
 - frontend hooks
 - client-side Supabase integration
 - app-specific styling and theme setup
+- app-owned Expo native modules in `apps/app/modules/`, with platform implementations and native tests colocated inside each module
 
 Suggested internal growth pattern:
 

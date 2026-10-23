@@ -287,6 +287,15 @@ Code-only extraction uses local AST parsing; document and media extraction via
 the assistant skill can use its model. This graph covers `odin`; build `odin-ml`
 separately if needed.
 
+## Offline account PIN
+
+Native account access requires a six-digit PIN after initial online enrollment.
+Five incorrect attempts lock entry for one hour. Offline access lasts 30 days
+since successful online account verification; expiry preserves local records and
+requires online verification. Logout requires internet, while Lock app works
+offline. See [offline authentication](apps/app/features/auth/README.md) for recovery,
+encryption, native rebuild steps, verification, and security limits.
+
 ## Android Device Flow
 
 1. Connect an Android phone with USB debugging enabled.

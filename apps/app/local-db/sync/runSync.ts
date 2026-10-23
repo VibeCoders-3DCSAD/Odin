@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { authorizeLocalRequest, rejectServerSession, trackProtectedRequest } from "../../lib/localAccess";
 import { initDatabase } from "../client";
 import { enqueueOperation } from "../helpers";
 import {
@@ -69,6 +70,7 @@ export async function runSync(
   accessToken: string,
   { pull = true }: { pull?: boolean } = {},
 ): Promise<SyncResult> {
+  accessToken = await authorizeLocalRequest(userId, accessToken);
   const syncKey = `${userId}:${deviceId}`;
   const existing = syncPromises.get(syncKey);
   // Every run pushes, so an in-flight run covers a push-only request; a push-only run does not cover a pull.
@@ -657,9 +659,11 @@ function fetchWithTimeout(
 ): Promise<Response> {
   const timeout = options.timeout ?? REQUEST_TIMEOUT;
   const controller = new AbortController();
+  const release = trackProtectedRequest(controller);
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
-    clearTimeout(timeoutId),
-  );
+  return fetch(url, { ...options, signal: controller.signal }).then((response) => {
+    if (response.status === 401) rejectServerSession();
+    return response;
+  }).finally(() => { clearTimeout(timeoutId); release(); });
 }

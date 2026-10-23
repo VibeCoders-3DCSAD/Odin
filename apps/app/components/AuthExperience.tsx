@@ -64,6 +64,7 @@ type GoogleAuthConfig = {
 export type { AuthenticatedState };
 
 type AuthExperienceProps = {
+  authError?: string | null;
   google: GoogleAuthConfig;
   isPasswordRecovery?: boolean;
   isResolvingRecoveryToken?: boolean;
@@ -351,6 +352,7 @@ function Notice({ tone, message }: NoticeProps) {
 }
 
 export default function AuthExperience({
+  authError,
   google,
   isPasswordRecovery,
   isResolvingRecoveryToken,
@@ -443,6 +445,10 @@ export default function AuthExperience({
   }, [notice]);
 
   useEffect(() => { setNotice(null); }, [mode]);
+
+  useEffect(() => {
+    if (authError) setNotice({ tone: "error", message: authError });
+  }, [authError]);
 
   useEffect(() => {
     if (isPasswordRecovery || recoveryTokenProp || recoveryRefreshTokenProp) {

@@ -1,0 +1,30 @@
+appId: com.odin.finances
+name: Remembered account PIN and offline lockout
+env:
+  # Use only a dedicated test installation, already enrolled online with this PIN.
+  TEST_PIN: "001234"
+---
+- setAirplaneMode: enabled
+- launchApp
+- assertVisible: "Unlock Budgie"
+- tapOn: "Six-digit PIN"
+- inputText: ${TEST_PIN}
+- tapOn: "Unlock"
+- assertVisible: "Dashboard"
+- stopApp
+- launchApp
+- assertVisible: "Unlock Budgie"
+# Run only on a dedicated emulator or an explicitly authorized device.
+- repeat:
+    times: 5
+    commands:
+      - tapOn: "Six-digit PIN"
+      - inputText: "999999"
+      - tapOn: "Unlock"
+- assertVisible: "Try again in .*"
+- stopApp
+- launchApp
+- assertVisible: "Try again in .*"
+- setAirplaneMode: disabled
+# Hour and 30-day boundaries are covered by injected clocks in Jest, without a
+# production bypass. Online recovery is verified separately with a test account.

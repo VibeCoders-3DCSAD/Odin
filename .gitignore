@@ -66,3 +66,6 @@ yarn-error.*
 supabase/.branches/
 *.keystore
 scripts/out/
+
+# Generated build output for app-owned Expo modules
+/apps/app/modules/*/android/build/
