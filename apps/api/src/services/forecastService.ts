@@ -244,7 +244,8 @@ export function mapMlForecast(value: unknown): ForecastPayload {
     if (typeof value.category !== "string" || !HFCE_CATEGORIES.has(value.category) || typeof value.amount !== "number" || !Number.isFinite(value.amount) || value.amount < 0) throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");
     return { category: value.category, amountCentavos: cents(value.amount) };
   });
-  if (categoryForecasts.reduce((total, point) => total + point.amountCentavos, 0) !== cents(snapshot.total_amount)) throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");
+  // odin-ml rounds total_amount to two decimals and allows a one-centavo difference from the category sum.
+  if (Math.abs(categoryForecasts.reduce((total, point) => total + point.amountCentavos, 0) - cents(snapshot.total_amount)) > 1) throw new ForecastUpstreamError(502, "Forecast service returned an invalid response");
   return {
     forecasts,
     snapshot: {

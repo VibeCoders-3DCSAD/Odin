@@ -47,6 +47,16 @@ describe("forecast ML adapter", () => {
     expect(result.snapshot.categoryForecasts[0]?.amountCentavos).toBe(amount * 100);
   });
 
+  it("accepts a two-decimal total that differs from the category sum by float error", () => {
+    const result = mapMlForecast({ ...mlResponse,
+      snapshot: { ...mlResponse.snapshot, total_amount: 0.3, category_forecasts: [{ category: "food", amount: 0.1 }, { category: "transport", amount: 0.2 }] },
+    });
+    expect(result.snapshot.totalAmountCentavos).toBeCloseTo(30);
+    expect(() => mapMlForecast({ ...mlResponse,
+      snapshot: { ...mlResponse.snapshot, total_amount: 0.32, category_forecasts: [{ category: "food", amount: 0.1 }, { category: "transport", amount: 0.2 }] },
+    })).toThrow(ForecastUpstreamError);
+  });
+
   it("validates transaction history without the retired horizon and level controls", () => {
     expect(parseForecastRequest({ historicalTransactions: [transaction] })).toEqual({ historicalTransactions: [transaction] });
     expect(() => parseForecastRequest({ historicalTransactions: [] })).toThrow(ForecastValidationError);
