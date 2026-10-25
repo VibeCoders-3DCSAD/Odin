@@ -190,4 +190,31 @@ describe("forecast ML adapter", () => {
     expect(result.quarters[1]!.totalCentavos).toBe(300_000);
     expect(result).toMatchObject({ modelVersion: "hfce-sarima-v4-category-quarterly", baselineMethod: "same_period_last_year", seasonalUncertainty: false, quality: "PERSONALIZED" });
   });
+  it("forecasts as of a past day from the spending before it, starting at that day's month", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
+    process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
+    const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => mlResponse });
+    const request = parseForecastRequest({ historicalTransactions: [transaction, currentQuarterTransaction], asOf: "2026-09-01" });
+    const result = await getMlQuarterlyForecast("user-1", request, fetcher);
+    const body = JSON.parse(fetcher.mock.calls[0]![1].body);
+    expect(body).toMatchObject({ as_of: "2026-09-01", target_months: forecastMonths(new Date("2026-09-01T00:00:00+08:00")), categories: ["food"] });
+    expect(body.target_months[0]).toBe("2026-09");
+    // September's own spending came after the forecast date.
+    expect(body.historical_transactions.map((point: { date: string }) => point.date)).toEqual(["2026-06-04"]);
+    expect(result.months[0]!.month).toBe("2026-09");
+  });
+
+  it("rejects an asOf day that is malformed or still ahead in Manila", () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
+    expect(() => parseForecastRequest({ historicalTransactions: [transaction], asOf: "2026-9-1" })).toThrow("asOf is invalid");
+    expect(() => parseForecastRequest({ historicalTransactions: [transaction], asOf: "2026-10-19" })).toThrow("asOf cannot be in the future");
+  });
+
+  it("has no past forecast without spending before the asOf day", async () => {
+    process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
+    const fetcher = jest.fn();
+    await expect(getMlQuarterlyForecast("user-1", { historicalTransactions: [currentQuarterTransaction], asOf: "2026-09-01" }, fetcher)).rejects.toMatchObject({ reason: "NO_COMPLETED_MONTH" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });

@@ -11,6 +11,8 @@ export type ForecastTransaction = {
 
 export type ForecastRequest = {
   historicalTransactions: ForecastTransaction[];
+  // YYYY-MM-DD day to forecast from instead of today; the quarterly forecast then starts in that month.
+  asOf?: string;
 };
 
 export type ForecastPayload = {

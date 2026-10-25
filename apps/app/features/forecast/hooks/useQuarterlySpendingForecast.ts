@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { getSnapshot, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
-import { getForecastHistoryStartDate, listForecastTransactions, listMonthlySpending, listQuarterlySpending, pastQuarters, recentMonths, type MonthSpending, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
-import { listScheduledPayments } from "../../../local-db/repositories/scheduledPayments";
+import { listMonthlySpending, listQuarterlySpending, pastQuarters, recentMonths, type MonthSpending, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
 import { useConnectivityStore } from "../../../services/connectivity";
 import { getQuarterlyForecastContent } from "../../dashboard/dashboardSnapshotContent";
-import { requestForecastInterpretation, requestQuarterlyForecast } from "../api";
+import { requestForecastInterpretation } from "../api";
 import { forecastInterpretation } from "../QuarterlyForecastCharts";
-import { addScheduledPayments } from "../scheduledForecast";
+import { fetchSpendingForecast } from "../fetchSpendingForecast";
 import type { QuarterlyForecastPayload } from "../types";
 
 const HISTORY_QUARTERS = 4;
@@ -45,21 +44,13 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
 
     async function revalidate() {
       try {
-        const historicalTransactions = await listForecastTransactions(userId, { fromDate: getForecastHistoryStartDate(), excludeScheduledPayments: true, excludeUnusualSpending: true });
+        const result = await fetchSpendingForecast(userId, accessToken, { signal });
         if (signal.aborted) return;
-        if (historicalTransactions.length === 0) {
-          setNotice("Record a posted income or expense before requesting a forecast.");
+        if ("notice" in result) {
+          setNotice(result.notice);
           return;
         }
-        const result = await requestQuarterlyForecast(accessToken, { historicalTransactions }, signal);
-        if (signal.aborted) return;
-        if (result.response.ok && result.body.payload === null && result.body.reason) {
-          setNotice(result.body.message ?? "A spending forecast isn't available yet.");
-          return;
-        }
-        if (!result.response.ok || !result.body.payload) throw new Error("forecast_request_failed");
-        const payload = addScheduledPayments(result.body.payload, await listScheduledPayments(userId));
-        if (signal.aborted) return;
+        const { payload } = result;
         await upsertSnapshot(userId, "forecast_quarterly", payload);
         if (signal.aborted) return;
         setForecast(payload);

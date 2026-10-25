@@ -17,6 +17,8 @@ export type ForecastRequest = {
   targetMonth?: string;
   // Several YYYY-MM months in one odin-ml call; the snapshot covers the first.
   targetMonths?: string[];
+  // YYYY-MM-DD day to forecast from instead of today, so a past month's forecast can be compared with its spending.
+  asOf?: string;
 };
 
 export type BaselineMethod = "same_period_last_year" | "median_monthly" | "recency_weighted_provisional";
@@ -90,7 +92,19 @@ export function parseForecastRequest(value: unknown): ForecastRequest {
   }
   return {
     historicalTransactions: input.historicalTransactions.map(parseTransaction),
+    ...(input.asOf == null ? {} : { asOf: parseAsOf(input.asOf) }),
   };
+}
+
+function parseAsOf(value: unknown): string {
+  if (typeof value !== "string" || !ISO_DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new ForecastValidationError("asOf is invalid");
+  if (value > manilaClock(new Date()).toISOString().slice(0, 10)) throw new ForecastValidationError("asOf cannot be in the future");
+  return value;
+}
+
+// The moment the forecast is made from: midnight in Manila on asOf, or now.
+function forecastClock(asOf?: string): Date {
+  return asOf ? new Date(`${asOf}T00:00:00+08:00`) : new Date();
 }
 
 function parseTransaction(value: unknown): ForecastTransaction {
@@ -119,8 +133,9 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
   if (!baseUrl) throw new ForecastUpstreamError(503, "Forecast service is unavailable", "configuration");
   const historicalTransactions = request.historicalTransactions;
   if (historicalTransactions.length === 0) throw new ForecastValidationError("No forecastable transactions remain");
-  const categories = forecastableCategories(historicalTransactions);
-  if (categories.length === 0) throw new ForecastUnavailableError(hasCompletedMonthSpend(historicalTransactions) ? "NO_RECENT_SPENDING" : "NO_COMPLETED_MONTH");
+  const now = forecastClock(request.asOf);
+  const categories = forecastableCategories(historicalTransactions, now);
+  if (categories.length === 0) throw new ForecastUnavailableError(hasCompletedMonthSpend(historicalTransactions, now) ? "NO_RECENT_SPENDING" : "NO_COMPLETED_MONTH");
   const body = JSON.stringify({
     user_id: userId,
     historical_transactions: historicalTransactions.map((transaction) => ({
@@ -135,6 +150,7 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
     categories,
     ...(request.targetMonth ? { target_month: request.targetMonth } : {}),
     ...(request.targetMonths ? { target_months: request.targetMonths } : {}),
+    ...(request.asOf ? { as_of: request.asOf } : {}),
   });
   const headers = trustedMlHeaders(userId, body);
   if (!headers) throw new ForecastUpstreamError(503, "Forecast service is unavailable", "configuration");
@@ -201,9 +217,13 @@ function withTotal<T extends { categories: CategoryAmount[] }>(group: T): T & { 
 
 // From six months of history odin-ml walks each month forward from last month by HFCE, splitting each
 // quarter's growth evenly across its months. A partial opening quarter scales its forecast months up to a full three.
+// With asOf, the forecast is the one that would have been made that day, from the spending recorded before it.
 export async function getMlQuarterlyForecast(userId: string, request: ForecastRequest, fetcher: typeof fetch = fetch): Promise<QuarterlyForecastPayload> {
-  const targetMonths = forecastMonths();
-  const payload = await getMlForecast(userId, { historicalTransactions: request.historicalTransactions, targetMonths }, fetcher);
+  const { asOf } = request;
+  const targetMonths = forecastMonths(forecastClock(asOf));
+  const historicalTransactions = asOf ? request.historicalTransactions.filter((transaction) => transaction.date < asOf) : request.historicalTransactions;
+  if (historicalTransactions.length === 0) throw new ForecastUnavailableError("NO_COMPLETED_MONTH");
+  const payload = await getMlForecast(userId, { historicalTransactions, targetMonths, ...(asOf ? { asOf } : {}) }, fetcher);
   const months = targetMonths.map((month) => withTotal({ month, categories: payload.forecasts.filter((point) => point.month === month).map(({ category, amountCentavos }) => ({ category, amountCentavos })) }));
   const quarterKeys = [...new Set(targetMonths.map(quarterOf))];
   const quarters = quarterKeys.map((quarter) => {
