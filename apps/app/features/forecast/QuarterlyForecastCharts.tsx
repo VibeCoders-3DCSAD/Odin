@@ -82,16 +82,21 @@ function monthName(month: string): string {
   return MONTH_NAMES[Number(month.slice(5, 7)) - 1]!;
 }
 
+const shortMonthLabel = (month: string) => `${monthName(month).slice(0, 3)} '${month.slice(2, 4)}`;
+
 const MONTH_LABELS: Labels = {
-  full: (month) => `${monthName(month).slice(0, 3)} ${month.slice(0, 4)}`,
-  short: (month) => `${monthName(month).slice(0, 3)} '${month.slice(2, 4)}`,
+  full: shortMonthLabel,
+  short: shortMonthLabel,
   dates: (month) => `${monthName(month)} ${month.slice(0, 4)}`,
 };
+
+// The monthly view stays under the axis's crowding limit, so every month keeps its label.
+const MONTHLY_FORECAST_MONTHS = 4;
 
 // A full year of history follows each month's own spending last year, so the forecast is shown per month.
 // Shorter histories forecast the same amount for every month of a quarter, so they stay quarterly.
 export function monthlyForecast(forecast: QuarterlyForecastPayload): NonNullable<QuarterlyForecastPayload["months"]> | null {
-  return forecast.baselineMethod === "same_period_last_year" && forecast.months?.length ? forecast.months : null;
+  return forecast.baselineMethod === "same_period_last_year" && forecast.months?.length ? forecast.months.slice(0, MONTHLY_FORECAST_MONTHS) : null;
 }
 
 // Past this many points the axis labels every other point, counted from the first forecast point.

@@ -18,7 +18,7 @@ const forecast: QuarterlyForecastPayload = {
 
 describe("monthly spending forecast", () => {
   it("shows months only once a full year of history sets each month's baseline", () => {
-    expect(monthlyForecast(forecast)).toBe(forecast.months);
+    expect(monthlyForecast(forecast)).toEqual(forecast.months);
     expect(monthlyForecast({ ...forecast, baselineMethod: "median_monthly" })).toBeNull();
     expect(monthlyForecast({ ...forecast, months: undefined })).toBeNull();
   });
@@ -31,6 +31,13 @@ describe("monthly spending forecast", () => {
     expect(view.getAllByText("PHP 1,000")).toHaveLength(2);
     expect(view.getByText("All forecast categories, per month")).toBeTruthy();
     expect(view.getByLabelText("Total projected spending for 3 months")).toBeTruthy();
+  });
+
+  it("shows the next four months, each with its own axis label", () => {
+    const months = ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04"].map((month) => ({ month, ...food(100_000) }));
+
+    expect(monthlyForecast({ ...forecast, months })?.map((month) => month.month)).toEqual(["2026-11", "2026-12", "2027-01", "2027-02"]);
+    expect(render(<QuarterlyForecastCharts forecast={{ ...forecast, months }} />).getByLabelText("Total projected spending for 4 months")).toBeTruthy();
   });
 
   it("keeps quarter tabs while the baseline is not seasonal", () => {
