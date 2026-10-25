@@ -166,7 +166,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   scheduled_payment_records: new Set([
-    "id", "user_id", "scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes",
+    "id", "user_id", "scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes", "settles_occurrence",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   savings_allocation_preferences: new Set(["user_id", "strategy", "version", "deleted", "created_at", "updated_at", "last_synced_at"]),

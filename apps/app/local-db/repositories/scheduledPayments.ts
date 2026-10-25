@@ -263,7 +263,7 @@ async function writePayment(db: SQLite.SQLiteDatabase, userId: string, deviceId:
   }, { id: ids.transactionId });
   await insertScheduledPaymentRecordInTransaction(db, userId, deviceId, {
     id: ids.recordId, scheduledPaymentId: payment.id, transactionId: transaction.id, occurrenceDate: entry.occurrenceDate,
-    paymentDate: entry.paymentDate, amountCentavos: entry.amountCentavos, source, notes: entry.notes,
+    paymentDate: entry.paymentDate, amountCentavos: entry.amountCentavos, source, notes: entry.notes, settlesOccurrence: false,
   });
 }
 

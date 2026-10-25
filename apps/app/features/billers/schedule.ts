@@ -122,18 +122,20 @@ export function occurrenceStatus(scheduledCentavos: number, paidCentavos: number
 }
 
 // The occurrence the user should act on: the latest past one while it is unpaid, otherwise the next one due.
-export function currentOccurrence(schedule: PaymentSchedule, scheduledCentavos: number, paidByDueDate: ReadonlyMap<string, number>, today: string): Occurrence | null {
+// Due dates in settledDueDates were marked paid in full, so they count as paid whatever was paid against them.
+export function currentOccurrence(schedule: PaymentSchedule, scheduledCentavos: number, paidByDueDate: ReadonlyMap<string, number>, today: string, settledDueDates: ReadonlySet<string> = new Set()): Occurrence | null {
   const previous = previousDueDate(schedule, addDays(today, -1));
   const previousPaid = previous ? paidByDueDate.get(previous) ?? 0 : 0;
-  const dueDate = previous && previousPaid < scheduledCentavos ? previous : nextDueDate(schedule, today);
+  const dueDate = previous && previousPaid < scheduledCentavos && !settledDueDates.has(previous) ? previous : nextDueDate(schedule, today);
   if (!dueDate) return null;
   const paidCentavos = paidByDueDate.get(dueDate) ?? 0;
+  const settled = settledDueDates.has(dueDate);
   return {
     dueDate,
     scheduledCentavos,
     paidCentavos,
-    remainingCentavos: Math.max(scheduledCentavos - paidCentavos, 0),
-    status: occurrenceStatus(scheduledCentavos, paidCentavos, dueDate, today),
+    remainingCentavos: settled ? 0 : Math.max(scheduledCentavos - paidCentavos, 0),
+    status: settled ? "paid" : occurrenceStatus(scheduledCentavos, paidCentavos, dueDate, today),
   };
 }
 

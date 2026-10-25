@@ -70,6 +70,11 @@ describe("currentOccurrence", () => {
     expect(currentOccurrence(base, 1000, new Map([["2026-09-05", 1000]]), "2026-10-05")).toMatchObject({ dueDate: "2026-10-05", status: "upcoming" });
   });
 
+  it("treats an underpaid occurrence marked as paid as paid and moves on", () => {
+    expect(currentOccurrence(base, 1000, new Map([["2026-10-05", 930]]), "2026-10-17", new Set(["2026-10-05"]))).toMatchObject({ dueDate: "2026-11-05", status: "upcoming" });
+    expect(currentOccurrence(base, 1000, new Map([["2026-10-05", 1000], ["2026-11-05", 930]]), "2026-10-17", new Set(["2026-11-05"]))).toEqual({ dueDate: "2026-11-05", scheduledCentavos: 1000, paidCentavos: 930, remainingCentavos: 0, status: "paid" });
+  });
+
   it("returns null after the schedule has ended and been paid", () => {
     expect(currentOccurrence({ ...base, endsOn: "2026-09-30" }, 1000, new Map([["2026-09-05", 1000]]), "2026-10-17")).toBeNull();
   });

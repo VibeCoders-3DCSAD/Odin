@@ -62,10 +62,16 @@ BEGIN
 
   BEGIN
     PERFORM public.apply_scheduled_payment_sync_operation(gen_random_uuid(), 'device-1', 'scheduled_payment_records', '5c000000-0000-4000-8000-0000000000c1', 'update', 1, '{notes}', '{"notes":"x"}');
-    RAISE EXCEPTION 'payment records must not be updated';
+    RAISE EXCEPTION 'payment records must not be updated beyond their settlement';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM NOT LIKE 'payment records cannot be updated%' THEN RAISE; END IF;
+    IF SQLERRM NOT LIKE 'payment records only update settles_occurrence%' THEN RAISE; END IF;
   END;
+
+  SELECT * INTO v_result FROM public.apply_scheduled_payment_sync_operation(gen_random_uuid(), 'device-1', 'scheduled_payment_records', '5c000000-0000-4000-8000-0000000000c1', 'update', 1, '{settles_occurrence}', '{"settles_occurrence":true}');
+  IF v_result.status <> 'applied' OR v_result.current_version <> 2
+     OR NOT (SELECT settles_occurrence FROM public.scheduled_payment_records WHERE id = '5c000000-0000-4000-8000-0000000000c1') THEN
+    RAISE EXCEPTION 'settling a payment''s occurrence must apply: %', v_result;
+  END IF;
 
   SELECT * INTO v_result FROM public.apply_scheduled_payment_sync_operation(gen_random_uuid(), 'device-1', 'scheduled_payments', v_payment, 'update', 2, '{status}', '{"status":"archived"}');
   IF v_result.status <> 'applied' THEN RAISE EXCEPTION 'archiving must apply: %', v_result; END IF;

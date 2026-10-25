@@ -168,3 +168,45 @@ describe("postDueScheduledPayments", () => {
     expect(liveRecords()).toEqual([]);
   });
 });
+
+describe("marking an underpaid occurrence as paid", () => {
+  async function underpaid() {
+    const { createScheduledPayment, recordScheduledPayment } = await repos();
+    const payment = await createScheduledPayment("user-1", "device-1", rent);
+    await recordScheduledPayment("user-1", "device-1", { scheduledPaymentId: payment.id, occurrenceDate: "2026-10-01", amountCentavos: 1_100_000, paymentDate: "2026-09-30", sourceAccountId: "acct-cash", notes: null });
+    return payment;
+  }
+
+  it("settles the occurrence, syncs only the flag, and stops it showing as overdue", async () => {
+    const { listScheduledPaymentSummaries } = await repos();
+    const { settleScheduledPaymentOccurrence, listScheduledPaymentRecords } = await import("../scheduledPaymentRecords");
+    const payment = await underpaid();
+    expect((await listScheduledPaymentSummaries("user-1", "active", "2026-10-05"))[0]!.current).toMatchObject({ dueDate: "2026-10-01", status: "overdue" });
+
+    await settleScheduledPaymentOccurrence("user-1", "device-1", payment.id, "2026-10-01");
+
+    const [record] = await listScheduledPaymentRecords("user-1", payment.id);
+    expect(record).toMatchObject({ amountCentavos: 1_100_000, settlesOccurrence: true, version: 2 });
+    expect(harness.queued("scheduled_payment_records").at(-1)).toMatchObject({ record_id: record!.id, operation_type: "update", changed_fields: ["settles_occurrence"], payload: { settles_occurrence: true } });
+    expect((await listScheduledPaymentSummaries("user-1", "active", "2026-10-05"))[0]!.current).toMatchObject({ dueDate: "2026-11-01", status: "upcoming" });
+    expect(balance()).toBe(3_900_000);
+  });
+
+  it("does not auto-post the remainder of a settled occurrence", async () => {
+    const { setScheduledPaymentAutoPost, postDueScheduledPayments } = await repos();
+    const { settleScheduledPaymentOccurrence } = await import("../scheduledPaymentRecords");
+    const payment = await underpaid();
+    await setScheduledPaymentAutoPost("user-1", "device-1", payment.id, true, "2026-09-30");
+    await settleScheduledPaymentOccurrence("user-1", "device-1", payment.id, "2026-10-01");
+
+    expect(await postDueScheduledPayments("user-1", "device-1", "2026-10-01")).toBe(0);
+  });
+
+  it("refuses an occurrence with no payment", async () => {
+    const { createScheduledPayment } = await repos();
+    const { settleScheduledPaymentOccurrence } = await import("../scheduledPaymentRecords");
+    const payment = await createScheduledPayment("user-1", "device-1", rent);
+
+    await expect(settleScheduledPaymentOccurrence("user-1", "device-1", payment.id, "2026-10-01")).rejects.toThrow("Record a payment for this occurrence before marking it as paid.");
+  });
+});

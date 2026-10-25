@@ -4,12 +4,14 @@ import { Banner, FieldLabel, FormCard, Note, styles as ui, v4, v4Font } from "..
 import { useToast } from "../../components/Toast";
 import { LocalDbError } from "../../local-db/helpers";
 import { listFinancialAccounts } from "../../local-db/repositories/financialFoundations";
-import { listScheduledPaymentRecords, type ScheduledPaymentRecord } from "../../local-db/repositories/scheduledPaymentRecords";
+import { listScheduledPaymentRecords, settleScheduledPaymentOccurrence, type ScheduledPaymentRecord } from "../../local-db/repositories/scheduledPaymentRecords";
 import { deleteScheduledPayment, deleteScheduledPaymentRecord, getScheduledPayment, setScheduledPaymentArchived, type ScheduledPayment } from "../../local-db/repositories/scheduledPayments";
 import { listSubcategories } from "../../local-db/repositories/taxonomy";
 import { DeleteConfirmDialog } from "./components/ScheduledPaymentActions";
 import { formatDueDate, formatPhp, repeatsLabel } from "./presentation";
 import { addDays, currentOccurrence, dueDatesBetween, localToday, type OccurrenceStatus } from "./schedule";
+
+const HISTORY_PAGE_SIZE = 5;
 
 type Props = { userId: string; deviceId: string; scheduledPaymentId: string; syncVersion: number; onEdit: () => void; onRecordPayment: () => void; onDeleted: () => void; onSyncRequested: () => void };
 
@@ -32,8 +34,9 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
   const [accountName, setAccountName] = useState("—");
   const [categoryName, setCategoryName] = useState("—");
   const [failed, setFailed] = useState(false);
-  const [confirm, setConfirm] = useState<"archive" | "delete" | null>(null);
+  const [confirm, setConfirm] = useState<"archive" | "delete" | "settle" | null>(null);
   const [removingRecord, setRemovingRecord] = useState<ScheduledPaymentRecord | null>(null);
+  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE_SIZE);
 
   const load = useCallback(async () => {
     try {
@@ -55,6 +58,7 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
     for (const record of records) paid.set(record.occurrenceDate, (paid.get(record.occurrenceDate) ?? 0) + record.amountCentavos);
     return paid;
   }, [records]);
+  const settledDates = useMemo(() => new Set(records.filter((record) => record.settlesOccurrence).map((record) => record.occurrenceDate)), [records]);
 
   async function run(action: () => Promise<unknown>, success: string, after?: () => void) {
     try {
@@ -72,7 +76,7 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
   if (payment === null) return <Banner tone="info">This obligation is deleted and unavailable for new payments. Choose an active obligation instead.</Banner>;
 
   const archived = payment.status === "archived";
-  const current = archived ? null : currentOccurrence(payment, payment.amountCentavos, paidByDate, today);
+  const current = archived ? null : currentOccurrence(payment, payment.amountCentavos, paidByDate, today, settledDates);
   const status = current ? STATUS[current.status] : null;
   const comingUp = archived ? [] : dueDatesBetween(payment, current && current.dueDate > today ? addDays(current.dueDate, 1) : today, addDays(today, 400)).slice(0, 3);
 
@@ -95,6 +99,7 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
             <Stat label="Remaining" value={formatPhp(current.remainingCentavos)} />
           </View>
           {current.remainingCentavos > 0 ? <Pressable onPress={onRecordPayment} accessibilityRole="button" style={ui.button}><Text style={ui.buttonText}>Record payment</Text></Pressable> : null}
+          {current.remainingCentavos > 0 && current.paidCentavos > 0 ? <Pressable onPress={() => setConfirm("settle")} accessibilityRole="button" style={[ui.button, ui.buttonGhost]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Mark as paid</Text></Pressable> : null}
         </FormCard>
       ) : null}
 
@@ -114,15 +119,20 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
       ) : null}
 
       <FormCard title="Payment history">
-        {records.length === 0 ? <Note>This obligation has no recorded payments. Record a payment when one is made.</Note> : records.map((record) => (
+        {records.length === 0 ? <Note>This obligation has no recorded payments. Record a payment when one is made.</Note> : records.slice(0, historyShown).map((record) => (
           <Pressable key={record.id} onLongPress={() => setRemovingRecord(record)} accessibilityRole="button" accessibilityLabel={`${formatPhp(record.amountCentavos)} paid ${formatDueDate(record.paymentDate)}`} accessibilityHint="Long press to delete this payment" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
               <Text style={ui.listTitle}>{formatDueDate(record.paymentDate)}</Text>
-              <Text style={ui.listSubtitle}>For {formatDueDate(record.occurrenceDate)}{record.source === "auto" ? " · Auto-posted" : ""}</Text>
+              <Text style={ui.listSubtitle}>For {formatDueDate(record.occurrenceDate)}{record.source === "auto" ? " · Auto-posted" : ""}{record.settlesOccurrence ? " · Settled in full" : ""}</Text>
             </View>
             <Text style={[ui.listTitle, { fontVariant: ["tabular-nums"] }]}>{formatPhp(record.amountCentavos)}</Text>
           </Pressable>
         ))}
+        {records.length > historyShown ? (
+          <Pressable onPress={() => setHistoryShown((shown) => shown + HISTORY_PAGE_SIZE)} accessibilityRole="button" style={[ui.button, ui.buttonGhost]}>
+            <Text style={[ui.buttonText, ui.buttonGhostText]}>Show {Math.min(HISTORY_PAGE_SIZE, records.length - historyShown)} more</Text>
+          </Pressable>
+        ) : null}
       </FormCard>
 
       {!archived ? <Pressable onPress={onEdit} accessibilityRole="button" style={[ui.button, ui.buttonGhost]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Edit</Text></Pressable> : null}
@@ -139,6 +149,18 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
             <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
               <Pressable onPress={() => setConfirm(null)} accessibilityRole="button" style={[ui.button, ui.buttonGhost, { flex: 1 }]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Cancel</Text></Pressable>
               <Pressable onPress={() => { setConfirm(null); run(() => setScheduledPaymentArchived(userId, deviceId, payment.id, true), `${payment.name} was archived.`); }} accessibilityRole="button" style={[ui.button, { flex: 1 }]}><Text style={ui.buttonText}>Archive</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={confirm === "settle" && current != null} transparent animationType="fade" onRequestClose={() => setConfirm(null)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "center", padding: 28 }}>
+          <View accessibilityRole="alert" style={{ backgroundColor: v4.surface, borderRadius: 20, padding: 20, gap: 10 }}>
+            <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>Mark {current ? formatDueDate(current.dueDate) : ""} as paid?</Text>
+            <Text style={ui.note}>{current ? `The ${formatPhp(current.paidCentavos)} already paid settles this occurrence, and the remaining ${formatPhp(current.remainingCentavos)} is no longer owed. Delete that payment to undo this.` : ""}</Text>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
+              <Pressable onPress={() => setConfirm(null)} accessibilityRole="button" style={[ui.button, ui.buttonGhost, { flex: 1 }]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Cancel</Text></Pressable>
+              <Pressable onPress={() => { setConfirm(null); if (current) run(() => settleScheduledPaymentOccurrence(userId, deviceId, payment.id, current.dueDate), `${payment.name} for ${formatDueDate(current.dueDate)} is marked as paid.`); }} accessibilityRole="button" style={[ui.button, { flex: 1 }]}><Text style={ui.buttonText}>Mark as paid</Text></Pressable>
             </View>
           </View>
         </View>

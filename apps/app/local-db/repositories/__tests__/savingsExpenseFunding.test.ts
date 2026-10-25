@@ -5,6 +5,7 @@ import m051 from "../../migrations/051_savings_goals";
 import m053 from "../../migrations/053_savings_goal_model";
 import m084 from "../../migrations/084_savings_goal_account_link";
 import m086 from "../../migrations/086_expense_savings_funding";
+import m088 from "../../migrations/088_settle_scheduled_payment_occurrence";
 import { createExpense, createSavingsGoalTransfer, updateTransaction, deleteTransaction, listSavingsAccountMovements } from "../ledger";
 import { listSavingsContributionGoals } from "../savingsGoalContributions";
 import { readSavingsExpenseFunding } from "../savingsExpenseFunding";
@@ -44,7 +45,7 @@ describe("linked savings funding", () => {
       CREATE TABLE scheduled_payment_records (id text, user_id text, transaction_id text, deleted integer, scheduled_payment_id text, occurrence_date text, payment_date text, amount_centavos integer, source text, notes text, version integer);
       CREATE TABLE credit_card_transactions (transaction_id text, user_id text, account_id text, cycle_id text, purchase_type text, deleted integer, version integer);
     `);
-    for (const migration of [m012, m051, m053, m084, m086]) await migration.up(mockDb as unknown as SQLite.SQLiteDatabase);
+    for (const migration of [m012, m051, m053, m084, m086, m088]) await migration.up(mockDb as unknown as SQLite.SQLiteDatabase);
     mockSqlite.exec(`
       ALTER TABLE transactions ADD COLUMN credit_card_posting_date text;
       INSERT INTO savings_goals (id, user_id, name, goal_type, target_amount_centavos, starting_amount_centavos, priority, status, created_at, updated_at, linked_account_id)

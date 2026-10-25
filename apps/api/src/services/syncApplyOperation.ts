@@ -340,6 +340,7 @@ const SAVINGS_GOAL_FIELDS = new Set(["linked_account_id", "name", "goal_type", "
 const SCHEDULED_PAYMENT_FIELDS = new Set(["name", "subcategory_id", "source_account_id", "amount_centavos", "frequency", "due_day_of_month", "due_second_day_of_month", "due_day_of_week", "due_month", "starts_on", "ends_on", "auto_post", "auto_post_from", "is_family_support", "is_dependent_support", "protected_by_default", "notes", "status"]);
 const SCHEDULED_PAYMENT_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
 const SCHEDULED_PAYMENT_RECORD_FIELDS = new Set(["scheduled_payment_id", "transaction_id", "occurrence_date", "payment_date", "amount_centavos", "source", "notes"]);
+const SCHEDULED_PAYMENT_RECORD_SETTLEMENT_FIELDS = new Set(["settles_occurrence"]);
 const SAVINGS_GOAL_ACTIVITY_FIELDS = new Set(["savings_goal_id", "transaction_id", "activity_kind", "amount_centavos", "activity_date", "notes"]);
 const SAVINGS_ALLOCATION_PREFERENCE_FIELDS = new Set(["strategy"]);
 const SAVINGS_GOAL_TYPES = ["emergency_fund", "custom"];
@@ -955,7 +956,7 @@ async function validateUpdatePayload(
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   if (entity === "scheduled_payments") return validateScheduledPaymentPayload(payload, false);
-  if (entity === "scheduled_payment_records") throw new Error("payment records cannot be updated; delete and record again");
+  if (entity === "scheduled_payment_records") return validateScheduledPaymentRecordSettlement(payload);
   let allowedFields: Set<string>;
   if (entity === "categories") {
     allowedFields = CATEGORY_UPDATE_FIELDS;
@@ -1833,6 +1834,15 @@ function validateScheduledPaymentRecordPayload(payload: Record<string, unknown>)
   requirePositiveInteger(sanitized, "amount_centavos");
   if (sanitized.source !== undefined && sanitized.source !== "manual" && sanitized.source !== "auto") throw new Error("source must be manual or auto");
   optionalString(sanitized, "notes");
+  return sanitized;
+}
+
+// Settling the occurrence in full is the only change a payment record accepts; anything else is delete and record again.
+function validateScheduledPaymentRecordSettlement(payload: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = sanitizePayload(payload, SCHEDULED_PAYMENT_RECORD_SETTLEMENT_FIELDS);
+  if (Object.keys(payload).some((key) => !SERVER_COLUMNS.has(key) && !SCHEDULED_PAYMENT_RECORD_SETTLEMENT_FIELDS.has(key)) ||typeof sanitized.settles_occurrence !== "boolean") {
+    throw new Error("payment records only update settles_occurrence; delete and record again");
+  }
   return sanitized;
 }
 

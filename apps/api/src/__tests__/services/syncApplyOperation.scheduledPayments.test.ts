@@ -66,9 +66,13 @@ describe("scheduled payment sync validation", () => {
     await expect(prepareOperation({} as never, "user-1", update({ recurring_template_id: "template-1" }))).rejects.toThrow("recurring_template_id is not syncable");
   });
 
-  it("accepts a payment record and rejects updating one", async () => {
+  it("accepts a payment record and rejects updating anything but its settlement", async () => {
+    const recordUpdate = (payload: Record<string, unknown>) => ({ ...record, operation_type: "update" as const, base_version: 1, changed_fields: Object.keys(payload), payload });
     await expect(prepareOperation({} as never, "user-1", record)).resolves.toMatchObject({ payload: record.payload });
-    await expect(prepareOperation({} as never, "user-1", { ...record, operation_type: "update" as const, base_version: 1, changed_fields: ["notes"], payload: { notes: "x" } })).rejects.toThrow("payment records cannot be updated");
+    await expect(prepareOperation({} as never, "user-1", recordUpdate({ settles_occurrence: true }))).resolves.toMatchObject({ payload: { settles_occurrence: true } });
+    await expect(prepareOperation({} as never, "user-1", recordUpdate({ notes: "x" }))).rejects.toThrow("payment records only update settles_occurrence");
+    await expect(prepareOperation({} as never, "user-1", recordUpdate({ settles_occurrence: true, amount_centavos: 1 }))).rejects.toThrow("payment records only update settles_occurrence");
+    await expect(prepareOperation({} as never, "user-1", recordUpdate({ settles_occurrence: "yes" }))).rejects.toThrow("payment records only update settles_occurrence");
   });
 
   it("rejects a payment record without a valid occurrence date", async () => {

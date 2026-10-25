@@ -59,6 +59,19 @@ describe("BillerDetailScreen", () => {
     await waitFor(() => expect(mockArchive).toHaveBeenCalledWith("user-1", "device-1", "meralco", true));
   });
 
+  it("shows payment history five at a time until every payment is shown", async () => {
+    mockRecords.mockResolvedValue(Array.from({ length: 12 }, (_, index) => ({ id: `r${index}`, scheduledPaymentId: "meralco", transactionId: `t${index}`, occurrenceDate: lastDue, paymentDate: addDays(lastDue, -index), amountCentavos: 1_000, source: "manual", notes: null, settlesOccurrence: false, version: 1 })));
+    const view = render(<BillerDetailScreen {...props} />);
+
+    await view.findByText("Show 5 more");
+    expect(view.getAllByLabelText(/ paid /)).toHaveLength(5);
+    fireEvent.press(view.getByText("Show 5 more"));
+    expect(view.getAllByLabelText(/ paid /)).toHaveLength(10);
+    fireEvent.press(view.getByText("Show 2 more"));
+    expect(view.getAllByLabelText(/ paid /)).toHaveLength(12);
+    expect(view.queryByText(/^Show \d+ more$/)).toBeNull();
+  });
+
   it("explains that archived payments are out of planning", async () => {
     mockGet.mockResolvedValue({ ...meralco, status: "archived" });
     mockRecords.mockResolvedValue([]);
