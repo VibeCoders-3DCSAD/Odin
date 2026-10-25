@@ -569,12 +569,13 @@ async function pullAndApply(
   const payload = body?.payload as {
     cursors: Record<string, TableCursor>;
     changes: Record<string, Record<string, unknown>[]>;
-    has_more?: Record<string, boolean>;
+    has_more: Record<string, boolean>;
     remaining?: Record<string, number>;
     successful: boolean;
   } | null;
 
-  if (!payload?.changes) {
+  // Without the server's has_more flags the client cannot tell a full page from the last one.
+  if (!payload?.changes || !payload.has_more) {
     return { pulled: 0, received: 0, cursors: payload?.cursors ?? cursors, successful: false, hasMore: false };
   }
 
@@ -622,9 +623,7 @@ async function pullAndApply(
     }
   }
 
-  const hasMore = payload.has_more
-    ? Object.values(payload.has_more).some(Boolean)
-    : Object.values(payload.changes).some((rows) => rows.length === 500);
+  const hasMore = Object.values(payload.has_more).some(Boolean);
 
   return { pulled, received, remaining, cursors: payload.cursors, successful: payload.successful !== false, hasMore };
 }

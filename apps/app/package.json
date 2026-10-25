@@ -13,6 +13,7 @@
     "@noble/hashes": "1.8.0",
     "@odin/savings-interest": "workspace:*",
     "@odin/spending-insights": "workspace:*",
+    "@odin/sync-config": "workspace:*",
     "@react-native-community/datetimepicker": "^9.1.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
     "@supabase/supabase-js": "2.57.4",

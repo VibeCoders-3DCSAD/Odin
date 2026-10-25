@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PULL_PAGE_SIZE } from "@odin/sync-config";
 import { prepareOperation } from "./syncApplyOperation.js";
 
 type PushOperation = {
@@ -223,7 +224,7 @@ export async function pullChanges(
       .select("*")
       .order("updated_at", { ascending: true })
       .order(PULL_IDENTITY_COLUMNS[table] ?? "id", { ascending: true })
-      .limit(500);
+      .limit(PULL_PAGE_SIZE);
     return { table, response: await scopePullQuery(query, table, userId, cursors[table]) };
   }));
 
@@ -247,7 +248,7 @@ export async function pullChanges(
 
     if (data && data.length > 0) {
       changes[table] = data;
-      hasMore[table] = data.length === 500;
+      hasMore[table] = data.length === PULL_PAGE_SIZE;
 
       const lastRow = data[data.length - 1] as Record<string, unknown>;
       newCursors[table] = {

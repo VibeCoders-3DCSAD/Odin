@@ -18,7 +18,8 @@
     "dotenv": "^17.4.2",
     "express": "5.1.0",
     "@odin/savings-interest": "workspace:*",
-    "@odin/spending-insights": "workspace:*"
+    "@odin/spending-insights": "workspace:*",
+    "@odin/sync-config": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
