@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -24,6 +25,8 @@ import { RECURRENCE_OPTIONS } from "../alerts/recurrenceOptions";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
+
+const budgieThink = require("../../assets/budgie-think.png");
 
 const palette = {
   shell: "#fcf8f0",
@@ -829,34 +832,25 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         </View>
       </Modal>
 
-      <Modal visible={showUnusualSpending && unusualSpending !== null} transparent animationType="fade" onRequestClose={dismissUnusualSpending}>
-        <Pressable onPress={dismissUnusualSpending} style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <Pressable onPress={() => {}}>
-            <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>Unusual spending detected</Text>
-              <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 12 }}>
-                This {formatCurrency(unusualSpending?.amountCentavos ?? 0)} expense is outside your usual spending range for {unusualSpending?.subcategoryLabel ?? "this subcategory"}.
-              </Text>
-              <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
-                Your usual spending is {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. This is only a personal spending observation.
-              </Text>
-              {recurringError ? <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.error, marginTop: 10 }}>{recurringError}</Text> : null}
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink, marginTop: 18 }}>Will you be making this expense again?</Text>
-              <View style={{ gap: 14, marginTop: 12 }}>
-                {RECURRENCE_OPTIONS.map(({ recurrence, label }) => (
-                  <Pressable key={recurrence} onPress={() => void answerUnusualSpendingRecurrence(recurrence)} disabled={answeringRecurrence !== null} accessibilityRole="button" accessibilityLabel={label}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>{answeringRecurrence === recurrence ? "Saving..." : label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={{ flexDirection: "row", justifyContent: "flex-end", alignItems: "center", marginTop: 22 }}>
-                <Pressable onPress={dismissUnusualSpending} accessibilityRole="button" accessibilityLabel="Close unusual spending insight">
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Ask me later</Text>
+      {/* Unanswered on purpose: the only way out is one of the three answers. */}
+      <Modal visible={showUnusualSpending && unusualSpending !== null} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
+            <Image source={budgieThink} accessibilityIgnoresInvertColors style={{ width: "100%", height: undefined, aspectRatio: 3 / 2 }} resizeMode="contain" />
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink, marginTop: 12, textAlign: "center" }}>Budgie wants to learn about you</Text>
+            <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 10, textAlign: "center" }}>
+              You spent {formatCurrency(unusualSpending?.amountCentavos ?? 0)} on {unusualSpending?.subcategoryLabel ?? "this subcategory"}, more than your usual {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. Will you be making this expense again?
+            </Text>
+            {recurringError ? <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.error, marginTop: 10, textAlign: "center" }}>{recurringError}</Text> : null}
+            <View style={{ gap: 10, marginTop: 18 }}>
+              {RECURRENCE_OPTIONS.map(({ recurrence, label }) => (
+                <Pressable key={recurrence} onPress={() => void answerUnusualSpendingRecurrence(recurrence)} disabled={answeringRecurrence !== null} accessibilityRole="button" accessibilityLabel={label} style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: palette.brand, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 }}>
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.brand, textAlign: "center" }}>{answeringRecurrence === recurrence ? "Saving..." : label}</Text>
                 </Pressable>
-              </View>
+              ))}
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
     </>
