@@ -12,6 +12,7 @@ const mockRequestForecastInterpretation = jest.fn();
 const mockListScheduledPayments = jest.fn();
 const mockListQuarterlySpending = jest.fn();
 const mockPastQuarters = jest.fn();
+let mockOnline = true;
 
 jest.mock("../../../local-db/repositories/dashboardSnapshots", () => ({
   getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
@@ -25,6 +26,9 @@ jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
 }));
 jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
   listScheduledPayments: (...args: unknown[]) => mockListScheduledPayments(...args),
+}));
+jest.mock("../../../services/connectivity", () => ({
+  useConnectivityStore: (select: (state: { online: boolean }) => unknown) => select({ online: mockOnline }),
 }));
 jest.mock("../api", () => ({
   requestQuarterlyForecast: (...args: unknown[]) => mockRequestQuarterlyForecast(...args),
@@ -45,6 +49,7 @@ const snapshot = { id: "s-1", user_id: "user-1", source: "forecast_quarterly", p
 describe("SpendingForecastScreen", () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockOnline = true;
     mockUpsertSnapshot.mockReset().mockResolvedValue(undefined);
     mockGetSnapshot.mockResolvedValue(snapshot);
     mockListForecastTransactions.mockResolvedValue([{ transactionId: "t-1", date: "2026-09-04", amount: 100, category: "food", transactionType: "expense" }]);
@@ -105,6 +110,39 @@ describe("SpendingForecastScreen", () => {
     expect(view.getByText("PHP 15,000")).toBeTruthy();
     expect(view.getByText("Forecast data may be out of date.")).toBeTruthy();
     expect(view.queryByText("Updating forecast…")).toBeNull();
+  });
+
+  it("shows the saved forecast offline without requesting a new one", async () => {
+    mockOnline = false;
+    mockGetSnapshot.mockResolvedValue({ ...snapshot, stale: true });
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(view.getByText("You're offline. Showing your last saved forecast.")).toBeTruthy());
+    expect(view.getByText("PHP 15,000")).toBeTruthy();
+    expect(view.queryByText("Updating forecast…")).toBeNull();
+    expect(mockRequestQuarterlyForecast).not.toHaveBeenCalled();
+  });
+
+  it("asks for a connection offline when no forecast is saved", async () => {
+    mockOnline = false;
+    mockGetSnapshot.mockResolvedValue(null);
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(view.getByText("Connect to the internet to get your spending forecast.")).toBeTruthy());
+    expect(view.queryByLabelText("Loading spending forecast")).toBeNull();
+    expect(mockRequestQuarterlyForecast).not.toHaveBeenCalled();
+  });
+
+  it("revalidates the saved forecast once the connection returns", async () => {
+    mockOnline = false;
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+    await waitFor(() => expect(view.getByText("You're offline. Showing your last saved forecast.")).toBeTruthy());
+
+    mockOnline = true;
+    view.rerender(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+    await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(view.queryByText("You're offline. Showing your last saved forecast.")).toBeNull());
+    expect(mockUpsertSnapshot).toHaveBeenCalledWith("user-1", "forecast_quarterly", expect.objectContaining({ modelVersion: forecast.modelVersion }));
   });
 
   it("clears the previous account's forecast immediately when the account changes", async () => {

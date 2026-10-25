@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSnapshot, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
 import { getForecastHistoryStartDate, listForecastTransactions, listQuarterlySpending, pastQuarters, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
 import { listScheduledPayments } from "../../../local-db/repositories/scheduledPayments";
+import { useConnectivityStore } from "../../../services/connectivity";
 import { getQuarterlyForecastContent } from "../../dashboard/dashboardSnapshotContent";
 import { requestForecastInterpretation, requestQuarterlyForecast } from "../api";
 import { forecastInterpretation } from "../QuarterlyForecastCharts";
@@ -18,6 +19,7 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const hasForecast = useRef(false);
+  const online = useConnectivityStore((state) => state.online);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -89,12 +91,19 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
       } catch {
         // A failed cache read still allows a fresh forecast to be requested.
       }
-      if (!signal.aborted) await revalidate();
+      if (signal.aborted) return;
+      // Offline, the saved forecast stands; reconnecting re-runs this effect to revalidate.
+      if (!online) {
+        setNotice(hasForecast.current ? "You're offline. Showing your last saved forecast." : "Connect to the internet to get your spending forecast.");
+        setRefreshing(false);
+        return;
+      }
+      await revalidate();
     }
 
     void loadCachedForecast();
     return () => controller.abort();
-  }, [userId, accessToken, refreshKey]);
+  }, [userId, accessToken, refreshKey, online]);
 
   return { forecast, history, refreshing, stale, error, notice };
 }
