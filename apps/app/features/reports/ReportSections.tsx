@@ -60,8 +60,8 @@ type RefreshProps = { refreshKey: number };
 export function ExpenseDistributionSection({ userId, range, refreshKey }: { userId: string; range: ReportRange } & RefreshProps) {
   const { data, loading, error } = useReportData(() => getCashOutflowDistribution(userId, range), [userId, range.startDate, range.endDate, refreshKey]);
   const total = data?.reduce((sum, item) => sum + item.amountCentavos, 0) ?? 0;
-  return <Section title="Cash outflow breakdown"><State loading={loading} error={error}>{data?.length && total > 0 ? <View style={{ marginTop: 14 }}>
-    <View accessibilityLabel={`Cash outflow breakdown chart showing ${data.length} categories`} style={{ alignItems: "center" }}><ExpensePieChart items={data} total={total} /></View>
+  return <Section title="Where it went"><State loading={loading} error={error}>{data?.length && total > 0 ? <View style={{ marginTop: 14 }}>
+    <View accessibilityLabel={`Where it went chart showing ${data.length} categories`} style={{ alignItems: "center" }}><ExpensePieChart items={data} total={total} /></View>
     <View style={{ gap: 8, marginTop: 14 }}>{data.map((item, index) => <View key={item.label} style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
       <View style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length], borderRadius: 4, height: 10, width: 10 }} />
       <Text style={{ color: P.muted, flex: 1, fontFamily: "Manrope", fontSize: 12 }}>{item.label}</Text>

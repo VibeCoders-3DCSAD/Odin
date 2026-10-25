@@ -37,7 +37,7 @@ describe("ExpenseDistributionSection", () => {
     const view = render(<ExpenseDistributionSection userId="user-1" range={{ startDate: "2026-09-01", endDate: "2026-09-24" }} refreshKey={0} />);
 
     await waitFor(() => {
-      expect(view.getByText("Cash outflow breakdown")).toBeTruthy();
+      expect(view.getByText("Where it went")).toBeTruthy();
       expect(view.getByText("Food")).toBeTruthy();
       expect(view.getByText("75%")).toBeTruthy();
       expect(view.getByText("Savings contributions")).toBeTruthy();
