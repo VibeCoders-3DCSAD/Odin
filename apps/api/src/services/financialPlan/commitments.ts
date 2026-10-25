@@ -1,10 +1,10 @@
 import { FinancialPlanInputError } from "./errors.js";
 import { scheduledReservationDates } from "./commitmentSchedule.js";
 
-export const DEBT_COMMITMENT_FIELDS = "id, current_balance_centavos, minimum_payment_centavos, payment_frequency, payment_schedule, next_due_date, annual_interest_rate_bps, allows_extra_payments, updated_at";
+export const DEBT_COMMITMENT_FIELDS = "id, status, paid_off_at, current_balance_centavos, minimum_payment_centavos, payment_frequency, payment_schedule, next_due_date, annual_interest_rate_bps, allows_extra_payments, updated_at";
 export const SAVINGS_COMMITMENT_FIELDS = "id, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, custom_interval_days, next_contribution_date, goal_type, target_amount_centavos, current_amount_centavos, updated_at";
 type Period = { start: string; end: string };
-type Debt = { id: string; current_balance_centavos: number; minimum_payment_centavos: number; next_due_date: string | null; payment_frequency: string; payment_schedule: { semiMonthlyDays?: [number, number]; customIntervalDays?: number; dayOfMonth?: number } | null };
+type Debt = { id: string; status?: string; paid_off_at?: string | null; current_balance_centavos: number; minimum_payment_centavos: number; next_due_date: string | null; payment_frequency: string; payment_schedule: { semiMonthlyDays?: [number, number]; customIntervalDays?: number; dayOfMonth?: number } | null };
 type Goal = { id: string; planned_contribution_amount_centavos: number | null; next_contribution_date: string | null; contribution_frequency: string | null; contribution_day_of_month: number | null; contribution_second_day_of_month: number | null; contribution_interval_count: number | null; custom_interval_days: number | null };
 export type Commitment = { debtAccountId?: string | null; creditCardStatementId?: string | null; savingsGoalId?: string | null; scheduledPaymentId?: string | null; dueDate: string; amountCentavos: number };
 export type CommitmentBudget = { key: string; amountCentavos: number };
@@ -13,8 +13,13 @@ export function commitmentKey(row: Commitment): string {
   return `${row.debtAccountId ? `debt:${row.debtAccountId}` : row.creditCardStatementId ? `statement:${row.creditCardStatementId}` : row.scheduledPaymentId ? `scheduled:${row.scheduledPaymentId}` : `savings:${row.savingsGoalId}`}:${row.dueDate}`;
 }
 
+// A debt paid off during the period keeps its payments in the plan, like any other occurrence already paid.
+function paidOffInPeriod(debt: Debt, period: Period): boolean {
+  return debt.status === "paid_off" && !!debt.paid_off_at && debt.paid_off_at.slice(0, 10) >= period.start;
+}
+
 export function debtCommitments(debts: Debt[], period: Period): Commitment[] {
-  return debts.flatMap((debt) => debt.current_balance_centavos > 0 ? scheduledReservationDates(debt.next_due_date, debt.payment_frequency, period, debt.payment_schedule ?? {}).map((dueDate) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos), dueDate })) : []);
+  return debts.flatMap((debt) => debt.current_balance_centavos > 0 || paidOffInPeriod(debt, period) ? scheduledReservationDates(debt.next_due_date, debt.payment_frequency, period, debt.payment_schedule ?? {}).map((dueDate) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: debt.current_balance_centavos > 0 ? Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos) : debt.minimum_payment_centavos, dueDate })) : []);
 }
 
 export function savingsCommitments(goals: Goal[], period: Period): Commitment[] {

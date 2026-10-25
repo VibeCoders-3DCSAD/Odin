@@ -1,29 +1,29 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import type { ReservationSkips } from "./api";
+import type { CommitmentSkips } from "./helpers/commitmentBudget";
 
 type Props = {
-  skips: ReservationSkips;
-  onChange: (skips: ReservationSkips) => void;
+  manual: CommitmentSkips;
+  onChange: (manual: CommitmentSkips) => void;
 };
 
 const choices = [
-  { key: "savingsContributions", label: "I'll budget savings manually", excluded: "Savings contributions excluded from this plan." },
-  { key: "debtRepayments", label: "I'll budget debt repayments manually", excluded: "Debt repayments excluded from this plan. Existing payments are still due." },
-  { key: "scheduledPayments", label: "I'll budget billers & remittances manually", excluded: "Billers and remittances excluded from this plan. Existing bills are still due." },
+  { key: "savingsContributions", label: "I'll budget savings manually", note: "You'll set each savings contribution on the next screen." },
+  { key: "debtRepayments", label: "I'll budget debt repayments manually", note: "You'll set each debt repayment on the next screen." },
+  { key: "scheduledPayments", label: "I'll budget billers & remittances manually", note: "You'll set each bill and remittance on the next screen." },
 ] as const;
 
-export function PlanCommitmentChoices({ skips, onChange }: Props) {
+export function PlanCommitmentChoices({ manual, onChange }: Props) {
   return <View style={styles.section}>
     <Text style={styles.heading}>Savings, debt &amp; bills</Text>
-    <Text style={styles.description}>All are included by default. Set the amounts on the next screen.</Text>
-    {choices.map(({ key, label, excluded }) => {
-      const checked = skips[key];
+    <Text style={styles.description}>Each is set aside at its amount due, including ones already paid or contributed this month.</Text>
+    {choices.map(({ key, label, note }) => {
+      const checked = manual[key];
       return <View key={key} style={styles.choice}>
-        <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{ checked }} onPress={() => onChange({ ...skips, [key]: !skips[key] })} style={[styles.row, checked && styles.selected]}>
+        <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{ checked }} onPress={() => onChange({ ...manual, [key]: !manual[key] })} style={[styles.row, checked && styles.selected]}>
           <View style={[styles.checkbox, checked && styles.checked]}><Text style={styles.check}>{checked ? "✓" : ""}</Text></View>
           <Text style={styles.label}>{label}</Text>
         </Pressable>
-        {checked ? <Text style={styles.excluded}>{excluded}</Text> : null}
+        {checked ? <Text style={styles.note}>{note}</Text> : null}
       </View>;
     })}
   </View>;
@@ -40,5 +40,5 @@ const styles = StyleSheet.create({
   checked: { borderColor: "#0E6D46", backgroundColor: "#0E6D46" },
   check: { color: "#FFFFFF", fontWeight: "800", fontSize: 14 },
   label: { flex: 1, fontFamily: "Manrope", fontSize: 13, fontWeight: "700", color: "#1B1C1A" },
-  excluded: { fontFamily: "Manrope", fontSize: 11, color: "#6B7A6F", lineHeight: 16 },
+  note: { fontFamily: "Manrope", fontSize: 11, color: "#6B7A6F", lineHeight: 16 },
 });

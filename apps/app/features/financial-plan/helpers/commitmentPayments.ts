@@ -1,5 +1,5 @@
 import type { FinancialPlanReservation } from "../types";
-import { commitmentKey, commitmentTarget } from "./commitmentBudget";
+import { commitmentKey, commitmentTarget, type CommitmentPreview } from "./commitmentBudget";
 
 export type CommitmentPaymentStatus = "paid" | "partial" | "unpaid";
 export type CommitmentPayment = { paidCentavos: number; dueCentavos: number; status: CommitmentPaymentStatus };
@@ -26,4 +26,11 @@ export function commitmentPayments(rows: FinancialPlanReservation[], requirement
     result.set(key, { paidCentavos, dueCentavos, status: paidCentavos >= dueCentavos || settled.has(key) ? "paid" : paidCentavos > 0 ? "partial" : "unpaid" });
   }
   return result;
+}
+
+/** What was already paid towards each commitment in the preview, capped at its amount due. */
+export function previewPaidCentavos(preview: CommitmentPreview, payments: PlanCommitmentPayments | null): Map<string, number> {
+  if (!payments) return new Map();
+  const rows = [...preview.debtReservations, ...preview.savingsReservations, ...(preview.obligations ?? [])];
+  return new Map([...commitmentPayments(rows, rows, payments)].map(([key, payment]) => [key, payment.paidCentavos]));
 }

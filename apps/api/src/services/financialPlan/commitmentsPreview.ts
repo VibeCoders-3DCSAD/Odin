@@ -6,7 +6,7 @@ import { scheduledPaymentReservations, type ScheduledPaymentRow } from "./schedu
 export async function getFinancialPlanCommitments(userId: string, supabase: SupabaseClient, planMonth?: string) {
   const period = financialPlanPeriod(planMonth);
   const results = await Promise.all([
-    supabase.from("debt_accounts").select(DEBT_COMMITMENT_FIELDS).eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
+    supabase.from("debt_accounts").select(DEBT_COMMITMENT_FIELDS).eq("user_id", userId).in("status", ["active", "paid_off"]).eq("deleted", false).limit(100),
     supabase.from("savings_goals").select(SAVINGS_COMMITMENT_FIELDS).eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("credit_card_statements").select("id, minimum_due_centavos, due_date").eq("user_id", userId).eq("authoritative", true).eq("deleted", false).gte("due_date", period.start).lte("due_date", period.end).limit(100),
     supabase.from("scheduled_payments").select("id, name, amount_centavos, frequency, due_day_of_month, due_second_day_of_month, due_day_of_week, due_month, starts_on, ends_on").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(200),

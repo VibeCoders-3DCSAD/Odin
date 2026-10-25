@@ -9,8 +9,8 @@ import { listFinancialAccounts } from "../../local-db/repositories/financialAcco
 import { runSync } from "../../local-db/sync/runSync";
 import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { requestFinancialPlanCommitments, requestFinancialPlanExplanations, requestFinancialPlanRecommendation, type ManualPlanAllocation, type ReservationSkips } from "./api";
-import { emptyCommitmentDraft, hasUnderfundedReservation, parseBudgetAmount, planCommitmentBudgets, planObligations, requirementReservations, selectedCommitmentBudgets, updateCommitmentBudget, type CommitmentKind, type CommitmentPreview } from "./helpers/commitmentBudget";
-import type { PlanCommitmentPayments } from "./helpers/commitmentPayments";
+import { hasUnderfundedReservation, manualCommitmentDraft, parseBudgetAmount, planCommitmentBudgets, planObligations, requirementReservations, selectedCommitmentBudgets, updateCommitmentBudget, type CommitmentKind, type CommitmentPreview, type CommitmentSkips } from "./helpers/commitmentBudget";
+import { previewPaidCentavos, type PlanCommitmentPayments } from "./helpers/commitmentPayments";
 import { planSpendingInsights } from "./helpers/planSpendingInsights";
 import { DevPlanMonthSettings } from "./DevPlanMonthSettings";
 import { PlanAllocations } from "./PlanAllocations";
@@ -80,6 +80,9 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
   const [plannedAmount, setPlannedAmount] = useState("");
   const [manualAllocations, setManualAllocations] = useState<ManualPlanAllocation[]>([]);
   const [reservationSkips, setReservationSkips] = useState<ReservationSkips>({ debtRepayments: false, savingsContributions: false, scheduledPayments: false });
+  // Commitment types the user budgets by hand on the review step instead of setting aside their amount due.
+  const [manualCommitments, setManualCommitments] = useState<CommitmentSkips>({ debtRepayments: false, savingsContributions: false, scheduledPayments: false });
+  const anyManualCommitments = manualCommitments.debtRepayments || manualCommitments.savingsContributions || manualCommitments.scheduledPayments;
   // Savings and debt edits after allocation only change the remaining money; insights describing the earlier allocation are hidden.
   const [commitmentsEdited, setCommitmentsEdited] = useState(false);
   const [acceptConfirmOpen, setAcceptConfirmOpen] = useState(false);
@@ -173,11 +176,12 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
         return;
       }
       const preview = await requestFinancialPlanCommitments(accessToken, __DEV__ ? devPlanMonth : undefined);
-      const previewLabels = await getFinancialPlanLabels(userId, { recommendation: { allocations: [], ...preview } });
+      const [previewLabels, previewPayments] = await Promise.all([getFinancialPlanLabels(userId, { recommendation: { allocations: [], ...preview } }), loadCommitmentPayments(userId, preview.period)]);
       if (!active) return;
+      setCommitmentPaymentsPaid(previewPayments);
       const labeled = applyFinancialPlanLabels({ allocations: [], ...preview }, previewLabels);
       setCommitmentPreview(labeled);
-      setCommitmentDraft(emptyCommitmentDraft(labeled));
+      setCommitmentDraft(labeled);
       setInvalidCommitmentFields({});
       setTopLevelCategories(topLevelResult);
       setCategories(result);
@@ -192,6 +196,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
        setIncludedCategoryIds(new Set([...requiredCategoryIds, ...validRecentCategoryIds]));
         setManualAllocations([]);
        setReservationSkips({ debtRepayments: false, savingsContributions: false, scheduledPayments: false });
+      setManualCommitments({ debtRepayments: false, savingsContributions: false, scheduledPayments: false });
       setCommitmentsEdited(false);
       const available = accounts
         .filter((account) => account.kind !== "savings" && account.kind !== "credit_card")
@@ -389,20 +394,19 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
 
   if (state === "loading") return <View style={{ paddingTop: 32, alignItems: "center" }}><ActivityIndicator color="#0E6D46" /><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 10 }}>Preparing your plan...</Text></View>;
   const pastPlansAction = onOpenPastPlans ? <Pressable accessibilityRole="button" accessibilityLabel="View past Financial Plans" onPress={onOpenPastPlans} style={{ alignSelf: "flex-end", paddingVertical: 4 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 12, color: "#0E6D46" }}>Past plans</Text></Pressable> : null;
-  if (state === "selecting") return <View>{pastPlansAction}{advancedSettings}<PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} initialManualAllocations={manualAllocations} commitmentSection={<PlanCommitmentChoices skips={reservationSkips} onChange={setReservationSkips} />} onContinue={(allocations) => {
+  if (state === "selecting") return <View>{pastPlansAction}{advancedSettings}<PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} initialManualAllocations={manualAllocations} commitmentSection={<PlanCommitmentChoices manual={manualCommitments} onChange={(next) => { setCommitmentDraft((current) => current && commitmentPreview ? manualCommitmentDraft(current, commitmentPreview, manualCommitments, next, previewPaidCentavos(commitmentPreview, commitmentPaymentsPaid)) : current); setManualCommitments(next); }} />} onContinue={(allocations) => {
     setManualAllocations(allocations);
     setError(null);
-    // With every commitment type included, each one starts at its amount due and the plan is generated right away;
-    // the user can still adjust those amounts on the plan. Excluding any type opens manual budgeting.
-    const anyExcluded = reservationSkips.debtRepayments || reservationSkips.savingsContributions || reservationSkips.scheduledPayments;
-    if (!anyExcluded && commitmentPreview) {
+    // Without manual types, each commitment starts at its amount due and the plan is generated right away;
+    // the user can still adjust those amounts on the plan. Budgeting any type manually opens the review step.
+    if (!anyManualCommitments && commitmentPreview) {
       const nextReservationSkips = { ...reservationSkips, commitmentBudgets: selectedCommitmentBudgets(commitmentPreview, reservationSkips) };
       setReservationSkips(nextReservationSkips);
       void loadRecommendation(allocations, nextReservationSkips);
     } else setState("budgeting");
   }} /></View>;
-  if ((state === "budgeting" || (state === "error" && !plan && (reservationSkips.debtRepayments || reservationSkips.savingsContributions || reservationSkips.scheduledPayments))) && commitmentPreview && commitmentDraft) {
-    return <View>{pastPlansAction}{advancedSettings}<PlanCommitmentReview requirements={commitmentPreview} draft={commitmentDraft} skips={reservationSkips} plannedAmountCentavos={plannedAmountCentavos ?? 0} invalid={hasInvalidCommitments || planningAmountError !== null} error={error} onAmountChange={(kind, index, amount) => {
+  if ((state === "budgeting" || (state === "error" && !plan && anyManualCommitments)) && commitmentPreview && commitmentDraft) {
+    return <View>{pastPlansAction}{advancedSettings}<PlanCommitmentReview requirements={commitmentPreview} draft={commitmentDraft} skips={reservationSkips} payments={commitmentPaymentsPaid ?? undefined} plannedAmountCentavos={plannedAmountCentavos ?? 0} invalid={hasInvalidCommitments || planningAmountError !== null} error={error} onAmountChange={(kind, index, amount) => {
       const amountCentavos = parseBudgetAmount(amount);
       if (amountCentavos === null) return;
       setCommitmentDraft((current) => current ? { ...current, [kind]: (current[kind] ?? []).map((row, rowIndex) => rowIndex === index ? { ...row, amountCentavos } : row) } : current);

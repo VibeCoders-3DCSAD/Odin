@@ -1,4 +1,4 @@
-import { emptyCommitmentDraft, parseBudgetAmount, planCommitmentBudgets, selectedCommitmentBudgets, updateCommitmentBudget } from "../helpers/commitmentBudget";
+import { manualCommitmentDraft, parseBudgetAmount, planCommitmentBudgets, selectedCommitmentBudgets, updateCommitmentBudget } from "../helpers/commitmentBudget";
 import type { FinancialPlanRecommendation } from "../types";
 
 function infeasiblePlan(): FinancialPlanRecommendation {
@@ -38,7 +38,17 @@ it("budgets a biller in the plan snapshot while keeping its amount due", () => {
   expect(planCommitmentBudgets(result)).toEqual([{ key: "debt:loan:2026-10-20", amountCentavos: 50_000 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 5_000 }]);
 });
 
-it("starts billers empty and always sends them, even when savings and debt are excluded", () => {
-  const draft = emptyCommitmentDraft({ period: { start: "2026-10-01", end: "2026-10-31" }, debtReservations: [{ debtAccountId: "loan", dueDate: "2026-10-20", amountCentavos: 50_000 }], savingsReservations: [], obligations: [{ scheduledPaymentId: "bill-1", dueDate: "2026-10-22", amountCentavos: 20_000 }] });
-  expect(selectedCommitmentBudgets(draft, { debtRepayments: true, savingsContributions: true, scheduledPayments: false })).toEqual([{ key: "scheduled:bill-1:2026-10-22", amountCentavos: 0 }]);
+it("starts only the manually budgeted types empty and restores the amount due when unticked", () => {
+  const preview = { period: { start: "2026-10-01", end: "2026-10-31" }, debtReservations: [{ debtAccountId: "loan", dueDate: "2026-10-20", amountCentavos: 50_000 }], savingsReservations: [], obligations: [{ scheduledPaymentId: "bill-1", dueDate: "2026-10-22", amountCentavos: 20_000 }] };
+  const none = { debtRepayments: false, savingsContributions: false, scheduledPayments: false };
+  const manual = manualCommitmentDraft(preview, preview, none, { ...none, scheduledPayments: true });
+  expect(selectedCommitmentBudgets(manual, none)).toEqual([{ key: "debt:loan:2026-10-20", amountCentavos: 50_000 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 0 }]);
+  expect(manualCommitmentDraft(manual, preview, { ...none, scheduledPayments: true }, none)).toEqual(preview);
+});
+
+it("starts manual types at what was already paid", () => {
+  const preview = { period: { start: "2026-10-01", end: "2026-10-31" }, debtReservations: [{ debtAccountId: "loan", dueDate: "2026-10-20", amountCentavos: 50_000 }], savingsReservations: [], obligations: [{ scheduledPaymentId: "bill-1", dueDate: "2026-10-22", amountCentavos: 20_000 }] };
+  const none = { debtRepayments: false, savingsContributions: false, scheduledPayments: false };
+  const manual = manualCommitmentDraft(preview, preview, none, { debtRepayments: true, savingsContributions: false, scheduledPayments: true }, new Map([["debt:loan:2026-10-20", 30_000]]));
+  expect(selectedCommitmentBudgets(manual, none)).toEqual([{ key: "debt:loan:2026-10-20", amountCentavos: 30_000 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 0 }]);
 });

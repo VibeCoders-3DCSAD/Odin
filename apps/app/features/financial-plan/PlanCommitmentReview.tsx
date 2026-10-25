@@ -4,12 +4,15 @@ import type { ReservationSkips } from "./api";
 import { PlanCommitmentBudgetSection } from "./PlanCommitmentBudgetSection";
 import { UnderfundedCommitmentsDialog } from "./UnderfundedCommitmentsDialog";
 import { formatPeso } from "./financialPlanPresentation";
+import type { PlanCommitmentPayments } from "./helpers/commitmentPayments";
 import { commitmentTotals, hasUnderfundedCommitment, type CommitmentKind, type CommitmentPreview } from "./helpers/commitmentBudget";
 
 type Props = {
   requirements: CommitmentPreview;
   draft: CommitmentPreview;
   skips: ReservationSkips;
+  // What was already paid this period, shown on each row.
+  payments?: PlanCommitmentPayments;
   plannedAmountCentavos: number;
   invalid: boolean;
   error: string | null;
@@ -21,7 +24,7 @@ type Props = {
   onAllocate: () => void;
 };
 
-export function PlanCommitmentReview({ requirements, draft, skips, plannedAmountCentavos, invalid, error, onAmountChange, onValidityChange, onBack, actionLabel = "Calculate Allocations", onAllocate }: Props) {
+export function PlanCommitmentReview({ requirements, draft, skips, payments, plannedAmountCentavos, invalid, error, onAmountChange, onValidityChange, onBack, actionLabel = "Calculate Allocations", onAllocate }: Props) {
   const { savingsCentavos: savings, debtCentavos: debt, scheduledCentavos: bills, remainingCentavos: remaining } = commitmentTotals(draft, skips, plannedAmountCentavos);
   const disabled = invalid || remaining < 0;
   // Amounts below what is due are confirmed in a dialog when the user moves on, not flagged while they type.
@@ -34,7 +37,7 @@ export function PlanCommitmentReview({ requirements, draft, skips, plannedAmount
     <Pressable accessibilityRole="button" accessibilityLabel="Back to plan setup" onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Back to setup</Text></Pressable>
     <Text accessibilityRole="header" style={styles.heading}>Financial Plan</Text>
     <Text style={styles.description}>Set aside money for each savings goal, debt, bill and remittance for {draft.period.start} to {draft.period.end}, then allocate the remaining money to your categories.</Text>
-    <PlanCommitmentBudgetSection requirements={requirements} draft={draft} skips={skips} onAmountChange={onAmountChange} onValidityChange={onValidityChange} />
+    <PlanCommitmentBudgetSection requirements={requirements} draft={draft} skips={skips} payments={payments} onAmountChange={onAmountChange} onValidityChange={onValidityChange} />
     {skips.debtRepayments ? <Text style={styles.description}>Debt repayments excluded from this plan. Existing payments are still due.</Text> : null}
     {skips.savingsContributions ? <Text style={styles.description}>Savings contributions excluded from this plan.</Text> : null}
     {skips.scheduledPayments ? <Text style={styles.description}>Billers and remittances excluded from this plan. Existing bills are still due.</Text> : null}

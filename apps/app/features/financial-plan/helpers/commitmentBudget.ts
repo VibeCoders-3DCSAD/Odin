@@ -59,12 +59,20 @@ export function updateCommitmentBudget(plan: FinancialPlanRecommendation, kind: 
   return { ...plan, inputSnapshot, status: shortfallCentavos > 0 ? "INFEASIBLE" : "RECOMMENDATION_READY", recommendation: { ...current, availableFundsCentavos, requiredFundsCentavos: current.requiredFundsCentavos == null ? undefined : current.requiredFundsCentavos + delta, shortfallCentavos, ...(kind === "obligations" ? {} : { [kind]: updatedRows }) } };
 }
 
-type CommitmentSkips = { debtRepayments: boolean; savingsContributions: boolean; scheduledPayments: boolean };
+export type CommitmentSkips = { debtRepayments: boolean; savingsContributions: boolean; scheduledPayments: boolean };
 
-// The user sets every savings, debt, biller and remittance amount themselves, so the plan starts with nothing allocated.
-export function emptyCommitmentDraft(preview: CommitmentPreview): CommitmentPreview {
-  const clear = (rows: FinancialPlanReservation[]) => rows.map((row) => ({ ...row, amountCentavos: 0 }));
-  return { ...preview, debtReservations: clear(preview.debtReservations), savingsReservations: clear(preview.savingsReservations), obligations: clear(preview.obligations ?? []) };
+const commitmentKinds = { debtRepayments: "debtReservations", savingsContributions: "savingsReservations", scheduledPayments: "obligations" } as const;
+
+// Types the user budgets manually start at what was already paid towards each row (nothing when unpaid); the rest start at
+// their amount due. Only the types whose choice changed are reset.
+export function manualCommitmentDraft(draft: CommitmentPreview, preview: CommitmentPreview, previous: CommitmentSkips, next: CommitmentSkips, paidCentavos: Map<string, number> = new Map()): CommitmentPreview {
+  const result = { ...draft };
+  for (const choice of Object.keys(commitmentKinds) as (keyof CommitmentSkips)[]) {
+    if (previous[choice] === next[choice]) continue;
+    const kind = commitmentKinds[choice];
+    result[kind] = (preview[kind] ?? []).map((row) => next[choice] ? { ...row, amountCentavos: paidCentavos.get(commitmentKey(row)) ?? 0 } : row);
+  }
+  return result;
 }
 
 function selectedCommitments(draft: CommitmentPreview, skips: CommitmentSkips): FinancialPlanReservation[] {
