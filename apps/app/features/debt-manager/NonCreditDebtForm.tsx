@@ -1,5 +1,10 @@
-import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import React, { useEffect, useState, type ReactNode } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { Briefcase, Car, PencilSimple, Stack, Storefront, User, type IconProps } from "phosphor-react-native";
+import { Banner, FieldError, FormCard, MonthEndNote, Note, SectionLabel, Switch, TextField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
+import { DateField } from "../../components/DateField";
+import { upcomingDueDate } from "./debtForecast";
+import { getPhilippineToday } from "./debtTrendRange";
 import {
   createDebtAccount,
   updateDebtAccount,
@@ -21,22 +26,16 @@ import {
   SALARY_LOAN_PROVIDER_OPTIONS,
 } from "./debtTypes";
 
-const P = {
-  shell: "#F8F4EB",
-  card: "#FFFDF8",
-  ink: "#17261E",
-  muted: "#66736A",
-  brand: "#123F2C",
-  white: "#FFFFFF",
-  softCard: "#E5F0E3",
-  optionLine: "#C8D9C6",
-  line: "#E2E4DC",
-  error: "#D9001F",
-} as const;
 const PERSONAL_PURPOSES = ["Emergency", "Medical", "Education", "Home Improvement", "Debt Consolidation", "Personal Purchase", "Other"];
 const MULTIPURPOSE_PURPOSES = ["Home Improvement", "Education", "Medical", "Livelihood", "Emergency", "Utility", "Other"];
 const BUSINESS_PURPOSES = ["Working Capital", "Inventory", "Equipment", "Expansion", "Operating Expenses", "Emergency", "Other"];
 const REPAYMENT_METHODS = [{ value: "payroll_deduction", label: "Payroll Deduction" }, { value: "automatic_debit", label: "Automatic Debit" }, { value: "manual_payment", label: "Manual Payment" }, { value: "other", label: "Other" }] as const;
+const WEEKDAY_OPTIONS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, index) => ({ value: String(index), label }));
+// These frequencies are entered as a weekday or days of the month; the rest still pick their next payment date.
+const ENTERED_DAY_FREQUENCIES: PaymentFrequency[] = ["daily", "weekly", "semi_monthly", "monthly"];
+const DEBT_TYPE_ICONS: Record<DebtTypePreset, React.ComponentType<IconProps>> = {
+  personal_loan: User, salary_loan: Briefcase, multipurpose_loan: Stack, business_loan: Storefront, auto_loan: Car, custom_debt: PencilSimple,
+};
 
 type NonCreditDebtFormProps = {
   userId: string;
@@ -48,27 +47,16 @@ type NonCreditDebtFormProps = {
 
 type Option<T extends string> = { value: T; label: string };
 
+function isDayOfMonth(day: number) {
+  return Number.isInteger(day) && day >= 1 && day <= 31;
+}
+
 function pesos(value: string) {
   const parsed = Number(value.replace(/,/g, ""));
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : Number.NaN;
 }
 
-function Section({ eyebrow, title, children, first = false }: { eyebrow: string; title: string; children: React.ReactNode; first?: boolean }) {
-  return (
-    <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 18, borderWidth: 1, gap: 16, padding: 16 }}>
-      <View style={{ flexDirection: "row", gap: 11, alignItems: "center" }}>
-        <View style={{ alignItems: "center", backgroundColor: first ? P.brand : P.softCard, borderRadius: 9, height: 32, justifyContent: "center", width: 32 }}>
-          <Text style={{ color: first ? P.white : P.brand, fontFamily: "Manrope", fontSize: 10, fontWeight: "800" }}>{eyebrow}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 10, fontWeight: "800", letterSpacing: 0.8, marginBottom: 2 }}>{first ? "START HERE" : "DETAILS"}</Text>
-          <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 16, fontWeight: "800" }}>{title}</Text>
-        </View>
-      </View>
-      {children}
-    </View>
-  );
-}
+const php = <Text style={ui.fieldSuffix}>PHP</Text>;
 
 function Field({ label, placeholder, value, onChangeText, numeric = false, prefix, suffix, error }: {
   label: string;
@@ -76,68 +64,62 @@ function Field({ label, placeholder, value, onChangeText, numeric = false, prefi
   value: string;
   onChangeText: (value: string) => void;
   numeric?: boolean;
-  prefix?: string;
+  prefix?: ReactNode;
   suffix?: string;
   error?: string;
 }) {
-  const [focused, setFocused] = useState(false);
-
   return (
-    <View style={{ gap: 6 }}>
-      <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 11.5, fontWeight: "800" }}>{label}</Text>
-      <View style={{ alignItems: "center", backgroundColor: "#FBFAF5", borderColor: error ? P.error : focused ? P.brand : P.line, borderRadius: 12, borderWidth: focused || error ? 1.5 : 1, flexDirection: "row", height: 50, paddingHorizontal: 13 }}>
-        {prefix ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 13, fontWeight: "700", marginRight: 7 }}>{prefix}</Text> : null}
-        <TextInput
-          accessibilityLabel={label}
-          placeholder={placeholder}
-          placeholderTextColor="#919A91"
-          value={value}
-          onChangeText={onChangeText}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          keyboardType={numeric ? "decimal-pad" : "default"}
-          style={{ color: P.ink, flex: 1, fontFamily: "Manrope", fontSize: 14, paddingVertical: 8 }}
-        />
-        {suffix ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, fontWeight: "700", marginLeft: 7 }}>{suffix}</Text> : null}
-      </View>
-      {error ? <Text accessibilityLiveRegion="polite" style={{ color: P.error, fontFamily: "Manrope", fontSize: 11 }}>{error}</Text> : null}
+    <View>
+      <TextField label={label} accessibilityLabel={label} placeholder={placeholder} value={value} onChangeText={onChangeText} keyboardType={numeric ? "decimal-pad" : "default"} icon={prefix} suffix={suffix} error={Boolean(error)} />
+      {error ? <FieldError>{error}</FieldError> : null}
     </View>
   );
 }
 
-function Options<T extends string>({ values, selected, onChange, compact = false, cards = false }: { values: Option<T>[]; selected: T; onChange: (value: T) => void; compact?: boolean; cards?: boolean }) {
+// Static styles only: the function form of Pressable's style is dropped on device, which left selected chips white-on-cream.
+function Choices<T extends string>({ label, values, selected, onChange, error }: { label?: string; values: readonly Option<T>[]; selected: T; onChange: (value: T) => void; error?: string }) {
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      {values.map((item) => {
+    <View>
+      {label ? <SectionLabel>{label}</SectionLabel> : null}
+      <View accessibilityRole="radiogroup" style={ui.chips}>
+        {values.map((item) => {
+          const active = selected === item.value;
+          return (
+            <Pressable
+              key={item.value}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Select ${item.label}`}
+              onPress={() => onChange(item.value)}
+              style={[ui.chip, active ? ui.chipOn : null]}
+            >
+              <Text style={[ui.chipText, active ? ui.chipTextOn : null]}>{item.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {error ? <FieldError>{error}</FieldError> : null}
+    </View>
+  );
+}
+
+function DebtTypeGrid({ selected, onChange }: { selected: DebtTypePreset; onChange: (value: DebtTypePreset) => void }) {
+  return (
+    <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {DEBT_TYPE_OPTIONS.map((item) => {
         const active = selected === item.value;
+        const Icon = DEBT_TYPE_ICONS[item.value];
         return (
           <Pressable
             key={item.value}
             accessibilityRole="radio"
             accessibilityState={{ selected: active }}
             accessibilityLabel={`Select ${item.label}`}
-            accessibilityHint="Double tap to select this option"
             onPress={() => onChange(item.value)}
-            style={({ pressed }) => ({
-               alignItems: "center",
-               backgroundColor: active ? P.brand : P.softCard,
-               borderColor: active ? P.brand : P.optionLine,
-               borderRadius: cards ? 14 : 11,
-               borderWidth: 1,
-               flexDirection: "row",
-               gap: 7,
-               justifyContent: "center",
-               minHeight: cards ? 52 : 44,
-               opacity: pressed ? 0.8 : 1,
-               paddingHorizontal: compact ? 10 : 12,
-               paddingVertical: compact ? 6 : 9,
-               ...(cards ? { flexBasis: "47.5%", flexGrow: 1 } : {}),
-             })}
-           >
-            <View style={{ alignItems: "center", backgroundColor: active ? P.white : "transparent", borderColor: active ? P.white : P.muted, borderRadius: 6, borderWidth: 1.5, height: 12, justifyContent: "center", width: 12 }}>
-              {active ? <View style={{ backgroundColor: P.brand, borderRadius: 3, height: 6, width: 6 }} /> : null}
-            </View>
-             <Text style={{ color: active ? P.white : P.ink, fontFamily: "Manrope", fontSize: compact ? 12 : cards ? 12.5 : 13, fontWeight: "800" }}>{item.label}</Text>
+            style={[ui.option, { flexBasis: "47%", flexGrow: 1, paddingVertical: 11, paddingHorizontal: 12, gap: 9 }, active ? ui.optionOn : null]}
+          >
+            <Icon color={active ? v4.brandMid : v4.mut} size={18} weight={active ? "fill" : "regular"} />
+            <Text style={{ flex: 1, fontFamily: v4Font, fontSize: 12.5, fontWeight: active ? "700" : "600", color: active ? v4.brand : v4.ink2 }}>{item.label}</Text>
           </Pressable>
         );
       })}
@@ -153,14 +135,19 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
   const [balance, setBalance] = useState(debt ? String(debt.currentBalanceCentavos / 100) : "");
   const [payment, setPayment] = useState(debt ? String(debt.minimumPaymentCentavos / 100) : "");
   const [allowsExtraPayments, setAllowsExtraPayments] = useState(debt?.allowsExtraPayments ?? false);
-  const [startDate, setStartDate] = useState(debt?.typeSpecific.startDate ?? "");
+  // Interest is anchored to the start date; new debts start on the day they are added.
+  const [startDate] = useState(() => debt?.typeSpecific.startDate || getPhilippineToday());
   const [nextDueDate, setNextDueDate] = useState(debt?.nextDueDate ?? "");
   const [targetPayoffDate, setTargetPayoffDate] = useState(debt?.targetPayoffDate ?? "");
   const [maturityDate, setMaturityDate] = useState(debt?.maturityDate ?? "");
   const [rate, setRate] = useState(debt ? String(debt.annualInterestRateBps / 100) : "0");
   const [frequency, setFrequency] = useState<PaymentFrequency>(debt?.paymentFrequency ?? "monthly");
-  const [semiMonthlyFirstDay, setSemiMonthlyFirstDay] = useState(String(debt?.paymentSchedule.semiMonthlyDays?.[0] ?? 1));
-  const [semiMonthlySecondDay, setSemiMonthlySecondDay] = useState(String(debt?.paymentSchedule.semiMonthlyDays?.[1] ?? 15));
+  const [semiMonthlyFirstDay, setSemiMonthlyFirstDay] = useState(debt?.paymentSchedule.semiMonthlyDays?.[0]?.toString() ?? "");
+  const [semiMonthlySecondDay, setSemiMonthlySecondDay] = useState(debt?.paymentSchedule.semiMonthlyDays?.[1]?.toString() ?? "");
+  const [dueDay, setDueDay] = useState(debt?.paymentFrequency !== "monthly" ? "" : debt.paymentSchedule.dayOfMonth ? String(debt.paymentSchedule.dayOfMonth) : debt.nextDueDate ? String(Number(debt.nextDueDate.slice(8, 10))) : "");
+  const [dayOfWeek, setDayOfWeek] = useState<number | null>(debt?.paymentFrequency === "weekly" && debt.nextDueDate ? new Date(`${debt.nextDueDate}T00:00:00Z`).getUTCDay() : null);
+  // An edit keeps its stored next due date until the schedule itself changes.
+  const [scheduleEdited, setScheduleEdited] = useState(!debt);
   const [customIntervalDays, setCustomIntervalDays] = useState(debt?.paymentSchedule.customIntervalDays?.toString() ?? "");
   const [period, setPeriod] = useState<InterestRatePeriod>(debt?.interestPeriod ?? "annual");
   const [method, setMethod] = useState<InterestMethod>(debt?.interestMethod ?? "no_interest");
@@ -184,11 +171,17 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { listIncomeSources(userId).then(setIncomeSources).catch(() => setIncomeSources([])); }, [userId]);
-  useEffect(() => { setErrors({}); }, [balance, customIntervalDays, fees, lender, name, nextDueDate, original, payment, rate, semiMonthlyFirstDay, semiMonthlySecondDay, startDate, targetPayoffDate, termMonths]);
+  useEffect(() => { setErrors({}); }, [balance, customIntervalDays, dayOfWeek, dueDay, fees, frequency, lender, name, nextDueDate, original, payment, rate, semiMonthlyFirstDay, semiMonthlySecondDay, targetPayoffDate, termMonths]);
 
   async function save() {
+    const semiMonthlyDays: [number, number] = [Number(semiMonthlyFirstDay), Number(semiMonthlySecondDay)];
+    const enteredDays = scheduleEdited && ENTERED_DAY_FREQUENCIES.includes(frequency);
+    const dueDate = enteredDays ? upcomingDueDate(frequency, { dayOfWeek, dayOfMonth: Number(dueDay), semiMonthlyDays }, getPhilippineToday()) ?? "" : nextDueDate;
+    // A quarterly debt keeps the day of its picked date (a stored day survives an untouched edit), so Jan 31 falls on Apr 30 and then Jul 31.
+    const quarterlyDay = dueDate && (nextDueDate !== debt?.nextDueDate || !debt?.paymentSchedule.dayOfMonth) ? Number(dueDate.slice(8, 10)) : debt?.paymentSchedule.dayOfMonth;
+    const dayOfMonth = frequency === "monthly" ? Number(dueDay) : frequency === "quarterly" ? quarterlyDay : undefined;
     const input: CreateDebtAccountInput = {
-      type, name, lenderName: lender || null, originalBalanceCentavos: pesos(original), currentBalanceCentavos: pesos(balance), annualInterestRateBps: Math.round(Number(rate) * 100), minimumPaymentCentavos: pesos(payment), allowsExtraPayments, paymentFrequency: frequency, paymentSchedule: { semiMonthlyDays: frequency === "semi_monthly" ? [Number(semiMonthlyFirstDay), Number(semiMonthlySecondDay)] : undefined, customIntervalDays: frequency === "custom" ? Number(customIntervalDays) : undefined }, startDate, nextDueDate, maturityDate: maturityDate || null, targetPayoffDate, interestPeriod: period, interestMethod: method, notes: notes || null,
+      type, name, lenderName: lender || null, originalBalanceCentavos: pesos(original), currentBalanceCentavos: pesos(balance), annualInterestRateBps: Math.round(Number(rate) * 100), minimumPaymentCentavos: pesos(payment), allowsExtraPayments, paymentFrequency: frequency, paymentSchedule: { semiMonthlyDays: frequency === "semi_monthly" ? semiMonthlyDays : undefined, customIntervalDays: frequency === "custom" ? Number(customIntervalDays) : undefined, dayOfMonth }, startDate, nextDueDate: dueDate, maturityDate: maturityDate || null, targetPayoffDate, interestPeriod: period, interestMethod: method, notes: notes || null,
       typeSpecific: {
         startDate, feesCentavos: fees ? pesos(fees) : 0, penaltyInfo: penaltyInfo || null, termMonths: termMonths ? Number(termMonths) : null,
         personalLoan: type === "personal_loan" ? { purpose: purpose || null } : undefined,
@@ -213,11 +206,16 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
     if (method === "no_interest" && input.annualInterestRateBps !== 0) nextErrors.rate = "No-interest debts must use a zero interest rate.";
     if (!Number.isFinite(input.typeSpecific.feesCentavos) || input.typeSpecific.feesCentavos < 0) nextErrors.fees = "Fees must be non-negative.";
     if (termMonths && (!Number.isSafeInteger(input.typeSpecific.termMonths) || input.typeSpecific.termMonths! <= 0)) nextErrors.termMonths = "Term must be a positive whole number of months.";
-    if (!startDate) nextErrors.startDate = "Start date is required.";
-    if (!nextDueDate) nextErrors.nextDueDate = "Next payment date is required.";
+    if (enteredDays && frequency === "weekly" && dayOfWeek === null) nextErrors.dayOfWeek = "Choose the day this debt is due.";
+    if (frequency === "monthly" && !isDayOfMonth(Number(dueDay))) nextErrors.dueDay = "Enter a due day from 1 to 31.";
     if (!targetPayoffDate) nextErrors.targetPayoffDate = "Target payoff date is required.";
-    if (targetPayoffDate && nextDueDate && targetPayoffDate < nextDueDate) nextErrors.targetPayoffDate = "Target payoff date must be on or after the next payment date.";
-    if (frequency === "semi_monthly" && (!Number.isInteger(input.paymentSchedule.semiMonthlyDays?.[0]) || !Number.isInteger(input.paymentSchedule.semiMonthlyDays?.[1]) || input.paymentSchedule.semiMonthlyDays![0] < 1 || input.paymentSchedule.semiMonthlyDays![0] > 28 || input.paymentSchedule.semiMonthlyDays![1] < 1 || input.paymentSchedule.semiMonthlyDays![1] > 28 || input.paymentSchedule.semiMonthlyDays![0] === input.paymentSchedule.semiMonthlyDays![1])) nextErrors.semiMonthlyDays = "Enter two different days from 1 to 28.";
+    if (targetPayoffDate && dueDate && targetPayoffDate < dueDate) nextErrors.targetPayoffDate = "Target payoff date must be on or after the next payment date.";
+    // Same rules as income paydays: days past the 28th become the 28th in February, so Date 1 must stay before it.
+    const [firstDay, secondDay] = semiMonthlyDays;
+    if (frequency === "semi_monthly" && (!isDayOfMonth(firstDay) || !isDayOfMonth(secondDay))) nextErrors.semiMonthlyDays = "Enter Date 1 and Date 2, each from 1 to 31.";
+    else if (frequency === "semi_monthly" && firstDay >= secondDay) nextErrors.semiMonthlyDays = "Date 1 must come before Date 2.";
+    else if (frequency === "semi_monthly" && firstDay >= Math.min(secondDay, 28)) nextErrors.semiMonthlyDays = "Date 1 must be the 27th or earlier when Date 2 is after the 28th, so February still has two payments.";
+    if (!dueDate && !nextErrors.dayOfWeek && !nextErrors.dueDay && !nextErrors.semiMonthlyDays) nextErrors.nextDueDate = "Next payment date is required.";
     if (frequency === "custom" && (!Number.isSafeInteger(input.paymentSchedule.customIntervalDays) || input.paymentSchedule.customIntervalDays! <= 0)) nextErrors.customIntervalDays = "Custom interval must be a positive whole number of days.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
@@ -237,85 +235,133 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
     }
   }
 
+
+  function chooseMethod(next: InterestMethod) {
+    setMethod(next);
+    // The rate field is hidden for no-interest debts, so clear it rather than fail validation on a value the user cannot see.
+    if (next === "no_interest") setRate("0");
+  }
+
   function renderTypeFields() {
     const incomeOptions = incomeSources.map((source) => ({ value: source.id, label: source.name }));
     const purposeOptions = (type === "business_loan" ? BUSINESS_PURPOSES : type === "multipurpose_loan" ? MULTIPURPOSE_PURPOSES : PERSONAL_PURPOSES).map((value) => ({ value, label: value }));
-    if (type === "salary_loan") return <View style={{ gap: 12 }}><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Provider</Text><Options values={[...SALARY_LOAN_PROVIDER_OPTIONS]} selected={salaryLoanProvider} onChange={setSalaryLoanProvider} compact />{errors.salaryLoanProvider ? <Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 11 }}>{errors.salaryLoanProvider}</Text> : null}</View><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Income source to deduct from</Text>{incomeOptions.length ? <Options values={incomeOptions} selected={incomeSource} onChange={setIncomeSource} compact /> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Add an income source before creating a salary loan.</Text>}{errors.incomeSource ? <Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 11 }}>{errors.incomeSource}</Text> : null}</View><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Repayment method</Text><Options values={[...REPAYMENT_METHODS]} selected={repaymentMethod} onChange={setRepaymentMethod} compact /></View>{repaymentMethod === "payroll_deduction" ? <><Field label="Payroll deduction" placeholder={DEBT_PLACEHOLDERS.salaryDeductionAmount} value={deduction} onChangeText={setDeduction} numeric prefix="PHP" error={errors.deduction} /><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16 }}>This amount is subtracted from the selected income source after its gross income is calculated.</Text><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Deduction schedule</Text><Options values={PAYMENT_FREQUENCY_OPTIONS} selected={deductionSchedule} onChange={setDeductionSchedule} compact /></View></> : null}</View>;
-    if (type === "auto_loan") return <View style={{ gap: 12 }}><Field label="Vehicle" placeholder={DEBT_PLACEHOLDERS.autoVehicleDescription} value={vehicle} onChangeText={setVehicle} /><Field label="Vehicle purchase price" placeholder={DEBT_PLACEHOLDERS.autoPurchasePrice} value={vehiclePrice} onChangeText={setVehiclePrice} numeric prefix="PHP" /><Field label="Downpayment" placeholder={DEBT_PLACEHOLDERS.autoDownpayment} value={downpayment} onChangeText={setDownpayment} numeric prefix="PHP" /></View>;
-    if (type === "business_loan") return <View style={{ gap: 12 }}><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Linked income source</Text>{incomeOptions.length ? <Options values={incomeOptions} selected={businessSource} onChange={setBusinessSource} compact /> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Add an income source before linking this business loan.</Text>}</View><View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Loan purpose</Text><Options values={purposeOptions} selected={purpose} onChange={setPurpose} compact /></View></View>;
-    return <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Loan purpose</Text><Options values={purposeOptions} selected={purpose} onChange={setPurpose} compact /></View>;
+    if (type === "salary_loan") return (
+      <>
+        <Choices label="PROVIDER" values={SALARY_LOAN_PROVIDER_OPTIONS} selected={salaryLoanProvider} onChange={setSalaryLoanProvider} error={errors.salaryLoanProvider} />
+        {incomeOptions.length
+          ? <Choices label="DEDUCTED FROM" values={incomeOptions} selected={incomeSource} onChange={setIncomeSource} error={errors.incomeSource} />
+          : <View><Banner tone="warn">Add an income source before creating a salary loan.</Banner>{errors.incomeSource ? <FieldError>{errors.incomeSource}</FieldError> : null}</View>}
+        <Choices label="REPAYMENT METHOD" values={REPAYMENT_METHODS} selected={repaymentMethod} onChange={setRepaymentMethod} />
+        {repaymentMethod === "payroll_deduction" ? (
+          <>
+            <View style={{ gap: 6 }}>
+              <Field label="Payroll deduction" placeholder={DEBT_PLACEHOLDERS.salaryDeductionAmount} value={deduction} onChangeText={setDeduction} numeric prefix={php} error={errors.deduction} />
+              <Note>Subtracted from the selected income source after its gross income is calculated.</Note>
+            </View>
+            <Choices label="DEDUCTION SCHEDULE" values={PAYMENT_FREQUENCY_OPTIONS} selected={deductionSchedule} onChange={setDeductionSchedule} />
+          </>
+        ) : null}
+      </>
+    );
+    if (type === "auto_loan") return (
+      <>
+        <Field label="Vehicle" placeholder={DEBT_PLACEHOLDERS.autoVehicleDescription} value={vehicle} onChangeText={setVehicle} />
+        <Field label="Purchase price" placeholder={DEBT_PLACEHOLDERS.autoPurchasePrice} value={vehiclePrice} onChangeText={setVehiclePrice} numeric prefix={php} />
+        <Field label="Downpayment" placeholder={DEBT_PLACEHOLDERS.autoDownpayment} value={downpayment} onChangeText={setDownpayment} numeric prefix={php} />
+      </>
+    );
+    if (type === "business_loan") return (
+      <>
+        {incomeOptions.length
+          ? <Choices label="LINKED INCOME SOURCE" values={incomeOptions} selected={businessSource} onChange={setBusinessSource} />
+          : <Banner tone="info">Add an income source to link it to this business loan.</Banner>}
+        <Choices label="PURPOSE" values={purposeOptions} selected={purpose} onChange={setPurpose} />
+      </>
+    );
+    return <Choices label="PURPOSE" values={purposeOptions} selected={purpose} onChange={setPurpose} />;
   }
 
+  const typeLabel = DEBT_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? "Loan";
+
   return (
-    <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 36 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-      <View style={{ backgroundColor: P.brand, borderRadius: 22, overflow: "hidden", padding: 20 }}>
-        <View style={{ alignItems: "center", flexDirection: "row", justifyContent: "space-between" }}>
-          <Text style={{ color: "#B8D9BD", fontFamily: "Manrope", fontSize: 10, fontWeight: "800", letterSpacing: 1.2 }}>DEBT SETUP</Text>
-          <View style={{ backgroundColor: "#2B5B43", borderRadius: 99, paddingHorizontal: 9, paddingVertical: 5 }}>
-            <Text style={{ color: P.white, fontFamily: "Manrope", fontSize: 10, fontWeight: "800" }}>{debt ? "EDITING" : "NEW ACCOUNT"}</Text>
-          </View>
-        </View>
-        <Text style={{ color: P.white, fontFamily: "Manrope", fontSize: 25, fontWeight: "800", letterSpacing: -0.5, marginTop: 12 }}>{debt ? "Refine your plan." : "Give this debt a plan."}</Text>
-        <Text style={{ color: "#C4D6C8", fontFamily: "Manrope", fontSize: 12.5, lineHeight: 18, marginTop: 6 }}>{debt ? "Update the numbers and keep your repayment forecast honest." : "A few precise details turn a balance into a repayment forecast."}</Text>
-        <View style={{ flexDirection: "row", gap: 5, marginTop: 18 }}>
-          {["Account", "Balance", "Terms", "Plan"].map((step, index) => (
-            <View key={step} style={{ flex: 1, gap: 5 }}>
-              <View style={{ backgroundColor: index === 0 ? "#B8D9BD" : "#497158", borderRadius: 99, height: 4 }} />
-              <Text style={{ color: index === 0 ? P.white : "#A8C0AD", fontFamily: "Manrope", fontSize: 9.5, fontWeight: "700" }}>{step}</Text>
-            </View>
-          ))}
-        </View>
+    <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 36 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <View style={{ gap: 3, paddingHorizontal: 2, paddingTop: 2 }}>
+        <Text style={{ color: v4.ink, fontFamily: v4Font, fontSize: 20, fontWeight: "800", letterSpacing: -0.3 }}>{debt ? "Edit debt" : "Add a debt"}</Text>
+        <Text style={{ color: v4.mut, fontFamily: v4Font, fontSize: 12.5 }}>Loans, installments, and anything that isn't a credit card.</Text>
       </View>
 
-      <Section first eyebrow="01" title="What are you tracking?">
-          <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, lineHeight: 17 }}>Choose the debt that best matches its repayment rules.</Text>
-          <Options values={DEBT_TYPE_OPTIONS} selected={type} onChange={setType} cards />
-          <Field label="Debt name" placeholder={DEBT_PLACEHOLDERS.debtName} value={name} onChangeText={setName} error={errors.name} />
-          <Field label={`Lender or provider${type === "custom_debt" ? " (optional)" : ""}`} placeholder={DEBT_PLACEHOLDERS.lenderName} value={lender} onChangeText={setLender} error={errors.lender} />
-      </Section>
+      <FormCard title="Type">
+        <DebtTypeGrid selected={type} onChange={setType} />
+        <Field label="Name" placeholder={DEBT_PLACEHOLDERS.debtName} value={name} onChangeText={setName} error={errors.name} />
+        <Field label={`Lender${type === "custom_debt" ? " (optional)" : ""}`} placeholder={DEBT_PLACEHOLDERS.lenderName} value={lender} onChangeText={setLender} error={errors.lender} />
+      </FormCard>
 
-      <Section eyebrow="02" title="Set the starting point">
-        <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, lineHeight: 17 }}>Use the current balance for tracking. The original amount gives your progress context.</Text>
-        <Field label="Original amount" placeholder={DEBT_PLACEHOLDERS.originalAmount} value={original} onChangeText={setOriginal} numeric prefix="PHP" error={errors.original} />
-        <Field label="Current balance" placeholder={DEBT_PLACEHOLDERS.currentBalance} value={balance} onChangeText={setBalance} numeric prefix="PHP" error={errors.balance} />
-         <Field label="Minimum payment" placeholder={DEBT_PLACEHOLDERS.paymentAmount} value={payment} onChangeText={setPayment} numeric prefix="PHP" error={errors.payment} />
-         <View style={{ backgroundColor: "#FBFAF5", borderColor: P.line, borderRadius: 12, borderWidth: 1, flexDirection: "row", gap: 12, padding: 12 }}>
-           <Pressable accessibilityRole="switch" accessibilityLabel="Allow extra payments" accessibilityHint="Put extra money toward this debt when available" accessibilityState={{ checked: allowsExtraPayments }} onPress={() => setAllowsExtraPayments((value) => !value)} style={{ alignSelf: "center", backgroundColor: allowsExtraPayments ? P.brand : P.line, borderRadius: 99, height: 26, justifyContent: "center", paddingHorizontal: 3, width: 44 }}>
-             <View style={{ alignSelf: allowsExtraPayments ? "flex-end" : "flex-start", backgroundColor: P.white, borderRadius: 10, height: 20, width: 20 }} />
-           </Pressable>
-           <View style={{ flex: 1, gap: 2 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Allow extra payments</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16 }}>Put extra money toward this debt when available.</Text></View>
-         </View>
-        <View style={{ backgroundColor: P.softCard, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 }}><Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 11, fontWeight: "700", lineHeight: 16 }}>Amounts are in Philippine pesos. Recorded payments update your balance over time.</Text></View>
-      </Section>
+      <FormCard title="Balance">
+        <Field label="Original amount" placeholder={DEBT_PLACEHOLDERS.originalAmount} value={original} onChangeText={setOriginal} numeric prefix={php} error={errors.original} />
+        <Field label="Current balance" placeholder={DEBT_PLACEHOLDERS.currentBalance} value={balance} onChangeText={setBalance} numeric prefix={php} error={errors.balance} />
+        <Field label="Minimum payment" placeholder={DEBT_PLACEHOLDERS.paymentAmount} value={payment} onChangeText={setPayment} numeric prefix={php} error={errors.payment} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, borderTopColor: v4.hairline, paddingTop: 12 }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={ui.cardTitle}>Allow extra payments</Text>
+            <Note>Put spare money toward this debt when you have it.</Note>
+          </View>
+          <Switch accessibilityLabel="Allow extra payments" value={allowsExtraPayments} onToggle={() => setAllowsExtraPayments((value) => !value)} />
+        </View>
+      </FormCard>
 
-      <Section eyebrow="03" title="How does repayment work?">
-        <Field label="Interest rate" placeholder={DEBT_PLACEHOLDERS.interestRate} value={rate} onChangeText={setRate} numeric suffix="%" error={errors.rate} />
-        <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Rate period</Text><Options values={INTEREST_PERIOD_OPTIONS} selected={period} onChange={setPeriod} compact /></View>
-        <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Interest method</Text><Options values={INTEREST_METHOD_OPTIONS} selected={method} onChange={setMethod} compact /></View>
-          <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Payment frequency</Text><Options values={PAYMENT_FREQUENCY_OPTIONS} selected={frequency} onChange={setFrequency} compact /></View>
-          {frequency === "semi_monthly" ? <View style={{ flexDirection: "row", gap: 12 }}><View style={{ flex: 1 }}><Field label="First payment day" placeholder="1" value={semiMonthlyFirstDay} onChangeText={setSemiMonthlyFirstDay} numeric error={errors.semiMonthlyDays} /></View><View style={{ flex: 1 }}><Field label="Second payment day" placeholder="15" value={semiMonthlySecondDay} onChangeText={setSemiMonthlySecondDay} numeric /></View></View> : null}
-          {frequency === "custom" ? <Field label="Custom payment interval" placeholder="Enter number of days" value={customIntervalDays} onChangeText={setCustomIntervalDays} numeric suffix="days" error={errors.customIntervalDays} /> : null}
-          <Field label="Loan or installment term (months)" placeholder={DEBT_PLACEHOLDERS.debtSpecificTerm} value={termMonths} onChangeText={setTermMonths} numeric error={errors.termMonths} />
-          <Field label="Fees" placeholder="Enter fees" value={fees} onChangeText={setFees} numeric prefix="PHP" error={errors.fees} />
-         <Field label="Penalty information" placeholder="Add penalty information" value={penaltyInfo} onChangeText={setPenaltyInfo} />
-      </Section>
+      <FormCard title="Interest">
+        <Choices values={INTEREST_METHOD_OPTIONS} selected={method} onChange={chooseMethod} />
+        {method !== "no_interest" ? (
+          <>
+            <Field label="Rate" placeholder={DEBT_PLACEHOLDERS.interestRate} value={rate} onChangeText={setRate} numeric suffix="%" error={errors.rate} />
+            <Choices label="RATE PERIOD" values={INTEREST_PERIOD_OPTIONS} selected={period} onChange={setPeriod} />
+          </>
+        ) : errors.rate ? <FieldError>{errors.rate}</FieldError> : null}
+        <Field label="Fees" placeholder="Enter fees" value={fees} onChangeText={setFees} numeric prefix={php} error={errors.fees} />
+        <Field label="Penalties" placeholder="Add penalty information" value={penaltyInfo} onChangeText={setPenaltyInfo} />
+      </FormCard>
 
-      <Section eyebrow="04" title="Anchor the payment plan">
-        <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, lineHeight: 17 }}>Use YYYY-MM-DD so your schedule and forecast line up correctly.</Text>
-          <Field label="Start date" placeholder={DEBT_PLACEHOLDERS.startDate} value={startDate} onChangeText={setStartDate} error={errors.startDate} />
-           <Field label="Next payment date" placeholder={DEBT_PLACEHOLDERS.nextPaymentDate} value={nextDueDate} onChangeText={setNextDueDate} error={errors.nextDueDate} />
-          <Field label="Maturity date" placeholder={DEBT_PLACEHOLDERS.maturityDate} value={maturityDate} onChangeText={setMaturityDate} />
-          <Field label="When do you want to get this debt paid?" placeholder={DEBT_PLACEHOLDERS.targetPayoffDate} value={targetPayoffDate} onChangeText={setTargetPayoffDate} error={errors.targetPayoffDate} />
-      </Section>
+      <FormCard title="Schedule">
+        <Choices label="FREQUENCY" values={PAYMENT_FREQUENCY_OPTIONS} selected={frequency} onChange={(value) => { setFrequency(value); setScheduleEdited(true); }} />
+        {frequency === "weekly" ? <Choices label="DUE DAY" values={WEEKDAY_OPTIONS} selected={dayOfWeek === null ? "" : String(dayOfWeek)} onChange={(value) => { setDayOfWeek(Number(value)); setScheduleEdited(true); }} error={errors.dayOfWeek} /> : null}
+        {frequency === "monthly" ? (
+          <View>
+            <TextField label="Due day" accessibilityLabel="Due day" placeholder="15" value={dueDay} onChangeText={(value) => { setDueDay(value); setScheduleEdited(true); }} keyboardType="number-pad" maxLength={2} error={Boolean(errors.dueDay)} />
+            {errors.dueDay ? <FieldError>{errors.dueDay}</FieldError> : null}
+          </View>
+        ) : null}
+        {frequency === "semi_monthly" ? (
+          <>
+            <TextField label="Date 1" accessibilityLabel="First payment day" placeholder="15" value={semiMonthlyFirstDay} onChangeText={(value) => { setSemiMonthlyFirstDay(value); setScheduleEdited(true); }} keyboardType="number-pad" maxLength={2} error={Boolean(errors.semiMonthlyDays)} />
+            <View>
+              <TextField label="Date 2" accessibilityLabel="Second payment day" placeholder="30" value={semiMonthlySecondDay} onChangeText={(value) => { setSemiMonthlySecondDay(value); setScheduleEdited(true); }} keyboardType="number-pad" maxLength={2} error={Boolean(errors.semiMonthlyDays)} />
+              {errors.semiMonthlyDays ? <FieldError>{errors.semiMonthlyDays}</FieldError> : null}
+            </View>
+          </>
+        ) : null}
+        {ENTERED_DAY_FREQUENCIES.includes(frequency) ? null : <DateField label="Next payment" placeholder={DEBT_PLACEHOLDERS.nextPaymentDate} value={nextDueDate || null} onChange={setNextDueDate} error={errors.nextDueDate} />}
+        <MonthEndNote days={frequency === "monthly" ? [dueDay] : frequency === "semi_monthly" ? [semiMonthlyFirstDay, semiMonthlySecondDay] : frequency === "quarterly" ? [nextDueDate.slice(8, 10)] : []} />
+        {frequency === "custom" ? <Field label="Every" placeholder="Enter number of days" value={customIntervalDays} onChangeText={setCustomIntervalDays} numeric suffix="days" error={errors.customIntervalDays} /> : null}
+        <Field label="Term" placeholder={DEBT_PLACEHOLDERS.debtSpecificTerm} value={termMonths} onChangeText={setTermMonths} numeric suffix="months" error={errors.termMonths} />
+        <DateField label="Maturity date (optional)" placeholder={DEBT_PLACEHOLDERS.maturityDate} value={maturityDate || null} onChange={setMaturityDate} />
+        <DateField label="Pay off by" placeholder={DEBT_PLACEHOLDERS.targetPayoffDate} value={targetPayoffDate || null} onChange={setTargetPayoffDate} error={errors.targetPayoffDate} />
+      </FormCard>
 
-      {type !== "custom_debt" ? <Section eyebrow="05" title="Add the details that matter">{renderTypeFields()}</Section> : null}
-      <Section eyebrow="06" title="Anything else to remember?"><Field label="Notes" placeholder={DEBT_PLACEHOLDERS.notes} value={notes} onChangeText={setNotes} /></Section>
+      {type !== "custom_debt" ? <FormCard title={`${typeLabel} details`}>{renderTypeFields()}</FormCard> : null}
 
-      {message ? <View accessibilityLiveRegion="polite" style={{ backgroundColor: "#FFF0F2", borderColor: "#F3C6CE", borderRadius: 12, borderWidth: 1, padding: 12 }}><Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 12, fontWeight: "700", lineHeight: 17 }}>{message}</Text></View> : null}
+      <FormCard title="Notes">
+        <TextField label="Anything to remember" accessibilityLabel="Notes" placeholder={DEBT_PLACEHOLDERS.notes} value={notes} onChangeText={setNotes} multiline />
+      </FormCard>
 
-      <View style={{ gap: 8, paddingTop: 2 }}>
-        <Pressable accessibilityRole="button" disabled={saving} onPress={() => save().catch(() => {})} style={({ pressed }) => ({ alignItems: "center", backgroundColor: P.brand, borderRadius: 13, height: 54, justifyContent: "center", opacity: saving || pressed ? 0.6 : 1 })}><Text style={{ color: P.white, fontFamily: "Manrope", fontSize: 14, fontWeight: "800" }}>{saving ? "Saving..." : debt ? "Save changes" : "Save debt"}</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={saving} onPress={onCancel} style={({ pressed }) => ({ alignItems: "center", borderRadius: 13, height: 46, justifyContent: "center", opacity: saving || pressed ? 0.6 : 1 })}><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Cancel</Text></Pressable>
+      {message ? <Banner tone="error">{message}</Banner> : null}
+
+      <View style={{ flexDirection: "row", gap: 10, paddingTop: 4 }}>
+        <Pressable accessibilityRole="button" disabled={saving} onPress={onCancel} style={[ui.button, ui.buttonGhost, { flex: 1 }, saving ? ui.dimmed : null]}>
+          <Text style={[ui.buttonText, ui.buttonGhostText]}>Cancel</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={saving} onPress={() => save().catch(() => {})} style={[ui.button, { flex: 2 }, saving ? ui.dimmed : null]}>
+          <Text style={ui.buttonText}>{saving ? "Saving..." : debt ? "Save changes" : "Save debt"}</Text>
+        </Pressable>
       </View>
     </ScrollView>
   );

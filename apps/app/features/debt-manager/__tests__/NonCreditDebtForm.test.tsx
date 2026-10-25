@@ -1,5 +1,6 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import NonCreditDebtForm from "../NonCreditDebtForm";
 import type { DebtAccount } from "../../../local-db/repositories/debtAccounts";
 
@@ -9,6 +10,13 @@ jest.mock("../../../local-db/repositories/debtAccounts", () => ({
   createDebtAccount: (...args: unknown[]) => mockCreateDebtAccount(...args),
   updateDebtAccount: (...args: unknown[]) => mockUpdateDebtAccount(...args),
 }));
+jest.mock("@react-native-community/datetimepicker", () => "DateTimePicker");
+
+function pickDate(view: ReturnType<typeof render>, label: string, date: Date) {
+  fireEvent.press(view.getByLabelText(label));
+  fireEvent(view.UNSAFE_getByType(DateTimePicker), "onChange", { type: "set" }, date);
+  fireEvent.press(view.getByLabelText("Done"));
+}
 
 describe("NonCreditDebtForm", () => {
   beforeEach(() => { mockCreateDebtAccount.mockReset(); mockUpdateDebtAccount.mockReset(); });
@@ -35,9 +43,28 @@ describe("NonCreditDebtForm", () => {
   it("creates a personal loan with the common debt fields", async () => {
     mockCreateDebtAccount.mockResolvedValue({ debt: { id: "debt-1", name: "Emergency loan" } });
     const onSaved = jest.fn(); const view = render(<NonCreditDebtForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={onSaved} />);
-    fireEvent.changeText(view.getByPlaceholderText("Enter debt name"), "Emergency loan"); fireEvent.changeText(view.getByPlaceholderText("Enter lender name"), "Bank A"); fireEvent.changeText(view.getByPlaceholderText("Enter original amount"), "1000"); fireEvent.changeText(view.getByPlaceholderText("Enter current balance"), "1000"); fireEvent.changeText(view.getByPlaceholderText("Enter payment amount"), "100"); fireEvent.changeText(view.getByPlaceholderText("Select start date"), "2026-09-01"); fireEvent.changeText(view.getByPlaceholderText("Select payment date"), "2026-10-01"); fireEvent.changeText(view.getByPlaceholderText("Select target payoff date"), "2027-07-01"); fireEvent.press(view.getByText("Save debt"));
-    await waitFor(() => expect(mockCreateDebtAccount).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ name: "Emergency loan", originalBalanceCentavos: 100000, currentBalanceCentavos: 100000, minimumPaymentCentavos: 10000, targetPayoffDate: "2027-07-01" })));
+    fireEvent.changeText(view.getByPlaceholderText("Enter debt name"), "Emergency loan"); fireEvent.changeText(view.getByPlaceholderText("Enter lender name"), "Bank A"); fireEvent.changeText(view.getByPlaceholderText("Enter original amount"), "1000"); fireEvent.changeText(view.getByPlaceholderText("Enter current balance"), "1000"); fireEvent.changeText(view.getByPlaceholderText("Enter payment amount"), "100"); fireEvent.changeText(view.getByLabelText("Due day"), "1"); pickDate(view, "Pay off by", new Date(2099, 6, 1)); fireEvent.press(view.getByText("Save debt"));
+    await waitFor(() => expect(mockCreateDebtAccount).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ name: "Emergency loan", originalBalanceCentavos: 100000, currentBalanceCentavos: 100000, minimumPaymentCentavos: 10000, paymentFrequency: "monthly", nextDueDate: expect.stringMatching(/^\d{4}-\d{2}-01$/), targetPayoffDate: "2099-07-01" })));
     expect(onSaved).toHaveBeenCalledWith({ id: "debt-1", name: "Emergency loan" });
+  });
+  it("accepts due days up to the 31st, stores the chosen day, and explains month-end fallback", async () => {
+    mockCreateDebtAccount.mockResolvedValue({ debt: { id: "debt-1", name: "Car loan" } });
+    const view = render(<NonCreditDebtForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
+    fireEvent.changeText(view.getByPlaceholderText("Enter debt name"), "Car loan"); fireEvent.changeText(view.getByPlaceholderText("Enter lender name"), "Bank A"); fireEvent.changeText(view.getByPlaceholderText("Enter original amount"), "1000"); fireEvent.changeText(view.getByPlaceholderText("Enter current balance"), "1000"); fireEvent.changeText(view.getByPlaceholderText("Enter payment amount"), "100");
+    fireEvent.changeText(view.getByLabelText("Due day"), "31");
+    expect(view.getByText(/Days 29, 30 and 31 become the 28th in February/)).toBeTruthy();
+    pickDate(view, "Pay off by", new Date(2099, 6, 1));
+    fireEvent.press(view.getByText("Save debt"));
+    await waitFor(() => expect(mockCreateDebtAccount).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ paymentSchedule: expect.objectContaining({ dayOfMonth: 31 }) })));
+  });
+  it("keeps twice-a-month dates different in February", () => {
+    const view = render(<NonCreditDebtForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
+    fireEvent.press(view.getByRole("radio", { name: "Select Twice a Month" }));
+    fireEvent.changeText(view.getByLabelText("First payment day"), "28");
+    fireEvent.changeText(view.getByLabelText("Second payment day"), "30");
+    fireEvent.press(view.getByText("Save debt"));
+    expect(view.getByText("Date 1 must be the 27th or earlier when Date 2 is after the 28th, so February still has two payments.")).toBeTruthy();
+    expect(mockCreateDebtAccount).not.toHaveBeenCalled();
   });
   it("preserves auto-loan purchase data when saving an existing debt", async () => {
     const debt: DebtAccount = {
@@ -63,6 +90,6 @@ describe("NonCreditDebtForm", () => {
     const view = render(<NonCreditDebtForm userId="user-1" deviceId="device-1" onCancel={jest.fn()} onSaved={jest.fn()} />);
 
     fireEvent.press(view.getByRole("switch", { name: "Allow extra payments" }));
-    expect(view.getByRole("switch", { name: "Allow extra payments" }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByRole("switch", { name: "Allow extra payments" }).props.accessibilityState).toMatchObject({ checked: true });
   });
 });

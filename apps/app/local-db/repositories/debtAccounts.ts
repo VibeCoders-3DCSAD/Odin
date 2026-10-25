@@ -8,7 +8,7 @@ export const DEBT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", 
 export const DEBT_STATUSES = ["active", "archived", "deleted", "paid_off"] as const;
 const INTEREST_METHODS: InterestMethod[] = ["flat_add_on", "diminishing_balance", "provider_calculated", "no_interest"];
 const INTEREST_PERIODS: InterestRatePeriod[] = ["annual", "monthly", "per_term", "none"];
-const PAYMENT_FREQUENCIES: PaymentFrequency[] = ["weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "custom"];
+const PAYMENT_FREQUENCIES: PaymentFrequency[] = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "custom"];
 
 export type DebtTypePreset = typeof DEBT_TYPES[number];
 export type DebtAccountStatus = typeof DEBT_STATUSES[number];
@@ -17,9 +17,10 @@ export type DebtProgressStatus = "ahead" | "on_schedule" | "behind" | "finished"
 export type DebtRepaymentStatus = "advanced" | "on_track" | "underpaid" | "not_in_schedule";
 export type InterestMethod = "flat_add_on" | "diminishing_balance" | "provider_calculated" | "no_interest";
 export type InterestRatePeriod = "annual" | "monthly" | "per_term" | "none";
-export type PaymentFrequency = "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "custom";
+export type PaymentFrequency = "daily" | "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "custom";
 export type SalaryLoanProvider = "sss" | "gsis" | "pag_ibig" | "other";
-export type DebtPaymentSchedule = { semiMonthlyDays?: [number, number]; customIntervalDays?: number };
+// dayOfMonth is the chosen due day for monthly and quarterly debts; months shorter than it use their last day.
+export type DebtPaymentSchedule = { semiMonthlyDays?: [number, number]; customIntervalDays?: number; dayOfMonth?: number };
 
 export type DebtPresetData = {
   startDate: string | null;
@@ -149,9 +150,12 @@ function validate(input: CreateDebtAccountInput): CreateDebtAccountInput {
   if (!INTEREST_METHODS.includes(input.interestMethod)) throw new LocalDbError("VALIDATION_ERROR", "interest method is invalid");
   if (!input.interestPeriod || !INTEREST_PERIODS.includes(input.interestPeriod)) throw new LocalDbError("VALIDATION_ERROR", "interest period is invalid");
   if (!PAYMENT_FREQUENCIES.includes(input.paymentFrequency)) throw new LocalDbError("VALIDATION_ERROR", "payment frequency is invalid");
-  const { customIntervalDays, semiMonthlyDays } = input.paymentSchedule;
+  const { customIntervalDays, semiMonthlyDays, dayOfMonth } = input.paymentSchedule;
+  const isDayOfMonth = (day: number | undefined) => Number.isSafeInteger(day) && day! >= 1 && day! <= 31;
   if (input.paymentFrequency === "custom" && (!Number.isSafeInteger(customIntervalDays) || !(customIntervalDays && customIntervalDays > 0))) throw new LocalDbError("VALIDATION_ERROR", "custom payment interval must be a positive whole number of days");
-  if (input.paymentFrequency === "semi_monthly" && semiMonthlyDays && (!semiMonthlyDays.every((day) => Number.isSafeInteger(day) && day >= 1 && day <= 28) || semiMonthlyDays[0] === semiMonthlyDays[1])) throw new LocalDbError("VALIDATION_ERROR", "semi-monthly payment days must be distinct days from 1 to 28");
+  if (dayOfMonth !== undefined && !isDayOfMonth(dayOfMonth)) throw new LocalDbError("VALIDATION_ERROR", "payment day of month must be from 1 to 31");
+  // Days past the 28th become the 28th in February, so the earlier day must stay before it to keep two payments that month.
+  if (input.paymentFrequency === "semi_monthly" && semiMonthlyDays && (!semiMonthlyDays.every(isDayOfMonth) || Math.min(...semiMonthlyDays) >= Math.min(Math.max(...semiMonthlyDays), 28))) throw new LocalDbError("VALIDATION_ERROR", "semi-monthly payment days must be two days from 1 to 31 that stay different in February");
   if (input.interestMethod === "no_interest" && input.annualInterestRateBps !== 0) throw new LocalDbError("VALIDATION_ERROR", "no-interest debts must use a zero interest rate");
   assertInteger(input.typeSpecific.feesCentavos ?? 0, "feesCentavos");
   if (input.typeSpecific.termMonths != null) assertInteger(input.typeSpecific.termMonths, "termMonths", true);

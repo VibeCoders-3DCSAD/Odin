@@ -1,9 +1,52 @@
-import { addPaymentPeriod, buildDebtBalanceForecast, buildDebtForecast, getDebtPaymentProgress, getDebtRepaymentForecast } from "../debtForecast";
+import { addPaymentPeriod, buildDebtBalanceForecast, buildDebtForecast, getDebtPaymentProgress, getDebtRepaymentForecast, upcomingDueDate } from "../debtForecast";
+
+describe("upcoming due date from entered days", () => {
+  // 2026-10-25 is a Sunday.
+  const today = "2026-10-25";
+
+  it("is today for daily debts and the next matching weekday for weekly debts", () => {
+    expect(upcomingDueDate("daily", {}, today)).toBe("2026-10-25");
+    expect(upcomingDueDate("weekly", { dayOfWeek: 0 }, today)).toBe("2026-10-25");
+    expect(upcomingDueDate("weekly", { dayOfWeek: 3 }, today)).toBe("2026-10-28");
+    expect(upcomingDueDate("weekly", { dayOfWeek: null }, today)).toBeNull();
+  });
+
+  it("rolls monthly and twice-a-month days into next month once they have passed", () => {
+    expect(upcomingDueDate("monthly", { dayOfMonth: 28 }, today)).toBe("2026-10-28");
+    expect(upcomingDueDate("monthly", { dayOfMonth: 5 }, today)).toBe("2026-11-05");
+    expect(upcomingDueDate("monthly", { dayOfMonth: 5 }, "2026-12-20")).toBe("2027-01-05");
+    expect(upcomingDueDate("semi_monthly", { semiMonthlyDays: [28, 10] }, today)).toBe("2026-10-28");
+    expect(upcomingDueDate("semi_monthly", { semiMonthlyDays: [10, 20] }, today)).toBe("2026-11-10");
+  });
+
+  it("uses the month's last day when the chosen day is past it", () => {
+    expect(upcomingDueDate("monthly", { dayOfMonth: 31 }, "2026-11-10")).toBe("2026-11-30");
+    expect(upcomingDueDate("monthly", { dayOfMonth: 30 }, "2027-02-10")).toBe("2027-02-28");
+    expect(upcomingDueDate("semi_monthly", { semiMonthlyDays: [15, 31] }, "2028-02-20")).toBe("2028-02-29");
+  });
+
+  it("leaves dated schedules to the picked next payment date", () => {
+    expect(upcomingDueDate("quarterly", { dayOfMonth: 5 }, today)).toBeNull();
+  });
+});
 
 describe("debt payment schedules", () => {
   it("uses calendar periods for monthly and quarterly schedules", () => {
     expect(addPaymentPeriod("2026-01-31", "monthly")).toBe("2026-02-28");
     expect(addPaymentPeriod("2026-11-30", "quarterly")).toBe("2027-02-28");
+  });
+
+  it("returns to the chosen day after a short month instead of drifting", () => {
+    expect(addPaymentPeriod("2026-01-31", "monthly", { dayOfMonth: 31 })).toBe("2026-02-28");
+    expect(addPaymentPeriod("2026-02-28", "monthly", { dayOfMonth: 31 })).toBe("2026-03-31");
+    expect(addPaymentPeriod("2026-04-30", "monthly", { dayOfMonth: 30 })).toBe("2026-05-30");
+    expect(addPaymentPeriod("2026-04-30", "quarterly", { dayOfMonth: 31 })).toBe("2026-07-31");
+  });
+
+  it("puts twice-a-month days past the 28th on February's last day", () => {
+    expect(addPaymentPeriod("2027-02-15", "semi_monthly", { semiMonthlyDays: [15, 30] })).toBe("2027-02-28");
+    expect(addPaymentPeriod("2027-02-28", "semi_monthly", { semiMonthlyDays: [15, 30] })).toBe("2027-03-15");
+    expect(addPaymentPeriod("2027-03-15", "semi_monthly", { semiMonthlyDays: [15, 30] })).toBe("2027-03-30");
   });
 
   it("uses configured semi-monthly dates and custom intervals", () => {

@@ -2,6 +2,7 @@ import type { DebtAccount, DebtPaymentSchedule, DebtRepaymentForecast, PaymentFr
 import { getPhilippineToday } from "./debtTrendRange";
 
 export const PAYMENT_INTERVAL_DAYS: Partial<Record<PaymentFrequency, number>> = {
+  daily: 1,
   weekly: 7,
   biweekly: 14,
 };
@@ -12,9 +13,10 @@ function addDays(date: string, days: number) {
   return value.toISOString().slice(0, 10);
 }
 
-function addMonths(date: string, months: number) {
+// With a chosen day, months return to it after a short month instead of drifting to the clamped date.
+function addMonths(date: string, months: number, dayOfMonth?: number) {
   const value = new Date(`${date}T00:00:00Z`);
-  const day = value.getUTCDate();
+  const day = dayOfMonth ?? value.getUTCDate();
   value.setUTCDate(1);
   value.setUTCMonth(value.getUTCMonth() + months);
   const lastDay = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0)).getUTCDate();
@@ -28,8 +30,8 @@ function dateAtDay(year: number, month: number, day: number) {
 }
 
 export function addPaymentPeriod(date: string, frequency: PaymentFrequency, schedule: DebtPaymentSchedule = {}) {
-  if (frequency === "monthly") return addMonths(date, 1);
-  if (frequency === "quarterly") return addMonths(date, 3);
+  if (frequency === "monthly") return addMonths(date, 1, schedule.dayOfMonth);
+  if (frequency === "quarterly") return addMonths(date, 3, schedule.dayOfMonth);
   if (frequency === "semi_monthly") {
     const days = [...(schedule.semiMonthlyDays ?? [1, 15])].sort((left, right) => left - right);
     const current = new Date(`${date}T00:00:00Z`);
@@ -40,6 +42,18 @@ export function addPaymentPeriod(date: string, frequency: PaymentFrequency, sche
   if (frequency === "custom") return typeof customIntervalDays === "number" && Number.isSafeInteger(customIntervalDays) && customIntervalDays > 0 ? addDays(date, customIntervalDays) : null;
   const days = PAYMENT_INTERVAL_DAYS[frequency];
   return days ? addDays(date, days) : null;
+}
+
+// The first due date on or after today for schedules entered as a weekday or days of the month.
+export function upcomingDueDate(frequency: PaymentFrequency, schedule: { dayOfWeek?: number | null; dayOfMonth?: number | null; semiMonthlyDays?: [number, number] }, today: string): string | null {
+  const current = new Date(`${today}T00:00:00Z`);
+  const year = current.getUTCFullYear();
+  const month = current.getUTCMonth();
+  if (frequency === "daily") return today;
+  if (frequency === "weekly") return schedule.dayOfWeek == null ? null : addDays(today, (schedule.dayOfWeek - current.getUTCDay() + 7) % 7);
+  const days = frequency === "monthly" ? (schedule.dayOfMonth ? [schedule.dayOfMonth] : []) : frequency === "semi_monthly" ? [...(schedule.semiMonthlyDays ?? [])].sort((left, right) => left - right) : [];
+  if (!days.length) return null;
+  return days.map((day) => dateAtDay(year, month, day)).find((candidate) => candidate >= today) ?? dateAtDay(year, month + 1, days[0]!);
 }
 
 function hasPaymentSchedule(frequency: PaymentFrequency, schedule: DebtPaymentSchedule = {}) {
@@ -70,7 +84,7 @@ function scheduleCanReachZero(
   contributionCentavos: number,
 ) {
   if (debt.interestMethod === "no_interest" || debt.interestMethod === "provider_calculated" || debt.interestPeriod === "none" || debt.interestPeriod === "per_term") return true;
-  const paymentsPerYear: Partial<Record<PaymentFrequency, number>> = { weekly: 52, biweekly: 26, semi_monthly: 24, monthly: 12, quarterly: 4 };
+  const paymentsPerYear: Partial<Record<PaymentFrequency, number>> = { daily: 365, weekly: 52, biweekly: 26, semi_monthly: 24, monthly: 12, quarterly: 4 };
   const interestEventsPerYear = debt.interestPeriod === "monthly" ? 12 : 1;
   const interestPrincipal = debt.interestMethod === "flat_add_on" ? debt.originalBalanceCentavos : debt.currentBalanceCentavos;
   const annualContributions = contributionCentavos * (paymentsPerYear[paymentFrequency] ?? 0);
