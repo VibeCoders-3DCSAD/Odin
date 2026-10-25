@@ -26,7 +26,10 @@ describe("POST /odin/api/financial-classification/v2/assess", () => {
     classify.mockResolvedValue({ ok: true, modelVersion: "financial_rules_v1", classification: { emergency_savings: { label: "EMERGENCY_FUND_ADEQUATE" } } });
     const onboarding = { select: jest.fn(), eq: jest.fn(), order: jest.fn(), limit: jest.fn(), maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) };
     for (const step of ["select", "eq", "order", "limit"] as const) onboarding[step].mockReturnValue(onboarding);
-    client.from.mockImplementation((table: string) => table === "onboarding_sessions" ? onboarding : { insert: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { id: "assessment-1", assessed_at: "2026-10-18T00:00:00Z", rule_set_version: "financial_rules_v1", output_snapshot: {} }, error: null }) }) }) });
+    // No emergency fund goal, so the RPC's liquid savings stay the classification input.
+    const savingsGoals = { select: jest.fn(), eq: jest.fn(), maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) };
+    for (const step of ["select", "eq"] as const) savingsGoals[step].mockReturnValue(savingsGoals);
+    client.from.mockImplementation((table: string) => table === "onboarding_sessions" ? onboarding : table === "savings_goals" ? savingsGoals : { insert: jest.fn().mockReturnValue({ select: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue({ data: { id: "assessment-1", assessed_at: "2026-10-18T00:00:00Z", rule_set_version: "financial_rules_v1", output_snapshot: {} }, error: null }) }) }) });
   });
 
   it("derives the input server-side and persists the rule result", async () => {

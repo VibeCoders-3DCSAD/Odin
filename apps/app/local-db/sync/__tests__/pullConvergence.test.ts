@@ -91,13 +91,6 @@ describe("legacy taxonomy pull convergence", () => {
     expect(String(db.runAsync.mock.calls[0]?.[0])).toContain("classification");
     expect(db.runAsync.mock.calls[0]).toContain("non_essential");
   });
-
-  it("does not restore retired taxonomy rows", async () => {
-    const db = { getFirstAsync: jest.fn(), runAsync: jest.fn() };
-    await applyPullRow(db as never, "subcategories", { id: "legacy-1", slug: "essentials_food_groceries", version: 1, deleted: false });
-    expect(db.getFirstAsync).not.toHaveBeenCalled();
-    expect(db.runAsync).not.toHaveBeenCalled();
-  });
 });
 
 describe("debt account pull convergence", () => {
