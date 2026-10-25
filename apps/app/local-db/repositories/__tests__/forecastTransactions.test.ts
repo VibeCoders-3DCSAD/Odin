@@ -66,9 +66,9 @@ describe("listForecastTransactions", () => {
 
   it("sums actual expenses per quarter and category, with billers in their own group", async () => {
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([
-      { quarter: "2025Q4", category: "food", amount_centavos: 900_000 },
-      { quarter: "2025Q4", category: "billers_remittances", amount_centavos: 10_800_000 },
-      { quarter: "2026Q1", category: "food", amount_centavos: 1_000_000 },
+      { period: "2025Q4", category: "food", amount_centavos: 900_000 },
+      { period: "2025Q4", category: "billers_remittances", amount_centavos: 10_800_000 },
+      { period: "2026Q1", category: "food", amount_centavos: 1_000_000 },
     ]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
     const { listQuarterlySpending } = await import("../forecastTransactions");
@@ -82,6 +82,30 @@ describe("listForecastTransactions", () => {
     expect(sql).toContain("THEN 'billers_remittances' ELSE c.slug END");
     expect(sql).toContain("t.transaction_type = 'expense'");
     expect(params).toEqual(["user-1", "2025-10-01", "2026-06-30"]);
+  });
+
+  it("lists the two months before this one and this month, oldest first", async () => {
+    const { recentMonths } = await import("../forecastTransactions");
+    expect(recentMonths(3, new Date("2026-10-25T00:00:00Z"))).toEqual(["2026-08", "2026-09", "2026-10"]);
+    expect(recentMonths(3, new Date("2027-01-05T00:00:00Z"))).toEqual(["2026-11", "2026-12", "2027-01"]);
+  });
+
+  it("sums actual expenses per month and category, through the end of the last month", async () => {
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([
+      { period: "2026-08", category: "food", amount_centavos: 300_000 },
+      { period: "2026-10", category: "billers_remittances", amount_centavos: 150_000 },
+    ]);
+    mockInitDatabase.mockResolvedValue({ getAllAsync });
+    const { listMonthlySpending } = await import("../forecastTransactions");
+
+    await expect(listMonthlySpending("user-1", ["2026-08", "2026-09", "2026-10"])).resolves.toEqual([
+      { month: "2026-08", totalCentavos: 300_000, categories: [{ category: "food", amountCentavos: 300_000 }] },
+      { month: "2026-09", totalCentavos: 0, categories: [] },
+      { month: "2026-10", totalCentavos: 150_000, categories: [{ category: "billers_remittances", amountCentavos: 150_000 }] },
+    ]);
+    const [sql, ...params] = getAllAsync.mock.calls[0]!;
+    expect(sql).toContain("substr(t.transaction_date, 1, 7) AS period");
+    expect(params).toEqual(["user-1", "2026-08-01", "2026-10-31"]);
   });
 
   it("does not send malformed or zero-value local rows", async () => {

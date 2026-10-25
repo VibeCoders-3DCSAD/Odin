@@ -128,17 +128,22 @@ export function pastQuarters(count: number, now = new Date()): string[] {
   });
 }
 
-// Actual spending per quarter in the same groups the forecast uses: HFCE categories, with biller and
+export type MonthSpending = { month: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[] };
+
+// The last `count` months (YYYY-MM) through the current one, oldest first. The current month is still in progress.
+export function recentMonths(count: number, now = new Date()): string[] {
+  return Array.from({ length: count }, (_, index) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - count + 1 + index, 1)).toISOString().slice(0, 7));
+}
+
+const QUARTER_SQL = "substr(t.transaction_date, 1, 4) || 'Q' || ((CAST(substr(t.transaction_date, 6, 2) AS INTEGER) + 2) / 3)";
+const MONTH_SQL = "substr(t.transaction_date, 1, 7)";
+
+// Actual spending per period in the same groups the forecast uses: HFCE categories, with biller and
 // remittance payments in their own group. Debt repayments and savings transfers have no category and are left out.
-export async function listQuarterlySpending(userId: string, quarters: string[]): Promise<QuarterSpending[]> {
-  if (quarters.length === 0) return [];
-  const first = quarters[0]!;
-  const last = quarters.at(-1)!;
-  const startDate = `${first.slice(0, 4)}-${String((Number(first.slice(5)) - 1) * 3 + 1).padStart(2, "0")}-01`;
-  const endDate = new Date(Date.UTC(Number(last.slice(0, 4)), Number(last.slice(5)) * 3, 0)).toISOString().slice(0, 10);
+async function listPeriodSpending(userId: string, periods: string[], periodSql: string, startDate: string, endDate: string) {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ quarter: string; category: string; amount_centavos: number }>(
-    `SELECT substr(t.transaction_date, 1, 4) || 'Q' || ((CAST(substr(t.transaction_date, 6, 2) AS INTEGER) + 2) / 3) AS quarter,
+  const rows = await db.getAllAsync<{ period: string; category: string; amount_centavos: number }>(
+    `SELECT ${periodSql} AS period,
             CASE WHEN EXISTS (SELECT 1 FROM scheduled_payment_records r WHERE r.user_id = t.user_id AND r.transaction_id = t.id AND r.deleted = 0)
                  THEN '${SCHEDULED_PAYMENTS_CATEGORY}' ELSE c.slug END AS category,
             SUM(t.amount_centavos) AS amount_centavos
@@ -147,12 +152,29 @@ export async function listQuarterlySpending(userId: string, quarters: string[]):
        LEFT JOIN categories c ON c.id = s.category_id AND c.deleted = 0
       WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
         AND t.amount_centavos > 0 AND t.transaction_date >= ? AND t.transaction_date <= ?
-      GROUP BY quarter, category
+      GROUP BY period, category
      HAVING category IS NOT NULL`,
     userId, startDate, endDate,
   );
-  return quarters.map((quarter) => {
-    const categories = rows.filter((row) => row.quarter === quarter).map((row) => ({ category: row.category, amountCentavos: row.amount_centavos }));
-    return { quarter, totalCentavos: categories.reduce((sum, point) => sum + point.amountCentavos, 0), categories };
+  return periods.map((period) => {
+    const categories = rows.filter((row) => row.period === period).map((row) => ({ category: row.category, amountCentavos: row.amount_centavos }));
+    return { period, totalCentavos: categories.reduce((sum, point) => sum + point.amountCentavos, 0), categories };
   });
+}
+
+export async function listQuarterlySpending(userId: string, quarters: string[]): Promise<QuarterSpending[]> {
+  if (quarters.length === 0) return [];
+  const first = quarters[0]!;
+  const last = quarters.at(-1)!;
+  const startDate = `${first.slice(0, 4)}-${String((Number(first.slice(5)) - 1) * 3 + 1).padStart(2, "0")}-01`;
+  const endDate = new Date(Date.UTC(Number(last.slice(0, 4)), Number(last.slice(5)) * 3, 0)).toISOString().slice(0, 10);
+  return (await listPeriodSpending(userId, quarters, QUARTER_SQL, startDate, endDate)).map(({ period, ...spending }) => ({ quarter: period, ...spending }));
+}
+
+// The current month's total covers only what has been recorded so far.
+export async function listMonthlySpending(userId: string, months: string[]): Promise<MonthSpending[]> {
+  if (months.length === 0) return [];
+  const last = months.at(-1)!;
+  const endDate = new Date(Date.UTC(Number(last.slice(0, 4)), Number(last.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  return (await listPeriodSpending(userId, months, MONTH_SQL, `${months[0]}-01`, endDate)).map(({ period, ...spending }) => ({ month: period, ...spending }));
 }

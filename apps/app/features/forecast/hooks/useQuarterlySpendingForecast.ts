@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getSnapshot, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
-import { getForecastHistoryStartDate, listForecastTransactions, listQuarterlySpending, pastQuarters, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
+import { getForecastHistoryStartDate, listForecastTransactions, listMonthlySpending, listQuarterlySpending, pastQuarters, recentMonths, type MonthSpending, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
 import { listScheduledPayments } from "../../../local-db/repositories/scheduledPayments";
 import { useConnectivityStore } from "../../../services/connectivity";
 import { getQuarterlyForecastContent } from "../../dashboard/dashboardSnapshotContent";
@@ -10,10 +10,13 @@ import { addScheduledPayments } from "../scheduledForecast";
 import type { QuarterlyForecastPayload } from "../types";
 
 const HISTORY_QUARTERS = 4;
+// The monthly chart shows the two months before this one and this month so far.
+const HISTORY_MONTHS = 3;
 
 export function useQuarterlySpendingForecast(userId: string, accessToken: string, refreshKey: number) {
   const [forecast, setForecast] = useState<QuarterlyForecastPayload | null>(null);
   const [history, setHistory] = useState<QuarterSpending[]>([]);
+  const [monthHistory, setMonthHistory] = useState<MonthSpending[]>([]);
   const [refreshing, setRefreshing] = useState(true);
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +36,11 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
       if (signal.aborted) return;
       const firstRecorded = actual.findIndex((quarter) => quarter.totalCentavos > 0);
       setHistory(firstRecorded === -1 ? [] : actual.slice(firstRecorded));
+    }).catch(() => {});
+    void listMonthlySpending(userId, recentMonths(HISTORY_MONTHS)).then((actual) => {
+      if (signal.aborted) return;
+      const firstRecorded = actual.findIndex((month) => month.totalCentavos > 0);
+      setMonthHistory(firstRecorded === -1 ? [] : actual.slice(firstRecorded));
     }).catch(() => {});
 
     async function revalidate() {
@@ -105,5 +113,5 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
     return () => controller.abort();
   }, [userId, accessToken, refreshKey, online]);
 
-  return { forecast, history, refreshing, stale, error, notice };
+  return { forecast, history, monthHistory, refreshing, stale, error, notice };
 }

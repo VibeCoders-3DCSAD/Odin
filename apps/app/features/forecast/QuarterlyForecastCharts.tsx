@@ -5,16 +5,18 @@ import type { QuarterlyForecastPayload } from "./types";
 import { SCHEDULED_PAYMENTS_CATEGORY } from "./scheduledForecast";
 import { ForecastCategoryPicker } from "./ForecastCategoryPicker";
 
-const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7" };
+const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", over: "#D9001F" };
 
 const CHART_HEIGHT = 180;
 // The right gutter fits half of the last centered quarter label ("Q3 2027"), so it is not clipped.
 const PLOT = { top: 12, right: 28, bottom: 26, left: 52 };
 
-type Series = { key: string; label: string; color: string; values: number[] };
+// values holds each point's forecast and actual its recorded spending; null where a point has none.
+type Series = { key: string; label: string; color: string; values: (number | null)[]; actual: (number | null)[] };
 type CategoryAmount = { category: string; amountCentavos: number };
-// A quarter (YYYYQn) or a month (YYYY-MM) of spending.
-type Period = { key: string; totalCentavos: number; categories: CategoryAmount[] };
+type Period = { totalCentavos: number; categories: CategoryAmount[] };
+// A quarter (YYYYQn) or a month (YYYY-MM), with its actual spending or its forecast.
+type Slot = { key: string; actual: Period | null; forecast: Period | null };
 type Labels = { full: (key: string) => string; short: (key: string) => string; dates: (key: string) => string };
 
 function formatPeso(centavos: number): string {
@@ -90,13 +92,25 @@ const MONTH_LABELS: Labels = {
   dates: (month) => `${monthName(month)} ${month.slice(0, 4)}`,
 };
 
-// The monthly view stays under the axis's crowding limit, so every month keeps its label.
-const MONTHLY_FORECAST_MONTHS = 4;
+// Forecast months charted after the current one; the current month's forecast is compared with its actual so far.
+const MONTHLY_FORECAST_MONTHS = 3;
 
-// A full year of history follows each month's own spending last year, so the forecast is shown per month.
-// Shorter histories forecast the same amount for every month of a quarter, so they stay quarterly.
-export function monthlyForecast(forecast: QuarterlyForecastPayload): NonNullable<QuarterlyForecastPayload["months"]> | null {
-  return forecast.baselineMethod === "same_period_last_year" && forecast.months?.length ? forecast.months.slice(0, MONTHLY_FORECAST_MONTHS) : null;
+// From six months of history odin-ml walks each month forward by HFCE, so the forecast is shown per month.
+// Provisional histories forecast the same amount for every month of a quarter, so they stay quarterly.
+export function monthlyForecast(forecast: QuarterlyForecastPayload, now = new Date()): NonNullable<QuarterlyForecastPayload["months"]> | null {
+  if (forecast.baselineMethod !== "same_period_last_year" && forecast.baselineMethod !== "median_monthly") return null;
+  const first = now.toISOString().slice(0, 7);
+  const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + MONTHLY_FORECAST_MONTHS, 1)).toISOString().slice(0, 7);
+  const months = (forecast.months ?? []).filter((month) => month.month >= first && month.month <= last);
+  return months.length ? months : null;
+}
+
+// One slot per period, in order; a period with both actual spending and a forecast shares its slot.
+function mergeSlots(actual: [string, Period][], forecast: [string, Period][]): Slot[] {
+  const actualByKey = new Map(actual);
+  const forecastByKey = new Map(forecast);
+  return [...new Set([...actualByKey.keys(), ...forecastByKey.keys()])].sort()
+    .map((key) => ({ key, actual: actualByKey.get(key) ?? null, forecast: forecastByKey.get(key) ?? null }));
 }
 
 // Past this many points the axis labels every other point, counted from the first forecast point.
@@ -111,15 +125,15 @@ function niceMax(value: number): number {
 
 // Every category stays selectable; only one series is displayed at a time.
 export function categorySeries(forecast: QuarterlyForecastPayload): Series[] {
-  return periodCategorySeries(forecast.quarters);
+  return slotCategorySeries(mergeSlots([], forecast.quarters.map(({ quarter, ...period }) => [quarter, period])));
 }
 
-function periodCategorySeries(periods: { categories: CategoryAmount[] }[]): Series[] {
+function slotCategorySeries(slots: Slot[]): Series[] {
   const totals = new Map<string, number>();
-  for (const period of periods) for (const point of period.categories) totals.set(point.category, (totals.get(point.category) ?? 0) + point.amountCentavos);
+  for (const slot of slots) for (const period of [slot.actual, slot.forecast]) for (const point of period?.categories ?? []) totals.set(point.category, (totals.get(point.category) ?? 0) + point.amountCentavos);
   const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([category]) => category);
-  const amountFor = (period: { categories: CategoryAmount[] }, category: string) => period.categories.find((point) => point.category === category)?.amountCentavos ?? 0;
-  return ranked.map((category) => ({ key: category, label: categoryLabel(category), color: P.brand, values: periods.map((period) => amountFor(period, category)) }));
+  const amountFor = (period: Period | null, category: string) => period ? period.categories.find((point) => point.category === category)?.amountCentavos ?? 0 : null;
+  return ranked.map((category) => ({ key: category, label: categoryLabel(category), color: P.brand, values: slots.map((slot) => amountFor(slot.forecast, category)), actual: slots.map((slot) => amountFor(slot.actual, category)) }));
 }
 
 // Below this share of change, spending is described as staying about the same.
@@ -162,32 +176,41 @@ export function forecastInterpretation(forecast: QuarterlyForecastPayload): stri
   return notes;
 }
 
-// Points before forecastStart are actual spending, drawn solid; forecast points are dashed on a shaded band.
-function LineChart({ quarters, labels, series, selected, onSelect, label, forecastStart = 0 }: { quarters: string[]; labels: Labels; series: Series[]; selected: number; onSelect: (index: number) => void; label: string; forecastStart?: number }) {
+// Actual spending is drawn solid. The forecast is always dashed and starts from the last actual point before it.
+function LineChart({ quarters, labels, series, selected, onSelect, label }: { quarters: string[]; labels: Labels; series: Series[]; selected: number; onSelect: (index: number) => void; label: string }) {
   const [width, setWidth] = useState(0);
   const plotWidth = Math.max(0, width - PLOT.left - PLOT.right);
   const plotHeight = CHART_HEIGHT - PLOT.top - PLOT.bottom;
-  const max = niceMax(Math.max(0, ...series.flatMap((line) => line.values)));
+  const max = niceMax(Math.max(0, ...series.flatMap((line) => [...line.values, ...line.actual]).filter((value): value is number => value !== null)));
   const x = (index: number) => PLOT.left + (quarters.length === 1 ? plotWidth / 2 : index / (quarters.length - 1) * plotWidth);
   const y = (value: number) => PLOT.top + plotHeight - value / max * plotHeight;
   const ticks = [0, max / 2, max];
   const slot = quarters.length > 1 ? plotWidth / (quarters.length - 1) : plotWidth;
   const crowded = quarters.length > FULL_AXIS_QUARTERS;
-  const labelled = (index: number) => !crowded || (index - forecastStart) % 2 === 0;
-  const path = (values: number[], from: number, to: number) => values.slice(from, to + 1).map((value, offset) => `${offset === 0 ? "M" : "L"} ${x(from + offset)} ${y(value)}`).join(" ");
-  const hasHistory = forecastStart > 0;
+  const firstForecast = Math.max(0, series[0]?.values.findIndex((value) => value !== null) ?? 0);
+  const labelled = (index: number) => !crowded || (index - firstForecast) % 2 === 0;
+  const points = (values: (number | null)[]) => values.flatMap((value, index) => value === null ? [] : [[index, value] as const]);
+  const path = (line: (readonly [number, number])[]) => line.map(([index, value], offset) => `${offset === 0 ? "M" : "L"} ${x(index)} ${y(value)}`).join(" ");
+  const forecastLine = (line: Series) => {
+    const forecast = points(line.values);
+    const before = forecast[0] ? line.actual[forecast[0][0] - 1] : null;
+    return before == null ? forecast : [[forecast[0]![0] - 1, before] as const, ...forecast];
+  };
+  const hasHistory = series.some((line) => line.actual.slice(0, firstForecast).some((value) => value !== null));
+  const dot = (key: string, index: number, value: number, actual: boolean, color: string) => <Circle key={key} cx={x(index)} cy={y(value)} r={index === selected ? 5 : crowded ? 3 : 4} fill={actual ? P.shell : color} stroke={actual ? color : P.shell} strokeWidth={2} />;
 
   return <View accessibilityLabel={label} onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={{ height: CHART_HEIGHT, marginTop: 12 }}>
     {width > 0 ? <Svg width={width} height={CHART_HEIGHT} accessibilityRole="image">
-      {hasHistory && forecastStart < quarters.length ? <Rect x={x(forecastStart) - slot / 2} y={PLOT.top} width={width - PLOT.right - x(forecastStart) + slot / 2} height={plotHeight} fill="#EFFEF7" /> : null}
-      {hasHistory && forecastStart < quarters.length ? <SvgText x={x(forecastStart) - slot / 2 + 4} y={PLOT.top + 10} fill={P.muted} fontFamily="Manrope" fontSize={9} fontWeight="800">FORECAST</SvgText> : null}
+      {hasHistory ? <Rect x={x(firstForecast) - slot / 2} y={PLOT.top} width={width - PLOT.right - x(firstForecast) + slot / 2} height={plotHeight} fill="#EFFEF7" /> : null}
+      {hasHistory ? <SvgText x={x(firstForecast) - slot / 2 + 4} y={PLOT.top + 10} fill={P.muted} fontFamily="Manrope" fontSize={9} fontWeight="800">FORECAST</SvgText> : null}
       {ticks.map((tick) => <Line key={tick} x1={PLOT.left} x2={width - PLOT.right} y1={y(tick)} y2={y(tick)} stroke={P.line} strokeWidth={1} />)}
       {ticks.map((tick) => <SvgText key={`label-${tick}`} x={PLOT.left - 8} y={y(tick) + 4} fill={P.muted} fontFamily="Manrope" fontSize={10} textAnchor="end">{compactPeso(tick)}</SvgText>)}
       {quarters.map((quarter, index) => labelled(index) ? <SvgText key={quarter} x={x(index)} y={CHART_HEIGHT - 8} fill={index === selected ? P.ink : P.muted} fontFamily="Manrope" fontSize={crowded ? 9 : 10} fontWeight={index === selected ? "800" : "400"} textAnchor="middle">{crowded ? labels.short(quarter) : labels.full(quarter)}</SvgText> : null)}
       <Line x1={x(selected)} x2={x(selected)} y1={PLOT.top} y2={PLOT.top + plotHeight} stroke={P.muted} strokeWidth={1} strokeDasharray="3 3" />
-      {series.map((line) => hasHistory ? <Path key={`${line.key}-actual`} d={path(line.values, 0, forecastStart - 1)} fill="none" stroke={line.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" /> : null)}
-      {series.map((line) => forecastStart < quarters.length ? <Path key={`${line.key}-forecast`} d={path(line.values, Math.max(0, forecastStart - 1), quarters.length - 1)} fill="none" stroke={line.color} strokeWidth={2} strokeDasharray={hasHistory ? "5 4" : undefined} strokeLinejoin="round" strokeLinecap="round" /> : null)}
-      {series.map((line) => line.values.map((value, index) => <Circle key={`${line.key}-${index}`} cx={x(index)} cy={y(value)} r={index === selected ? 5 : crowded ? 3 : 4} fill={index < forecastStart ? P.shell : line.color} stroke={index < forecastStart ? line.color : P.shell} strokeWidth={2} />))}
+      {series.map((line) => points(line.actual).length ? <Path key={`${line.key}-actual`} d={path(points(line.actual))} fill="none" stroke={line.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" /> : null)}
+      {series.map((line) => points(line.values).length ? <Path key={`${line.key}-forecast`} d={path(forecastLine(line))} fill="none" stroke={line.color} strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" /> : null)}
+      {series.map((line) => points(line.actual).map(([index, value]) => dot(`${line.key}-actual-${index}`, index, value, true, line.color)))}
+      {series.map((line) => points(line.values).map(([index, value]) => dot(`${line.key}-forecast-${index}`, index, value, false, line.color)))}
       {quarters.map((quarter, index) => <Rect key={`hit-${quarter}`} x={x(index) - slot / 2} y={0} width={slot} height={CHART_HEIGHT} fill="transparent" onPress={() => onSelect(index)} />)}
     </Svg> : null}
   </View>;
@@ -216,48 +239,90 @@ export function forecastReliabilityNote(forecast: QuarterlyForecastPayload): str
   return null;
 }
 
-// history holds actual spending for the quarters before the forecast, oldest first. A monthly forecast
-// leaves it out, since it is recorded per quarter.
-export function QuarterlyForecastCharts({ forecast, history = [] }: { forecast: QuarterlyForecastPayload; history?: QuarterlyForecastPayload["quarters"] }) {
-  const months = monthlyForecast(forecast);
+// The selected point's amount: its forecast, or its actual spending before the forecast starts.
+function PointAmount({ title, forecast, actual, actualNote }: { title: string; forecast: number | null; actual: number | null; actualNote: string }) {
+  return <>
+    <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 12 }}>{title}{forecast === null ? ` · Actual${actualNote}` : " · Forecast"}</Text>
+    <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 22, fontWeight: "800", marginTop: 2 }}>{formatPeso(forecast ?? actual ?? 0)}</Text>
+  </>;
+}
+
+// Spending so far against its forecast; spending past the forecast fills the bar and turns red.
+function ProgressRow({ label, forecast, actual }: { label: string; forecast: number; actual: number }) {
+  const over = actual > forecast;
+  const filled = forecast > 0 ? Math.min(1, actual / forecast) : actual > 0 ? 1 : 0;
+  const note = over ? `${formatPeso(actual - forecast)} over` : forecast > 0 ? `${Math.round(actual / forecast * 100)}% of forecast` : "";
+  return <View accessible accessibilityLabel={`${label}: ${formatPeso(actual)} spent of ${formatPeso(forecast)} forecast${note ? `, ${note}` : ""}`} style={{ marginTop: 10 }}>
+    <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+      <Text style={{ color: P.ink, flexShrink: 1, fontFamily: "Manrope", fontSize: 13, fontWeight: "700" }}>{label}</Text>
+      <Text style={{ color: over ? P.over : P.ink, fontFamily: "Manrope", fontSize: 13, fontWeight: "700" }}>{formatPeso(actual)} of {formatPeso(forecast)}</Text>
+    </View>
+    <View style={{ backgroundColor: P.line, borderRadius: 4, height: 8, marginTop: 6, overflow: "hidden" }}>
+      <View style={{ backgroundColor: over ? P.over : P.brand, height: "100%", width: `${filled * 100}%` }} />
+    </View>
+    {note ? <Text style={{ color: over ? P.over : P.muted, fontFamily: "Manrope", fontSize: 11, marginTop: 3 }}>{note}</Text> : null}
+  </View>;
+}
+
+// This month's forecast against the spending recorded so far, shown inside the total and category cards.
+function ForecastVsActual({ month, label, forecast, actual }: { month: string; label: string; forecast: number; actual: number }) {
+  return <View style={{ borderTopColor: P.line, borderTopWidth: 1, marginTop: 14, paddingTop: 12 }}>
+    <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Forecast vs Actual</Text>
+    <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, marginTop: 2 }}>{MONTH_LABELS.dates(month)} so far, against this month's forecast</Text>
+    <ProgressRow label={label} forecast={forecast} actual={actual} />
+  </View>;
+}
+
+// history holds actual spending for the quarters before the forecast, oldest first; monthHistory holds the
+// months before a monthly forecast, ending with the current month so far.
+export function QuarterlyForecastCharts({ forecast, history = [], monthHistory = [], now = new Date() }: { forecast: QuarterlyForecastPayload; history?: QuarterlyForecastPayload["quarters"]; monthHistory?: NonNullable<QuarterlyForecastPayload["months"]>; now?: Date }) {
+  const months = monthlyForecast(forecast, now);
   const labels = months ? MONTH_LABELS : QUARTER_LABELS;
   const unit = months ? "months" : "quarters";
-  const forecastStart = months ? 0 : history.length;
-  const combined: Period[] = months
-    ? months.map(({ month, ...period }) => ({ key: month, ...period }))
-    : [...history, ...forecast.quarters].map(({ quarter, ...period }) => ({ key: quarter, ...period }));
-  const [selected, setSelected] = useState(forecastStart);
+  const thisMonth = now.toISOString().slice(0, 7);
+  // The chart shows the current month's actual spending so far; its forecast goes to Forecast vs Actual.
+  const thisMonthForecast = months?.find((month) => month.month === thisMonth);
+  const thisMonthActual = monthHistory.find((month) => month.month === thisMonth);
+  const amountIn = (period: Period | undefined, key: string) => period?.categories.find((point) => point.category === key)?.amountCentavos ?? 0;
+  const slots = months
+    ? mergeSlots(monthHistory.map(({ month, ...period }) => [month, period]), months.filter((month) => month.month !== thisMonth).map(({ month, ...period }) => [month, period]))
+    : mergeSlots(history.map(({ quarter, ...period }) => [quarter, period]), forecast.quarters.map(({ quarter, ...period }) => [quarter, period]));
+  const firstForecast = Math.max(0, slots.findIndex((slot) => slot.forecast));
+  const [selected, setSelected] = useState(firstForecast);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const quarters = combined.map((period) => period.key);
-  const current = combined[selected] ?? combined[forecastStart]!;
-  const isActual = selected < forecastStart;
-  const total: Series = { key: "total", label: "Total", color: P.brand, values: combined.map((period) => period.totalCentavos) };
-  const categories = periodCategorySeries(combined);
+  const quarters = slots.map((slot) => slot.key);
+  const current = slots[selected] ?? slots[firstForecast]!;
+  // The current month is still in progress, so its actual spending is only what has been recorded so far.
+  const actualNote = current.key === thisMonth ? " so far" : "";
+  const total: Series = { key: "total", label: "Total", color: P.brand, values: slots.map((slot) => slot.forecast?.totalCentavos ?? null), actual: slots.map((slot) => slot.actual?.totalCentavos ?? null) };
+  const categories = slotCategorySeries(slots);
   const category = categories.find((line) => line.key === selectedCategory)
     ?? categories.find((line) => line.key !== SCHEDULED_PAYMENTS_CATEGORY) ?? categories[0];
   const interpretation = forecast.interpretation ?? forecastInterpretation(forecast);
   const reliability = forecastReliabilityNote(forecast);
-  const forecastCount = combined.length - forecastStart;
+  const actualCount = slots.filter((slot) => slot.actual).length;
+  const forecastCount = slots.filter((slot) => slot.forecast).length;
+  const spending = current.forecast ? "" : ` · actual spending${actualNote}`;
 
   return <View style={{ gap: 14, marginTop: 20 }}>
     {reliability ? <View accessibilityRole="alert" style={{ backgroundColor: forecast.quality === "INSUFFICIENT_DATA" ? "#FFF4E5" : "#EFFEF7", borderColor: forecast.quality === "INSUFFICIENT_DATA" ? "#F3C98B" : P.line, borderRadius: 12, borderWidth: 1, padding: 12 }}>
       <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, lineHeight: 18 }}>{reliability}</Text>
     </View> : null}
     <View>
-      {months ? null : <QuarterTabs quarters={forecast.quarters.map((quarter) => quarter.quarter)} offset={forecastStart} selected={selected} onSelect={setSelected} />}
-      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>{labels.dates(current.key)}{isActual ? " · actual spending" : ""}</Text>
+      {months ? null : <QuarterTabs quarters={forecast.quarters.map((quarter) => quarter.quarter)} offset={firstForecast} selected={selected} onSelect={setSelected} />}
+      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>{labels.dates(current.key)}{spending}</Text>
     </View>
-    <Card title="Total projected spending" subtitle={forecastStart ? `${forecastStart} past quarters of actual spending, then ${forecastCount} forecast quarters` : `All forecast categories, per ${months ? "month" : "quarter"}`}>
-      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 12 }}>{labels.full(current.key)}{isActual ? " · Actual" : " · Forecast"}</Text>
-      <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 22, fontWeight: "800", marginTop: 2 }}>{formatPeso(current.totalCentavos)}</Text>
-      <LineChart quarters={quarters} labels={labels} series={[total]} selected={selected} onSelect={setSelected} forecastStart={forecastStart} label={forecastStart ? `Actual spending for ${forecastStart} quarters and projected spending for ${forecastCount} quarters` : `Total projected spending for ${quarters.length} ${unit}`} />
+    <Card title="Total projected spending" subtitle={actualCount ? `${actualCount} ${unit} of actual spending and ${forecastCount} forecast ${unit}` : `All forecast categories, per ${months ? "month" : "quarter"}`}>
+      <PointAmount title={labels.full(current.key)} forecast={total.values[selected] ?? null} actual={total.actual[selected] ?? null} actualNote={actualNote} />
+      <LineChart quarters={quarters} labels={labels} series={[total]} selected={selected} onSelect={setSelected} label={actualCount ? `Actual spending for ${actualCount} ${unit} and projected spending for ${forecastCount} ${unit}` : `Total projected spending for ${quarters.length} ${unit}`} />
+      {thisMonthForecast ? <ForecastVsActual month={thisMonth} label="Total" forecast={thisMonthForecast.totalCentavos} actual={thisMonthActual?.totalCentavos ?? 0} /> : null}
     </Card>
     <Card title="Projected spending by category" subtitle="Choose a category to see its spending over time.">
       {category ? <>
         <ForecastCategoryPicker categories={categories} selected={category} onSelect={setSelectedCategory} />
-        <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 12 }}>{labels.full(current.key)}{isActual ? " · Actual" : " · Forecast"}</Text>
-        <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 22, fontWeight: "800", marginTop: 2 }}>{formatPeso(category.values[selected] ?? 0)}</Text>
-        <LineChart quarters={quarters} labels={labels} series={[category]} selected={selected} onSelect={setSelected} forecastStart={forecastStart} label={`${category.label} spending over ${quarters.length} ${unit}`} />
+        <PointAmount title={labels.full(current.key)} forecast={category.values[selected] ?? null} actual={category.actual[selected] ?? null} actualNote={actualNote} />
+        <LineChart quarters={quarters} labels={labels} series={[category]} selected={selected} onSelect={setSelected} label={`${category.label} spending over ${quarters.length} ${unit}`} />
+        {thisMonthForecast ? <ForecastVsActual month={thisMonth} label={category.label} forecast={amountIn(thisMonthForecast, category.key)} actual={amountIn(thisMonthActual, category.key)} /> : null}
         {category.key === SCHEDULED_PAYMENTS_CATEGORY ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>Based on your scheduled bills and remittances.</Text> : null}
       </> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 12 }}>No category spending available.</Text>}
     </Card>

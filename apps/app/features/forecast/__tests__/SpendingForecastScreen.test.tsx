@@ -12,6 +12,8 @@ const mockRequestForecastInterpretation = jest.fn();
 const mockListScheduledPayments = jest.fn();
 const mockListQuarterlySpending = jest.fn();
 const mockPastQuarters = jest.fn();
+const mockListMonthlySpending = jest.fn();
+const mockRecentMonths = jest.fn();
 let mockOnline = true;
 
 jest.mock("../../../local-db/repositories/dashboardSnapshots", () => ({
@@ -23,6 +25,8 @@ jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
   listForecastTransactions: (...args: unknown[]) => mockListForecastTransactions(...args),
   listQuarterlySpending: (...args: unknown[]) => mockListQuarterlySpending(...args),
   pastQuarters: (...args: unknown[]) => mockPastQuarters(...args),
+  listMonthlySpending: (...args: unknown[]) => mockListMonthlySpending(...args),
+  recentMonths: (...args: unknown[]) => mockRecentMonths(...args),
 }));
 jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
   listScheduledPayments: (...args: unknown[]) => mockListScheduledPayments(...args),
@@ -58,6 +62,8 @@ describe("SpendingForecastScreen", () => {
     mockListScheduledPayments.mockResolvedValue([]);
     mockListQuarterlySpending.mockResolvedValue([]);
     mockPastQuarters.mockReturnValue(["2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
+    mockListMonthlySpending.mockResolvedValue([]);
+    mockRecentMonths.mockReturnValue(["2026-08", "2026-09", "2026-10"]);
   });
 
   it("shows stale cached charts while history and revalidation are pending", async () => {

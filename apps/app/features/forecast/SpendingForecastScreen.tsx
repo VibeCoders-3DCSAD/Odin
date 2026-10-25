@@ -10,7 +10,7 @@ export default function SpendingForecastScreen(props: Props) {
 }
 
 function UserSpendingForecastScreen({ userId, accessToken, onBack, embedded = false, refreshKey = 0 }: Props) {
-  const { forecast, history, refreshing, stale, error, notice } = useQuarterlySpendingForecast(userId, accessToken, refreshKey);
+  const { forecast, history, monthHistory, refreshing, stale, error, notice } = useQuarterlySpendingForecast(userId, accessToken, refreshKey);
   const content = <View>
     {onBack ? <Pressable accessibilityRole="button" accessibilityLabel="Back to financial reports" onPress={onBack} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}><ArrowLeft size={18} color="#1B1C1A" weight="bold" /><Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: "#6B7A6F" }}>Financial Reports</Text></Pressable> : null}
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 18, backgroundColor: "#08B16A", justifyContent: "center", alignItems: "center" }}><Sparkle size={18} color="#FFFFFF" weight="fill" /></View><View style={{ flex: 1, flexShrink: 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>{forecast && monthlyForecast(forecast) ? "Monthly" : "Quarterly"} spending forecast</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 2 }}>Your next 12 months, based on your past spending and seasonal spending in the Philippines.</Text></View></View>
@@ -19,7 +19,7 @@ function UserSpendingForecastScreen({ userId, accessToken, onBack, embedded = fa
       {notice ? <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 20, color: "#6B7A6F", marginTop: 14 }}>{notice}</Text> : null}
       {forecast && refreshing ? <Text accessibilityLiveRegion="polite" style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 14 }}>Updating forecast…</Text> : null}
       {stale && forecast && !refreshing ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 14 }}>Forecast data may be out of date.</Text> : null}
-      {forecast ? <QuarterlyForecastCharts forecast={forecast} history={history} /> : !error && !notice ? <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 20, color: "#6B7A6F", marginTop: 14 }}>Record posted transactions to unlock a spending forecast.</Text> : null}
+      {forecast ? <QuarterlyForecastCharts forecast={forecast} history={history} monthHistory={monthHistory} /> : !error && !notice ? <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 20, color: "#6B7A6F", marginTop: 14 }}>Record posted transactions to unlock a spending forecast.</Text> : null}
     </>}
   </View>;
 
