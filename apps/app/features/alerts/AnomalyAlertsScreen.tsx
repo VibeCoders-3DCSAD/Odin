@@ -5,6 +5,8 @@ import { answerUnusualSpending, listPersistedUnusualSpendings, type SpendingRecu
 import { RECURRENCE_OPTIONS, recurrenceAnswer } from "./recurrenceOptions";
 
 type Props = { userId: string; deviceId: string; onBack?: () => void; initialTransactionId?: string };
+// Alerts are listed five at a time; each press of "Show more" reveals the next five.
+const ALERT_PAGE_SIZE = 5;
 const P = { ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", card: "#F8EFDC", warning: "#C25E00" };
 
 function formatCurrency(amountCentavos: number): string {
@@ -19,6 +21,8 @@ export default function AnomalyAlertsScreen({ userId, deviceId, onBack, initialT
   const [error, setError] = useState<string | null>(null);
 
   const [openedInitial, setOpenedInitial] = useState(false);
+  const [shown, setShown] = useState(ALERT_PAGE_SIZE);
+  const nextCount = Math.min(ALERT_PAGE_SIZE, alerts.length - shown);
 
   useEffect(() => {
     if (!loading && !openedInitial && initialTransactionId) {
@@ -60,7 +64,10 @@ export default function AnomalyAlertsScreen({ userId, deviceId, onBack, initialT
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><BellRinging size={24} color={P.brand} weight="fill" /><View><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 21, color: P.ink }}>Spending alerts</Text><Text style={{ color: P.muted, marginTop: 2 }}>Based on your saved local spending insights</Text></View></View>
     <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 14 }}><Pressable accessibilityRole="button" accessibilityLabel="Refresh spending alerts" onPress={refresh} disabled={refreshing}><Text style={{ color: P.brand, fontWeight: "700" }}>{refreshing ? "Refreshing..." : "Refresh"}</Text></Pressable></View>
     {error ? <View style={{ marginTop: 14, padding: 14, borderRadius: 14, backgroundColor: "#FFF0F2" }}><Text style={{ color: P.warning }}>{error}</Text></View> : null}
-    {loading ? <ActivityIndicator color={P.brand} style={{ marginTop: 44 }} /> : alerts.length === 0 ? <View style={{ marginTop: 36, alignItems: "center", padding: 22, borderRadius: 18, backgroundColor: P.card }}><Check size={30} color={P.brand} weight="bold" /><Text style={{ marginTop: 10, fontWeight: "800", color: P.ink }}>No unusual spending found</Text><Text style={{ marginTop: 5, textAlign: "center", color: P.muted }}>Budgie will show saved unusual-spending insights here.</Text></View> : <View style={{ gap: 10, marginTop: 18 }}>{alerts.map((alert) => <AlertRow key={alert.transactionId} alert={alert} onPress={() => setSelected(alert)} />)}</View>}
+    {loading ? <ActivityIndicator color={P.brand} style={{ marginTop: 44 }} /> : alerts.length === 0 ? <View style={{ marginTop: 36, alignItems: "center", padding: 22, borderRadius: 18, backgroundColor: P.card }}><Check size={30} color={P.brand} weight="bold" /><Text style={{ marginTop: 10, fontWeight: "800", color: P.ink }}>No unusual spending found</Text><Text style={{ marginTop: 5, textAlign: "center", color: P.muted }}>Budgie will show saved unusual-spending insights here.</Text></View> : <View style={{ gap: 10, marginTop: 18 }}>
+      {alerts.slice(0, shown).map((alert) => <AlertRow key={alert.transactionId} alert={alert} onPress={() => setSelected(alert)} />)}
+      {nextCount > 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`Show ${nextCount} more spending alert${nextCount === 1 ? "" : "s"}`} onPress={() => setShown((count) => count + ALERT_PAGE_SIZE)} style={{ alignItems: "center", paddingVertical: 12 }}><Text style={{ color: P.brand, fontFamily: "Manrope", fontWeight: "700" }}>Show {nextCount} more</Text></Pressable> : null}
+    </View>}
   </View>;
 }
 
