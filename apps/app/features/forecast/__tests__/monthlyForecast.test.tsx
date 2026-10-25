@@ -46,7 +46,7 @@ describe("monthly spending forecast", () => {
 
     expect(view.queryByRole("tab")).toBeNull();
     expect(view.getByText("October 2026")).toBeTruthy();
-    expect(view.getAllByText("PHP 1,000")).toHaveLength(2);
+    expect(view.getByText("PHP 1,000")).toBeTruthy();
     expect(view.getByText("All forecast categories, per month")).toBeTruthy();
     expect(view.getByLabelText("Total projected spending for 3 months")).toBeTruthy();
   });
@@ -70,20 +70,20 @@ describe("monthly spending forecast", () => {
     expect(view.getByText("September 2026 · actual spending")).toBeTruthy();
   });
 
-  it("switches both charts between past, mixed, and forward ranges", () => {
+  it("switches the chart between past, mixed, and forward ranges", () => {
     const history = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"].map((month) => ({ month, ...food(80_000) }));
     const months = ["2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04"].map((month) => ({ month, ...food(100_000) }));
     const view = render(<QuarterlyForecastCharts forecast={{ ...forecast, months }} monthHistory={history} now={NOW} />);
 
     chooseRange(view, "Past 6");
     expect(view.getByText("6 months of actual spending and 0 forecast months")).toBeTruthy();
-    expect(view.getByLabelText("Food and groceries spending over 6 months")).toBeTruthy();
+    expect(view.getByLabelText("Actual spending for 6 months and projected spending for 0 months")).toBeTruthy();
     expect(view.getByText("September 2026 · actual spending")).toBeTruthy();
 
     chooseRange(view, "Next 6");
     expect(view.getByLabelText("Total projected spending for 6 months")).toBeTruthy();
     expect(view.getByText("October 2026")).toBeTruthy();
-    expect(view.getAllByText("Forecast vs Actual")).toHaveLength(2);
+    expect(view.getByText("Forecast vs Actual")).toBeTruthy();
   });
 
   it("keeps the range when switching to quarters, which reach four quarters ahead", () => {
@@ -108,16 +108,15 @@ describe("monthly spending forecast", () => {
     expect(view.getByLabelText("Total projected spending for 5 months")).toBeTruthy();
   });
 
-  it("compares this month's forecast with its spending so far inside the total and category cards", () => {
+  it("compares this month's forecast with its spending so far inside the spending card", () => {
     const view = render(<QuarterlyForecastCharts forecast={forecast} monthHistory={monthHistory} now={NOW} />);
 
-    expect(view.getAllByText("Forecast vs Actual")).toHaveLength(2);
-    expect(view.getAllByText("October 2026 so far, against this month's forecast")).toHaveLength(2);
+    expect(view.getByText("Forecast vs Actual")).toBeTruthy();
+    expect(view.getByText("October 2026 so far, against this month's forecast")).toBeTruthy();
     expect(view.getByLabelText("Total: PHP 400 spent of PHP 1,000 forecast, 40% of forecast")).toBeTruthy();
-    expect(view.getByLabelText("Food and groceries: PHP 400 spent of PHP 1,000 forecast, 40% of forecast")).toBeTruthy();
 
     const over = render(<QuarterlyForecastCharts forecast={forecast} monthHistory={[{ month: "2026-10", ...food(150_000) }]} now={NOW} />);
-    expect(over.getAllByText("PHP 500 over")).toHaveLength(2);
+    expect(over.getByText("PHP 500 over")).toBeTruthy();
   });
 
   it("compares this quarter's forecast with its months so far once the view is quarterly", () => {
@@ -126,13 +125,12 @@ describe("monthly spending forecast", () => {
     const view = render(<QuarterlyForecastCharts forecast={forecast} monthHistory={history} now={november} />);
 
     fireEvent.press(view.getByLabelText("Show spending: Quarterly"));
-    expect(view.getAllByText("Q4 2026 so far, against this quarter's forecast")).toHaveLength(2);
+    expect(view.getByText("Q4 2026 so far, against this quarter's forecast")).toBeTruthy();
     // October and November count toward Q4; September belongs to Q3.
     expect(view.getByLabelText("Total: PHP 1,500 spent of PHP 5,000 forecast, 30% of forecast")).toBeTruthy();
-    expect(view.getByLabelText("Food and groceries: PHP 1,500 spent of PHP 5,000 forecast, 30% of forecast")).toBeTruthy();
   });
 
-  it("compares the chosen category when the category changes", () => {
+  it("compares the total, then the chosen category when the dropdown changes", () => {
     const mixed = (food: number, transport: number) => ({ totalCentavos: food + transport, categories: [{ category: "food", amountCentavos: food }, { category: "transport", amountCentavos: transport }] });
     const view = render(<QuarterlyForecastCharts
       forecast={{ ...forecast, months: [{ month: "2026-10", ...mixed(70_000, 30_000) }, { month: "2026-11", ...mixed(70_000, 30_000) }] }}
@@ -140,11 +138,14 @@ describe("monthly spending forecast", () => {
       now={NOW}
     />);
 
+    expect(view.getByLabelText("Total: PHP 700 spent of PHP 1,000 forecast, 70% of forecast")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Choose spending category: Total"));
+    fireEvent.press(view.getByLabelText("Food and groceries"));
     expect(view.getByLabelText("Food and groceries: PHP 250 spent of PHP 700 forecast, 36% of forecast")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Choose spending category: Food and groceries"));
     fireEvent.press(view.getByLabelText("Transportation"));
     expect(view.getByLabelText("Transportation: PHP 450 spent of PHP 300 forecast, PHP 150 over")).toBeTruthy();
-    expect(view.getByLabelText("Total: PHP 700 spent of PHP 1,000 forecast, 70% of forecast")).toBeTruthy();
+    expect(view.queryByLabelText(/^Total: /)).toBeNull();
   });
 
   it("keeps quarter tabs while the baseline is provisional", () => {

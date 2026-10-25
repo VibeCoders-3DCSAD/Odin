@@ -104,7 +104,7 @@ describe("SpendingForecastScreen", () => {
 
     await act(async () => { resolveForecast({ response: { ok: true }, body: { payload: updated } }); });
     expect(view.getByText("PHP 20,000")).toBeTruthy();
-    expect(view.getAllByText("Q1 2027 · Forecast")).toHaveLength(2);
+    expect(view.getByText("Q1 2027 · Forecast")).toBeTruthy();
     expect(view.queryByText("Updating forecast…")).toBeNull();
   });
 
@@ -193,9 +193,9 @@ describe("SpendingForecastScreen", () => {
     await waitFor(() => expect(view.getByLabelText("Actual spending for 1 quarters and projected spending for 2 quarters")).toBeTruthy());
     expect(mockPastQuarters).toHaveBeenCalledWith(6);
     expect(mockListQuarterlySpending).toHaveBeenCalledWith("user-1", ["2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
-    expect(view.getAllByText("Q4 2026 · Forecast")).toHaveLength(2);
+    expect(view.getByText("Q4 2026 · Forecast")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
-    expect(view.getAllByText("Q1 2027 · Forecast")).toHaveLength(2);
+    expect(view.getByText("Q1 2027 · Forecast")).toBeTruthy();
   });
 
   it("forecasts billers and remittances at their scheduled amounts, outside the HFCE model", async () => {
@@ -240,12 +240,13 @@ describe("SpendingForecastScreen", () => {
     expect(view.getByText("Spending forecast")).toBeTruthy();
     expect(view.getByText("October 1 to December 31, 2026")).toBeTruthy();
     expect(view.getByText("PHP 15,000")).toBeTruthy();
-    expect(view.getByLabelText("Choose spending category: Food and groceries")).toBeTruthy();
-    expect(view.getByText("PHP 10,000")).toBeTruthy();
+    expect(view.getByLabelText("Choose spending category: Total")).toBeTruthy();
 
     fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
     expect(view.getByText("January 1 to March 31, 2027")).toBeTruthy();
     expect(view.getByText("PHP 16,500")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Choose spending category: Total"));
+    fireEvent.press(view.getByRole("radio", { name: "Food and groceries" }));
     expect(view.getByText("PHP 11,000")).toBeTruthy();
   });
 
@@ -277,17 +278,20 @@ describe("SpendingForecastScreen", () => {
     view.rerender(<SpendingForecastScreen userId="user-1" accessToken="token" refreshKey={1} embedded />);
     await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenLastCalledWith("token", { historicalTransactions: regularSpending }, expect.any(AbortSignal)));
     await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenLastCalledWith("user-1", "forecast_quarterly", corrected));
-    expect(view.getAllByText("PHP 2,196")).toHaveLength(2);
+    expect(view.getByText("PHP 2,196")).toBeTruthy();
   });
 
-  it("shows one selected category and preserves the quarter when switching categories", async () => {
+  it("opens on the total and preserves the quarter when switching categories", async () => {
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
-    await waitFor(() => expect(view.getByLabelText("Choose spending category: Food and groceries")).toBeTruthy());
-    expect(view.getByLabelText("Food and groceries spending over 2 quarters")).toBeTruthy();
+    await waitFor(() => expect(view.getByLabelText("Choose spending category: Total")).toBeTruthy());
+    expect(view.getByLabelText("Total projected spending for 2 quarters")).toBeTruthy();
     expect(view.queryByText("Transportation")).toBeNull();
     fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
+    fireEvent.press(view.getByLabelText("Choose spending category: Total"));
+    expect(view.getByLabelText("Choose spending category: Total").props.accessibilityState.expanded).toBe(true);
+    fireEvent.press(view.getByRole("radio", { name: "Food and groceries" }));
+    expect(view.getByLabelText("Food and groceries spending over 2 quarters")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Choose spending category: Food and groceries"));
-    expect(view.getByLabelText("Choose spending category: Food and groceries").props.accessibilityState.expanded).toBe(true);
     fireEvent.press(view.getByRole("radio", { name: "Transportation" }));
     expect(view.getByLabelText("Transportation spending over 2 quarters")).toBeTruthy();
     expect(view.queryByLabelText("Food and groceries spending over 2 quarters")).toBeNull();
@@ -322,7 +326,7 @@ describe("SpendingForecastScreen", () => {
     });
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
     await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalled());
-    fireEvent.press(view.getByLabelText("Choose spending category: Food and groceries"));
+    fireEvent.press(view.getByLabelText("Choose spending category: Total"));
     fireEvent.press(view.getByRole("radio", { name: "Billers & Remittances" }));
     expect(view.getByLabelText("Billers & Remittances spending over 2 quarters")).toBeTruthy();
     expect(view.getByText("PHP 3,000")).toBeTruthy();

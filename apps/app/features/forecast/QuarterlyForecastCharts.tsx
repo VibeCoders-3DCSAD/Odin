@@ -11,6 +11,7 @@ import { localToday } from "../billers/schedule";
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", over: "#D9001F" };
 
 const CHART_HEIGHT = 180;
+const TOTAL_KEY = "__total";
 // The right gutter fits half of the last centered quarter label ("Q3 2027"), so it is not clipped.
 const PLOT = { top: 12, right: 28, bottom: 26, left: 52 };
 
@@ -313,7 +314,7 @@ function ProgressRow({ label, forecast, actual }: { label: string; forecast: num
   </View>;
 }
 
-// This month's or quarter's forecast against the spending recorded so far, shown inside the total and category cards.
+// This month's or quarter's forecast against the spending recorded so far, shown inside the spending card.
 function ForecastVsActual({ period, unit, label, forecast, actual }: { period: string; unit: "month" | "quarter"; label: string; forecast: number; actual: number }) {
   return <View style={{ borderTopColor: P.line, borderTopWidth: 1, marginTop: 14, paddingTop: 12 }}>
     <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Forecast vs Actual</Text>
@@ -378,10 +379,10 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
       <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 13, lineHeight: 20, marginTop: 14 }}>No recorded spending in this range yet.</Text>
     </View>;
   }
-  const total: Series = { key: "total", label: "Total", color: P.brand, values: slots.map((slot) => slot.forecast?.totalCentavos ?? null), actual: slots.map((slot) => slot.actual?.totalCentavos ?? null) };
+  // Total heads the dropdown and is shown first; its key can't clash with a category slug.
+  const total: Series = { key: TOTAL_KEY, label: "Total", color: P.brand, values: slots.map((slot) => slot.forecast?.totalCentavos ?? null), actual: slots.map((slot) => slot.actual?.totalCentavos ?? null) };
   const categories = slotCategorySeries(slots);
-  const category = categories.find((line) => line.key === selectedCategory)
-    ?? categories.find((line) => line.key !== SCHEDULED_PAYMENTS_CATEGORY) ?? categories[0];
+  const line = categories.find((series) => series.key === selectedCategory) ?? total;
   const interpretation = forecast.interpretation ?? forecastInterpretation(forecast);
   const reliability = forecastReliabilityNote(forecast);
   const actualCount = slots.filter((slot) => slot.actual).length;
@@ -398,19 +399,12 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
       {months || !forecastQuarters.length ? null : <QuarterTabs quarters={forecastQuarters} offset={firstForecast} selected={selected} onSelect={setSelected} />}
       <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>{labels.dates(current.key)}{spending}</Text>
     </View>
-    <Card title="Total projected spending" subtitle={actualCount ? `${actualCount} ${unit} of actual spending and ${forecastCount} forecast ${unit}` : `All forecast categories, per ${months ? "month" : "quarter"}`}>
-      <PointAmount title={labels.full(current.key)} forecast={total.values[selected] ?? null} actual={total.actual[selected] ?? null} />
-      <LineChart quarters={quarters} labels={labels} series={[total]} selected={selected} onSelect={setSelected} label={actualCount ? `Actual spending for ${actualCount} ${unit} and projected spending for ${forecastCount} ${unit}` : `Total projected spending for ${quarters.length} ${unit}`} />
-      {thisPeriod.forecast ? <ForecastVsActual period={thisPeriod.name} unit={thisPeriod.unit} label="Total" forecast={thisPeriod.forecast.totalCentavos} actual={thisPeriod.actual?.totalCentavos ?? 0} /> : null}
-    </Card>
-    <Card title="Projected spending by category" subtitle="Choose a category to see its spending over time.">
-      {category ? <>
-        <ForecastCategoryPicker categories={categories} selected={category} onSelect={setSelectedCategory} />
-        <PointAmount title={labels.full(current.key)} forecast={category.values[selected] ?? null} actual={category.actual[selected] ?? null} />
-        <LineChart quarters={quarters} labels={labels} series={[category]} selected={selected} onSelect={setSelected} label={`${category.label} spending over ${quarters.length} ${unit}`} />
-        {thisPeriod.forecast ? <ForecastVsActual period={thisPeriod.name} unit={thisPeriod.unit} label={category.label} forecast={amountIn(thisPeriod.forecast, category.key)} actual={amountIn(thisPeriod.actual, category.key)} /> : null}
-        {category.key === SCHEDULED_PAYMENTS_CATEGORY ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>Based on your scheduled bills and remittances.</Text> : null}
-      </> : <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 12 }}>No category spending available.</Text>}
+    <Card title="Projected spending" subtitle={actualCount ? `${actualCount} ${unit} of actual spending and ${forecastCount} forecast ${unit}` : `All forecast categories, per ${months ? "month" : "quarter"}`}>
+      <ForecastCategoryPicker categories={[total, ...categories]} selected={line} onSelect={setSelectedCategory} />
+      <PointAmount title={labels.full(current.key)} forecast={line.values[selected] ?? null} actual={line.actual[selected] ?? null} />
+      <LineChart quarters={quarters} labels={labels} series={[line]} selected={selected} onSelect={setSelected} label={line !== total ? `${line.label} spending over ${quarters.length} ${unit}` : actualCount ? `Actual spending for ${actualCount} ${unit} and projected spending for ${forecastCount} ${unit}` : `Total projected spending for ${quarters.length} ${unit}`} />
+      {thisPeriod.forecast ? <ForecastVsActual period={thisPeriod.name} unit={thisPeriod.unit} label={line.label} forecast={line === total ? thisPeriod.forecast.totalCentavos : amountIn(thisPeriod.forecast, line.key)} actual={line === total ? thisPeriod.actual?.totalCentavos ?? 0 : amountIn(thisPeriod.actual, line.key)} /> : null}
+      {line.key === SCHEDULED_PAYMENTS_CATEGORY ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>Based on your scheduled bills and remittances.</Text> : null}
     </Card>
     {interpretation.length ? <Card title="What this means for you" subtitle="How your spending may change">
       <View style={{ gap: 8, marginTop: 12 }}>{interpretation.map((note) => <View key={note} style={{ flexDirection: "row", gap: 8 }}>
