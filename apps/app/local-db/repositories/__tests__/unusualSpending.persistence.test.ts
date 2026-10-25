@@ -54,6 +54,19 @@ describe("saveUnusualSpending", () => {
     }]);
     expect(getAllAsync.mock.calls[0]?.[0]).toContain("FROM anomaly_evaluations");
   });
+
+  it("leaves out evaluations of spending below the usual amount", async () => {
+    const row = (id: string, amount_centavos: number) => ({
+      id, transaction_date: "2026-10-30", amount_centavos,
+      subcategory_id: "subcategory-1", subcategory_label: "Groceries", account_name: "Cash",
+      usable_history_count: 6, usual_spending_centavos: 12_500,
+      lower_bound_centavos: 7_500, upper_bound_centavos: 20_000, severity: 1.2, recurrence: null,
+    });
+    mockInitDatabase.mockResolvedValue({ getAllAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue([row("higher", 100_000), row("lower", 1_000)]) });
+    const { listPersistedUnusualSpendings } = await import("../unusualSpending");
+
+    expect((await listPersistedUnusualSpendings("user-1")).map((insight) => insight.transactionId)).toEqual(["higher"]);
+  });
 });
 
 describe("answerUnusualSpending", () => {

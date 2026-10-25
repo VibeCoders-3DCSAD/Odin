@@ -68,6 +68,12 @@ export async function listUnusualSpendings(userId: string, now = new Date()): Pr
   return detectUnusualSpendings(transactions, recurrences);
 }
 
+// Only spending above the usual range is worth an alert; unusually low spending is still detected,
+// so it stays out of the forecast and baselines, but is never shown.
+function isHigherSpending(insight: UnusualSpendingInsight): boolean {
+  return insight.amountCentavos > insight.usualSpendingCentavos;
+}
+
 export async function listPersistedUnusualSpendings(userId: string): Promise<UnusualSpendingInsight[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<SpendingTransactionRow & {
@@ -110,12 +116,12 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
       confirmedRecurring: row.recurrence === "frequent",
       recurrence: row.recurrence,
     }]
-    : []);
+    : []).filter(isHigherSpending);
 }
 
 export async function getUnusualSpending(userId: string, transactionId: string): Promise<UnusualSpendingInsight | null> {
   const insights = await listUnusualSpendings(userId);
-  return insights.find((insight) => insight.transactionId === transactionId) ?? null;
+  return insights.find((insight) => insight.transactionId === transactionId && isHigherSpending(insight)) ?? null;
 }
 
 export async function saveUnusualSpending(userId: string, deviceId: string, insight: UnusualSpendingInsight): Promise<void> {

@@ -66,10 +66,9 @@ export default function AnomalyAlertsScreen({ userId, deviceId, onBack, initialT
 
 function AlertRow({ alert, onPress }: { alert: UnusualSpendingInsight; onPress: () => void }) {
   const date = new Date(alert.transactionDate).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
-  const direction = alert.amountCentavos > alert.usualSpendingCentavos ? "higher" : "lower";
   return <Pressable accessibilityRole="button" accessibilityLabel={`Open spending alert for ${alert.subcategoryLabel}`} onPress={onPress} style={{ padding: 17, borderRadius: 18, borderWidth: 1, borderColor: P.line, backgroundColor: "#FFFFFF" }}>
-    <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 16, fontWeight: "800", flex: 1 }}>Unusual {alert.subcategoryLabel} spending</Text><Text style={{ color: P.warning, fontFamily: "Manrope", fontSize: 11, fontWeight: "800" }}>{direction.toUpperCase()}</Text></View>
-    <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 13, lineHeight: 19, marginTop: 7 }}>{formatCurrency(alert.amountCentavos)} is outside your usual range of {formatCurrency(alert.lowerBoundCentavos)} to {formatCurrency(alert.upperBoundCentavos)}.</Text>
+    <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 16, fontWeight: "800", flex: 1 }}>Unusual {alert.subcategoryLabel} spending</Text><Text style={{ color: P.warning, fontFamily: "Manrope", fontSize: 11, fontWeight: "800" }}>HIGHER</Text></View>
+    <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 13, lineHeight: 19, marginTop: 7 }}>{formatCurrency(alert.amountCentavos)} is above your usual range of {formatCurrency(alert.lowerBoundCentavos)} to {formatCurrency(alert.upperBoundCentavos)}.</Text>
     <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 12 }}>{date}</Text>
   </Pressable>;
 }
