@@ -62,7 +62,7 @@ it("keeps every populated dashboard section, amounts and navigation", async () =
   for (const text of ["PHP 62,480.00", "+32.4%", "52,000", "36,700", "₱15,300", "2 savings goals in progress · ₱82,500 saved.", "Electric bill", "Expected salary", "Emergency fund", "Debt burden", "Financial margin", "Credit card", "Lunch", "-₱320", "100%", "About ₱208 a day for 13 days.", "3.8k / 4k", "PHP 49,300"]) {
     expect(view.getAllByText(text).length).toBeGreaterThan(0);
   }
-  const links: [string, string][] = [["View Savings goals", "savings-goals"], ["View all spending categories", "categories"], ["View all transactions", "transactions"], ["Open Financial Plan", "financial-plan"], ["View spending forecast", "spending-forecast"]];
+  const links: [string, string][] = [["View Savings goals", "savings-goals"], ["View all spending categories", "categories"], ["View all transactions", "transactions"], ["Open Financial Plan", "financial-plan"], ["View spending forecast", "financial-reports"]];
   for (const [label, page] of links) {
     fireEvent.press(view.getByLabelText(label));
     expect(onNavigate).toHaveBeenLastCalledWith(page);

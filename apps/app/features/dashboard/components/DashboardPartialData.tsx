@@ -22,6 +22,6 @@ export function DashboardPartialData({ trends, snapshots, snapshotsUnavailable, 
     <View style={{ flexDirection: "row", gap: 11 }}>
       <SnapshotCard title="Savings goals" stale={stale(savings)} unavailable={unavailable(savings)} onRefresh={onRefresh} onNavigate={() => onNavigate("savings-goals")} actionLabel={!savings || savingsCount === 0 ? "Create a goal" : undefined} copy={getSnapshotText(savings) ?? (unavailable(savings) ? "Savings information is unavailable." : !savings || savingsCount === 0 ? "No savings goals yet." : savingsCount === null ? "Savings goal summary is unavailable. Refresh to try again." : `${savingsCount} savings goals in progress.`)} />
     </View>
-    <ForecastPanel forecast={getForecastContent(forecastSnapshot)} stale={stale(forecastSnapshot)} unavailable={unavailable(forecastSnapshot)} onRefresh={onRefresh} onNavigate={() => onNavigate("spending-forecast")} />
+    <ForecastPanel forecast={getForecastContent(forecastSnapshot)} stale={stale(forecastSnapshot)} unavailable={unavailable(forecastSnapshot)} onRefresh={onRefresh} onNavigate={() => onNavigate("financial-reports")} />
   </View>;
 }

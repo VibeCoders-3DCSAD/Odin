@@ -16,7 +16,7 @@ import { AttentionUpcoming } from "./components/AttentionUpcoming";
 import type { DashboardItemTarget } from "./types";
 import { SafeToSpendCard } from "./components/SafeToSpendCard";
 import { getForecastContent, getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
-import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getPreviousMonthName } from "./dashboardFormatting";
+import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getGreeting, getPreviousMonthName } from "./dashboardFormatting";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
 import type { CategorySpending } from "../../local-db/repositories/dashboardSummary";
@@ -263,18 +263,29 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
 
       <SafeToSpendCard userId={userId} reloadKey={s} onNavigate={onNavigate} />
 
-      <ForecastPanel forecast={forecast} stale={staleSnapshot(forecastSnap)} unavailable={forecastUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("spending-forecast")} />
+      <ForecastPanel forecast={forecast} stale={staleSnapshot(forecastSnap)} unavailable={forecastUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("financial-reports")} />
       {refreshing ? <View style={{ alignItems: "center", marginTop: 12 }}><ActivityIndicator size="small" color={P.green} /></View> : null}
     </View>
   );
 }
 
+// Re-checked every minute so the greeting changes while the dashboard stays open.
+function useGreeting(): string {
+  const [greeting, setGreeting] = React.useState(() => getGreeting());
+  React.useEffect(() => {
+    const timer = setInterval(() => setGreeting(getGreeting()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return greeting;
+}
+
 export default function DashboardScreen(props: Props) {
+  const greeting = useGreeting();
   return (
     <View>
       <View style={{ marginTop: 6, marginBottom: 14 }}>
         <Text accessibilityRole="header" style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: P.ink }}>Dashboard</Text>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: P.secondary, marginTop: 4 }}>Good morning!</Text>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 13, color: P.secondary, marginTop: 4 }}>{greeting}!</Text>
       </View>
       <DashboardContent {...props} />
     </View>

@@ -10,7 +10,7 @@ const actions = [
   { label: "Add an income source", page: "income-sources", copy: "Set expected income to make your monthly plan more useful." },
   { label: "Create a Financial Plan", page: "financial-plan", copy: "Plan this month's commitments and category allocations." },
   { label: "Create a savings goal", page: "savings-goals", copy: "No savings goals yet." },
-  { label: "View forecast", page: "spending-forecast", copy: "Forecast information will appear after you record activity." },
+  { label: "View forecast", page: "financial-reports", copy: "Forecast information will appear after you record activity." },
 ];
 
 export function DashboardEmptyState({ onNavigate }: Props) {

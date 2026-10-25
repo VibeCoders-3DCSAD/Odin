@@ -27,3 +27,12 @@ export function getPreviousMonthName(): string {
   date.setMonth(date.getMonth() - 1);
   return date.toLocaleDateString("en-US", { month: "short" });
 }
+
+// Morning 5:00–11:59, noon 12:00–12:59, afternoon 13:00–17:59, evening otherwise.
+export function getGreeting(date = new Date()): string {
+  const hour = date.getHours();
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour === 12) return "Good noon";
+  if (hour >= 13 && hour < 18) return "Good afternoon";
+  return "Good evening";
+}
