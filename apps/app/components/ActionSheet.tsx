@@ -44,9 +44,7 @@ export function ActionSheet({ visible, onClose, children, backdropColor = "rgba(
   }, [backdropOpacity, sheetOffset, visible]);
 
   return (
-    // Drawn under the system bars: on Android the modal window otherwise stops above the navigation bar, and
-    // BottomSheetSurface's safe-area padding then doubles the space below the sheet.
-    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: "flex-end" }}>
         <Animated.View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, opacity: backdropOpacity }}>
           <Pressable accessibilityLabel={accessibilityLabel} onPress={onClose} style={{ flex: 1, backgroundColor: backdropColor }} />
