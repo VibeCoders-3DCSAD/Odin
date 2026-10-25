@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import type { ForecastChartPoint } from "./DebtForecastChart";
+import { FLUSH_LIST } from "./debtUi";
 
 const COMPACT_ROW_LIMIT = 6;
 const INITIAL_FORECAST_ROWS = 3;
@@ -30,7 +31,7 @@ export function DebtForecastTable({ points, milestoneDate, dateGranularity = "da
 
   return <View accessibilityLabel="Debt balance details" style={{ gap: 8 }}>
     <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 12.5, color: v4.ink }}>Balance details</Text>
-    <View style={ui.list}>{rows.map((point, index) => {
+    <View style={FLUSH_LIST}>{rows.map((point, index) => {
       const milestone = point.date === milestoneDate;
       const dateLabel = dateGranularity === "month"
         ? new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${point.date}T00:00:00.000Z`))

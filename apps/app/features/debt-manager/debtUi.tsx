@@ -70,9 +70,13 @@ export function ProgressBar({ label, valueLabel, ratio, tone = "ok", inverted = 
   </View>;
 }
 
-export function List({ children }: { children: ReactNode }) {
-  return <View style={ui.list}>{children}</View>;
+// Bordered on its own; `flush` inside a card, where the rows run edge to edge without a second border.
+export function List({ children, flush = false }: { children: ReactNode; flush?: boolean }) {
+  return <View style={flush ? FLUSH_LIST : ui.list}>{children}</View>;
 }
+
+// Cancels the card's horizontal padding (BudgieForm card: paddingHorizontal 15).
+export const FLUSH_LIST = { marginHorizontal: -15, borderTopWidth: 1, borderBottomWidth: 1, borderColor: v4.hairline } as const;
 
 type ListRowProps = {
   icon?: ReactNode;

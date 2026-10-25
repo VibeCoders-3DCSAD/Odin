@@ -77,7 +77,7 @@ function CycleCard({ account, cycle, current, transactions, statement, payment, 
 
       <Divider />
       <Text style={{ fontFamily: v4Font, fontSize: 12.5, fontWeight: "800", color: v4.ink }}>Purchases · {transactions.length}</Text>
-      {transactions.length === 0 ? <Note>No purchases recorded in this billing cycle.</Note> : <List>{transactions.map((item, index) => <ListRow
+      {transactions.length === 0 ? <Note>No purchases recorded in this billing cycle.</Note> : <List flush>{transactions.map((item, index) => <ListRow
         key={item.transaction_id}
         divider={index > 0}
         title={item.merchant_name ?? "Credit-card purchase"}

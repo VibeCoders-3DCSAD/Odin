@@ -7,7 +7,7 @@ import { archiveDebtAccount, markDebtAccountDeleted, restoreDebtAccount, type De
 import { deleteTransactionDebtPayment, listDebtPayments, type DebtPayment } from "../../local-db/repositories/debtPayments";
 import { getDebtPaymentProgress, getDebtRepaymentForecast } from "./debtForecast";
 import { INTEREST_PERIOD_OPTIONS } from "./debtTypes";
-import { Button, InfoRow, LinkButton, Pill, Pills, ProgressBar, formatPeso as money, formatShortDate, type Tone } from "./debtUi";
+import { Button, FLUSH_LIST, InfoRow, LinkButton, Pill, Pills, ProgressBar, formatPeso as money, formatShortDate, type Tone } from "./debtUi";
 
 const PAYMENT_LIMIT = 3;
 
@@ -111,7 +111,7 @@ export default function NonCreditDebtCard({ userId, deviceId, debt, onEdit, onRe
 
     <FormCard title="Payments" right={<Note>{payments === null ? "Loading..." : `${payments.length} recorded`}</Note>}>
       {payments !== null && payments.length === 0 ? <Note>No payments recorded yet.</Note> : null}
-      {visiblePayments?.length ? <View style={ui.list}>{visiblePayments.map((payment, index) => <View key={payment.id} style={index > 0 ? ui.listRowDivider : null}>
+      {visiblePayments?.length ? <View style={FLUSH_LIST}>{visiblePayments.map((payment, index) => <View key={payment.id} style={index > 0 ? ui.listRowDivider : null}>
         <View style={[ui.listRow, { paddingRight: 4 }]}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Edit payment on ${payment.payment_date}`} onPress={() => onEditPayment(payment)} style={[ui.listRowMain, { paddingRight: 4 }]}>
             <View style={{ flex: 1, minWidth: 0 }}>

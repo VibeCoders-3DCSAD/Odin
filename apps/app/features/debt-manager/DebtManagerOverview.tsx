@@ -134,7 +134,6 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
 
     <UpcomingPaymentsCard payments={upcomingPayments} today={today} />
 
-    <SectionHeader title="Progress" />
     <DebtPaymentTrend points={overview.summary.paymentTrend} />
     <GlobalDebtTrend points={overview.globalTrend} />
   </View>;
