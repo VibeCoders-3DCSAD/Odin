@@ -5,6 +5,7 @@ import type { AuthenticatedRequest } from "../middleware/auth.js";
 import {
   pushOperations,
   pullChanges,
+  countRemainingChanges,
   registerDevice,
   isDeviceActive,
   SYNCED_TABLES,
@@ -130,7 +131,12 @@ router.get(
 
       console.log("[sync/pull] start", { userId, cursorTables: Object.keys(cursors) });
 
-      const result = await pullChanges(supabase, userId, cursors);
+      // Counted from the request cursors, before this page advances them, so the total includes this page.
+      // Both read from the same cursors, so they run together to get the first page out sooner.
+      const [remaining, result] = await Promise.all([
+        request.query.include_remaining === "1" ? countRemainingChanges(supabase, userId, cursors) : undefined,
+        pullChanges(supabase, userId, cursors),
+      ]);
 
       const changeSummary: Record<string, number> = {};
       for (const [table, rows] of Object.entries(result.changes)) {
@@ -140,7 +146,7 @@ router.get(
       console.log("[sync/pull] done", { userId, ...changeSummary });
 
       response.set("Cache-Control", "no-store");
-      response.status(200).json({ payload: result });
+      response.status(200).json({ payload: remaining ? { ...result, remaining } : result });
     } catch (error) {
       next(error);
     }

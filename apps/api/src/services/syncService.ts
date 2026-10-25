@@ -176,6 +176,36 @@ export async function pushOperations(
   return results;
 }
 
+// Every synced table is user-scoped; categories and subcategories are provisioned per user from defaults.
+function scopePullQuery<Q extends { eq(column: string, value: string): unknown; or(filters: string): unknown }>(
+  query: Q,
+  table: string,
+  userId: string,
+  cursor: TableCursor | undefined,
+): Q {
+  query.eq("user_id", userId);
+  if (cursor && cursor.id) {
+    const cursorColumn = PULL_IDENTITY_COLUMNS[table] ?? "id";
+    query.or(`updated_at.gt.${cursor.ts},and(updated_at.eq.${cursor.ts},${cursorColumn}.gt.${cursor.id})`);
+  }
+  return query;
+}
+
+// Rows each table still has to send from these cursors, so a first sync can show real progress.
+export async function countRemainingChanges(
+  supabase: SupabaseClient,
+  userId: string,
+  cursors: PullCursors,
+): Promise<Record<string, number>> {
+  const counts = await Promise.all(SYNCED_TABLES.map(async (table) => {
+    const query = supabase.from(table).select("*", { count: "exact", head: true });
+    const { count, error } = await scopePullQuery(query, table, userId, cursors[table]);
+    if (error) console.error("[sync/pull] count failed", { userId, table, error });
+    return [table, count ?? 0] as const;
+  }));
+  return Object.fromEntries(counts);
+}
+
 export async function pullChanges(
   supabase: SupabaseClient,
   userId: string,
@@ -186,61 +216,21 @@ export async function pullChanges(
   const hasMore: Record<string, boolean> = {};
   let successful = true;
 
-  for (const table of SYNCED_TABLES) {
-    const cursorColumn = PULL_IDENTITY_COLUMNS[table] ?? "id";
+  // Tables are independent, so fetch them together instead of paying one round trip per table.
+  const responses = await Promise.all(SYNCED_TABLES.map(async (table) => {
     const query = supabase
       .from(table)
       .select("*")
       .order("updated_at", { ascending: true })
-      .order(cursorColumn, { ascending: true })
+      .order(PULL_IDENTITY_COLUMNS[table] ?? "id", { ascending: true })
       .limit(500);
+    return { table, response: await scopePullQuery(query, table, userId, cursors[table]) };
+  }));
 
-    if (
-       table === "financial_accounts" ||
-       table === "savings_account_details" ||
-      table === "transactions" ||
-       table === "income_sources" ||
-      table === "recurring_transaction_templates" ||
-      table === "recurring_transaction_occurrences"
-       || table === "financial_plans"
-        || table === "credit_card_cycles"
-         || table === "credit_card_details"
-         || table === "credit_card_repayment_preferences"
-         || table === "credit_card_installments"
-         || table === "credit_card_transactions"
-           || table === "credit_card_statements"
-           || table === "credit_card_payments"
-           || table === "debt_accounts"
-           || table === "debt_payments"
-            || table === "debt_strategy_preferences"
-            || table === "user_debt_priorities"
-            || table === "credit_card_settlements"
-            || table === "credit_card_statement_strategies"
-            || table === "alert_notification_preferences"
-            || table === "anomaly_whitelist_rules"
-             || table === "alert_suppression_rules"
-              || table === "anomaly_evaluations"
-              || table === "savings_goals"
-               || table === "savings_goal_activities"
-               || table === "savings_allocation_preferences"
-               || table === "scheduled_payments"
-               || table === "scheduled_payment_records"
-    ) {
-      // user-scoped only — no system rows
-      query.eq("user_id", userId);
-    } else {
-      // Categories and subcategories are provisioned per user from defaults.
-      query.eq("user_id", userId);
-    }
-
+  for (const { table, response } of responses) {
+    const cursorColumn = PULL_IDENTITY_COLUMNS[table] ?? "id";
     const tableCursor = cursors[table];
-    if (tableCursor && tableCursor.id) {
-      query.or(
-        `updated_at.gt.${tableCursor.ts},and(updated_at.eq.${tableCursor.ts},${cursorColumn}.gt.${tableCursor.id})`,
-      );
-    }
-
-    const { data, error } = await query;
+    const { data, error } = response;
 
     if (error) {
       successful = false;

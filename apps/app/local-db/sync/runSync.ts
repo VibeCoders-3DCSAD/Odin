@@ -18,6 +18,7 @@ const REQUEST_TIMEOUT = 10_000;
 const MAX_SYNC_ATTEMPTS = 3;
 const MAX_PULL_PAGES_PER_SYNC = 3;
 const PULL_PAGE_DELAY_MS = 100;
+const PROGRESS_REPORT_ROWS = 25;
 
 const syncPromises = new Map<string, { promise: Promise<SyncResult>; pull: boolean }>();
 
@@ -29,6 +30,15 @@ type PushResultItem = {
   reason?: string;
   current_version?: number;
   conflicted_fields?: string[];
+};
+
+export type PullProgress = { received: number; total: number };
+
+type SyncOptions = {
+  pull?: boolean;
+  // Keep paging past MAX_PULL_PAGES_PER_SYNC until the server has nothing left, e.g. behind the initial sync screen.
+  untilComplete?: boolean;
+  onProgress?: (progress: PullProgress) => void;
 };
 
 type SyncResult = {
@@ -68,8 +78,9 @@ export async function runSync(
   userId: string,
   deviceId: string,
   accessToken: string,
-  { pull = true }: { pull?: boolean } = {},
+  options: SyncOptions = {},
 ): Promise<SyncResult> {
+  const pull = options.pull ?? true;
   accessToken = await authorizeLocalRequest(userId, accessToken);
   const syncKey = `${userId}:${deviceId}`;
   const existing = syncPromises.get(syncKey);
@@ -77,10 +88,10 @@ export async function runSync(
   if (existing && (existing.pull || !pull)) return existing.promise;
   if (existing) {
     await existing.promise.catch(() => {});
-    return runSync(userId, deviceId, accessToken, { pull });
+    return runSync(userId, deviceId, accessToken, options);
   }
 
-  const syncPromise = runSyncInternal(userId, deviceId, accessToken, pull);
+  const syncPromise = runSyncInternal(userId, deviceId, accessToken, { ...options, pull });
   syncPromises.set(syncKey, { promise: syncPromise, pull });
   try {
     return await syncPromise;
@@ -93,7 +104,7 @@ async function runSyncInternal(
   userId: string,
   deviceId: string,
   accessToken: string,
-  pull: boolean,
+  { pull, untilComplete = false, onProgress }: SyncOptions & { pull: boolean },
 ): Promise<SyncResult> {
   if (!userId || !accessToken || !deviceId) {
     return { pushed: 0, pulled: 0, errors: 0, successful: false, hasMore: false };
@@ -117,13 +128,21 @@ async function runSyncInternal(
   let pulled = await retryAnomalyEvaluationPulls(db, userId);
   let pullSuccessful = true;
   let hasMore = syncState.pullPending;
+  const maxPages = untilComplete ? Number.POSITIVE_INFINITY : MAX_PULL_PAGES_PER_SYNC;
+  const progress: PullProgress = { received: 0, total: 0 };
+  // Reports while a page is still being applied, so the screen moves as soon as the server answers.
+  const reportPage = (pageReceived: number, remaining?: number) => {
+    if (remaining !== undefined) progress.total = remaining;
+    const received = progress.received + pageReceived;
+    onProgress?.({ received, total: Math.max(progress.total, received) });
+  };
 
-  for (let page = 0; page < MAX_PULL_PAGES_PER_SYNC; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const previousHasMore = hasMore;
     let result: Awaited<ReturnType<typeof pullAndApply>>;
 
     try {
-      result = await pullAndApply(db, userId, accessToken, cursors);
+      result = await pullAndApply(db, userId, accessToken, cursors, Boolean(onProgress) && page === 0, onProgress ? reportPage : undefined);
     } catch {
       pullSuccessful = false;
       hasMore = true;
@@ -131,12 +150,19 @@ async function runSyncInternal(
     }
 
     pulled += result.pulled;
+    if (onProgress) {
+      if (result.remaining !== undefined) progress.total = result.remaining;
+      progress.received += result.received;
+      // Rows can change while paging, so never report more than the total.
+      progress.total = Math.max(progress.total, progress.received);
+      onProgress({ ...progress });
+    }
     pullSuccessful = pullSuccessful && result.successful;
     Object.assign(cursors, result.cursors);
     hasMore = result.successful ? result.hasMore : previousHasMore || result.hasMore;
 
     if (!result.successful || !result.hasMore) break;
-    if (page < MAX_PULL_PAGES_PER_SYNC - 1) {
+    if (page < maxPages - 1) {
       await new Promise((resolve) => setTimeout(resolve, PULL_PAGE_DELAY_MS));
     }
   }
@@ -518,11 +544,14 @@ async function pullAndApply(
   userId: string,
   accessToken: string,
   cursors: Record<string, TableCursor>,
-): Promise<{ pulled: number; cursors: Record<string, TableCursor>; successful: boolean; hasMore: boolean }> {
+  includeRemaining = false,
+  onApplied?: (applied: number, remaining?: number) => void,
+): Promise<{ pulled: number; received: number; remaining?: number; cursors: Record<string, TableCursor>; successful: boolean; hasMore: boolean }> {
+  const remainingParam = includeRemaining ? "&include_remaining=1" : "";
   let response: Response;
   try {
     response = await fetchWithTimeout(
-      `${API_BASE}/odin/api/sync/pull?cursors=${encodeURIComponent(JSON.stringify(cursors))}`,
+      `${API_BASE}/odin/api/sync/pull?cursors=${encodeURIComponent(JSON.stringify(cursors))}${remainingParam}`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -531,30 +560,39 @@ async function pullAndApply(
       },
     );
   } catch {
-    return { pulled: 0, cursors, successful: false, hasMore: false };
+    return { pulled: 0, received: 0, cursors, successful: false, hasMore: false };
   }
 
-  if (!response.ok) return { pulled: 0, cursors, successful: false, hasMore: false };
+  if (!response.ok) return { pulled: 0, received: 0, cursors, successful: false, hasMore: false };
 
   const body = await response.json();
   const payload = body?.payload as {
     cursors: Record<string, TableCursor>;
     changes: Record<string, Record<string, unknown>[]>;
     has_more?: Record<string, boolean>;
+    remaining?: Record<string, number>;
     successful: boolean;
   } | null;
 
   if (!payload?.changes) {
-    return { pulled: 0, cursors: payload?.cursors ?? cursors, successful: false, hasMore: false };
+    return { pulled: 0, received: 0, cursors: payload?.cursors ?? cursors, successful: false, hasMore: false };
   }
 
+  const received = Object.values(payload.changes).reduce((sum, rows) => sum + (rows?.length ?? 0), 0);
+  const remaining = payload.remaining
+    ? Object.values(payload.remaining).reduce((sum, count) => sum + count, 0)
+    : undefined;
+
   let pulled = 0;
+  let applied = 0;
+  onApplied?.(0, remaining);
 
   for (const table of SYNCED_TABLES) {
     const rows = payload.changes[table];
     if (!rows || rows.length === 0) continue;
 
     for (const row of rows) {
+      if (++applied % PROGRESS_REPORT_ROWS === 0) onApplied?.(applied, remaining);
       const normalized = normalizePullRow(table, row as Record<string, unknown>, userId);
       try {
         await applyPullRow(db, table, normalized);
@@ -588,7 +626,7 @@ async function pullAndApply(
     ? Object.values(payload.has_more).some(Boolean)
     : Object.values(payload.changes).some((rows) => rows.length === 500);
 
-  return { pulled, cursors: payload.cursors, successful: payload.successful !== false, hasMore };
+  return { pulled, received, remaining, cursors: payload.cursors, successful: payload.successful !== false, hasMore };
 }
 
 async function loadSyncState(

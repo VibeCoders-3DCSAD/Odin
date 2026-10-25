@@ -7,6 +7,7 @@ import { ActivityIndicator, AppState, Platform, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AuthExperience from "./components/AuthExperience";
 import MobileShell from "./components/MobileShell";
+import { InitialSyncGate } from "./features/sync/InitialSyncGate";
 import OnboardingFlow from "./features/onboarding/OnboardingFlow";
 import { ToastProvider } from "./components/Toast";
 import { startConnectivityPolling, useConnectivityStore } from "./services/connectivity";
@@ -113,10 +114,12 @@ export default function App() {
   const showAuthentication = phase === "signed-out" || phase === "recovery";
   const content = loading ? <View className="flex-1 items-center justify-center bg-card"><ActivityIndicator color="#013220" /></View>
     : authenticated ? account.session.onboardingStatus === "submitted" && !reassessing
-      ? <MobileShell accessToken={account.session.accessToken} userId={account.session.userId} deviceId={deviceId}
+      ? <InitialSyncGate key={account.session.userId} accessToken={account.session.accessToken} userId={account.session.userId} deviceId={deviceId}>
+        <MobileShell accessToken={account.session.accessToken} userId={account.session.userId} deviceId={deviceId}
           onLoggedOut={() => { void useAuthStore.getState().finishLogout(); }}
           onRequestReassessment={() => setReassessing(true)} onLock={() => { void useAuthStore.getState().lock(); }}
           signOut={async () => { await GoogleSignin.signOut(); }} />
+      </InitialSyncGate>
       : <OnboardingFlow accessToken={account.session.accessToken} userId={account.session.userId}
           onComplete={() => { setReassessing(false); void useAuthStore.getState().updateOnboarding(); }} restart={reassessing} />
     : showAuthentication ? <View className="flex-1">
