@@ -62,7 +62,7 @@ describe("SpendingForecastScreen", () => {
     mockRequestForecastInterpretation.mockRejectedValue(new Error("offline"));
     mockListScheduledPayments.mockResolvedValue([]);
     mockListQuarterlySpending.mockResolvedValue([]);
-    mockPastQuarters.mockReturnValue(["2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
+    mockPastQuarters.mockReturnValue(["2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
     mockListMonthlySpending.mockResolvedValue([]);
     mockRecentMonths.mockReturnValue(["2026-08", "2026-09", "2026-10"]);
   });
@@ -191,8 +191,8 @@ describe("SpendingForecastScreen", () => {
 
     // The empty quarter before recording began is dropped; the forecast tab stays selected.
     await waitFor(() => expect(view.getByLabelText("Actual spending for 1 quarters and projected spending for 2 quarters")).toBeTruthy());
-    expect(mockPastQuarters).toHaveBeenCalledWith(4);
-    expect(mockListQuarterlySpending).toHaveBeenCalledWith("user-1", ["2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
+    expect(mockPastQuarters).toHaveBeenCalledWith(6);
+    expect(mockListQuarterlySpending).toHaveBeenCalledWith("user-1", ["2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
     expect(view.getAllByText("Q4 2026 · Forecast")).toHaveLength(2);
     fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
     expect(view.getAllByText("Q1 2027 · Forecast")).toHaveLength(2);
@@ -237,10 +237,10 @@ describe("SpendingForecastScreen", () => {
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
 
     await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalledWith("user-1", "forecast_quarterly", forecast));
-    expect(view.getByText("Quarterly spending forecast")).toBeTruthy();
+    expect(view.getByText("Spending forecast")).toBeTruthy();
     expect(view.getByText("October 1 to December 31, 2026")).toBeTruthy();
     expect(view.getByText("PHP 15,000")).toBeTruthy();
-    expect(view.getByText("Food and groceries")).toBeTruthy();
+    expect(view.getByLabelText("Choose spending category: Food and groceries")).toBeTruthy();
     expect(view.getByText("PHP 10,000")).toBeTruthy();
 
     fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));

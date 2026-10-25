@@ -10,9 +10,9 @@ import { forecastInterpretation } from "../QuarterlyForecastCharts";
 import { fetchSpendingForecast } from "../fetchSpendingForecast";
 import type { QuarterlyForecastPayload } from "../types";
 
-const HISTORY_QUARTERS = 4;
-// The monthly chart shows the two months before this one and this month so far.
-const HISTORY_MONTHS = 3;
+const HISTORY_QUARTERS = 6;
+// Six completed months for the monthly chart, and this month so far for Forecast vs Actual.
+const HISTORY_MONTHS = 7;
 
 export function useQuarterlySpendingForecast(userId: string, accessToken: string, refreshKey: number) {
   const [forecast, setForecast] = useState<QuarterlyForecastPayload | null>(null);
