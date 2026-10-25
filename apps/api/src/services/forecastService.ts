@@ -163,7 +163,9 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
       signal: controller.signal,
       body,
     });
-    if (!response.ok) throw new ForecastUpstreamError(response.status, "Forecast service rejected the request", "response");
+    if (!response.ok) {
+      throw new ForecastUpstreamError(response.status, `Forecast service rejected the request (HTTP ${response.status})`, "response");
+    }
     return mapMlForecast(await response.json());
   } catch (error) {
     if (error instanceof ForecastUpstreamError) throw error;
