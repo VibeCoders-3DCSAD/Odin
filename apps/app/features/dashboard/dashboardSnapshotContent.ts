@@ -51,23 +51,27 @@ export function getForecastContent(snapshot: DashboardSnapshotWithMeta | null | 
 export function getQuarterlyForecastContent(snapshot: DashboardSnapshotWithMeta | null | undefined): QuarterlyForecastPayload | null {
   const value = payload(snapshot);
   if (typeof value.modelVersion !== "string" || typeof value.generatedAt !== "string" || !Array.isArray(value.quarters)) return null;
-  const quarters = value.quarters.flatMap((quarter) => {
-    if (!quarter || typeof quarter !== "object" || Array.isArray(quarter)) return [];
-    const row = quarter as Record<string, unknown>;
-    if (typeof row.quarter !== "string" || !/^\d{4}Q[1-4]$/.test(row.quarter) || typeof row.totalCentavos !== "number" || !Number.isFinite(row.totalCentavos) || !Array.isArray(row.categories)) return [];
+  const periods = (rows: unknown[], key: "quarter" | "month", pattern: RegExp) => rows.flatMap((period) => {
+    if (!period || typeof period !== "object" || Array.isArray(period)) return [];
+    const row = period as Record<string, unknown>;
+    const id = row[key];
+    if (typeof id !== "string" || !pattern.test(id) || typeof row.totalCentavos !== "number" || !Number.isFinite(row.totalCentavos) || !Array.isArray(row.categories)) return [];
     const categories = row.categories.flatMap((point) => {
       if (!point || typeof point !== "object" || Array.isArray(point)) return [];
       const item = point as Record<string, unknown>;
       return typeof item.category === "string" && typeof item.amountCentavos === "number" && Number.isFinite(item.amountCentavos) ? [{ category: item.category, amountCentavos: item.amountCentavos }] : [];
     });
-    return [{ quarter: row.quarter, totalCentavos: row.totalCentavos, categories }];
+    return [{ id, totalCentavos: row.totalCentavos, categories }];
   });
+  const quarters = periods(value.quarters, "quarter", /^\d{4}Q[1-4]$/).map(({ id, ...period }) => ({ quarter: id, ...period }));
+  const months = Array.isArray(value.months) ? periods(value.months, "month", /^\d{4}-(0[1-9]|1[0-2])$/).map(({ id, ...period }) => ({ month: id, ...period })) : [];
   const interpretation = Array.isArray(value.interpretation) ? value.interpretation.filter((note): note is string => typeof note === "string" && note.trim().length > 0) : [];
   if (!quarters.length) return null;
   const quality = ["PERSONALIZED", "FALLBACK", "COLD_START", "INSUFFICIENT_DATA"].includes(value.quality as string) ? value.quality as QuarterlyForecastPayload["quality"] : undefined;
-  const baselineMethod = ["same_quarter_last_year", "median_monthly", "recency_weighted_provisional"].includes(value.baselineMethod as string) ? value.baselineMethod as QuarterlyForecastPayload["baselineMethod"] : undefined;
+  const baselineMethod = ["same_period_last_year", "median_monthly", "recency_weighted_provisional"].includes(value.baselineMethod as string) ? value.baselineMethod as QuarterlyForecastPayload["baselineMethod"] : undefined;
   return {
     quarters, modelVersion: value.modelVersion, generatedAt: value.generatedAt,
+    ...(months.length ? { months } : {}),
     ...(quality ? { quality } : {}), ...(baselineMethod ? { baselineMethod } : {}),
     ...(typeof value.seasonalUncertainty === "boolean" ? { seasonalUncertainty: value.seasonalUncertainty } : {}),
     ...(interpretation.length ? { interpretation } : {}),

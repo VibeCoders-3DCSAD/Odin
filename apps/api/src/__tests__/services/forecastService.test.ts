@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { jest } from "@jest/globals";
-import { ForecastUnavailableError, ForecastUpstreamError, ForecastValidationError, forecastQuarterMonths, getMlForecast, getMlQuarterlyForecast, mapMlForecast, parseForecastRequest } from "../../services/forecastService";
+import { ForecastUnavailableError, ForecastUpstreamError, ForecastValidationError, forecastMonths, getMlForecast, getMlQuarterlyForecast, mapMlForecast, parseForecastRequest } from "../../services/forecastService";
 
 const transaction = {
   transactionId: "b9df3d82-b64a-4b25-b8aa-dd36f70a42be",
@@ -26,7 +26,7 @@ const mlResponse = {
   response_id: "response-1",
   request_id: "user-1",
   user_id: "user-1",
-  forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 8500.25, user_baseline_amount: 7000, hfce_multiplier: 1.214321, hfce_forecast_amount_million_php: 12345.67, explanation: "Personalized food forecast.", baseline_method: "same_quarter_last_year", seasonal_uncertainty: false }],
+  forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amount: 8500.25, user_baseline_amount: 7000, hfce_multiplier: 1.214321, hfce_forecast_amount_million_php: 12345.67, explanation: "Personalized food forecast.", baseline_method: "same_period_last_year", seasonal_uncertainty: false }],
   snapshot: { month: "2026-10", total_amount: 8500.25, category_forecasts: [{ category: "food", amount: 8500.25 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-09-29T00:00:00Z", quality: "PERSONALIZED" },
   model_version: "hfce-sarima-v4-category-quarterly",
   status: "SUCCESS",
@@ -73,7 +73,7 @@ describe("forecast ML adapter", () => {
     expect(requestBody).toEqual(expect.objectContaining({ user_id: "user-1", categories: ["food"] }));
     expect(requestBody.historical_transactions).toEqual(expect.arrayContaining([expect.objectContaining({ transaction_id: transaction.transactionId, category: "food" })]));
     expect(fetcher.mock.calls[0]![1].headers["X-Odin-History-Signature"]).toBe(createHmac("sha256", "test-secret").update(`odin_api:user-1:${fetcher.mock.calls[0]![1].body}`).digest("hex"));
-    expect(result).toEqual(expect.objectContaining({ status: "SUCCESS", forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 850025, userBaselineCentavos: 700000, hfceMultiplier: 1.214321, hfceForecastAmountMillionPhp: 12345.67, explanation: "Personalized food forecast.", baselineMethod: "same_quarter_last_year", seasonalUncertainty: false }] }));
+    expect(result).toEqual(expect.objectContaining({ status: "SUCCESS", forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 850025, userBaselineCentavos: 700000, hfceMultiplier: 1.214321, hfceForecastAmountMillionPhp: 12345.67, explanation: "Personalized food forecast.", baselineMethod: "same_period_last_year", seasonalUncertainty: false }] }));
   });
 
   it("asks for the requested target month and omits it otherwise", async () => {
@@ -139,21 +139,37 @@ describe("forecast ML adapter", () => {
     await expect(getMlForecast("user-1", { historicalTransactions: [transaction, currentQuarterTransaction] }, jest.fn().mockRejectedValue(new Error("offline")))).rejects.toMatchObject({ status: 503 });
   });
 
-  it("targets next month and the opening month of the three quarters after it", () => {
-    expect(forecastQuarterMonths(new Date("2026-10-18T12:00:00.000Z"))).toEqual(["2026-11", "2027-01", "2027-04", "2027-07"]);
-    expect(forecastQuarterMonths(new Date("2026-11-30T12:00:00.000Z"))).toEqual(["2026-12", "2027-01", "2027-04", "2027-07"]);
-    expect(forecastQuarterMonths(new Date("2026-12-05T12:00:00.000Z"))).toEqual(["2027-01", "2027-04", "2027-07", "2027-10"]);
+  it("targets next month through the end of the third quarter after it", () => {
+    expect(forecastMonths(new Date("2026-10-18T12:00:00.000Z"))).toEqual(["2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09"]);
+    expect(forecastMonths(new Date("2026-11-30T12:00:00.000Z"))).toHaveLength(10);
+    expect(forecastMonths(new Date("2026-12-05T12:00:00.000Z"))).toEqual(["2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09", "2027-10", "2027-11", "2027-12"]);
   });
 
-  it("totals four quarters as three forecast months each", async () => {
+  it("forecasts every month in one call and totals each quarter from its months", async () => {
     jest.useFakeTimers().setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
     process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
     process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
-    const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => mlResponse });
+    const months = forecastMonths();
+    // A full year of history: December carries last year's Christmas spending.
+    const amountFor = (month: string) => month === "2026-12" ? 3_000 : 1_000;
+    const point = mlResponse.forecasts[0]!;
+    const response = { ...mlResponse,
+      forecasts: months.map((month) => ({ ...point, month, quarter: `${month.slice(0, 4)}Q${Math.ceil(Number(month.slice(5)) / 3)}`, amount: amountFor(month) })),
+      snapshot: { ...mlResponse.snapshot, month: "2026-11", total_amount: 1_000, category_forecasts: [{ category: "food", amount: 1_000 }] },
+    };
+    const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => response });
     const result = await getMlQuarterlyForecast("user-1", { historicalTransactions: [currentQuarterTransaction] }, fetcher);
-    expect(fetcher.mock.calls.map((call) => JSON.parse(call[1].body).target_month)).toEqual(["2026-11", "2027-01", "2027-04", "2027-07"]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body).target_months).toEqual(months);
+    expect(result.months.slice(0, 3)).toEqual([
+      { month: "2026-11", totalCentavos: 100_000, categories: [{ category: "food", amountCentavos: 100_000 }] },
+      { month: "2026-12", totalCentavos: 300_000, categories: [{ category: "food", amountCentavos: 300_000 }] },
+      { month: "2027-01", totalCentavos: 100_000, categories: [{ category: "food", amountCentavos: 100_000 }] },
+    ]);
     expect(result.quarters.map((quarter) => quarter.quarter)).toEqual(["2026Q4", "2027Q1", "2027Q2", "2027Q3"]);
-    expect(result.quarters[0]).toEqual({ quarter: "2026Q4", totalCentavos: 2_550_075, categories: [{ category: "food", amountCentavos: 2_550_075 }] });
-    expect(result.modelVersion).toBe("hfce-sarima-v4-category-quarterly");
+    // November and December stand in for all of Q4: (1,000 + 3,000) x 3 / 2.
+    expect(result.quarters[0]).toEqual({ quarter: "2026Q4", totalCentavos: 600_000, categories: [{ category: "food", amountCentavos: 600_000 }] });
+    expect(result.quarters[1]!.totalCentavos).toBe(300_000);
+    expect(result).toMatchObject({ modelVersion: "hfce-sarima-v4-category-quarterly", baselineMethod: "same_period_last_year", seasonalUncertainty: false, quality: "PERSONALIZED" });
   });
 });

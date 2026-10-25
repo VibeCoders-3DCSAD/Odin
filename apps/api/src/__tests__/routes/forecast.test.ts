@@ -42,13 +42,16 @@ describe("POST /odin/api/forecast", () => {
     expect((await request(app).post("/odin/api/forecast").send(body)).status).toBe(401);
   });
 
-  it("returns four quarterly totals from the quarterly route", async () => {
+  it("returns monthly and four quarterly totals from the quarterly route", async () => {
     jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] }).setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
-    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(async () => new Response(JSON.stringify({ forecasts: [{ category: "food", month: "2026-11", quarter: "2026Q4", amount: 100, user_baseline_amount: 90, hfce_multiplier: 1.1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast.", baseline_method: "median_monthly", seasonal_uncertainty: true }], snapshot: { month: "2026-11", total_amount: 100, category_forecasts: [{ category: "food", amount: 100 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
+    const months = ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09"];
+    const forecasts = months.map((month) => ({ category: "food", month, quarter: `${month.slice(0, 4)}Q${Math.ceil(Number(month.slice(5)) / 3)}`, amount: 100, user_baseline_amount: 90, hfce_multiplier: 1.1, hfce_forecast_amount_million_php: 1, explanation: "Personalized food forecast.", baseline_method: "median_monthly", seasonal_uncertainty: true }));
+    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(async () => new Response(JSON.stringify({ forecasts, snapshot: { month: "2026-11", total_amount: 100, category_forecasts: [{ category: "food", amount: 100 }], model_version: "hfce-sarima-v4-category-quarterly", generated_at: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" }, model_version: "hfce-sarima-v4-category-quarterly", status: "SUCCESS" }), { status: 200 }));
     const response = await request(app).post("/odin/api/forecast/quarterly").set(authHeader()).send(body);
     jest.useRealTimers();
     expect(response.status).toBe(200);
-    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(response.body.payload.months).toHaveLength(11);
     expect(response.body.payload.quarters.map((quarter: { quarter: string }) => quarter.quarter)).toEqual(["2026Q4", "2027Q1", "2027Q2", "2027Q3"]);
     expect(response.body.payload.quarters[0].totalCentavos).toBe(30_000);
     expect(response.body.payload).toMatchObject({ quality: "PERSONALIZED", baselineMethod: "median_monthly", seasonalUncertainty: true });

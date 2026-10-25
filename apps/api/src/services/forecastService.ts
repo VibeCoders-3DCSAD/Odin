@@ -13,10 +13,12 @@ export type ForecastRequest = {
   historicalTransactions: ForecastTransaction[];
   // YYYY-MM month to forecast; odin-ml defaults to the next calendar month.
   targetMonth?: string;
+  // Several YYYY-MM months in one odin-ml call; the snapshot covers the first.
+  targetMonths?: string[];
 };
 
-export type BaselineMethod = "same_quarter_last_year" | "median_monthly" | "recency_weighted_provisional";
-const BASELINE_METHODS: readonly BaselineMethod[] = ["same_quarter_last_year", "median_monthly", "recency_weighted_provisional"];
+export type BaselineMethod = "same_period_last_year" | "median_monthly" | "recency_weighted_provisional";
+const BASELINE_METHODS: readonly BaselineMethod[] = ["same_period_last_year", "median_monthly", "recency_weighted_provisional"];
 
 export type ForecastPayload = {
   forecasts: { category: string; month: string; quarter: string; amountCentavos: number; userBaselineCentavos: number; hfceMultiplier: number; hfceForecastAmountMillionPhp: number; explanation: string; baselineMethod: BaselineMethod; seasonalUncertainty: boolean }[];
@@ -32,8 +34,12 @@ export type ForecastPayload = {
   status: "SUCCESS";
 };
 
+type CategoryAmount = { category: string; amountCentavos: number };
+
 export type QuarterlyForecastPayload = {
-  quarters: { quarter: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[] }[];
+  quarters: { quarter: string; totalCentavos: number; categories: CategoryAmount[] }[];
+  // Each forecast month; months differ within a quarter only once a full year of history sets the baseline.
+  months: { month: string; totalCentavos: number; categories: CategoryAmount[] }[];
   modelVersion: string;
   generatedAt: string;
   // INSUFFICIENT_DATA under six months of history; seasonalUncertainty under twelve.
@@ -123,6 +129,7 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
     })),
     categories,
     ...(request.targetMonth ? { target_month: request.targetMonth } : {}),
+    ...(request.targetMonths ? { target_months: request.targetMonths } : {}),
   });
   const headers = trustedMlHeaders(userId, body);
   if (!headers) throw new ForecastUpstreamError(503, "Forecast service is unavailable", "configuration");
@@ -158,32 +165,44 @@ function quarterOf(month: string): string {
   return `${month.slice(0, 4)}Q${Math.floor((Number(month.slice(5, 7)) - 1) / MONTHS_PER_QUARTER) + 1}`;
 }
 
-// One target month per quarter: next month opens the window, later quarters use their first month.
-export function forecastQuarterMonths(now = new Date()): string[] {
+// Next month through the end of the third quarter after it, so the opening quarter may be partial.
+export function forecastMonths(now = new Date()): string[] {
   const year = now.getUTCFullYear();
   const nextMonthIndex = now.getUTCMonth() + 1;
-  const quarterStartIndex = Math.floor(nextMonthIndex / MONTHS_PER_QUARTER) * MONTHS_PER_QUARTER;
-  return [
-    utcMonth(year, nextMonthIndex),
-    ...Array.from({ length: FORECAST_QUARTERS - 1 }, (_, index) => utcMonth(year, quarterStartIndex + (index + 1) * MONTHS_PER_QUARTER)),
-  ];
+  const endIndex = Math.floor(nextMonthIndex / MONTHS_PER_QUARTER) * MONTHS_PER_QUARTER + FORECAST_QUARTERS * MONTHS_PER_QUARTER;
+  return Array.from({ length: endIndex - nextMonthIndex }, (_, index) => utcMonth(year, nextMonthIndex + index));
 }
 
-// odin-ml scales a category's monthly baseline by its quarter's HFCE multiplier, so every month
-// in a quarter forecasts the same amount and the quarter total is three of them.
+function sumByCategory(points: CategoryAmount[], scale = 1): CategoryAmount[] {
+  const totals = new Map<string, number>();
+  for (const point of points) totals.set(point.category, (totals.get(point.category) ?? 0) + point.amountCentavos);
+  return [...totals].map(([category, amountCentavos]) => ({ category, amountCentavos: amountCentavos * scale }));
+}
+
+function withTotal<T extends { categories: CategoryAmount[] }>(group: T): T & { totalCentavos: number } {
+  return { ...group, totalCentavos: group.categories.reduce((total, point) => total + point.amountCentavos, 0) };
+}
+
+// odin-ml scales each month's baseline by its quarter's HFCE multiplier. HFCE is quarterly, so months in a
+// quarter differ only through the baseline: the same month last year once there is a full year of history.
+// A partial opening quarter scales its forecast months up to a full three.
 export async function getMlQuarterlyForecast(userId: string, request: ForecastRequest, fetcher: typeof fetch = fetch): Promise<QuarterlyForecastPayload> {
-  const months = forecastQuarterMonths();
-  const payloads = await Promise.all(months.map((targetMonth) => getMlForecast(userId, { historicalTransactions: request.historicalTransactions, targetMonth }, fetcher)));
+  const targetMonths = forecastMonths();
+  const payload = await getMlForecast(userId, { historicalTransactions: request.historicalTransactions, targetMonths }, fetcher);
+  const months = targetMonths.map((month) => withTotal({ month, categories: payload.forecasts.filter((point) => point.month === month).map(({ category, amountCentavos }) => ({ category, amountCentavos })) }));
+  const quarterKeys = [...new Set(targetMonths.map(quarterOf))];
+  const quarters = quarterKeys.map((quarter) => {
+    const inQuarter = months.filter((month) => quarterOf(month.month) === quarter);
+    return withTotal({ quarter, categories: sumByCategory(inQuarter.flatMap((month) => month.categories), MONTHS_PER_QUARTER / inQuarter.length) });
+  });
   return {
-    quarters: payloads.map((payload, index) => {
-      const categories = payload.forecasts.map((point) => ({ category: point.category, amountCentavos: point.amountCentavos * MONTHS_PER_QUARTER }));
-      return { quarter: quarterOf(months[index]!), totalCentavos: categories.reduce((total, point) => total + point.amountCentavos, 0), categories };
-    }),
-    modelVersion: payloads[0]!.modelVersion,
+    quarters,
+    months,
+    modelVersion: payload.modelVersion,
     generatedAt: new Date().toISOString(),
-    quality: payloads.some((payload) => payload.snapshot.quality === "INSUFFICIENT_DATA") ? "INSUFFICIENT_DATA" : payloads[0]!.snapshot.quality,
-    baselineMethod: payloads[0]!.forecasts[0]?.baselineMethod ?? "recency_weighted_provisional",
-    seasonalUncertainty: payloads.some((payload) => payload.forecasts.some((point) => point.seasonalUncertainty)),
+    quality: payload.forecasts.some((point) => point.baselineMethod === "recency_weighted_provisional") ? "INSUFFICIENT_DATA" : payload.snapshot.quality,
+    baselineMethod: payload.forecasts[0]?.baselineMethod ?? "recency_weighted_provisional",
+    seasonalUncertainty: payload.forecasts.some((point) => point.seasonalUncertainty),
   };
 }
 
