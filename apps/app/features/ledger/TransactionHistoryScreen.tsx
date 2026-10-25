@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Funnel } from "phosphor-react-native";
+import { ArrowDownLeft, ArrowsLeftRight, ArrowUpRight, CalendarCheck, Funnel, MagnifyingGlass } from "phosphor-react-native";
 import { listTransactions, getTransaction, getTransactionTotals, deleteTransaction, type TransactionFilters, type TransactionListItem, type TransactionTotals } from "../../local-db/repositories/ledger";
 import { readTransactionCache, reuseUnchangedRows, transactionCacheKey, writeTransactionCache } from "./transactionCache";
 import { getCreditCardPurchaseMetadataForTransaction } from "../../local-db/repositories/creditCardInstallments";
@@ -25,35 +25,34 @@ import { RECURRENCE_OPTIONS } from "../alerts/recurrenceOptions";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
+import { dashboardColors as P } from "../dashboard/dashboardAppearance";
 
 const budgieThink = require("../../assets/budgie-think.png");
 
-const palette = {
-  shell: "#fcf8f0",
-  brand: "#013220",
-  ink: "#1B1C1A",
-  ink2: "#414942",
-  mut: "#6B7A6F",
-  line: "#EAEAE6",
-  error: "#D9001F",
-  success: "#08B16A",
-  card: "#F1F0EB",
+const AMOUNT_COLORS: Record<string, string> = {
+  income: P.green,
+  expense: P.error,
 };
-
-const TYPE_COLORS: Record<string, string> = {
-  income: "#08B16A",
-  expense: "#D9001F",
-  transfer: "#1565C0",
-};
-// Badge for uncategorized biller and remittance payments.
-const SCHEDULED_PAYMENT_COLOR = "#E8590C";
+// Selected WHEN chip fill.
+const CHIP_ON = "#41EDA4";
 
 const SORT_OPTIONS = [
-  { key: "transaction_date", label: "Date" },
-  { key: "amount_centavos", label: "Amount" },
+  { by: "transaction_date", dir: "desc", label: "Newest first", hint: "The default" },
+  { by: "transaction_date", dir: "asc", label: "Oldest first" },
+  { by: "amount_centavos", dir: "desc", label: "Largest amount" },
+  { by: "amount_centavos", dir: "asc", label: "Smallest amount" },
 ] as const;
 
-const FILTER_TYPES = ["all", "income", "expense", "transfer"] as const;
+const FILTER_TYPES = [
+  { key: "all", label: "Everything" },
+  { key: "income", label: "Income" },
+  { key: "expense", label: "Expenses" },
+  { key: "transfer", label: "Transfers" },
+] as const;
+
+const sectionLabel = {
+  fontFamily: "Manrope", fontWeight: "700", fontSize: 11, letterSpacing: 0.6, color: P.secondary,
+} as const;
 
 const DATE_RANGES = ["all", "week", "month", "year", "custom"] as const;
 
@@ -88,44 +87,92 @@ function formatAmount(centavos: number): string {
   return amountFormat.format(centavos / 100);
 }
 
-const TransactionRow = memo(function TransactionRow({ tx, onEdit, onDelete }: {
+// Uncategorized rows get a tile by kind: scheduled payment, transfer, income or expense.
+function FallbackTileIcon({ tx }: { tx: TransactionListItem }) {
+  if (tx.is_scheduled_payment) return <CalendarCheck size={18} color="#fff" weight="bold" />;
+  if (tx.transaction_type === "transfer") return <ArrowsLeftRight size={18} color="#fff" weight="bold" />;
+  if (tx.transaction_type === "income") return <ArrowUpRight size={18} color="#fff" weight="bold" />;
+  return <ArrowDownLeft size={18} color="#fff" weight="bold" />;
+}
+
+function fallbackTileColor(tx: TransactionListItem): string {
+  if (tx.is_scheduled_payment) return P.warning;
+  if (tx.transaction_type === "transfer") return P.secondary;
+  if (tx.transaction_type === "income") return P.green;
+  return P.error;
+}
+
+const TransactionRow = memo(function TransactionRow({ tx, last, onEdit, onDelete }: {
   tx: TransactionListItem;
+  last: boolean;
   onEdit: (transactionId: string) => void;
   onDelete: (transactionId: string) => void;
 }) {
-  const typeColor = TYPE_COLORS[tx.transaction_type] ?? palette.mut;
-  const badgeColor = tx.is_scheduled_payment ? SCHEDULED_PAYMENT_COLOR : typeColor;
   const prefix = tx.transaction_type === "expense" ? "-" : tx.transaction_type === "income" ? "+" : "";
   return (
-    <View style={{ paddingVertical: 8, paddingHorizontal: 2, marginBottom: 2, flexDirection: "row", alignItems: "center", gap: 10 }}>
-      {tx.icon_key ? (
-        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: tx.color_hex ?? DEFAULT_TAXONOMY_COLOR, alignItems: "center", justifyContent: "center", marginRight: 2 }}>
-          <TaxonomyIcon iconKey={tx.icon_key} size={18} color="#fff" weight="fill" />
-        </View>
-      ) : (
-        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: `${badgeColor}20`, alignItems: "center", justifyContent: "center", marginRight: 2 }}>
-          <Text style={{ fontSize: 10, color: badgeColor, fontWeight: "800" }}>
-            {tx.is_scheduled_payment ? "BR" : tx.transaction_type === "transfer" ? "TR" : tx.transaction_type === "income" ? "+" : "-"}
-          </Text>
-        </View>
-      )}
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }} numberOfLines={1}>
+    <View style={{ paddingVertical: 12, paddingLeft: 14, paddingRight: 6, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: last ? 0 : 1, borderBottomColor: P.divider }}>
+      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: tx.icon_key ? tx.color_hex ?? DEFAULT_TAXONOMY_COLOR : fallbackTileColor(tx), alignItems: "center", justifyContent: "center" }}>
+        {tx.icon_key ? <TaxonomyIcon iconKey={tx.icon_key} size={18} color="#fff" weight="fill" /> : <FallbackTileIcon tx={tx} />}
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: P.ink }} numberOfLines={1}>
           {tx.name}
         </Text>
-        <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: palette.mut }} numberOfLines={1}>
+        <Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.secondary, marginTop: 1 }} numberOfLines={1}>
           {[tx.category_label, tx.financial_account_name].filter(Boolean).join(" · ") || "Uncategorized"}
         </Text>
       </View>
-      <View style={{ alignItems: "flex-end" }}>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 13.5, color: typeColor }}>
-          {prefix}P{formatAmount(tx.amount_centavos)}
-        </Text>
-      </View>
+      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12.5, color: AMOUNT_COLORS[tx.transaction_type] ?? P.ink, fontVariant: ["tabular-nums"] }}>
+        {prefix}PHP {formatAmount(tx.amount_centavos)}
+      </Text>
       <KebabTooltip onEdit={() => onEdit(tx.id)} onDelete={() => onDelete(tx.id)} />
     </View>
   );
 });
+
+function StatCard({ kind, centavos }: { kind: "income" | "expense"; centavos: number }) {
+  const income = kind === "income";
+  return (
+    <View style={{ flex: 1, borderRadius: 12, padding: 14, backgroundColor: income ? P.mint : P.pink }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: income ? P.green : P.expenseIcon, alignItems: "center", justifyContent: "center" }}>
+          {income ? <ArrowUpRight size={13} color="#fff" weight="bold" /> : <ArrowDownLeft size={13} color="#fff" weight="bold" />}
+        </View>
+        <Text style={sectionLabel}>{income ? "INCOME" : "EXPENSES"}</Text>
+      </View>
+      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 19, letterSpacing: -0.2, color: P.ink, fontVariant: ["tabular-nums"] }} numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={{ fontWeight: "600", fontSize: 11, color: P.secondary }}>PHP </Text>
+        {formatAmount(centavos)}
+      </Text>
+    </View>
+  );
+}
+
+function Radio({ label, hint, selected, onPress }: { label: string; hint?: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected }} onPress={onPress} style={{ flexDirection: "row", alignItems: "center", gap: 11, minHeight: 44, paddingVertical: 6 }}>
+      <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selected ? P.brand : P.border, alignItems: "center", justifyContent: "center", backgroundColor: P.surface }}>
+        {selected ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: P.brand }} /> : null}
+      </View>
+      <View>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: P.ink }}>{label}</Text>
+        {hint ? <Text style={{ fontFamily: "Manrope", fontSize: 11, color: P.secondary, marginTop: 1 }}>{hint}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityState={{ selected }}
+      style={{ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: selected ? P.brand : P.border, backgroundColor: selected ? CHIP_ON : P.surface }}
+    >
+      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: selected ? P.brand : P.secondary }}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function TransactionHistoryScreen({ userId, deviceId, accessToken, unusualSpending, onUnusualSpendingDismissed, onNewTransaction, onLoadMoreChange, getScrollOffset, scrollTo, syncVersion = 0 }: Props) {
   const { showToast } = useToast();
@@ -456,7 +503,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     return `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
-  const filterActive = showFilters || activeFilterCount > 0;
+  const filtered = activeFilterCount > 0 || search.trim().length > 0;
 
   // The list stays mounted, hidden, while a transaction is edited: remounting every loaded row on return
   // blocks the JS thread for seconds, whereas a mounted list only re-renders the rows the edit changed.
@@ -472,7 +519,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       />
     ) : null}
     <View
-      style={{ gap: 12, display: editTarget ? "none" : "flex" }}
+      style={{ gap: 11, paddingTop: 6, display: editTarget ? "none" : "flex" }}
       onLayout={() => {
         // The edit form shares the shell's scroll view, so the list's offset is restored once it is laid out again;
         // any earlier and the scroll view is still only as tall as the form.
@@ -481,202 +528,146 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
         listScrollY.current = null;
       }}
     >
-      {/* Search bar + filter icon */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          onSubmitEditing={() => load()}
-          returnKeyType="search"
-          placeholder="Search transactions..."
-          placeholderTextColor={palette.mut}
-          style={{
-            flex: 1, height: 44, borderRadius: 12, borderWidth: 1, borderColor: palette.line,
-            paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 13, color: palette.ink,
-            backgroundColor: palette.card,
-          }}
-        />
+      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, letterSpacing: -0.3, color: P.ink, marginBottom: 2 }}>
+        Activity
+      </Text>
+
+      {/* Search and the filters button share one card */}
+      <View style={{ backgroundColor: P.surface, borderWidth: 1, borderColor: P.border, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 15, gap: 9 }}>
+        <View style={{ minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: P.border, backgroundColor: P.surface, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 14 }}>
+          <MagnifyingGlass size={16} color={P.secondary} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            onSubmitEditing={() => load()}
+            returnKeyType="search"
+            placeholder="Search transactions..."
+            placeholderTextColor={P.secondary}
+            style={{ flex: 1, minHeight: 46, fontFamily: "Manrope", fontSize: 13.5, color: P.ink }}
+          />
+        </View>
         <Pressable
+          accessibilityRole="button"
           onPress={() => setShowFilters(true)}
-          style={{
-            width: 44, height: 44, borderRadius: 12, borderWidth: 1,
-            borderColor: filterActive ? palette.brand : palette.line,
-            backgroundColor: filterActive ? palette.brand : palette.card,
-            alignItems: "center", justifyContent: "center",
-          }}
+          style={{ minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: P.border, backgroundColor: P.surface, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}
         >
-          <Funnel size={20} color={filterActive ? "#fff" : palette.mut} weight="bold" />
-          {activeFilterCount > 0 && (
-            <View style={{
-              position: "absolute", top: -4, right: -4, minWidth: 16, height: 16,
-              borderRadius: 8, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center",
-              paddingHorizontal: 4,
-            }}>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9, color: "#fff" }}>
-                {activeFilterCount}
-              </Text>
-            </View>
-          )}
+          <Funnel size={17} color={P.ink} />
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.ink }}>
+            Filters and sort{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+          </Text>
         </Pressable>
       </View>
 
-      <View style={{ flexDirection: "row", gap: 10, opacity: stale ? 0.5 : 1 }}>
-        <View style={{ flex: 1, borderRadius: 14, backgroundColor: "#edfff8", borderWidth: 1, borderColor: "#d4f5e7", padding: 12 }}>
-          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.success, marginBottom: 3 }}>Income</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.success }}>+P{formatAmount(totals.income_centavos)}</Text>
+      {/* The totals wait for the rows rather than printing a zero that is about to change. A type filter shows only its own total. */}
+      {loading ? null : (
+        <View style={{ flexDirection: "row", gap: 12, opacity: stale ? 0.5 : 1 }}>
+          {typeFilter !== "expense" ? <StatCard kind="income" centavos={totals.income_centavos} /> : null}
+          {typeFilter !== "income" ? <StatCard kind="expense" centavos={totals.expense_centavos} /> : null}
         </View>
-        <View style={{ flex: 1, borderRadius: 14, backgroundColor: "#fff0f2", borderWidth: 1, borderColor: "#ffdce2", padding: 12 }}>
-          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.error, marginBottom: 3 }}>Expenses</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: palette.error }}>-P{formatAmount(totals.expense_centavos)}</Text>
-        </View>
-      </View>
+      )}
 
       {/* Transaction list */}
       {loading ? (
-        <ActivityIndicator color={palette.brand} style={{ marginTop: 40 }} />
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 40 }}>
+          <ActivityIndicator color={P.secondary} size="small" />
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.secondary }}>Loading...</Text>
+        </View>
       ) : transactions.length === 0 ? (
-        <View style={{ alignItems: "center", paddingVertical: 60 }}>
-          <Text style={{ fontFamily: "Manrope", fontSize: 14, color: palette.mut, marginBottom: 16 }}>
-            No transactions yet
+        <View style={{ alignItems: "center", paddingVertical: 26, paddingHorizontal: 18 }}>
+          <View style={{ width: 96, height: 96, borderRadius: 48, borderWidth: 1.5, borderStyle: "dashed", borderColor: P.secondary, alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+            {filtered ? <Funnel size={34} color={P.secondary} /> : <ArrowsLeftRight size={34} color={P.secondary} />}
+          </View>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 15, color: P.ink, marginBottom: 4 }}>
+            {filtered ? "No transactions match" : "No transactions yet"}
           </Text>
-          <Pressable
-            onPress={onNewTransaction}
-            style={{ paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, backgroundColor: palette.brand }}
-          >
-            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 13, color: "#fff" }}>
-              Add your first
-            </Text>
-          </Pressable>
+          <Text style={{ fontFamily: "Manrope", fontSize: 12, lineHeight: 18, color: P.secondary, textAlign: "center", maxWidth: 230 }}>
+            {filtered ? "Clear the filters to see all your transactions." : "Record your first transaction to see it here."}
+          </Text>
+          {filtered ? null : (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onNewTransaction}
+              style={{ alignSelf: "stretch", minHeight: 50, borderRadius: 12, backgroundColor: P.brand, alignItems: "center", justifyContent: "center", marginTop: 14 }}
+            >
+              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: "#fff" }}>
+                Add your first
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : (
-        <View style={{ opacity: stale ? 0.5 : 1 }}>
-        {stale ? <ActivityIndicator color={palette.brand} style={{ marginTop: 12 }} /> : null}
+        <View style={{ opacity: stale ? 0.5 : 1, gap: 11 }}>
+        {stale ? <ActivityIndicator color={P.brand} /> : null}
         {grouped.map((group) => (
-          <View key={`${group.date}-${group.items[0]!.id}`}>
-            <Text style={{
-              fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: palette.mut,
-              letterSpacing: 0.4, marginTop: 12, marginBottom: 7,
-            }}>
+          <View key={`${group.date}-${group.items[0]!.id}`} style={{ gap: 8 }}>
+            <Text style={sectionLabel}>
               {group.date.toUpperCase()}
             </Text>
-            {group.items.map((tx) => (
-              <TransactionRow key={tx.id} tx={tx} onEdit={editTransaction} onDelete={selectDeleteTarget} />
-            ))}
+            <View style={{ backgroundColor: P.surface, borderWidth: 1, borderColor: P.border, borderRadius: 16, overflow: "hidden" }}>
+              {group.items.map((tx, index) => (
+                <TransactionRow key={tx.id} tx={tx} last={index === group.items.length - 1} onEdit={editTransaction} onDelete={selectDeleteTarget} />
+              ))}
+            </View>
           </View>
         ))}
         </View>
       )}
-      {loadingMore ? <ActivityIndicator color={palette.brand} style={{ marginVertical: 16 }} /> : null}
+      {loadingMore ? <ActivityIndicator color={P.brand} style={{ marginVertical: 16 }} /> : null}
 
       {/* Filter bottom drawer */}
       <ActionSheet visible={showFilters} onClose={() => setShowFilters(false)} backdropColor="rgba(0,0,0,0.45)">
           <BottomSheetSurface
-            bottomSpacing={32}
+            bottomSpacing={26}
             style={{
-              backgroundColor: palette.shell, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              padding: 20,
+              backgroundColor: P.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+              paddingTop: 10, paddingHorizontal: 20, maxHeight: "88%",
             }}
           >
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: palette.line, alignSelf: "center", marginBottom: 16 }} />
+            <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: P.divider, alignSelf: "center", marginBottom: 12 }} />
 
-            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink, marginBottom: 16 }}>
-              Filter & Sort
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 16, color: P.ink, marginBottom: 6 }}>
+              Filters and sort
             </Text>
 
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
-              Type
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 11, paddingBottom: 14 }} showsVerticalScrollIndicator={false}>
+            <Text style={sectionLabel}>SHOW</Text>
+            <View>
               {FILTER_TYPES.map((t) => (
-                <Pressable
-                  key={t}
-                  onPress={() => setTypeFilter(t)}
-                  style={{
-                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-                    backgroundColor: typeFilter === t ? palette.brand : palette.card,
-                    borderWidth: 1,
-                    borderColor: typeFilter === t ? palette.brand : palette.line,
-                  }}
-                >
-                  <Text style={{
-                    fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
-                    color: typeFilter === t ? "#fff" : palette.ink2,
-                  }}>
-                    {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
-                  </Text>
-                </Pressable>
+                <Radio key={t.key} label={t.label} selected={typeFilter === t.key} onPress={() => setTypeFilter(t.key)} />
               ))}
-            </ScrollView>
+            </View>
 
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
-              Category
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
-              <Pressable
-                onPress={() => setCategoryFilter("all")}
-                style={{
-                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-                  backgroundColor: categoryFilter === "all" ? palette.brand : palette.card,
-                  borderWidth: 1, borderColor: categoryFilter === "all" ? palette.brand : palette.line,
-                }}
-              >
-                <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: categoryFilter === "all" ? "#fff" : palette.ink2 }}>
-                  All categories
-                </Text>
-              </Pressable>
+            <Text style={sectionLabel}>CATEGORY</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
+              <Chip label="All categories" selected={categoryFilter === "all"} onPress={() => setCategoryFilter("all")} />
               {categories.map((category) => (
-                <Pressable
-                  key={category.id}
-                  onPress={() => setCategoryFilter(category.id)}
-                  style={{
-                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-                    backgroundColor: categoryFilter === category.id ? palette.brand : palette.card,
-                    borderWidth: 1, borderColor: categoryFilter === category.id ? palette.brand : palette.line,
-                  }}
-                >
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: categoryFilter === category.id ? "#fff" : palette.ink2 }}>
-                    {category.label}
-                  </Text>
-                </Pressable>
+                <Chip key={category.id} label={category.label} selected={categoryFilter === category.id} onPress={() => setCategoryFilter(category.id)} />
               ))}
             </ScrollView>
 
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
-              Date Range
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 16 }}>
+            <Text style={sectionLabel}>WHEN</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
               {DATE_RANGES.map((r) => (
-                <Pressable
+                <Chip
                   key={r}
+                  label={r === "all" ? "Any time" : r === "week" ? "This week" : r === "month" ? "This month" : r === "year" ? "This year" : "Custom"}
+                  selected={dateRange === r}
                   onPress={() => setDateRange(r)}
-                  style={{
-                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-                    backgroundColor: dateRange === r ? palette.brand : palette.card,
-                    borderWidth: 1,
-                    borderColor: dateRange === r ? palette.brand : palette.line,
-                  }}
-                >
-                  <Text style={{
-                    fontFamily: "Manrope", fontWeight: "600", fontSize: 12,
-                    color: dateRange === r ? "#fff" : palette.ink2,
-                  }}>
-                    {r === "all" ? "Any time" : r === "week" ? "This week" : r === "month" ? "This month" : r === "year" ? "This year" : "Custom"}
-                  </Text>
-                </Pressable>
+                />
               ))}
-            </ScrollView>
+            </View>
             {dateRange === "custom" ? (
-              <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+              <View style={{ flexDirection: "row", gap: 8 }}>
                 {(["from", "to"] as const).map((field) => {
                   const value = field === "from" ? customFromDate : customToDate;
                   return (
                     <Pressable
                       key={field}
                       onPress={() => setDatePickerField(field)}
-                      style={{ flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.card, justifyContent: "center", paddingHorizontal: 12 }}
+                      style={{ flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: P.border, backgroundColor: P.surface, justifyContent: "center", paddingHorizontal: 14 }}
                     >
-                      <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut }}>{field === "from" ? "From" : "To"}</Text>
-                      <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: value ? palette.ink : palette.mut, marginTop: 2 }}>{value ?? "Select date"}</Text>
+                      <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 11.5, color: P.secondary }}>{field === "from" ? "From" : "To"}</Text>
+                      <Text style={{ fontFamily: "Manrope", fontSize: 13.5, color: value ? P.ink : P.secondary, marginTop: 2 }}>{value ?? "Select date"}</Text>
                     </Pressable>
                   );
                 })}
@@ -690,38 +681,19 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               />
             ) : null}
 
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: palette.mut, marginBottom: 8 }}>
-              Sort By
-            </Text>
-            <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
-              {SORT_OPTIONS.map((opt) => {
-                const active = sortBy === opt.key;
-                return (
-                  <Pressable
-                    key={opt.key}
-                    onPress={() => {
-                      if (active) {
-                        setSortDir(sortDir === "desc" ? "asc" : "desc");
-                      } else {
-                        setSortBy(opt.key);
-                      }
-                    }}
-                    style={{
-                      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
-                      backgroundColor: active ? palette.brand : palette.card,
-                      flexDirection: "row", alignItems: "center", gap: 4,
-                    }}
-                  >
-                    <Text style={{
-                      fontFamily: "Manrope", fontWeight: "600", fontSize: 11,
-                      color: active ? "#fff" : palette.ink2,
-                    }}>
-                      {opt.label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <Text style={sectionLabel}>SORT BY</Text>
+            <View>
+              {SORT_OPTIONS.map((opt) => (
+                <Radio
+                  key={`${opt.by}-${opt.dir}`}
+                  label={opt.label}
+                  hint={"hint" in opt ? opt.hint : undefined}
+                  selected={sortBy === opt.by && sortDir === opt.dir}
+                  onPress={() => { setSortBy(opt.by); setSortDir(opt.dir); }}
+                />
+              ))}
             </View>
+            </ScrollView>
 
             <View style={{ flexDirection: "row", gap: 10 }}>
               <Pressable
@@ -735,11 +707,11 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                   setSortDir("desc");
                 }}
                 style={{
-                  flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: palette.line,
+                  flex: 1, minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: P.border, backgroundColor: P.surface,
                   alignItems: "center", justifyContent: "center",
                 }}
               >
-                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.ink }}>
                   Reset
                 </Text>
               </Pressable>
@@ -756,7 +728,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                   setShowFilters(false);
                 }}
                 style={{
-                  flex: 1, minHeight: 48, borderRadius: 14, backgroundColor: palette.brand,
+                  flex: 1, minHeight: 50, borderRadius: 12, backgroundColor: P.brand,
                   alignItems: "center", justifyContent: "center",
                 }}
               >
@@ -771,18 +743,18 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       {/* Delete confirmation modal */}
       <Modal visible={deleteTarget !== null} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 }}>
-          <View style={{ borderRadius: 20, backgroundColor: palette.shell, padding: 20 }}>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
+          <View style={{ borderRadius: 20, backgroundColor: P.surface, padding: 20 }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
               Delete transaction?
             </Text>
-            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: P.secondary, marginTop: 8 }}>
               This will reverse any balance changes. The transaction will remain as a tombstone record and stay syncable.
             </Text>
             <View style={{ gap: 10, marginTop: 18 }}>
               <Pressable
                 onPress={handleDelete}
                 disabled={deleting}
-                style={{ minHeight: 50, borderRadius: 14, backgroundColor: palette.error, alignItems: "center", justifyContent: "center" }}
+                style={{ minHeight: 50, borderRadius: 12, backgroundColor: P.error, alignItems: "center", justifyContent: "center" }}
               >
                 {deleting ? (
                   <ActivityIndicator color="#fff" />
@@ -794,9 +766,9 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               </Pressable>
               <Pressable
                 onPress={() => setDeleteTarget(null)}
-                style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: palette.line, alignItems: "center", justifyContent: "center" }}
+                style={{ minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: P.border, alignItems: "center", justifyContent: "center" }}
               >
-                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.ink }}>
                   Cancel
                 </Text>
               </Pressable>
@@ -808,19 +780,19 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       {/* Installment delete restriction modal */}
       <Modal visible={deleteBlockedTarget !== null} transparent animationType="fade" onRequestClose={() => setDeleteBlockedTarget(null)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 }}>
-          <View style={{ borderRadius: 20, backgroundColor: palette.shell, padding: 20 }}>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
+          <View style={{ borderRadius: 20, backgroundColor: P.surface, padding: 20 }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink }}>
               Cannot delete installment purchase
             </Text>
-            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: P.secondary, marginTop: 8 }}>
               Installment transactions cannot be deleted after creation because billing-cycle amortizations, issuer statement values, and available-credit holds may already depend on them.
             </Text>
-            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: palette.mut, marginTop: 8 }}>
+            <Text style={{ fontFamily: "Manrope", fontSize: 13, lineHeight: 19, color: P.secondary, marginTop: 8 }}>
               Record an issuer-recognized settlement or reversal separately when that flow is available.
             </Text>
             <Pressable
               onPress={() => setDeleteBlockedTarget(null)}
-              style={{ minHeight: 50, borderRadius: 14, backgroundColor: palette.brand, alignItems: "center", justifyContent: "center", marginTop: 18 }}
+              style={{ minHeight: 50, borderRadius: 12, backgroundColor: P.brand, alignItems: "center", justifyContent: "center", marginTop: 18 }}
               accessibilityRole="button"
               accessibilityLabel="Close installment delete restriction"
             >
@@ -835,17 +807,17 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       {/* Unanswered on purpose: the only way out is one of the three answers. */}
       <Modal visible={showUnusualSpending && unusualSpending !== null} transparent animationType="fade" onRequestClose={() => {}}>
         <View style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.4)" }}>
-          <View style={{ borderRadius: 20, padding: 22, backgroundColor: palette.shell }}>
+          <View style={{ borderRadius: 20, padding: 22, backgroundColor: P.surface }}>
             <Image source={budgieThink} accessibilityIgnoresInvertColors style={{ width: "100%", height: undefined, aspectRatio: 3 / 2 }} resizeMode="contain" />
-            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink, marginTop: 12, textAlign: "center" }}>Budgie wants to learn about you</Text>
-            <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: palette.ink2, marginTop: 10, textAlign: "center" }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink, marginTop: 12, textAlign: "center" }}>Budgie wants to learn about you</Text>
+            <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.secondary, marginTop: 10, textAlign: "center" }}>
               You spent {formatCurrency(unusualSpending?.amountCentavos ?? 0)} on {unusualSpending?.subcategoryLabel ?? "this subcategory"}, more than your usual {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. Will you be making this expense again?
             </Text>
-            {recurringError ? <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.error, marginTop: 10, textAlign: "center" }}>{recurringError}</Text> : null}
+            {recurringError ? <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.error, marginTop: 10, textAlign: "center" }}>{recurringError}</Text> : null}
             <View style={{ gap: 10, marginTop: 18 }}>
               {RECURRENCE_OPTIONS.map(({ recurrence, label }) => (
-                <Pressable key={recurrence} onPress={() => void answerUnusualSpendingRecurrence(recurrence)} disabled={answeringRecurrence !== null} accessibilityRole="button" accessibilityLabel={label} style={{ minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: palette.brand, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.brand, textAlign: "center" }}>{answeringRecurrence === recurrence ? "Saving..." : label}</Text>
+                <Pressable key={recurrence} onPress={() => void answerUnusualSpendingRecurrence(recurrence)} disabled={answeringRecurrence !== null} accessibilityRole="button" accessibilityLabel={label} style={{ minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: P.border, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 }}>
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.brand, textAlign: "center" }}>{answeringRecurrence === recurrence ? "Saving..." : label}</Text>
                 </Pressable>
               ))}
             </View>

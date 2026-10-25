@@ -1008,7 +1008,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     return <ShellPlaceholderPage title={meta.title} subtitle={meta.subtitle} />;
   }
 
-  const shellColor = currentPage === "dashboard" ? dashboardColors.page : palette.shell;
+  const v3Page = currentPage === "dashboard" || currentPage === "transactions";
+  const shellColor = v3Page ? dashboardColors.page : palette.shell;
 
   return (
     <View className="flex-1">
@@ -1021,7 +1022,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           <>
         {activeTab ? (
           /* Top bar: profile and sync, logo, notifications */
-          <View style={{ backgroundColor: shellColor, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center", borderBottomWidth: currentPage === "dashboard" ? 1 : 0, borderBottomColor: dashboardColors.divider }}>
+          <View style={{ backgroundColor: shellColor, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center", borderBottomWidth: v3Page ? 1 : 0, borderBottomColor: dashboardColors.divider }}>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 11 }}>
               <Pressable
                 accessibilityRole="button"
