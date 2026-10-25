@@ -12,6 +12,7 @@ const mockListCreditCardPayments = jest.fn();
 const mockListCreditCardInstallments = jest.fn();
 const mockListCreditCardStrategies = jest.fn();
 const mockGetAcceptedFinancialPlanForPeriod = jest.fn();
+const mockGetFinancialPlanBudgetRemaining = jest.fn();
 const mockGetDebtStrategy = jest.fn();
 const mockListDebtPriorities = jest.fn();
 
@@ -43,6 +44,7 @@ jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   getAcceptedFinancialPlanForPeriod: (...args: unknown[]) => mockGetAcceptedFinancialPlanForPeriod(...args),
   getCurrentFinancialPlanPeriod: () => ({ start: "2026-10-01", end: "2026-10-31" }),
+  getFinancialPlanBudgetRemaining: (...args: unknown[]) => mockGetFinancialPlanBudgetRemaining(...args),
 }));
 jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({
   getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args),
@@ -58,7 +60,7 @@ beforeEach(() => {
   }]);
   mockListDebtAccounts.mockImplementation((_userId: string, visibility: string) => Promise.resolve(visibility === "active" ? [{
     id: "debt-1", name: "Loan", type: "personal_loan", status: "active", currentBalanceCentavos: 2_000,
-    originalBalanceCentavos: 5_000, minimumPaymentCentavos: 500, paymentFrequency: "monthly", nextDueDate: "2026-10-01",
+    originalBalanceCentavos: 5_000, allowsExtraPayments: true, minimumPaymentCentavos: 500, paymentFrequency: "monthly", nextDueDate: "2026-10-01",
     targetPayoffDate: "2027-01-01", annualInterestRateBps: 0, interestMethod: "no_interest", interestPeriod: "none",
     typeSpecific: { startDate: "2026-09-01", feesCentavos: 0, penaltyInfo: null, termMonths: null },
   }] : []));
@@ -70,6 +72,7 @@ beforeEach(() => {
   mockListCreditCardInstallments.mockResolvedValue([]);
   mockListCreditCardStrategies.mockResolvedValue([]);
   mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
+  mockGetFinancialPlanBudgetRemaining.mockResolvedValue(null);
   mockGetDebtStrategy.mockResolvedValue("avalanche");
   mockListDebtPriorities.mockResolvedValue([]);
 });
@@ -129,7 +132,7 @@ beforeEach(() => {
 
     await waitFor(() => {
       expect(view.getByText("Financial Plan repayments")).toBeTruthy();
-      expect(view.getByText("Loan: PHP 10.00 due 2026-10-01")).toBeTruthy();
+      expect(view.getByLabelText("Loan, PHP 10.00, due 2026-10-01")).toBeTruthy();
     });
   });
 
@@ -147,7 +150,29 @@ beforeEach(() => {
 
     await waitFor(() => {
       expect(view.getByText("Recommended surplus allocation")).toBeTruthy();
-      expect(view.getByText("Visa statement: PHP 10.00")).toBeTruthy();
-      expect(view.getByText("Loan: PHP 20.00")).toBeTruthy();
+      expect(view.getByLabelText("Visa statement, PHP 10.00")).toBeTruthy();
+      expect(view.getByLabelText("Loan, PHP 20.00")).toBeTruthy();
     });
+  });
+
+  it("shows this month's budget remaining from the accepted Financial Plan", async () => {
+    const plan = { id: "plan-1", recommendation: { debtReservations: [], availableFundsCentavos: 50_000 } };
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(plan);
+    mockGetFinancialPlanBudgetRemaining.mockResolvedValue(12_500);
+
+    const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
+
+    await waitFor(() => expect(view.getByText("PHP 125.00")).toBeTruthy());
+    expect(view.getByText("Budget remaining this month")).toBeTruthy();
+    expect(mockGetFinancialPlanBudgetRemaining).toHaveBeenCalledWith("user-1", plan);
+  });
+
+  it("keeps the repayment plan when the budget remaining lookup fails", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ id: "plan-1", recommendation: { debtReservations: [] } });
+    mockGetFinancialPlanBudgetRemaining.mockRejectedValue(new Error("spending unavailable"));
+
+    const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
+
+    await waitFor(() => expect(view.getByText("Unavailable")).toBeTruthy());
+    expect(view.getByText("Card statement targets")).toBeTruthy();
   });
