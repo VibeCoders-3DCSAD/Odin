@@ -66,7 +66,38 @@ describe("detectUnusualSpendings", () => {
     }
   });
 
-  it("uses the previous twelve months as its history window", () => {
-    expect(unusualSpendingStartDate(new Date("2026-09-23T12:00:00Z"))).toBe("2025-09-23");
+  it("uses the previous thirteen months as its history window", () => {
+    expect(unusualSpendingStartDate(new Date("2026-09-23T12:00:00Z"))).toBe("2025-08-23");
+  });
+
+  describe("yearly expenses", () => {
+    const gifts = { ...history[0]!, id: "gifts-2026", transactionDate: "2026-04-01", amountCentavos: 100_000 };
+    const yearly = new Map([["gifts-2026", "yearly" as const]]);
+    const nextYear = (amountCentavos: number, transactionDate = "2027-04-10") => ({ ...history[0]!, id: "gifts-2027", transactionDate, amountCentavos });
+
+    it("raises the upper bound to 1.5x last year's amount around its anniversary", () => {
+      expect(detectUnusualSpendings([...history, gifts, nextYear(140_000)], yearly).map((insight) => insight.transactionId)).toEqual(["gifts-2026"]);
+    });
+
+    it("still flags an expense well above last year's yearly amount", () => {
+      const insights = detectUnusualSpendings([...history, gifts, nextYear(200_000)], yearly);
+
+      expect(insights.map((insight) => insight.transactionId)).toEqual(["gifts-2026", "gifts-2027"]);
+      expect(insights[1]!.upperBoundCentavos).toBe(150_000);
+    });
+
+    it("keeps the usual range outside the anniversary window", () => {
+      expect(detectUnusualSpendings([...history, gifts, nextYear(140_000, "2026-10-01")], yearly).map((insight) => insight.transactionId)).toEqual(["gifts-2026", "gifts-2027"]);
+    });
+
+    it("carries the yearly allowance forward without another answer and keeps it out of the baseline", () => {
+      const followingYear = { ...history[0]!, id: "gifts-2028", transactionDate: "2028-04-05", amountCentavos: 150_000 };
+      const later = { ...history[0]!, id: "later", transactionDate: "2028-06-15", amountCentavos: 100_000 };
+
+      const insights = detectUnusualSpendings([...history, gifts, nextYear(140_000), followingYear, later], yearly);
+
+      expect(insights.map((insight) => insight.transactionId)).toEqual(["gifts-2026", "later"]);
+      expect(insights[1]).toMatchObject({ usableHistoryCount: 6 });
+    });
   });
 });

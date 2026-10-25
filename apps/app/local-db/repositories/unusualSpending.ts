@@ -23,7 +23,8 @@ function getDb(): Promise<SQLite.SQLiteDatabase> {
 
 export function unusualSpendingStartDate(now = new Date()): string {
   const start = new Date(now);
-  start.setUTCMonth(start.getUTCMonth() - 12);
+  // 13 months, so last year's yearly expenses are still in range when their anniversary comes round.
+  start.setUTCMonth(start.getUTCMonth() - 13);
   return start.toISOString().slice(0, 10);
 }
 
