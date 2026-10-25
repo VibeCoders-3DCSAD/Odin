@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ArrowLeft, BellRinging, Check } from "phosphor-react-native";
-import { confirmRecurringSpending, listPersistedUnusualSpendings, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { answerUnusualSpending, listPersistedUnusualSpendings, type SpendingRecurrence, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { RECURRENCE_OPTIONS, recurrenceAnswer } from "./recurrenceOptions";
 
 type Props = { userId: string; deviceId: string; onBack?: () => void; initialTransactionId?: string };
 const P = { ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", card: "#F8EFDC", warning: "#C25E00" };
@@ -47,12 +48,12 @@ export default function AnomalyAlertsScreen({ userId, deviceId, onBack, initialT
     setRefreshing(false);
   }
 
-  async function confirmRecurring(alert: UnusualSpendingInsight) {
-    await confirmRecurringSpending(userId, deviceId, alert.transactionId);
+  async function answer(alert: UnusualSpendingInsight, recurrence: SpendingRecurrence) {
+    await answerUnusualSpending(userId, deviceId, alert.transactionId, recurrence);
     await load();
   }
 
-  if (selected) return <Detail alert={selected} onBack={() => setSelected(null)} onConfirmRecurring={() => confirmRecurring(selected)} />;
+  if (selected) return <Detail alert={selected} onBack={() => setSelected(null)} onAnswer={(recurrence) => answer(selected, recurrence)} />;
 
   return <View>
     {onBack ? <Pressable accessibilityRole="button" accessibilityLabel="Back to financial reports" onPress={onBack} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}><ArrowLeft size={18} color={P.ink} weight="bold" /><Text style={{ color: P.muted }}>Financial Reports</Text></Pressable> : null}
@@ -73,24 +74,24 @@ function AlertRow({ alert, onPress }: { alert: UnusualSpendingInsight; onPress: 
   </Pressable>;
 }
 
-function Detail({ alert, onBack, onConfirmRecurring }: { alert: UnusualSpendingInsight; onBack: () => void; onConfirmRecurring: () => Promise<void> }) {
-  const [saving, setSaving] = useState(false);
+function Detail({ alert, onBack, onAnswer }: { alert: UnusualSpendingInsight; onBack: () => void; onAnswer: (recurrence: SpendingRecurrence) => Promise<void> }) {
+  const [saving, setSaving] = useState<SpendingRecurrence | null>(null);
   const [error, setError] = useState<string | null>(null);
-  async function confirm() {
-    setSaving(true);
+  async function confirm(recurrence: SpendingRecurrence) {
+    setSaving(recurrence);
     try {
-      await onConfirmRecurring();
+      await onAnswer(recurrence);
       setError(null);
     } catch {
       setError("Your answer could not be saved. Try again.");
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   }
   return <View><Pressable accessibilityRole="button" accessibilityLabel="Back to alerts" onPress={onBack} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 16 }}><ArrowLeft size={18} color={P.ink} weight="bold" /><Text style={{ color: P.muted }}>All alerts</Text></Pressable><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 22, color: P.ink }}>Unusual {alert.subcategoryLabel} spending</Text><Text style={{ color: P.muted, marginTop: 5 }}>{new Date(alert.transactionDate).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}</Text><View style={{ marginTop: 18, padding: 18, borderRadius: 18, backgroundColor: P.card }}><Text style={{ color: P.ink, lineHeight: 21 }}>{formatCurrency(alert.amountCentavos)} is outside your usual spending range for {alert.subcategoryLabel}. Your usual spending is {formatCurrency(alert.usualSpendingCentavos)}, based on {alert.usableHistoryCount} earlier expenses.</Text><Text style={{ color: P.ink, fontWeight: "800", marginTop: 12 }}>{formatCurrency(alert.amountCentavos)}</Text>{alert.accountName ? <Text style={{ color: P.muted, marginTop: 5 }}>{alert.accountName}</Text> : null}</View>
-    {alert.confirmedRecurring
-      ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 }}><Check size={18} color={P.brand} weight="bold" /><Text style={{ color: P.muted, flex: 1 }}>You marked this as frequent spending. Future {alert.subcategoryLabel} expenses are compared with it included.</Text></View>
-      : <Pressable accessibilityRole="button" accessibilityLabel="I'll be making this spending frequently" onPress={() => void confirm()} disabled={saving} style={{ marginTop: 16, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: P.brand, alignItems: "center" }}><Text style={{ color: P.brand, fontWeight: "700" }}>{saving ? "Saving..." : "I'll be making this spending frequently"}</Text></Pressable>}
+    {alert.recurrence
+      ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 }}><Check size={18} color={P.brand} weight="bold" /><Text style={{ color: P.muted, flex: 1 }}>{recurrenceAnswer(alert.recurrence, alert.subcategoryLabel)}</Text></View>
+      : <View style={{ gap: 10, marginTop: 16 }}><Text style={{ color: P.ink, fontWeight: "700" }}>Will you be making this expense again?</Text>{RECURRENCE_OPTIONS.map(({ recurrence, label }) => <Pressable key={recurrence} accessibilityRole="button" accessibilityLabel={label} onPress={() => void confirm(recurrence)} disabled={saving !== null} style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: P.brand, alignItems: "center" }}><Text style={{ color: P.brand, fontWeight: "700" }}>{saving === recurrence ? "Saving..." : label}</Text></Pressable>)}</View>}
     {error ? <Text style={{ color: P.warning, marginTop: 10 }}>{error}</Text> : null}
   </View>;
 }

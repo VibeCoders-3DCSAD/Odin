@@ -19,7 +19,8 @@ import { useToast } from "../../components/Toast";
 import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
-import { confirmRecurringSpending, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { answerUnusualSpending, type SpendingRecurrence, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { RECURRENCE_OPTIONS } from "../alerts/recurrenceOptions";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
@@ -152,7 +153,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [deleteBlockedTarget, setDeleteBlockedTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showUnusualSpending, setShowUnusualSpending] = useState(false);
-  const [confirmingRecurring, setConfirmingRecurring] = useState(false);
+  const [answeringRecurrence, setAnsweringRecurrence] = useState<SpendingRecurrence | null>(null);
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const requestId = useRef(0);
   const loadingMoreRef = useRef(false);
@@ -429,16 +430,16 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     else setCustomToDate(formatIsoDate(date));
   }
 
-  async function confirmUnusualSpendingRecurring(): Promise<void> {
+  async function answerUnusualSpendingRecurrence(recurrence: SpendingRecurrence): Promise<void> {
     if (!unusualSpending) return;
-    setConfirmingRecurring(true);
+    setAnsweringRecurrence(recurrence);
     try {
-      await confirmRecurringSpending(userId, deviceId, unusualSpending.transactionId);
+      await answerUnusualSpending(userId, deviceId, unusualSpending.transactionId, recurrence);
       dismissUnusualSpending();
     } catch {
       setRecurringError("Your answer could not be saved. Try again.");
     } finally {
-      setConfirmingRecurring(false);
+      setAnsweringRecurrence(null);
     }
   }
 
@@ -840,12 +841,17 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
                 Your usual spending is {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. This is only a personal spending observation.
               </Text>
               {recurringError ? <Text style={{ fontFamily: "Manrope", fontSize: 13, color: palette.error, marginTop: 10 }}>{recurringError}</Text> : null}
-              <View style={{ flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 20, marginTop: 22 }}>
-                <Pressable onPress={() => void confirmUnusualSpendingRecurring()} disabled={confirmingRecurring} style={{ flexShrink: 1 }} accessibilityRole="button" accessibilityLabel="I'll be making this spending frequently">
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>{confirmingRecurring ? "Saving..." : "I'll be making this spending frequently"}</Text>
-                </Pressable>
+              <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink, marginTop: 18 }}>Will you be making this expense again?</Text>
+              <View style={{ gap: 14, marginTop: 12 }}>
+                {RECURRENCE_OPTIONS.map(({ recurrence, label }) => (
+                  <Pressable key={recurrence} onPress={() => void answerUnusualSpendingRecurrence(recurrence)} disabled={answeringRecurrence !== null} accessibilityRole="button" accessibilityLabel={label}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink2 }}>{answeringRecurrence === recurrence ? "Saving..." : label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", alignItems: "center", marginTop: 22 }}>
                 <Pressable onPress={dismissUnusualSpending} accessibilityRole="button" accessibilityLabel="Close unusual spending insight">
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Got it</Text>
+                  <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: palette.brand }}>Ask me later</Text>
                 </Pressable>
               </View>
             </View>

@@ -15,7 +15,8 @@ function spansThreeCalendarMonths(firstDate, candidateDate) {
   return (candidate.getUTCFullYear() - first.getUTCFullYear()) * 12 + candidate.getUTCMonth() - first.getUTCMonth() >= 3;
 }
 
-function detectUnusualSpendings(transactions, confirmedRecurringIds = new Set()) {
+// recurrences maps a transaction ID to the user's answer: "one_time", "frequent", or "yearly".
+function detectUnusualSpendings(transactions, recurrences = new Map()) {
   const histories = new Map();
   const insights = [];
   const ordered = [...transactions].sort((first, second) => first.transactionDate.localeCompare(second.transactionDate) || first.id.localeCompare(second.id));
@@ -47,13 +48,15 @@ function detectUnusualSpendings(transactions, confirmedRecurringIds = new Set())
             severity: Math.max(lower - value, value - upper) / iqr,
             usableHistoryCount: history.length,
             subcategoryId: transaction.subcategoryId,
-            confirmedRecurring: confirmedRecurringIds.has(transaction.id),
+            confirmedRecurring: recurrences.get(transaction.id) === "frequent",
+            recurrence: recurrences.get(transaction.id) ?? null,
           });
         }
       }
     }
-    // Flagged expenses stay out of the baseline until the user confirms them as recurring.
-    if (!flagged || confirmedRecurringIds.has(transaction.id)) history.push(transaction);
+    // Flagged expenses stay out of the baseline unless the user says they will be frequent;
+    // a yearly payment would otherwise widen the everyday range.
+    if (!flagged || recurrences.get(transaction.id) === "frequent") history.push(transaction);
     histories.set(transaction.subcategoryId, history);
   }
   return insights;

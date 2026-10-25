@@ -96,7 +96,7 @@ async function listUpcomingSavings(userId: string, today: string, through: strin
 }
 
 async function listAttentionObservations(userId: string): Promise<DashboardReminder[]> {
-  return (await listPersistedUnusualSpendings(userId)).filter((item) => !item.confirmedRecurring).map((item) => ({ id: `observation:${item.transactionId}`, title: `Unusual ${item.subcategoryLabel} spending`, detail: "Will this be a frequent expense?", amountCentavos: item.amountCentavos, date: item.transactionDate, target: { kind: "observation", id: item.transactionId } }));
+  return (await listPersistedUnusualSpendings(userId)).filter((item) => item.recurrence === null).map((item) => ({ id: `observation:${item.transactionId}`, title: `Unusual ${item.subcategoryLabel} spending`, detail: "Will this be a frequent expense?", amountCentavos: item.amountCentavos, date: item.transactionDate, target: { kind: "observation", id: item.transactionId } }));
 }
 
 async function section(sources: Promise<DashboardReminder[]>[]): Promise<DashboardReminderSection> {

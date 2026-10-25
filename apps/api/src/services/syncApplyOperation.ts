@@ -56,7 +56,8 @@ const ANOMALY_WHITELIST_UPDATE_FIELDS = new Set(["status", "notes"]);
 const ALERT_SUPPRESSION_CREATE_FIELDS = new Set(["category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata"]);
 const ALERT_SUPPRESSION_UPDATE_FIELDS = new Set(["status", "ends_at", "reason"]);
 const ANOMALY_EVALUATION_CREATE_FIELDS = new Set(["transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "model_version", "evaluated_at"]);
-const ANOMALY_EVALUATION_UPDATE_FIELDS = new Set(["confirmed_recurring_at"]);
+const ANOMALY_EVALUATION_UPDATE_FIELDS = new Set(["recurrence", "confirmed_recurring_at"]);
+const ANOMALY_RECURRENCES = new Set(["one_time", "frequent", "yearly"]);
 const TAXONOMY_ICON_KEYS = new Set([
   "bowl-food", "wine", "t-shirt", "house", "armchair", "first-aid",
   "car", "device-mobile", "game-controller", "graduation-cap", "fork-knife",
@@ -1008,10 +1009,19 @@ async function validateUpdatePayload(
     assertOnlyAllowed(payload, fields);
     return sanitizePayload(payload, fields);
   } else if (entity === "anomaly_evaluations") {
-    // Scores stay immutable; only the user's recurring-spending confirmation may be recorded.
+    // Scores stay immutable; only the user's answer may be recorded. Older apps send only
+    // confirmed_recurring_at, which means frequent; confirmed_recurring_at only accompanies frequent.
     assertOnlyAllowed(payload, ANOMALY_EVALUATION_UPDATE_FIELDS);
     const sanitized = sanitizePayload(payload, ANOMALY_EVALUATION_UPDATE_FIELDS);
-    requireIsoTimestamp(sanitized, "confirmed_recurring_at");
+    if (sanitized.recurrence === undefined) {
+      requireIsoTimestamp(sanitized, "confirmed_recurring_at");
+      return sanitized;
+    }
+    if (typeof sanitized.recurrence !== "string" || !ANOMALY_RECURRENCES.has(sanitized.recurrence)) {
+      throw new Error("recurrence must be one_time, frequent, or yearly");
+    }
+    if (sanitized.recurrence === "frequent") requireIsoTimestamp(sanitized, "confirmed_recurring_at");
+    else if (sanitized.confirmed_recurring_at !== undefined) throw new Error("confirmed_recurring_at is only recorded for frequent spending");
     return sanitized;
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);

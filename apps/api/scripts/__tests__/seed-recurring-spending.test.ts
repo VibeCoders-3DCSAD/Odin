@@ -11,13 +11,13 @@ it("keeps seeded medicine purchases in the forecast after frequent-spending conf
   const confirmations = buildSeedRecurringSpending(userId, data.transactions, subcategoryIds, today);
   expect(confirmations.length).toBeGreaterThan(0);
   const medicines = data.transactions.filter((row) => row.subcategory_id === subcategoryIds.get("health_medicines") && row.transaction_date >= "2025-10-21");
-  const ids = new Set(confirmations.map((row) => row.transaction_id));
-  expect(confirmations.every((row) => row.user_id === userId && row.confirmed_recurring_at === `${today}T12:00:00+08:00`)).toBe(true);
+  const recurrences = new Map(confirmations.map((row) => [row.transaction_id, "frequent" as const]));
+  expect(confirmations.every((row) => row.user_id === userId && row.recurrence === "frequent" && row.confirmed_recurring_at === `${today}T12:00:00+08:00`)).toBe(true);
   expect(confirmations.every((row) => medicines.some((transaction) => transaction.id === row.transaction_id && transaction.amount_centavos === row.amount_centavos))).toBe(true);
   const remainingOneOffs = detectUnusualSpendings(medicines.map((row) => ({
     id: row.id, transactionDate: row.transaction_date, amountCentavos: row.amount_centavos,
     subcategoryId: row.subcategory_id!, subcategoryLabel: "Medicines", accountName: null,
-  })), ids).filter((insight) => !insight.confirmedRecurring);
+  })), recurrences).filter((insight) => !insight.confirmedRecurring);
   expect(remainingOneOffs).toEqual([]);
   expect(confirmations.some((row) => row.amount_centavos === 78666)).toBe(true);
   expect(confirmations.some((row) => row.amount_centavos === 90520)).toBe(true);

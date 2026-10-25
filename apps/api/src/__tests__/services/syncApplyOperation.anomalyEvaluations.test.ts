@@ -38,4 +38,23 @@ describe("anomaly evaluation sync validation", () => {
   it("rejects a recurring-spending confirmation without a timestamp", async () => {
     await expect(prepareOperation({} as never, "user-1", { ...operation, operation_type: "update" as const, base_version: 1, changed_fields: ["confirmed_recurring_at"], payload: { confirmed_recurring_at: "yes" } })).rejects.toThrow("confirmed_recurring_at must be an ISO-8601 timestamp");
   });
+
+  const answer = (payload: Record<string, unknown>) => prepareOperation({} as never, "user-1", { ...operation, operation_type: "update" as const, base_version: 1, changed_fields: Object.keys(payload), payload });
+
+  it.each([
+    { recurrence: "frequent", confirmed_recurring_at: "2026-10-31T08:00:00.000Z" },
+    { recurrence: "yearly" },
+    { recurrence: "one_time" },
+  ])("accepts the user's answer %o", async (payload) => {
+    await expect(answer(payload)).resolves.toMatchObject({ payload });
+  });
+
+  it("rejects an unknown answer", async () => {
+    await expect(answer({ recurrence: "monthly" })).rejects.toThrow("recurrence must be one_time, frequent, or yearly");
+  });
+
+  it("requires a confirmation time for a frequent answer and refuses one otherwise", async () => {
+    await expect(answer({ recurrence: "frequent" })).rejects.toThrow("confirmed_recurring_at must be an ISO-8601 timestamp");
+    await expect(answer({ recurrence: "yearly", confirmed_recurring_at: "2026-10-31T08:00:00.000Z" })).rejects.toThrow("confirmed_recurring_at is only recorded for frequent spending");
+  });
 });

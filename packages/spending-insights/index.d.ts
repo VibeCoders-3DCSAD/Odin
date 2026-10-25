@@ -20,7 +20,11 @@ export type UnusualSpendingInsight = {
   usableHistoryCount: number;
   subcategoryId: string;
   confirmedRecurring: boolean;
+  // The user's answer to the unusual-spending question; null until they answer.
+  recurrence: SpendingRecurrence | null;
 };
 
-export function detectUnusualSpendings(transactions: SpendingTransaction[], confirmedRecurringIds?: ReadonlySet<string>): UnusualSpendingInsight[];
+export type SpendingRecurrence = "one_time" | "frequent" | "yearly";
+
+export function detectUnusualSpendings(transactions: SpendingTransaction[], recurrences?: ReadonlyMap<string, SpendingRecurrence | null>): UnusualSpendingInsight[];
 export const UNUSUAL_SPENDING_MODEL_VERSION: string;

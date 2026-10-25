@@ -25,7 +25,7 @@ describe("saveUnusualSpending", () => {
       transactionId: "transaction-1", subcategoryId: "subcategory-1", amountCentavos: 100_000,
       subcategoryLabel: "Groceries", accountName: "Cash", transactionDate: "2026-10-30",
       usualSpendingCentavos: 12_500, lowerBoundCentavos: 7_500, upperBoundCentavos: 20_000,
-      severity: 1.2, usableHistoryCount: 6, confirmedRecurring: false,
+      severity: 1.2, usableHistoryCount: 6, confirmedRecurring: false, recurrence: null,
     });
 
     expect(runAsync.mock.calls[0]?.[0]).toContain("INSERT OR IGNORE INTO anomaly_evaluations");
@@ -41,7 +41,7 @@ describe("saveUnusualSpending", () => {
       subcategory_id: "subcategory-1", subcategory_label: "Groceries", account_name: "Cash",
       usable_history_count: 6, usual_spending_centavos: 12_500,
       lower_bound_centavos: 7_500, upper_bound_centavos: 20_000, severity: 1.2,
-      confirmed_recurring_at: "2026-10-31T08:00:00.000Z",
+      recurrence: "frequent",
     }]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
     const { _resetDbCacheForTesting, listPersistedUnusualSpendings } = await import("../unusualSpending");
@@ -52,45 +52,66 @@ describe("saveUnusualSpending", () => {
       subcategoryId: "subcategory-1", subcategoryLabel: "Groceries", accountName: "Cash",
       usableHistoryCount: 6, usualSpendingCentavos: 12_500,
       lowerBoundCentavos: 7_500, upperBoundCentavos: 20_000, severity: 1.2,
-      confirmedRecurring: true,
+      confirmedRecurring: true, recurrence: "frequent",
     }]);
     expect(getAllAsync.mock.calls[0]?.[0]).toContain("FROM anomaly_evaluations");
   });
 });
 
-describe("confirmRecurringSpending", () => {
+describe("answerUnusualSpending", () => {
   beforeEach(() => { jest.resetModules(); mockInitDatabase.mockReset(); mockEnqueueOperation.mockReset(); });
 
-  it("records the confirmation and queues a versioned update", async () => {
-    const runAsync = jest.fn<(...args: any[]) => any>();
+  function unanswered(runAsync: jest.Mock<(...args: any[]) => any>) {
     mockInitDatabase.mockResolvedValue({
       withTransactionAsync: async (callback: () => Promise<void>) => callback(),
       runAsync,
-      getFirstAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue({ id: "evaluation-1", version: 1, confirmed_recurring_at: null }),
+      getFirstAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue({ id: "evaluation-1", version: 1, recurrence: null }),
     });
-    const { _resetDbCacheForTesting, confirmRecurringSpending } = await import("../unusualSpending");
+  }
+
+  it("records a frequent answer with its confirmation time and queues a versioned update", async () => {
+    const runAsync = jest.fn<(...args: any[]) => any>();
+    unanswered(runAsync);
+    const { _resetDbCacheForTesting, answerUnusualSpending } = await import("../unusualSpending");
     _resetDbCacheForTesting();
 
-    await confirmRecurringSpending("user-1", "device-1", "transaction-1");
+    await answerUnusualSpending("user-1", "device-1", "transaction-1", "frequent");
 
-    expect(runAsync.mock.calls[0]?.[0]).toContain("SET confirmed_recurring_at = ?");
+    expect(runAsync.mock.calls[0]?.[0]).toContain("SET recurrence = ?, confirmed_recurring_at = ?");
+    expect(runAsync.mock.calls[0]?.[1]).toBe("frequent");
+    expect(runAsync.mock.calls[0]?.[2]).toEqual(expect.any(String));
     expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       entity: "anomaly_evaluations", recordId: "evaluation-1", operationType: "update",
-      baseVersion: 1, changedFields: ["confirmed_recurring_at"],
+      baseVersion: 1, changedFields: ["recurrence", "confirmed_recurring_at"],
+      payload: { recurrence: "frequent", confirmed_recurring_at: expect.any(String) },
     }));
   });
 
-  it("does not queue a second confirmation", async () => {
+  it("records a yearly answer without a frequent confirmation", async () => {
+    const runAsync = jest.fn<(...args: any[]) => any>();
+    unanswered(runAsync);
+    const { _resetDbCacheForTesting, answerUnusualSpending } = await import("../unusualSpending");
+    _resetDbCacheForTesting();
+
+    await answerUnusualSpending("user-1", "device-1", "transaction-1", "yearly");
+
+    expect(runAsync.mock.calls[0]?.slice(1, 3)).toEqual(["yearly", null]);
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      changedFields: ["recurrence"], payload: { recurrence: "yearly" },
+    }));
+  });
+
+  it("does not queue a second answer", async () => {
     const runAsync = jest.fn<(...args: any[]) => any>();
     mockInitDatabase.mockResolvedValue({
       withTransactionAsync: async (callback: () => Promise<void>) => callback(),
       runAsync,
-      getFirstAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue({ id: "evaluation-1", version: 2, confirmed_recurring_at: "2026-10-31T08:00:00.000Z" }),
+      getFirstAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue({ id: "evaluation-1", version: 2, recurrence: "one_time" }),
     });
-    const { _resetDbCacheForTesting, confirmRecurringSpending } = await import("../unusualSpending");
+    const { _resetDbCacheForTesting, answerUnusualSpending } = await import("../unusualSpending");
     _resetDbCacheForTesting();
 
-    await confirmRecurringSpending("user-1", "device-1", "transaction-1");
+    await answerUnusualSpending("user-1", "device-1", "transaction-1", "frequent");
 
     expect(runAsync).not.toHaveBeenCalled();
     expect(mockEnqueueOperation).not.toHaveBeenCalled();

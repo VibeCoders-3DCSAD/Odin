@@ -2,8 +2,8 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation } from "../helpers";
 import { randomUUID } from "../uuid";
-import { detectUnusualSpendings, UNUSUAL_SPENDING_MODEL_VERSION as MODEL_VERSION, type SpendingTransaction, type UnusualSpendingInsight } from "@odin/spending-insights";
-export { detectUnusualSpendings, type UnusualSpendingInsight } from "@odin/spending-insights";
+import { detectUnusualSpendings, UNUSUAL_SPENDING_MODEL_VERSION as MODEL_VERSION, type SpendingRecurrence, type SpendingTransaction, type UnusualSpendingInsight } from "@odin/spending-insights";
+export { detectUnusualSpendings, type SpendingRecurrence, type UnusualSpendingInsight } from "@odin/spending-insights";
 
 const MAX_TRANSACTIONS = 5_000;
 
@@ -51,22 +51,22 @@ async function listTransactions(userId: string, fromDate: string): Promise<Spend
     : []);
 }
 
-async function listConfirmedRecurringIds(userId: string): Promise<Set<string>> {
+/** Every saved unusual-spending evaluation by transaction ID, with the user's answer or null if unanswered. */
+export async function listSavedRecurrences(userId: string): Promise<Map<string, SpendingRecurrence | null>> {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ transaction_id: string }>(
-    `SELECT transaction_id FROM anomaly_evaluations
-      WHERE user_id = ? AND deleted = 0 AND confirmed_recurring_at IS NOT NULL`,
+  const rows = await db.getAllAsync<{ transaction_id: string; recurrence: SpendingRecurrence | null }>(
+    "SELECT transaction_id, recurrence FROM anomaly_evaluations WHERE user_id = ? AND deleted = 0",
     userId,
   );
-  return new Set(rows.map((row) => row.transaction_id));
+  return new Map(rows.map((row) => [row.transaction_id, row.recurrence]));
 }
 
 export async function listUnusualSpendings(userId: string, now = new Date()): Promise<UnusualSpendingInsight[]> {
-  const [transactions, confirmedRecurringIds] = await Promise.all([
+  const [transactions, recurrences] = await Promise.all([
     listTransactions(userId, unusualSpendingStartDate(now)),
-    listConfirmedRecurringIds(userId),
+    listSavedRecurrences(userId),
   ]);
-  return detectUnusualSpendings(transactions, confirmedRecurringIds);
+  return detectUnusualSpendings(transactions, recurrences);
 }
 
 export async function listPersistedUnusualSpendings(userId: string): Promise<UnusualSpendingInsight[]> {
@@ -77,13 +77,13 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
     lower_bound_centavos: number;
     upper_bound_centavos: number;
     severity: number;
-    confirmed_recurring_at: string | null;
+    recurrence: SpendingRecurrence | null;
   }>(
     `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id,
             s.label AS subcategory_label, a.name AS account_name,
             e.usable_history_count, e.usual_spending_centavos,
             e.lower_bound_centavos, e.upper_bound_centavos, e.severity,
-            e.confirmed_recurring_at
+            e.recurrence
        FROM anomaly_evaluations e
        JOIN transactions t ON t.id = e.transaction_id
          AND t.user_id = e.user_id AND t.deleted = 0
@@ -108,7 +108,8 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
       severity: row.severity,
       usableHistoryCount: row.usable_history_count,
       subcategoryId: row.subcategory_id,
-      confirmedRecurring: row.confirmed_recurring_at !== null,
+      confirmedRecurring: row.recurrence === "frequent",
+      recurrence: row.recurrence,
     }]
     : []);
 }
@@ -144,26 +145,33 @@ export async function saveUnusualSpending(userId: string, deviceId: string, insi
   });
 }
 
-/** Records the user's "I'll be making this spending frequently" response so the expense joins its baseline. */
-export async function confirmRecurringSpending(userId: string, deviceId: string, transactionId: string): Promise<void> {
+/**
+ * Records the user's answer to an unusual expense. A frequent expense joins its baseline; a yearly one
+ * stays out of it and recurs in the forecast a year later; a one-time expense is left out of both.
+ * The first answer is final.
+ */
+export async function answerUnusualSpending(userId: string, deviceId: string, transactionId: string, recurrence: SpendingRecurrence): Promise<void> {
   const db = await getDb();
   const timestamp = new Date().toISOString();
   await db.withTransactionAsync(async () => {
-    const row = await db.getFirstAsync<{ id: string; version: number; confirmed_recurring_at: string | null }>(
-      "SELECT id, version, confirmed_recurring_at FROM anomaly_evaluations WHERE user_id = ? AND transaction_id = ? AND deleted = 0",
+    const row = await db.getFirstAsync<{ id: string; version: number; recurrence: SpendingRecurrence | null }>(
+      "SELECT id, version, recurrence FROM anomaly_evaluations WHERE user_id = ? AND transaction_id = ? AND deleted = 0",
       userId, transactionId,
     );
     if (!row) throw new Error("unusual spending insight not found");
-    if (row.confirmed_recurring_at !== null) return;
+    if (row.recurrence !== null) return;
+    // confirmed_recurring_at still marks frequent spending for app versions that predate the answer.
+    const confirmedAt = recurrence === "frequent" ? timestamp : null;
     await db.runAsync(
-      "UPDATE anomaly_evaluations SET confirmed_recurring_at = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?",
-      timestamp, timestamp, row.id, userId,
+      "UPDATE anomaly_evaluations SET recurrence = ?, confirmed_recurring_at = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?",
+      recurrence, confirmedAt, timestamp, row.id, userId,
     );
     await enqueueOperation(db, {
       userId, deviceId, entity: "anomaly_evaluations", recordId: row.id, operationType: "update",
-      baseVersion: row.version, changedFields: ["confirmed_recurring_at"],
-      payload: { confirmed_recurring_at: timestamp },
-      failureMessage: "Your recurring spending confirmation could not be synchronized.",
+      baseVersion: row.version,
+      changedFields: confirmedAt ? ["recurrence", "confirmed_recurring_at"] : ["recurrence"],
+      payload: confirmedAt ? { recurrence, confirmed_recurring_at: confirmedAt } : { recurrence },
+      failureMessage: "Your unusual spending answer could not be synchronized.",
     });
   });
 }

@@ -124,8 +124,9 @@ it("surfaces saved observations, removes confirmed ones, and rejects foreign tax
   `);
   const { getDashboardReminders } = await import("../dashboardReminders");
   expect((await getDashboardReminders("u1", "2026-10-22")).attention.items).toMatchObject([{ amountCentavos: 2000, detail: "Will this be a frequent expense?", target: { kind: "observation", id: "expense" } }]);
-  const { confirmRecurringSpending } = await import("../unusualSpending");
-  await confirmRecurringSpending("u1", "device", "expense");
+  const { answerUnusualSpending } = await import("../unusualSpending");
+  // Any answer settles the question, including "one time only".
+  await answerUnusualSpending("u1", "device", "expense", "one_time");
   expect((await getDashboardReminders("u1", "2026-10-22")).attention.items).toEqual([]);
 });
 

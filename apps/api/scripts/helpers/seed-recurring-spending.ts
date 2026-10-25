@@ -21,7 +21,7 @@ export function buildSeedRecurringSpending(userId: string, transactions: Transac
   return insights.map((insight) => ({
     id: randomUUID(), user_id: userId, transaction_id: insight.transactionId,
     subcategory_id: insight.subcategoryId, amount_centavos: insight.amountCentavos,
-    evaluated_at: timestamp, confirmed_recurring_at: timestamp,
+    evaluated_at: timestamp, confirmed_recurring_at: timestamp, recurrence: "frequent",
     model_version: UNUSUAL_SPENDING_MODEL_VERSION, profile_label: null,
     history_days: insight.usableHistoryCount, raw_anomaly_score: insight.severity,
     is_anomaly: true, should_alert_user: false, review_status: "not_alerted",

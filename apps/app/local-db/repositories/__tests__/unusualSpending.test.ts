@@ -46,12 +46,24 @@ describe("detectUnusualSpendings", () => {
     const repeat = { ...history[0]!, id: "repeat", transactionDate: "2026-04-02", amountCentavos: 100_000 };
 
     const unconfirmed = detectUnusualSpendings([...history, spike, repeat]);
-    const confirmed = detectUnusualSpendings([...history, spike, repeat], new Set(["spike"]));
+    const confirmed = detectUnusualSpendings([...history, spike, repeat], new Map([["spike", "frequent" as const]]));
 
     expect(confirmed[0]).toMatchObject({ transactionId: "spike", confirmedRecurring: true });
     expect(unconfirmed[1]).toMatchObject({ transactionId: "repeat", usableHistoryCount: 6 });
     expect(confirmed[1]).toMatchObject({ transactionId: "repeat", usableHistoryCount: 7 });
     expect(confirmed[1]!.upperBoundCentavos).toBeGreaterThan(unconfirmed[1]!.upperBoundCentavos);
+  });
+
+  it("keeps a yearly or one-time expense out of the baseline but reports the answer", () => {
+    const spike = { ...history[0]!, id: "spike", transactionDate: "2026-04-01", amountCentavos: 100_000 };
+    const repeat = { ...history[0]!, id: "repeat", transactionDate: "2026-04-02", amountCentavos: 100_000 };
+
+    for (const recurrence of ["yearly", "one_time"] as const) {
+      const insights = detectUnusualSpendings([...history, spike, repeat], new Map([["spike", recurrence]]));
+
+      expect(insights[0]).toMatchObject({ transactionId: "spike", recurrence, confirmedRecurring: false });
+      expect(insights[1]).toMatchObject({ transactionId: "repeat", usableHistoryCount: 6, recurrence: null });
+    }
   });
 
   it("uses the previous twelve months as its history window", () => {

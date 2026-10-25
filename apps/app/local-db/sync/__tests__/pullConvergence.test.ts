@@ -15,8 +15,9 @@ describe("recurring spending confirmation pull convergence", () => {
       version: 2, deleted: false, created_at: confirmedAt, updated_at: confirmedAt,
     }, "user-1");
 
+    // A server row from before the recurrence column still reads as a frequent answer.
     expect(row).toMatchObject({
-      confirmed_recurring_at: confirmedAt, usable_history_count: 24,
+      confirmed_recurring_at: confirmedAt, recurrence: "frequent", usable_history_count: 24,
       usual_spending_centavos: 140000, lower_bound_centavos: 90000,
       upper_bound_centavos: 210000, severity: 2.5,
     });
@@ -24,6 +25,17 @@ describe("recurring spending confirmation pull convergence", () => {
     await applyPullRow(db as never, "anomaly_evaluations", row);
     expect(db.runAsync.mock.calls[0]).not.toContain(undefined);
     expect(db.runAsync.mock.calls[0]).toContain(confirmedAt);
+    expect(db.runAsync.mock.calls[0]).toContain("frequent");
+  });
+
+  it("keeps a yearly answer, which has no frequent confirmation", () => {
+    const row = normalizePullRow("anomaly_evaluations", {
+      id: "evaluation-2", user_id: "user-1", transaction_id: "tuition-1", subcategory_id: "tuition",
+      amount_centavos: 3_000_000, recurrence: "yearly", confirmed_recurring_at: null,
+      version: 2, deleted: false,
+    }, "user-1");
+
+    expect(row).toMatchObject({ recurrence: "yearly", confirmed_recurring_at: null });
   });
 });
 
