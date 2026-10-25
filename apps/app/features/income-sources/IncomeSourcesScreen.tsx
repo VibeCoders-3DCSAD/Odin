@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { CaretRight, CurrencyDollar, TrendUp } from "phosphor-react-native";
+import { CaretRight, TrendUp } from "phosphor-react-native";
+import { PesoIcon } from "../../components/PesoIcon";
 import { listIncomeSources, deleteIncomeSource, type IncomeSource } from "../../local-db/repositories/financialFoundations";
 import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
 import { getIncomeSummary } from "../../local-db/repositories/incomeSummary";
 import { Banner, styles as ui, v4, v4Font } from "../../components/BudgieForm";
-import AvailableBalanceCard from "../../components/AvailableBalanceCard";
+import { AmountHero } from "../../components/BudgieForm";
 import IncomeSourceActions from "./IncomeSourceActions";
 import { incomeScheduleLabel, formatIncomeAmount } from "./presentation";
 
@@ -57,7 +58,7 @@ export default function IncomeSourcesScreen({ userId, deviceId, onAdd, onEdit, o
 
   return (
     <View style={{ gap: 11 }}>
-      <AvailableBalanceCard variant="compact" label="Estimated monthly income after debt deductions" amount={loading ? "—" : formatIncomeAmount(summary.netMonthlyCentavos)} detail={loading ? "Loading income sources…" : sourceCount} />
+      <AmountHero label="ESTIMATED MONTHLY INCOME AFTER DEBT DEDUCTIONS" amountCentavos={loading ? undefined : summary.netMonthlyCentavos} detail={loading ? "Loading income sources…" : sourceCount} />
       {!loading && sources.length > 0 ? <Text style={s.detail}>{`PHP ${formatIncomeAmount(summary.grossMonthlyCentavos)} after taxes, before PHP ${formatIncomeAmount(summary.salaryLoanDeductionsCentavos)} in salary-loan deductions`}</Text> : null}
       {loading || sources.length > 0 ? (
         <View style={s.sectionHead}>
@@ -80,7 +81,7 @@ export default function IncomeSourcesScreen({ userId, deviceId, onAdd, onEdit, o
         <View style={s.list}>
           {sources.map((source, index) => (
             <Pressable key={source.id} onPress={() => { setSelected(source); setConfirming(false); }} accessibilityRole="button" accessibilityLabel={`Actions for ${source.name}`} disabled={deletingId === source.id} style={[s.row, index > 0 ? s.divider : null]}>
-              <View style={s.tile}><CurrencyDollar size={18} color="#FFFFFF" weight="bold" /></View>
+              <View style={s.tile}><PesoIcon size={18} color="#FFFFFF" /></View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text numberOfLines={1} style={ui.listTitle}>{source.name}</Text>
                 <Text numberOfLines={1} style={s.subtitle}>{incomeScheduleLabel(source)}</Text>

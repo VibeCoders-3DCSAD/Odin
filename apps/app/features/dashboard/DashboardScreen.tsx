@@ -2,9 +2,10 @@ import React from "react";
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
 import {
   ArrowDownLeft,
+  ArrowDownRight,
   ArrowUpRight,
 } from "phosphor-react-native";
-import AvailableBalanceCard from "../../components/AvailableBalanceCard";
+import { AmountHero } from "../../components/BudgieForm";
 import { SnapshotCard } from "./components/SnapshotCard";
 import { DashboardEmptyState } from "./components/DashboardEmptyState";
 import { DashboardPartialData } from "./components/DashboardPartialData";
@@ -50,6 +51,13 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
   const prevMonthName = getPreviousMonthName();
   const incomeDelta = deltaPercent(s.currentMonthIncomeCentavos, s.previousMonthIncomeCentavos);
   const expenseDelta = deltaPercent(s.currentMonthExpenseCentavos, s.previousMonthExpenseCentavos);
+  // Balance at the start of the month is today's balance minus this month's net activity.
+  const monthStartBalanceCentavos = s.currentBalanceCentavos - (s.currentMonthIncomeCentavos - s.currentMonthExpenseCentavos);
+  const balanceDelta = monthStartBalanceCentavos > 0 ? deltaPercent(s.currentBalanceCentavos, monthStartBalanceCentavos) : null;
+  const showBalanceDelta = s.accountCount > 0 && !!balanceDelta;
+  const balanceDetail = s.accountCount === 0
+    ? "Add an account to see your balance"
+    : balanceDelta ?? `Across ${s.accountCount} ${s.accountCount === 1 ? "account" : "accounts"}`;
   const categoryExpenseTotal = s.categorySpending.reduce((sum, category) => sum + category.total_centavos, 0);
   const visibleSpending = s.categorySpending.slice(0, 4);
   const hiddenSpendingTotal = s.categorySpending.slice(4).reduce((sum, category) => sum + category.total_centavos, 0);
@@ -92,12 +100,14 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
         </Pressable>
       ) : null}
       {/* Balance card */}
-      <AvailableBalanceCard
-        variant="compact"
-        amount={(s.currentBalanceCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-        detail={incomeDelta ? `${incomeDelta} vs last month` : undefined}
-        detailPill
-      />
+      <AmountHero label="AVAILABLE BALANCE" amountCentavos={s.currentBalanceCentavos} detail={showBalanceDelta ? undefined : balanceDetail}>
+        {showBalanceDelta ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10, paddingVertical: 3, paddingHorizontal: 10, borderRadius: 999, backgroundColor: P.brand, alignSelf: "flex-start" }}>
+            {balanceDelta?.startsWith("-") ? <ArrowDownRight size={12} color="#FFFFFF" weight="bold" /> : <ArrowUpRight size={12} color="#FFFFFF" weight="bold" />}
+            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, color: "#FFFFFF" }}>{balanceDelta}</Text>
+          </View>
+        ) : null}
+      </AmountHero>
 
       {/* Income / Expense cards */}
       <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>

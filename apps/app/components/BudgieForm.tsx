@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { CaretRight, Check, Info, Warning, WarningCircle } from "phosphor-react-native";
@@ -134,17 +134,19 @@ type AmountHeroProps = {
 };
 
 export function AmountHero({ children, label = "AMOUNT", amountCentavos, detail }: AmountHeroProps) {
+  // An unsized SVG keeps its intrinsic size on native, so the gradient is drawn at the measured card size.
+  const [size, setSize] = useState({ width: 0, height: 0 });
   return (
-    <View style={styles.hero}>
-      <Svg style={StyleSheet.absoluteFill} preserveAspectRatio="none">
+    <View style={styles.hero} onLayout={(event) => setSize(event.nativeEvent.layout)}>
+      {size.width > 0 ? <Svg style={StyleSheet.absoluteFill} width={size.width} height={size.height}>
         <Defs>
           <LinearGradient id="amountHero" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor={v4.brand} />
             <Stop offset="1" stopColor={v4.brandMid} />
           </LinearGradient>
         </Defs>
-        <Rect width="100%" height="100%" fill="url(#amountHero)" />
-      </Svg>
+        <Rect width={size.width} height={size.height} fill="url(#amountHero)" />
+      </Svg> : null}
       <Text style={styles.heroLabel}>{label}</Text>
       {amountCentavos !== undefined ? (
         <Text style={styles.heroAmount}>

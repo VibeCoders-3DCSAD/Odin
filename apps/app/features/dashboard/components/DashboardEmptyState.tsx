@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native";
+import { AmountHero } from "../../../components/BudgieForm";
 import { dashboardColors as P, dashboardStyles } from "../dashboardAppearance";
 
 type Props = { onNavigate: (page: string) => void };
@@ -15,6 +16,7 @@ const actions = [
 export function DashboardEmptyState({ onNavigate }: Props) {
   return (
     <View style={{ gap: 14 }}>
+      <AmountHero label="AVAILABLE BALANCE" amountCentavos={0} detail="Add an account to see your balance" />
       <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>Set up your financial picture</Text>
       <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.secondary }}>Start with an account, then add the records that make each dashboard summary useful.</Text>
        {actions.map((action) => <Pressable key={action.page} accessibilityRole="button" accessibilityLabel={action.label} onPress={() => onNavigate(action.page)} style={dashboardStyles.card}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.ink }}>{action.label}</Text><Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.secondary, marginTop: 6 }}>{action.copy}</Text></Pressable>)}

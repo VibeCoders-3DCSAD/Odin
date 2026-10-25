@@ -56,10 +56,10 @@ it("keeps every populated dashboard section, amounts and navigation", async () =
   const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={onNavigate} onOpenReminder={onOpenReminder} />);
   await waitFor(() => expect(view.getByText("₱2,700 left until Oct 31")).toBeTruthy());
 
-  for (const title of ["Dashboard", "Available Balance", "Income", "Expenses", "Net monthly cash flow", "Savings goals", "Needs Attention", "Upcoming", "Savings & Debt Profile", "Trends", "Spending", "Recent", "Safe to spend", "Spending forecast"]) {
+  for (const title of ["Dashboard", "AVAILABLE BALANCE", "Income", "Expenses", "Net monthly cash flow", "Savings goals", "Needs Attention", "Upcoming", "Savings & Debt Profile", "Trends", "Spending", "Recent", "Safe to spend", "Spending forecast"]) {
     expect(view.getAllByText(title).length).toBeGreaterThan(0);
   }
-  for (const text of ["62,480", "52,000", "36,700", "₱15,300", "2 savings goals in progress · ₱82,500 saved.", "Electric bill", "Expected salary", "Emergency fund", "Debt burden", "Financial margin", "Credit card", "Lunch", "-₱320", "100%", "About ₱208 a day for 13 days.", "3.8k / 4k", "PHP 49,300"]) {
+  for (const text of ["PHP 62,480.00", "+32.4%", "52,000", "36,700", "₱15,300", "2 savings goals in progress · ₱82,500 saved.", "Electric bill", "Expected salary", "Emergency fund", "Debt burden", "Financial margin", "Credit card", "Lunch", "-₱320", "100%", "About ₱208 a day for 13 days.", "3.8k / 4k", "PHP 49,300"]) {
     expect(view.getAllByText(text).length).toBeGreaterThan(0);
   }
   const links: [string, string][] = [["View Savings goals", "savings-goals"], ["View all spending categories", "categories"], ["View all transactions", "transactions"], ["Open Financial Plan", "financial-plan"], ["View spending forecast", "spending-forecast"]];
@@ -81,4 +81,19 @@ it("preserves available sections and retry when the summary fails", () => {
   }
   fireEvent.press(view.getByLabelText("Retry dashboard refresh"));
   expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+it("falls back to the account count when the balance has no monthly change", () => {
+  const data = populatedData();
+  mockUseDashboardData.mockReturnValue({ ...data, summary: { ...data.summary, currentMonthIncomeCentavos: 0, currentMonthExpenseCentavos: 0 } });
+  const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={jest.fn()} onOpenReminder={jest.fn()} />);
+  expect(view.getByText("Across 1 account")).toBeTruthy();
+});
+
+it("asks for an account in the balance card when none exists", () => {
+  const data = populatedData();
+  mockUseDashboardData.mockReturnValue({ ...data, summary: { ...data.summary, accountCount: 0, currentBalanceCentavos: 0 } });
+  const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={jest.fn()} onOpenReminder={jest.fn()} />);
+  expect(view.getByText("Add an account to see your balance")).toBeTruthy();
+  expect(view.getByText("PHP 0.00")).toBeTruthy();
 });
