@@ -20,11 +20,9 @@ type ForecastTransactionRow = {
   category_slug: string | null;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function description(row: ForecastTransactionRow): string | undefined {
@@ -157,8 +155,4 @@ export async function listQuarterlySpending(userId: string, quarters: string[]):
     const categories = rows.filter((row) => row.quarter === quarter).map((row) => ({ category: row.category, amountCentavos: row.amount_centavos }));
     return { quarter, totalCentavos: categories.reduce((sum, point) => sum + point.amountCentavos, 0), categories };
   });
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

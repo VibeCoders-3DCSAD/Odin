@@ -123,11 +123,9 @@ const VALID_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "month
 const VALID_RECURRING_STATUSES = ["active", "paused", "completed", "deleted"] as const;
 const VALID_OCCURRENCE_STATUSES = ["scheduled", "posted", "skipped", "failed"] as const;
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function now(): string {

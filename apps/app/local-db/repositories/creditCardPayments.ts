@@ -35,11 +35,9 @@ export type CreateStatementPaymentInput = StatementPaymentContext & Pick<CreateE
   "savings_goal_withdrawals" | "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name"
 > & { notes?: string | null };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function mapPayment(row: PaymentRow): CreditCardPayment {

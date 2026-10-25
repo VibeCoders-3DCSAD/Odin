@@ -76,8 +76,7 @@ type SavingsGoalRow = {
   status: SavingsGoalStatus; version: number; is_emergency_fund: number;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 function now() { return new Date().toISOString(); }
 const GOAL_SELECT = "SELECT g.*, a.name AS linked_account_name FROM savings_goals g LEFT JOIN financial_accounts a ON a.id = g.linked_account_id AND a.user_id = g.user_id AND a.deleted = 0";
 

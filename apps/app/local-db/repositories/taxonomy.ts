@@ -197,14 +197,12 @@ function mapSubcategory(row: SubcategoryRow): Subcategory {
   };
 }
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 const DATABASE_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
 const TAXONOMY_ICON_KEYS: ReadonlySet<string> = new Set(taxonomyIconKeys);
 const COLOR_HEX_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function boolToInt(v: boolean | undefined | null): number {

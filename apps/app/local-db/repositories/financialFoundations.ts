@@ -405,11 +405,9 @@ async function syncIncomeSourceRecurringTemplate(
 // Helpers
 // ---------------------------------------------------------------------------
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function boolToInt(v: boolean | undefined | null): number {

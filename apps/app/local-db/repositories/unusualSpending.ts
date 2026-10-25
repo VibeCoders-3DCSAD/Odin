@@ -16,11 +16,9 @@ type SpendingTransactionRow = {
   account_name: string | null;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 export function unusualSpendingStartDate(now = new Date()): string {
@@ -174,8 +172,4 @@ export async function answerUnusualSpending(userId: string, deviceId: string, tr
       failureMessage: "Your unusual spending answer could not be synchronized.",
     });
   });
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

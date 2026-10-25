@@ -68,8 +68,7 @@ type DebtAccountRow = {
   has_payment_history?: number;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 function now() { return new Date().toISOString(); }
 
 function parsePresetData(raw: string | null): DebtPresetData {

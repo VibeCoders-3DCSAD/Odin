@@ -29,8 +29,7 @@ type DueTemplate = {
   ends_on: string | null;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 
 // The ids a post writes for one payday. The server job derives the same ids, so whichever of the server or a
 // device posts first wins and every later post of that payday is a no-op.
@@ -99,8 +98,4 @@ export async function postDueRecurringIncome(userId: string, deviceId: string, t
     }
   }
   return posted;
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

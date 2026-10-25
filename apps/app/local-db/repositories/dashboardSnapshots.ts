@@ -23,13 +23,9 @@ export type DashboardSnapshotWithMeta = DashboardSnapshot & {
   stale: boolean;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) {
-    dbPromise = initDatabase();
-  }
-  return dbPromise;
+function getDb(): Promise<SQLite.SQLiteDatabase> {
+  return initDatabase();
 }
 
 export async function upsertSnapshot(
@@ -114,8 +110,4 @@ export async function deleteSnapshot(
     userId,
     source,
   );
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

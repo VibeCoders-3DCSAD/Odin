@@ -23,8 +23,7 @@ type CommitmentCore = {
   dueDate: string | null;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 
 // Reservation tables carry no user_id, so they are scoped through the owning plan.
 const SAVINGS_RESERVATIONS_SQL = `
@@ -148,8 +147,4 @@ export async function getPlanCommitmentReview(userId: string, planId: string): P
       debtAdditionalCentavos: sum(debts, (row) => row.additionalCentavos),
     },
   };
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

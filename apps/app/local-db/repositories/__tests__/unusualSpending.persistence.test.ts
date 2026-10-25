@@ -18,8 +18,7 @@ describe("saveUnusualSpending", () => {
       runAsync,
       getFirstAsync,
     });
-    const { _resetDbCacheForTesting, saveUnusualSpending } = await import("../unusualSpending");
-    _resetDbCacheForTesting();
+    const { saveUnusualSpending } = await import("../unusualSpending");
 
     await saveUnusualSpending("user-1", "device-1", {
       transactionId: "transaction-1", subcategoryId: "subcategory-1", amountCentavos: 100_000,
@@ -44,8 +43,7 @@ describe("saveUnusualSpending", () => {
       recurrence: "frequent",
     }]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { _resetDbCacheForTesting, listPersistedUnusualSpendings } = await import("../unusualSpending");
-    _resetDbCacheForTesting();
+    const { listPersistedUnusualSpendings } = await import("../unusualSpending");
 
     await expect(listPersistedUnusualSpendings("user-1")).resolves.toEqual([{
       transactionId: "transaction-1", transactionDate: "2026-10-30", amountCentavos: 100_000,
@@ -72,8 +70,7 @@ describe("answerUnusualSpending", () => {
   it("records a frequent answer with its confirmation time and queues a versioned update", async () => {
     const runAsync = jest.fn<(...args: any[]) => any>();
     unanswered(runAsync);
-    const { _resetDbCacheForTesting, answerUnusualSpending } = await import("../unusualSpending");
-    _resetDbCacheForTesting();
+    const { answerUnusualSpending } = await import("../unusualSpending");
 
     await answerUnusualSpending("user-1", "device-1", "transaction-1", "frequent");
 
@@ -90,8 +87,7 @@ describe("answerUnusualSpending", () => {
   it("records a yearly answer without a frequent confirmation", async () => {
     const runAsync = jest.fn<(...args: any[]) => any>();
     unanswered(runAsync);
-    const { _resetDbCacheForTesting, answerUnusualSpending } = await import("../unusualSpending");
-    _resetDbCacheForTesting();
+    const { answerUnusualSpending } = await import("../unusualSpending");
 
     await answerUnusualSpending("user-1", "device-1", "transaction-1", "yearly");
 
@@ -108,8 +104,7 @@ describe("answerUnusualSpending", () => {
       runAsync,
       getFirstAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue({ id: "evaluation-1", version: 2, recurrence: "one_time" }),
     });
-    const { _resetDbCacheForTesting, answerUnusualSpending } = await import("../unusualSpending");
-    _resetDbCacheForTesting();
+    const { answerUnusualSpending } = await import("../unusualSpending");
 
     await answerUnusualSpending("user-1", "device-1", "transaction-1", "frequent");
 

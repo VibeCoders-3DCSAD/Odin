@@ -11,11 +11,9 @@ export type DebtSummary = { openingCentavos: number; paidCentavos: number; remai
 export type CategoryBreakdown = { label: string; amountCentavos: number };
 export type AllocationSummary = { categoryCentavos: number; debtCentavos: number; savingsCentavos: number; spentCentavos: number } | null;
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  dbPromise ??= initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function periodPredicate(range: ReportRange): [string, string] {
@@ -228,8 +226,4 @@ export async function getAllocationSummary(userId: string, range: ReportRange): 
   if (!row) return null;
   const categoryCentavos = row.category ?? 0;
   return { categoryCentavos, debtCentavos: row.debt, savingsCentavos: row.savings, spentCentavos: row.spent };
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

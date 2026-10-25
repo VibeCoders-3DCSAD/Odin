@@ -17,11 +17,9 @@ type AlertRow = Omit<AlertCacheRecord, "route_params" | "related_entities" | "me
   allowed_actions_json: string;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function parseJson<T>(value: string, fallback: T): T {
@@ -145,8 +143,4 @@ export async function isAlertCacheStale(userId: string, alertId?: string): Promi
     ? await db.getFirstAsync<{ cached_at: string }>("SELECT cached_at FROM alert_cache WHERE user_id = ? AND id = ?", userId, alertId)
     : await db.getFirstAsync<{ cached_at: string }>("SELECT cached_at FROM alert_cache WHERE user_id = ? ORDER BY cached_at DESC LIMIT 1", userId);
   return !row || Date.now() - new Date(row.cached_at).getTime() > STALE_THRESHOLD_MS;
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

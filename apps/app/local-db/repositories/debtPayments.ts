@@ -11,8 +11,7 @@ export type DebtPayment = {
 
 export type DebtPaymentContext = { paymentId: string; debtAccountId: string };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 
 export async function listDebtPayments(userId: string, debtAccountId: string): Promise<DebtPayment[]> {
   const db = await getDb();

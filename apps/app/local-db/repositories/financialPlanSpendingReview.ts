@@ -6,8 +6,7 @@ type PlanRow = { id: string; period_start: string; period_end: string };
 type AllocationRow = { id: string; category_id: string | null; subcategory_id: string | null; allocation_rule: PlanSpendingReviewRow["allocationRule"]; allocated_amount_centavos: number };
 type SpendingGroupRow = { category_id: string | null; subcategory_id: string | null; amount_centavos: number };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 
 // D2: posted, live expenses in the plan period, excluding debt payments, credit-card payments, savings transfers and
 // scheduled (bill and remittance) payments. Those are reserved separately from category allocations, so they are not category spending.

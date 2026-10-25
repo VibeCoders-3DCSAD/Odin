@@ -10,7 +10,6 @@ jest.mock("expo-sqlite", () => ({
 jest.mock("../../client", () => ({ initDatabase: jest.fn() }));
 
 import {
-  _resetDbCacheForTesting,
   getAccountBalanceAt,
   getAllocationSummary,
   getBudgetActualSummary,
@@ -21,7 +20,6 @@ import {
 } from "../financialReports";
 
 beforeEach(() => {
-  _resetDbCacheForTesting();
   mockGetFirstAsync.mockReset();
   mockGetAllAsync.mockReset();
   // eslint-disable-next-line @typescript-eslint/no-require-imports

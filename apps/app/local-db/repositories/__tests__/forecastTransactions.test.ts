@@ -15,8 +15,7 @@ describe("listForecastTransactions", () => {
   it("reads only the current user's posted income and expenses with their purpose-level category slugs", async () => {
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([{ id: "b9df3d82-b64a-4b25-b8aa-dd36f70a42be", transaction_date: "2026-09-04", amount_centavos: 24550, transaction_type: "expense", merchant_name: "Market", counterparty_name: null, notes: null, category_slug: "food" }]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
-    _resetDbCacheForTesting();
+    const { listForecastTransactions } = await import("../forecastTransactions");
     await expect(listForecastTransactions("user-1")).resolves.toEqual([{ transactionId: "b9df3d82-b64a-4b25-b8aa-dd36f70a42be", date: "2026-09-04", amount: 245.5, category: "food", transactionType: "expense", description: "Market" }]);
     expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'"), "user-1");
     expect(getAllAsync.mock.calls[0]![0]).toContain("t.transaction_type IN ('income', 'expense')");
@@ -30,8 +29,7 @@ describe("listForecastTransactions", () => {
   it("bounds history from the requested date", async () => {
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
-    _resetDbCacheForTesting();
+    const { listForecastTransactions } = await import("../forecastTransactions");
     await listForecastTransactions("user-1", { fromDate: "2025-09-15" });
     expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("t.transaction_date >= ?"), "user-1", "2025-09-15");
   });
@@ -39,8 +37,7 @@ describe("listForecastTransactions", () => {
   it("leaves out biller and remittance payments only when asked", async () => {
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
-    _resetDbCacheForTesting();
+    const { listForecastTransactions } = await import("../forecastTransactions");
     await listForecastTransactions("user-1", { fromDate: "2025-10-01", excludeScheduledPayments: true });
     await listForecastTransactions("user-1", { fromDate: "2025-10-01" });
     expect(getAllAsync.mock.calls[0]![0]).toContain("NOT EXISTS (SELECT 1 FROM scheduled_payment_records r");
@@ -54,8 +51,7 @@ describe("listForecastTransactions", () => {
     // The check flags the laptop and gift; the tuition is no longer flagged but keeps its saved yearly answer.
     mockListUnusualSpendings.mockResolvedValue([{ transactionId: "laptop" }, { transactionId: "gift" }, { transactionId: "confirmed" }]);
     mockListSavedRecurrences.mockResolvedValue(new Map([["gift", "one_time"], ["confirmed", "frequent"], ["tuition", "yearly"]]));
-    const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
-    _resetDbCacheForTesting();
+    const { listForecastTransactions } = await import("../forecastTransactions");
     const list = (excludeUnusualSpending: boolean) => listForecastTransactions("user-1", { excludeUnusualSpending });
     const kept = await list(true);
     expect(kept.map((item) => [item.transactionId, item.recurrence])).toEqual([["confirmed", undefined], ["phone", undefined], ["tuition", "yearly"]]);
@@ -75,8 +71,7 @@ describe("listForecastTransactions", () => {
       { quarter: "2026Q1", category: "food", amount_centavos: 1_000_000 },
     ]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { _resetDbCacheForTesting, listQuarterlySpending } = await import("../forecastTransactions");
-    _resetDbCacheForTesting();
+    const { listQuarterlySpending } = await import("../forecastTransactions");
 
     await expect(listQuarterlySpending("user-1", ["2025Q4", "2026Q1", "2026Q2"])).resolves.toEqual([
       { quarter: "2025Q4", totalCentavos: 11_700_000, categories: [{ category: "food", amountCentavos: 900_000 }, { category: "billers_remittances", amountCentavos: 10_800_000 }] },
@@ -92,8 +87,7 @@ describe("listForecastTransactions", () => {
   it("does not send malformed or zero-value local rows", async () => {
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([{ id: "bad", transaction_date: "2026-09-04", amount_centavos: 0, transaction_type: "expense", merchant_name: null, counterparty_name: null, notes: null, category_slug: null }]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
-    _resetDbCacheForTesting();
+    const { listForecastTransactions } = await import("../forecastTransactions");
     await expect(listForecastTransactions("user-1")).resolves.toEqual([]);
   });
 
@@ -106,8 +100,7 @@ describe("listForecastTransactions", () => {
   it("returns only recent posted expense subcategories for plan recommendations", async () => {
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([{ subcategory_id: "groceries" }, { subcategory_id: "transport" }]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { _resetDbCacheForTesting, listRecentExpenseSubcategoryIds } = await import("../forecastTransactions");
-    _resetDbCacheForTesting();
+    const { listRecentExpenseSubcategoryIds } = await import("../forecastTransactions");
 
     await expect(listRecentExpenseSubcategoryIds("user-1", "2026-03-30")).resolves.toEqual(["groceries", "transport"]);
     expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("transaction_type = 'expense'"), "user-1", "2026-03-30");

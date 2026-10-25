@@ -49,11 +49,9 @@ const TAXONOMY_JOINS = `
   LEFT JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id) AND c.user_id = t.user_id
 `;
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function pad(n: number): string {
@@ -210,8 +208,5 @@ export async function getDailyTrends(userId: string): Promise<DailyTrend[]> {
   }));
 }
 
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
-}
 
 export type { DashboardSummary, DashboardTransaction, CategorySpending, DailyTrend };

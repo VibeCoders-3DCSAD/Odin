@@ -17,8 +17,7 @@ export type SafeToSpend = {
 const CATEGORY_LIMIT = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 
 function daysBetween(start: string, end: string): number {
   return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS);

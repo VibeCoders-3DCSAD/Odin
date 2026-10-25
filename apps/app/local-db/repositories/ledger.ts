@@ -151,11 +151,9 @@ export type TransactionFilters = {
   after?: Pick<TransactionListItem, "transaction_date" | "amount_centavos" | "created_at" | "row_id">;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function now(): string {

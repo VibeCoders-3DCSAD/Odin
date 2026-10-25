@@ -48,8 +48,7 @@ type Column = keyof typeof COLUMNS;
 const BOOLEAN_COLUMNS = new Set<Column>(["auto_post", "is_family_support", "is_dependent_support", "protected_by_default"]);
 const FREQUENCIES: ScheduledPaymentFrequency[] = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 
 function map(row: Row): ScheduledPayment {
   return {
@@ -341,8 +340,4 @@ export async function postDueScheduledPayments(userId: string, deviceId: string,
     }
   }
   return posted;
-}
-
-export function _resetDbCacheForTesting(): void {
-  dbPromise = null;
 }

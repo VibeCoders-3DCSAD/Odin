@@ -69,8 +69,7 @@ async function setup() {
   await financialPlansMigration.up(db as any);
   await db.execAsync(ACTUALS_SCHEMA);
   mockInitDatabase.mockResolvedValue(db);
-  const { getPlanCommitmentReview, _resetDbCacheForTesting } = await import("../financialPlanCommitmentReview");
-  _resetDbCacheForTesting();
+  const { getPlanCommitmentReview } = await import("../financialPlanCommitmentReview");
   return { run, review: (planId = "plan-1", userId = USER) => getPlanCommitmentReview(userId, planId) };
 }
 

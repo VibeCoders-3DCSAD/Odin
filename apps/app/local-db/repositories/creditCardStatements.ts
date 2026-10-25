@@ -27,11 +27,9 @@ export type CreateCreditCardStatementInput = Pick<CreditCardStatement,
   "cycle_id" | "statement_date" | "statement_balance_centavos" | "minimum_due_centavos" | "due_date"
 > & { finance_charge_centavos?: number };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function mapStatement(row: StatementRow): CreditCardStatement {

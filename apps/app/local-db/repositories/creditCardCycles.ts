@@ -43,11 +43,9 @@ export type CreditCardCycleDefaults = {
   billing_cycle_days: number | null;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function now(): string {

@@ -12,10 +12,9 @@ jest.mock("../../client", () => ({
   initDatabase: jest.fn(),
 }));
 
-import { getDashboardSummary, _resetDbCacheForTesting } from "../dashboardSummary";
+import { getDashboardSummary } from "../dashboardSummary";
 
 beforeEach(() => {
-  _resetDbCacheForTesting();
   mockGetFirstAsync.mockReset();
   mockGetAllAsync.mockReset();
 

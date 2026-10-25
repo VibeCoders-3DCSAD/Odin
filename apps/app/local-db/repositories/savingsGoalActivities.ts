@@ -6,8 +6,7 @@ import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 
 type Row = { id: string; savings_goal_id: string; transaction_id: string; activity_kind: SavingsActivityKind; amount_centavos: number; activity_date: string; notes: string | null; version: number };
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 function map(row: Row): SavingsActivity { return { id: row.id, savingsGoalId: row.savings_goal_id, transactionId: row.transaction_id, kind: row.activity_kind, amountCentavos: row.amount_centavos, activityDate: row.activity_date, notes: row.notes, version: row.version }; }
 
 export async function listSavingsGoalActivities(userId: string, savingsGoalId: string): Promise<SavingsActivity[]> {

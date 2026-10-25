@@ -28,11 +28,9 @@ function mapRow(row: PrivacySettingsRow): PrivacySettings {
   };
 }
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!dbPromise) dbPromise = initDatabase();
-  return dbPromise;
+  return initDatabase();
 }
 
 function settingsId(userId: string): string {

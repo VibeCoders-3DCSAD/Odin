@@ -20,8 +20,7 @@ type Row = { id: string; scheduled_payment_id: string; transaction_id: string; o
 
 const SELECT = "SELECT id, scheduled_payment_id, transaction_id, occurrence_date, payment_date, amount_centavos, source, notes, version FROM scheduled_payment_records";
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-function getDb() { dbPromise ??= initDatabase(); return dbPromise; }
+function getDb() { return initDatabase(); }
 
 function map(row: Row): ScheduledPaymentRecord {
   return { id: row.id, scheduledPaymentId: row.scheduled_payment_id, transactionId: row.transaction_id, occurrenceDate: row.occurrence_date, paymentDate: row.payment_date, amountCentavos: row.amount_centavos, source: row.source, notes: row.notes, version: row.version };

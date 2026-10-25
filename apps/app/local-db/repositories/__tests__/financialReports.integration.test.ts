@@ -4,13 +4,12 @@ import { createSqliteHarness } from "./sqliteHarness";
 const mockInitDatabase = jest.fn<() => Promise<unknown>>();
 jest.mock("../../client", () => ({ initDatabase: () => mockInitDatabase() }));
 
-import { _resetDbCacheForTesting, getCashFlowSummary, getCashOutflowDistribution, listCategoryBreakdown } from "../financialReports";
+import { getCashFlowSummary, getCashOutflowDistribution, listCategoryBreakdown } from "../financialReports";
 
 let harness: ReturnType<typeof createSqliteHarness>;
 const range = { startDate: "2026-10-01", endDate: "2026-10-17" };
 
 beforeEach(() => {
-  _resetDbCacheForTesting();
   harness = createSqliteHarness();
   harness.sqlite.exec(`
     CREATE TABLE transactions (id text primary key, user_id text, transaction_type text, status text default 'posted', transaction_date text default '2026-10-10', amount_centavos integer, subcategory_id text, destination_savings_goal_id text, deleted integer default 0);
