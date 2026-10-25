@@ -343,33 +343,27 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     return (
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={{ paddingTop: 0 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to categories"
-            onPress={goBack}
-            style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}
-          >
-            <ArrowLeft size={18} color={palette.ink} weight="bold" />
-            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.mut }}>
-              Categories
-            </Text>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 14, color: palette.mut }}>
-              /
-            </Text>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: palette.ink }}>
-              {viewingCategoryLabel}
-            </Text>
-          </Pressable>
-
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            <View>
-              <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: palette.ink }}>
-                {viewingCategoryLabel}
-              </Text>
-              <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 2 }}>
-                Subcategories
-              </Text>
-            </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to categories"
+              onPress={goBack}
+              hitSlop={8}
+              style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
+              <ArrowLeft size={18} color={palette.ink} weight="bold" />
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: viewingCategory?.color_hex ?? DEFAULT_TAXONOMY_COLOR, alignItems: "center", justifyContent: "center" }}>
+                <TaxonomyIcon iconKey={viewingCategory?.icon_key} size={21} color="#fff" weight="fill" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text numberOfLines={2} style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: palette.ink }}>
+                  {viewingCategoryLabel}
+                </Text>
+                <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut, marginTop: 2 }}>
+                  {viewingSubs.length} subcategor{viewingSubs.length === 1 ? "y" : "ies"}
+                </Text>
+              </View>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Add subcategory"
