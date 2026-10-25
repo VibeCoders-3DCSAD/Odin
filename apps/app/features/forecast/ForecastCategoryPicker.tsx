@@ -9,12 +9,13 @@ type Props = { categories: CategoryOption[]; selected: CategoryOption; onSelect:
 export function ForecastCategoryPicker({ categories, selected, onSelect }: Props) {
   const [open, setOpen] = useState(false);
   const Caret = open ? CaretUp : CaretDown;
-  return <View style={{ marginTop: 12 }}>
+  // Raised above the chart below, so the open list overlays it instead of pushing it down.
+  return <View style={{ marginTop: 12, zIndex: 10 }}>
     <Pressable accessibilityRole="button" accessibilityLabel={`Choose spending category: ${selected.label}`} accessibilityState={{ expanded: open }} onPress={() => setOpen((value) => !value)} style={{ flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: v4.hairline, backgroundColor: v4.surface, borderRadius: 10, paddingHorizontal: 12, minHeight: 48 }}>
       <Text style={{ flex: 1, fontFamily: v4Font, fontSize: 13, fontWeight: "700", color: v4.ink }}>{selected.label}</Text>
       <Caret color={v4.mut} size={16} weight="bold" />
     </Pressable>
-    {open ? <View style={{ marginTop: 6, borderWidth: 1, borderColor: v4.hairline, borderRadius: 10, overflow: "hidden", backgroundColor: v4.surface }}>
+    {open ? <View style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 6, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, borderWidth: 1, borderColor: v4.hairline, borderRadius: 10, overflow: "hidden", backgroundColor: v4.surface }}>
       {/* Keep about five touch-sized rows visible; longer category lists scroll within the card. */}
       <ScrollView nestedScrollEnabled style={{ maxHeight: 5 * 48 }}>
         {categories.map((category) => <Pressable key={category.key} accessibilityRole="radio" accessibilityLabel={category.label} accessibilityState={{ checked: category.key === selected.key }} onPress={() => { onSelect(category.key); setOpen(false); }} style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: category.key === selected.key ? "#EFFEF7" : v4.surface }}>

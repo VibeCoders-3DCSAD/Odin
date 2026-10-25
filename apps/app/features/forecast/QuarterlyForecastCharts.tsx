@@ -257,13 +257,14 @@ function RangePicker({ options, selected, onSelect }: { options: { value: Foreca
   const [open, setOpen] = useState(false);
   const Caret = open ? CaretUp : CaretDown;
   const current = options.find((option) => option.value === selected) ?? options[0]!;
-  return <View style={{ flexGrow: 1 }}>
+  // Raised above the cards below, so the open list overlays them instead of pushing them down.
+  return <View style={{ flexGrow: 1, zIndex: 10 }}>
     <Pressable accessibilityRole="button" accessibilityLabel={`Choose time range: ${current.label}`} accessibilityState={{ expanded: open }} onPress={() => setOpen((value) => !value)} style={{ alignItems: "center", backgroundColor: v4.surface, borderColor: v4.hairline, borderRadius: 10, borderWidth: 1, flexDirection: "row", gap: 6, minHeight: 44, paddingHorizontal: 12 }}>
       <CalendarBlank color={v4.mut} size={15} weight="bold" />
       <Text style={{ color: v4.ink, flex: 1, fontFamily: v4Font, fontSize: 12, fontWeight: "700" }}>{current.label}</Text>
       <Caret color={v4.mut} size={14} weight="bold" />
     </Pressable>
-    {open ? <View style={{ backgroundColor: v4.surface, borderColor: v4.hairline, borderRadius: 10, borderWidth: 1, marginTop: 6, overflow: "hidden" }}>
+    {open ? <View style={{ backgroundColor: v4.surface, borderColor: v4.hairline, borderRadius: 10, borderWidth: 1, elevation: 6, left: 0, marginTop: 6, overflow: "hidden", position: "absolute", right: 0, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, top: "100%" }}>
       {options.map((option) => <Pressable key={option.value} accessibilityRole="radio" accessibilityLabel={option.label} accessibilityState={{ checked: option.value === selected }} onPress={() => { onSelect(option.value); setOpen(false); }} style={{ alignItems: "center", backgroundColor: option.value === selected ? "#EFFEF7" : v4.surface, flexDirection: "row", gap: 8, minHeight: 44, paddingHorizontal: 12 }}>
         <Text style={{ color: v4.ink, flex: 1, fontFamily: v4Font, fontSize: 13 }}>{option.label}</Text>
         {option.value === selected ? <Check color={v4.brandMid} size={16} weight="bold" /> : null}
@@ -367,7 +368,7 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
   const quarters = slots.map((slot) => slot.key);
   const current = slots[selected];
   const choose = <T,>(set: (value: T) => void) => (value: T) => { set(value); setSelected(null); };
-  const settings = <View style={{ alignItems: "flex-start", flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+  const settings = <View style={{ alignItems: "flex-start", flexDirection: "row", flexWrap: "wrap", gap: 8, zIndex: 10 }}>
     {monthly ? <Segmented label="Show spending" options={[{ value: "monthly" as const, label: "Monthly" }, { value: "quarterly" as const, label: "Quarterly" }]} selected={scale} onSelect={choose(setScale)} /> : null}
     <RangePicker options={(["past", "around", "ahead"] as const).map((value) => ({ value, label: rangeLabel(RANGE_POINTS[scale][value]) }))} selected={range} onSelect={choose(setRange)} />
   </View>;
@@ -392,7 +393,7 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
     {reliability ? <View accessibilityRole="alert" style={{ backgroundColor: forecast.quality === "INSUFFICIENT_DATA" ? "#FFF4E5" : "#EFFEF7", borderColor: forecast.quality === "INSUFFICIENT_DATA" ? "#F3C98B" : P.line, borderRadius: 12, borderWidth: 1, padding: 12 }}>
       <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, lineHeight: 18 }}>{reliability}</Text>
     </View> : null}
-    <View>
+    <View style={{ zIndex: 10 }}>
       {settings}
       {months || !forecastQuarters.length ? null : <QuarterTabs quarters={forecastQuarters} offset={firstForecast} selected={selected} onSelect={setSelected} />}
       <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>{labels.dates(current.key)}{spending}</Text>
