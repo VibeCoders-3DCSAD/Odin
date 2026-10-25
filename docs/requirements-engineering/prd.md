@@ -91,7 +91,7 @@ Confirmed primary product areas are:
 17. As a user, I want to edit, delete, search, sort, and filter transactions, so that I can correct mistakes and review history easily.
 18. As a user, I want my dashboard to show my current financial picture, so that I can quickly understand balance, recent activity, budget status, alerts, goals, debts, and forecasts.
 19. As a user, I want the dashboard to show only information Odin can present responsibly, so that I do not rely on misleading guidance.
-20. As a user, I want to create and manage budgets, so that I can plan spending around my real income cycle.
+20. As a user, I want to generate, adjust, and accept a monthly Financial Plan using my available account balances, so that I can budget categories, savings, debt, and bills together.
 21. As a user, I want budget guidance to respect protected expenses, so that essential obligations are not treated as easy cuts.
 22. As a user, I want Odin to explain budget recommendations, so that I can decide whether to accept, modify, or reject them.
 23. As a user, I want to view forecasts for future financial activity by total and category, so that I can plan upcoming budget periods.
@@ -197,9 +197,9 @@ Confirmed primary product areas are:
 - Account/income/obligation tests should cover offline CRUD, ownership scoping, local balance availability, tombstone deletes, and sync convergence.
 - Ledger tests should cover income, expense, transfer invariants, line items, templates, recurring records, drafts where implemented, local balance effects, history filters, edits, and deletes.
 - Dashboard tests should cover local rendering offline, immediate update after local ledger writes, stale/cached labels, and graceful degradation for missing downstream modules.
-- Budget tests should cover offline CRUD, allocations, restriction-aware validation, activation/closure/archive actions, budget health, and sync convergence.
-- Budget recommendation tests should cover online refresh, cached offline display, explanation fields, protected-category behavior, and accept/modify/reject boundary behavior.
-- Forecasting tests should cover online refresh, cached offline display, cold-start/fallback/personalized metadata, expected events where included, and the four-line next-month category-group graph.
+- Financial Plan tests should cover current-month planning within available balances, automatic and manual commitment budgets, recorded payment status, category rules, acceptance, offline spending review, confirmed reset, and sync convergence. Legacy standalone budgets remain historical sync data.
+- Financial Plan recommendation tests should cover online generation, seasonal category and amount suggestions, fallback estimates, commitment edits with optional recalculation, underfunding confirmation, and acceptance within available funds.
+- Forecasting tests should cover online refresh, cached offline display, reliability metadata, scheduled payments, monthly and quarterly ranges, actual-versus-forecast comparisons, and saved forecast runs.
 - Anomaly/overspending tests should cover cached display, explanations, user feedback actions where syncable, whitelist/suppression rules, culturally expected spending cases, and ownership checks.
 - Alerts tests should cover cached inbox display, acknowledge/dismiss/snooze/clear actions, preference updates, in-app overspending visibility, and push-token online boundary.
 - Savings tests should cover goal CRUD, contributions, immediate progress updates, priority data, projection cache staleness, and validated category behavior once finalized.

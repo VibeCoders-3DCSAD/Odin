@@ -9,6 +9,8 @@
   activity history.
 - View the current-cycle savings amount reserved by the Financial Plan,
   required contributions, shortfall, and unallocated amount.
+- View the Financial Plan's remaining category budget after recorded spending,
+  separately from money reserved for savings goals.
 - Explain when no goals exist and allow users to create a goal.
 
 ### 7.2 Goal Management and Linked Accounts

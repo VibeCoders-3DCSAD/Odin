@@ -408,11 +408,15 @@ All offline-capable modules inherit the sync behavior of §3.2: local-first writ
 
 ### 6.8 Budgets and Allocations
 
+Intelligent Financial Planning owns active monthly budgets. Legacy standalone
+budget records remain syncable historical data. The detailed requirements are in
+[Intelligent Financial Planning](features/12-intelligent-financial-planning.md).
+
 | ID | Component | Requirement summary |
 | :--- | :--- | :--- |
-| BU-01 | Budget CRUD | Create/view/edit/delete budgets offline; set amounts, date ranges, and allocation methods; sync via user CRUD sync. |
-| BU-02 | Budget Actions | Activate, close, or archive budgets; show budget health indicators from spending against allocations. |
-| BU-03 | Restriction-Aware Validation | Validate allocations against protected/fixed restrictions; never recommend reductions to protected categories. |
+| BU-01 | Monthly Financial Plan | Generate, adjust, and accept a current-calendar-month plan using a chosen amount within eligible account balances; generate recommendations online and retain accepted plans offline. |
+| BU-02 | Plan Review | Show accepted category budgets against recorded spending, review past plans, and require confirmation before resetting an accepted plan. |
+| BU-03 | Category Rules | Treat Fixed allocations as exact amounts, Minimum allocations as floors, and Flexible allocations as adjustable; retain required rules when the plan is infeasible. |
 
 ### 6.9 Budget Recommendations
 
@@ -421,13 +425,15 @@ All offline-capable modules inherit the sync behavior of §3.2: local-first writ
 | BR-01 | Recommendation Generation | Generate budget recommendations via server-side calculation; cache results locally for offline display. |
 | BR-02 | Recommendation Display | Explain the reasoning; indicate which categories are protected from cuts. |
 | BR-03 | Recommendation Actions | Allow accept, modify, or reject per recommendation; never apply without explicit acceptance. |
+| BR-04 | Commitment Budgets | Include full-month savings, debt, and bill budgets by default, including occurrences paid during the month; offer manual budgeting and keep budgets separate from payment status. |
+| BR-05 | Allocation Edits | After commitment edits, update remaining funds and let users recalculate or adjust category allocations themselves; accept only feasible plans with valid amounts within available funds. |
 
 ### 6.10 Forecasts and Expected Events
 
 | ID | Component | Requirement summary |
 | :--- | :--- | :--- |
 | FO-01 | Forecast Generation | Generate/refresh forecasts through online execution; cache runs, series, points, explanations, and metadata for offline display. |
-| FO-02 | Forecast Display | Show total and category-level forecasts; label as personalized, fallback, or newcomer; show a four-line next-month category-group graph. |
+| FO-02 | Forecast Display | Show total and selected-category spending in monthly and quarterly views, with actual history, selectable ranges, reliability guidance, and current-period forecast-versus-actual comparisons; follow the ranges in Financial Reports §13.7. |
 | FO-03 | Expected Events | Show expected recurring events within forecast periods; incorporate into forecast display. |
 
 ### 6.11 Anomalies and Overspending
@@ -435,7 +441,7 @@ All offline-capable modules inherit the sync behavior of §3.2: local-first writ
 | ID | Component | Requirement summary |
 | :--- | :--- | :--- |
 | AN-01 | Anomaly Detection | Detect unusual spending/overspending risks (Isolation Forest executed on the server); cache results for offline display. |
-| AN-02 | Anomaly Display | Explain the unusual pattern; allow users to mark intentional spending as expected. |
+| AN-02 | Anomaly Display | Explain the unusual pattern; let users answer one-time, frequent, or yearly and explain the effect on comparisons and forecasts. |
 | AN-03 | Suppression Rules | Allow whitelist rules to suppress repeated warnings; sync approved rules via user CRUD sync; account for culturally expected spending patterns. |
 
 ### 6.12 Alerts and Notifications
@@ -469,7 +475,7 @@ All offline-capable modules inherit the sync behavior of §3.2: local-first writ
 | ID | Component | Requirement summary |
 | :--- | :--- | :--- |
 | RA-01 | Report Generation | Generate weekly, monthly, and custom date-range reports from local aggregate data; show cached comparison labels. |
-| RA-02 | Report Contents | Include spending summaries, budget-vs-actual, forecast summaries, savings progress, and debt summaries; support category-level views. |
+| RA-02 | Report Contents | Include cash outflow breakdowns, accepted-plan budget-versus-actual summaries, last month's forecast versus actual, spending outlooks, savings progress, debt summaries, and unusual-spending observations; follow Financial Reports §§13.3–13.10. |
 | RA-03 | Report Layout | Usable across mobile and desktop viewports. |
 
 ### 6.16 Help and Problem Reporting

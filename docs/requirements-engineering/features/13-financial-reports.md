@@ -7,7 +7,7 @@
 - Also allow users to choose a custom date range with a start date and an end date on or after it.
 - Show the dates covered by the selected reporting period.
 - Allow users to refresh report information and update locally calculated summaries after transaction synchronization.
-- Keep current account, savings, and debt summaries clearly distinguishable from activity measured within the selected reporting period.
+- Keep current savings and debt summaries clearly distinguishable from activity measured within the selected reporting period.
 
 ### 13.2 Report Filters
 
@@ -17,25 +17,22 @@
 - Explain when no activity matches the selected dates and filters.
 - Keep current-position summaries and the future forecast clearly identified where they are independent of the selected historical activity range.
 
-### 13.3 Cash Flow and Outflow Breakdown
+### 13.3 Cash Outflow Breakdown
 
-- Show recorded income, cash outflow, and net cash flow for the selected reporting period.
+- Show a `Where it went` breakdown of recorded cash outflow for the selected reporting period.
 - Include expenses and explicit savings contributions in cash outflow while excluding ordinary transfers between accounts.
-- Calculate net cash flow as income less cash outflow.
 - Show a cash outflow pie chart with amounts and percentage shares.
 - Distinguish debt repayments and savings contributions from other spending categories in the outflow breakdown.
 - Show the top spending categories and their amounts for the period.
-- Compare income and outflow automatically with the relevant previous period.
-- Compare monthly views with the preceding month and the current week with the previous week.
-- For the yearly view, compare average monthly activity with the previous year's average month rather than comparing a full-year total with one month.
-- Explain when no prior value is available for a percentage comparison.
 
-### 13.4 Account Summary
+### 13.4 Forecast Versus Actual
 
-- Show the number of current eligible financial accounts and their combined current balance.
-- Exclude credit-card credit from the account balance total.
-- Compare the current balance with the balance at the end of the relevant comparison period.
-- Clearly label the balance as a current position rather than implying it is the balance at the end of every selected reporting range.
+- Compare last month's forecast spending with its recorded actual spending, independently of the selected reporting period.
+- Show the forecast, actual spending, and amount over or under forecast.
+- Show up to three categories with the largest absolute differences from the forecast, identifying whether each was over or under.
+- Use the latest forecast saved during that month when available and show its saved date.
+- When no saved run covers that month, request a forecast as of its first day using earlier spending. Label this result as recalculated and require an online connection for the request.
+- Explain when earlier spending is insufficient or the comparison cannot be loaded without blocking other report sections.
 
 ### 13.5 Financial Plan Summaries
 
@@ -58,13 +55,16 @@
 
 ### 13.7 Spending Forecast
 
-- Provide a spending outlook for the next twelve months, grouped by quarter.
+- Provide a spending outlook starting with the current Philippine calendar month, with monthly and quarterly views when at least six months of spending history support a monthly baseline. Use a quarterly view for provisional forecasts.
+- Offer monthly ranges covering the past six months, three past and three forecast months, or six forecast months starting with the current month.
+- Offer quarterly ranges covering the past six quarters, three past and three forecast quarters, or two past and four forecast quarters starting with the current quarter. Show available points when history is shorter than the selected range.
 - Show total projected spending and allow users to select a category to inspect its projected spending over time.
-- Include available historical quarterly spending alongside future projections and visually distinguish actual activity from forecasts.
-- Allow users to select a quarter and review its dates and total or category amount.
+- Include available historical spending alongside projections and visually distinguish actual activity from forecasts.
+- Allow users to select a month or quarter and review its dates and total or category amount.
+- Show current-month or current-quarter spending so far against its forecast, including category comparisons and amounts over forecast.
 - Account for scheduled bills and remittances separately from other forecast spending to avoid double counting.
 - Identify scheduled-payment projections as based on the user's recorded billers and remittances.
-- Use recorded spending history while excluding identified unusual spending from the ordinary forecast baseline.
+- Use recorded spending history while excluding unusual expenses identified as one-time or awaiting an answer. Include confirmed frequent spending in the ordinary baseline and project confirmed yearly payments in their recurring month.
 - Explain projected changes, relatively expensive periods, and major spending categories in simple language.
 - Make clear that forecasts are estimates and actual spending may differ.
 - Keep the forecast's future horizon separate from the reporting period used for historical summaries.
@@ -79,6 +79,7 @@
 - Indicate when saved forecast information may be outdated.
 - Show useful forecast interpretations without requiring additional generated wording to finish first.
 - Preserve an available forecast when optional interpretation generation fails.
+- Keep up to five saved forecast runs per user per calendar month for later forecast-versus-actual review.
 
 ### 13.9 Unusual-Spending Observations
 
@@ -92,9 +93,10 @@
 
 ### 13.10 Frequent Spending Confirmation
 
-- Allow users to indicate that they expect to make an identified unusual expense frequently.
+- Allow users to classify an identified unusual expense as one-time, frequent, or yearly.
 - Include confirmed frequent spending in the history used for future comparisons in that subcategory.
-- Show when the user has already confirmed an observation as frequent spending and explain its effect on future comparisons.
+- Keep one-time spending outside the usual-spending baseline and forecast. Include yearly payments in forecasts for their recurring month.
+- Show the user's saved answer and explain its effect on future comparisons or forecasts.
 - Keep the observation available for review after confirmation.
 - Preserve the user's answer and allow retry when confirmation cannot be completed.
 

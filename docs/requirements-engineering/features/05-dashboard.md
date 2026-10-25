@@ -97,6 +97,8 @@ This document describes the Dashboard's functional requirements.
   expense or subcategory and amount. Ask, "Will this be a frequent expense?"
   and link to the existing frequent-spending confirmation flow in
   [Financial Reports](13-financial-reports.md#1310-frequent-spending-confirmation).
+- Let users review and answer an unusual-spending observation as one-time,
+  frequent, or yearly through the linked Financial Reports flow.
 - Show upcoming debt repayments, scheduled savings contributions, and unpaid
   credit-card payment deadlines starting seven calendar days before their due
   dates and continuing through the due date.

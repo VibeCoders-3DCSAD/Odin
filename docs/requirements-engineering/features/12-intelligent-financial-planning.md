@@ -22,6 +22,7 @@
 - Allow users to select broad expense categories or individual subcategories for the plan.
 - Prevent a broad category and its individual subcategories from being budgeted together in the same plan.
 - Recommend previously used categories and subcategories for selection.
+- Use recorded seasonal spending to recommend categories and a planning amount for the plan month. Keep the suggested planning amount within available money and let users change it.
 - Allow users to provide a planned amount for selected categories without spending history.
 - Allow users to choose Flexible, Minimum, or Fixed treatment for a category or subcategory in future Financial Plans.
 - Treat Fixed as an exact allocation, Minimum as a non-reducible floor, and Flexible as adjustable without a required floor.
@@ -30,24 +31,26 @@
 
 ### 12.4 Debt and Savings Commitment Review
 
-- During setup, offer independent, initially unchecked options to include savings contributions and debt repayments; collect amounts after `Continue to Plan`.
-- On the plan page, show only the selected commitment sections with their scheduled amounts and dates before generating category allocations.
-- Generate category allocations only after `Recommend Budget Allocation`; generate immediately after setup if neither commitment option is selected.
+- Include savings contributions, debt repayments, and billers and remittances in automatic budgeting by default.
+- During setup, offer independent, initially unchecked "I'll budget savings manually", "I'll budget debt repayments manually", and "I'll budget billers & remittances manually" options. Checking an option excludes that commitment type from automatic budgeting and lets the user enter its budgets after `Continue to Plan`.
+- Show scheduled amounts and dates alongside manually entered budgets before generating category allocations. Keep automatic budgets for commitment types the user has not chosen to budget manually.
+- When the user selects manual budgeting, generate category allocations after they review the commitment budgets and choose `Calculate Allocations`. Otherwise, generate allocations after `Continue to Plan` using the automatic commitment budgets.
 - Clearly identify exclusions and explain that excluding debt repayments from the plan does not cancel existing payment obligations.
-- Default omitted API inclusion preferences to excluded. Require an explicit reviewed amount for every selected scheduled commitment before generating category budgets; do not silently substitute schedule amounts.
+- When API exclusion preferences are omitted, include savings contributions and debt repayments. Use scheduled amounts for automatic commitment budgets; require an explicit amount for each commitment the user chooses to budget manually before generating category allocations.
 - Apply exclusions to optional surplus guidance as well as scheduled reservations.
 - Allow users to choose how much to set aside for each payment and goal, and review or adjust these budgets again before accepting the plan.
 - Show the original amount due or scheduled contribution alongside the user's chosen budget.
 - Warn when a debt budget is below the amount due and may result in a missed payment.
 - Warn when a savings budget is below the contribution schedule and may delay goal completion.
-- Show a live breakdown of the planning amount, savings, debt, other scheduled commitments, and the amount available for categories; account for scheduled payments already made.
+- Show a live breakdown of the planning amount, savings, debt, other scheduled commitments, and the amount available for categories.
+- Keep full-month commitment budgets separate from payment status. Include occurrences already paid or contributed during the month in the monthly budget, and show recorded payments against their original requirements when reviewing the accepted plan.
 - Prevent acceptance when total allocations and extra amounts exceed the available plan funds.
 - Keep plan reservations separate from actual payments and savings contributions; accepting a plan does not move money.
 
 ### 12.5 Billers and Remittances
 
 - Include active billers and remittances due within the plan month.
-- Account for all scheduled occurrences in the month and reserve only amounts that remain unpaid.
+- Account for all scheduled occurrences in the month, including paid and partially paid occurrences. Default each occurrence's budget to its full scheduled amount and allow users to choose a manual budget.
 - Show each commitment's name, reserved amount, and due date, together with the section total.
 - Avoid counting the same scheduled expense in both a separate commitment reservation and the category spending budget.
 - Count scheduled expenses toward matching Fixed or Minimum category requirements and budget only the remaining requirement separately.
@@ -56,7 +59,7 @@
 ### 12.6 Spending Budget Recommendation
 
 - Recommend category budgets using the chosen planning amount after debt, savings, and bill-payment reservations.
-- Use spending forecasts informed by recorded expense history, excluding expenses identified as anomalous from the forecast baseline.
+- Use spending forecasts informed by recorded expense history. Exclude unusual expenses identified as one-time or awaiting an answer; include confirmed frequent spending and account for confirmed yearly payments in their recurring month.
 - Use recorded spending as a fallback estimate when a forecasting service cannot provide a usable forecast.
 - Respect Fixed and Minimum requirements while distributing money among selected categories.
 - Show each category's treatment, estimated spending, proposed budget, and any constrained or unfunded amount.
@@ -79,7 +82,7 @@
 
 ### 12.8 Savings Contribution Plan
 
-- When savings contributions are selected, include scheduled contributions for active savings goals due during the plan month, including emergency fund goals.
+- By default, budget scheduled contributions for active savings goals due during the plan month, including emergency fund goals. When the user chooses manual savings budgeting, use their reviewed contribution budgets.
 - Show the selected contribution budgets and their scheduled dates.
 - Use Savings and Debt Profile Classification to inform optional surplus guidance, including an eligible emergency fund as a possible destination.
 - Allow users to choose an extra savings amount after required reservations and category allocations.
@@ -88,7 +91,7 @@
 
 ### 12.9 Debt Repayment Plan
 
-- When debt repayments are selected, include active loan repayments and authoritative credit-card statement minimums due during the plan period, accounting for recorded payments where applicable.
+- By default, budget loan repayments and authoritative credit-card statement minimums due during the plan period, including payments already made that month and loans paid off during the month. When the user chooses manual debt budgeting, use their reviewed repayment budgets.
 - Show original payment requirements, selected repayment budgets, due dates, and underfunding warnings.
 - Use Savings and Debt Profile Classification to inform optional surplus guidance without automatically bypassing other commitments.
 - Allow users to choose an extra debt repayment amount separately from scheduled repayment budgets.
@@ -100,12 +103,14 @@
 
 - Present savings and debt budgets, billers and remittances, and category allocations in a clear plan review.
 - Show remaining unallocated money and optional surplus guidance separately from scheduled commitments.
+- Require confirmation before accepting underfunded savings, debt, or bill budgets, explaining the risk of delayed goals or missed payments.
 - Leave optional surplus amounts under the user's control, including when classification information is incomplete or outdated.
 - Require users to refresh an unaccepted recommendation when its source information changes.
-- Require `Update Budget Allocation` after a scheduled savings or debt budget changes; prevent acceptance until category allocations have been regenerated successfully.
+- After a savings, debt, or bill budget changes, update the remaining plan money and let users choose `Recalculate` to rebalance category allocations or adjust eligible category allocations themselves.
+- Hide explanations and surplus guidance based on the earlier allocation after commitment budgets change. Allow acceptance without recalculation when the edited plan remains feasible, contains valid amounts, and fits the planning amount.
 - Prevent acceptance while the plan is infeasible, contains invalid amounts, or exceeds available plan funds.
 - Save the accepted plan for its month and allow users to reopen it without regenerating its original allocations or commitments.
-- Retain inclusion choices with newly accepted plans and hide excluded savings and debt sections when reopening them.
+- Retain the accepted savings and debt budgets and any explicit plan exclusions when reopening a plan. Manual budgeting alone does not exclude the user's reviewed budgets from the accepted plan.
 
 ### 12.11 Accepted Plan Spending Review
 
