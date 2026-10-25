@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  Image,
   Modal,
   PanResponder,
   Pressable,
@@ -1032,7 +1031,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         ) : (
           <>
         {hideChrome ? null : activeTab ? (
-          /* Top bar: profile and sync, logo, notifications */
+          /* Top bar: profile and sync, reports */
           <View style={{ backgroundColor: shellColor, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center", borderBottomWidth: v3Page ? 1 : 0, borderBottomColor: dashboardColors.divider }}>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 11 }}>
               <Pressable
@@ -1045,11 +1044,6 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
               </Pressable>
               {syncButton}
             </View>
-            <Image
-              source={require("../assets/budgie-logo.png")}
-              accessibilityLabel="Budgie logo"
-              style={{ width: 30, height: 30, resizeMode: "contain" }}
-            />
             <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end" }}>
               <Pressable
                 accessibilityRole="button"
