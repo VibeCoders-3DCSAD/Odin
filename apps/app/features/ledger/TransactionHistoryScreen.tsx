@@ -8,6 +8,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { ArrowDownLeft, ArrowsLeftRight, ArrowUpRight, CalendarCheck, Funnel, MagnifyingGlass } from "phosphor-react-native";
@@ -168,6 +169,7 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       accessibilityState={{ selected }}
       style={{ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: selected ? P.brand : P.border, backgroundColor: selected ? CHIP_ON : P.surface }}
     >
@@ -178,6 +180,7 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
 
 export default function TransactionHistoryScreen({ userId, deviceId, accessToken, unusualSpending, onUnusualSpendingDismissed, onNewTransaction, onLoadMoreChange, getScrollOffset, scrollTo, syncVersion = 0, onEditingChange }: Props) {
   const { showToast } = useToast();
+  const { height: windowHeight } = useWindowDimensions();
 
   // The page mounts with the spinner so navigating here is immediate; cached rows are painted on the next
   // frame by the first load. The filters always start at their defaults, so only those totals are restored.
@@ -193,6 +196,8 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
+  // The search the rows on screen were loaded with; the typed text only counts once it is submitted.
+  const [loadedSearch, setLoadedSearch] = useState("");
   const [sortBy, setSortBy] = useState<string>(DEFAULT_SORT_BY);
   const [sortDir, setSortDir] = useState<string>(DEFAULT_SORT_DIR);
   const [dateRange, setDateRange] = useState<string>("all");
@@ -260,6 +265,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       setVisibleCount(INITIAL_RENDER_ROWS);
       setTransactions((current) => reuseUnchangedRows(current, cached.rows));
       setTotals(cached.totals);
+      setLoadedSearch(filters.search ?? "");
       setHasMore(cached.hasMore);
       setStale(false);
       setLoading(false);
@@ -284,6 +290,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
       if (!cached && !refreshInPlace) setVisibleCount(INITIAL_RENDER_ROWS);
       setTransactions((current) => reuseUnchangedRows(current, rows));
       setTotals(nextTotals);
+      setLoadedSearch(filters.search ?? "");
       setHasMore(nextHasMore);
       lastRowRef.current = rows[rows.length - 1] ?? null;
       writeTransactionCache(cacheKey, { rows, totals: nextTotals, hasMore: nextHasMore });
@@ -511,7 +518,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     return `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
-  const filtered = activeFilterCount > 0 || search.trim().length > 0;
+  const filtered = activeFilterCount > 0 || loadedSearch.length > 0;
 
   // The list stays mounted, hidden, while a transaction is edited: remounting every loaded row on return
   // blocks the JS thread for seconds, whereas a mounted list only re-renders the rows the edit changed.
@@ -552,6 +559,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
             onChangeText={setSearch}
             onSubmitEditing={() => load()}
             returnKeyType="search"
+            accessibilityLabel="Search transactions"
             placeholder="Search transactions..."
             placeholderTextColor={P.secondary}
             style={{ flex: 1, minHeight: 46, fontFamily: "Manrope", fontSize: 13.5, color: P.ink }}
@@ -631,7 +639,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
             bottomSpacing={26}
             style={{
               backgroundColor: P.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-              paddingTop: 10, paddingHorizontal: 20, maxHeight: "88%",
+              paddingTop: 10, paddingHorizontal: 20,
             }}
           >
             <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: P.divider, alignSelf: "center", marginBottom: 12 }} />
@@ -640,7 +648,8 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
               Filters and sort
             </Text>
 
-            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 11, paddingBottom: 14 }} showsVerticalScrollIndicator={false}>
+            {/* Capping the scroll area itself, not the sheet: a capped sheet with a shrinking child left a blank the size of its bottom padding under the buttons. */}
+            <ScrollView style={{ maxHeight: Math.round(windowHeight * 0.62) }} contentContainerStyle={{ gap: 11, paddingBottom: 14 }} showsVerticalScrollIndicator={false}>
             <Text style={sectionLabel}>SHOW</Text>
             <View>
               {FILTER_TYPES.map((t) => (
