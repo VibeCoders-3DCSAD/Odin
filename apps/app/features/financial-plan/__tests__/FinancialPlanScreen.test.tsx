@@ -456,6 +456,7 @@ describe("FinancialPlanScreen", () => {
     await waitFor(() => expect(view.getByLabelText("Include Housing in Financial Plan")).toBeTruthy());
     fireEvent.press(view.getByLabelText("Include Housing in Financial Plan"));
     expect(view.queryByLabelText("One-time plan amount for Housing in pesos")).toBeNull();
+    fireEvent.press(view.getByLabelText("Show subcategories for Housing"));
     expect(view.getByLabelText("Include Rent in Financial Plan").props.accessibilityState.checked).toBe(false);
   });
 
@@ -466,7 +467,9 @@ describe("FinancialPlanScreen", () => {
     mockListSubcategories.mockResolvedValue(["gifts", "tuition"].map((id) => ({ id, category_id: "misc", label: id === "gifts" ? "Gifts" : "Tuition", kind: "expense", minimum_amount_centavos: null, fixed_amount_centavos: null })));
     mockListPlanRecommendations.mockResolvedValue({ subcategoryIds: ["gifts"], categoryIds: [], historySubcategoryIds: ["gifts", "tuition"], historyCategoryIds: ["misc"], seasonal: true, expectedSpend: { subcategories: {}, categories: {} } });
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
-    await waitFor(() => expect(view.getByLabelText("Include Gifts in Financial Plan").props.accessibilityState.checked).toBe(true));
+    await waitFor(() => expect(view.getByLabelText("Show subcategories for Miscellaneous")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Show subcategories for Miscellaneous"));
+    expect(view.getByLabelText("Include Gifts in Financial Plan").props.accessibilityState.checked).toBe(true);
 
     expect(mockListPlanRecommendations).toHaveBeenCalledWith("user-1", "2026-10");
     expect(view.getByText("Recommended from this time last year and your past 12 months")).toBeTruthy();

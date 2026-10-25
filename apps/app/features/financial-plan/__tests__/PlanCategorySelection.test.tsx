@@ -85,6 +85,7 @@ describe("PlanCategorySelection", () => {
        onContinue={jest.fn()}
     />);
 
+    fireEvent.press(view.getByLabelText("Show subcategories for Food"));
     fireEvent.press(view.getByLabelText("Configure Financial Plan rule for Groceries"));
     fireEvent.press(view.getByLabelText("Fixed rule for Groceries"));
     fireEvent.changeText(view.getByLabelText("Fixed amount for Groceries in pesos"), "1250.50");
@@ -177,13 +178,13 @@ describe("PlanCategorySelection", () => {
     expect(view.queryByLabelText("Skip Savings Contributions")).toBeNull();
   });
 
-  it("renders every category after the first frames and still toggles one rendered later", async () => {
-    const categories = Array.from({ length: 6 }, (_, index) => ({ ...food, id: `category-${index}`, slug: `category-${index}`, label: `Category ${index}` }));
-    const subcategories = categories.map((category) => ({ ...groceries, id: `sub-${category.id}`, slug: `sub-${category.id}`, category_id: category.id, label: `Sub ${category.label}` }));
+  it("groups essentials apart from non-essentials and opens a category to toggle its subcategories", () => {
+    const leisure: Category = { ...food, id: "leisure", slug: "leisure", label: "Leisure", classification: "non_essential" };
+    const movies: Subcategory = { ...groceries, id: "movies", slug: "movies", category_id: "leisure", label: "Movies" };
     const onToggle = jest.fn();
     const view = render(<PlanCategorySelection
-      topLevelCategories={categories}
-      subcategories={subcategories}
+      topLevelCategories={[leisure, food]}
+      subcategories={[groceries, movies]}
       includedIds={new Set()}
       recommendedIds={new Set()}
       onToggle={onToggle}
@@ -196,9 +197,15 @@ describe("PlanCategorySelection", () => {
       onContinue={jest.fn()}
     />);
 
-    expect(view.getByText("Category 0")).toBeTruthy();
-    await waitFor(() => expect(view.getByText("Category 5")).toBeTruthy());
-    fireEvent.press(view.getByLabelText("Include Sub Category 5 in Financial Plan"));
-    expect(onToggle).toHaveBeenCalledWith("sub-category-5");
+    const order = ["ESSENTIALS", "Food", "NON-ESSENTIALS", "Leisure"].map((text) => view.toJSON() && JSON.stringify(view.toJSON()).indexOf(`"${text}"`));
+    expect(order).toEqual([...order].sort((a, b) => (a ?? 0) - (b ?? 0)));
+    expect(view.queryByText("Movies")).toBeNull();
+
+    fireEvent.press(view.getByLabelText("Show subcategories for Leisure"));
+    fireEvent.press(view.getByLabelText("Include Movies in Financial Plan"));
+    expect(onToggle).toHaveBeenCalledWith("movies");
+
+    fireEvent.press(view.getByLabelText("Hide subcategories for Leisure"));
+    expect(view.queryByText("Movies")).toBeNull();
   });
 });

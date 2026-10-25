@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ArrowsClockwise, CaretLeft, ChartLine, CheckCircle, Cloud, House, ListBullets, Plus, Target, TrashSimple, User, Wallet, type IconProps } from "phosphor-react-native";
+import { ArrowDown, ArrowsClockwise, CaretLeft, ChartLine, CheckCircle, Cloud, House, ListBullets, Plus, Target, TrashSimple, User, Wallet, type IconProps } from "phosphor-react-native";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -61,6 +61,9 @@ import { ActionSheet } from "./ActionSheet";
 const TOOLBAR_MAX_WIDTH = 430;
 const CONTENT_GUTTER = 20;
 const SYNC_STATUS_POLL_MS = 5_000;
+// Long pages show a scroll-to-bottom button while this much content is still below the viewport.
+const SCROLL_TO_END_THRESHOLD = 400;
+const SCROLL_TO_END_PAGES = new Set<Page>(["financial-plan"]);
 const AUTO_SYNC_MS = 30_000;
 const MAX_SYNC_ATTEMPTS = 3;
 const SYNC_ISSUES_PAGE_SIZE = 50;
@@ -304,6 +307,9 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   // Stable so the transactions screen can use them inside memoized row callbacks.
   const getContentScrollY = useCallback(() => contentScrollY.current, []);
   const scrollContentTo = useCallback((y: number) => contentScrollRef.current?.scrollTo({ y, animated: false }), []);
+  const contentHeight = useRef(0);
+  const viewportHeight = useRef(0);
+  const [showScrollToEnd, setShowScrollToEnd] = useState(false);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -1011,6 +1017,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   }
 
   const hideChrome = editingFromActivity && currentPage === "transactions";
+  // Same-value updates bail out, so this only re-renders when the button appears or disappears.
+  const updateScrollToEnd = () => setShowScrollToEnd(SCROLL_TO_END_PAGES.has(currentPage) && contentHeight.current - viewportHeight.current - contentScrollY.current > SCROLL_TO_END_THRESHOLD);
   const v3Page = (currentPage === "dashboard" || currentPage === "transactions") && !hideChrome;
   const shellColor = v3Page ? dashboardColors.page : palette.shell;
 
@@ -1079,9 +1087,14 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           keyboardShouldPersistTaps="handled"
           onScroll={({ nativeEvent }) => {
             contentScrollY.current = nativeEvent.contentOffset.y;
+            contentHeight.current = nativeEvent.contentSize.height;
+            viewportHeight.current = nativeEvent.layoutMeasurement.height;
             const distanceFromBottom = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y;
             if (currentPage === "transactions" && distanceFromBottom < 200) transactionLoadMoreRef.current?.();
+            updateScrollToEnd();
           }}
+          onContentSizeChange={(_width, height) => { contentHeight.current = height; updateScrollToEnd(); }}
+          onLayout={({ nativeEvent }) => { viewportHeight.current = nativeEvent.layout.height; updateScrollToEnd(); }}
           scrollEventThrottle={16}
           ref={contentScrollRef}
           // The hub title scrolls away; the segment row (child 1) stays pinned.
@@ -1121,6 +1134,33 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           ) : null}
           {renderPage()}
         </ScrollView>
+
+        {showScrollToEnd && SCROLL_TO_END_PAGES.has(currentPage) ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scroll to bottom"
+            onPress={() => contentScrollRef.current?.scrollToEnd({ animated: true })}
+            hitSlop={6}
+            style={{
+              position: "absolute",
+              right: CONTENT_GUTTER,
+              bottom: (activeTab && !hideChrome ? 62 : 0) + bottomInset + 16,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: palette.brandMedium,
+              shadowColor: "#013220",
+              shadowOpacity: 0.25,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 5,
+            }}
+          >
+            <ArrowDown size={20} color="#FFFFFF" weight="bold" />
+          </Pressable>
+        ) : null}
 
         {/* Bottom tab bar */}
         {activeTab && !hideChrome ? (
