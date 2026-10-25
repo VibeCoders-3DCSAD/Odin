@@ -35,6 +35,7 @@ type TaxonomyScreenProps = {
   deviceId: string;
   syncVersion?: number;
   onBack: () => void;
+  onBackInterceptChange?: (intercept: (() => boolean) | null) => void;
 };
 
 const palette = {
@@ -182,7 +183,7 @@ function assembleNested(
   return localCategories.map((category) => ({ ...category, subcategories: subsByCat.get(category.id) ?? [] }));
 }
 
-export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBack }: TaxonomyScreenProps) {
+export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBack, onBackInterceptChange }: TaxonomyScreenProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -229,6 +230,17 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
     });
     return () => back.remove();
   }, [viewingCategoryId]);
+
+  useEffect(() => {
+    onBackInterceptChange?.(() => {
+      if (subcategoryFormVisible) { closeSubcategoryForm(); return true; }
+      if (categoryFormVisible) { setCategoryFormVisible(false); return true; }
+      if (viewingCategoryId) { goBack(); return true; }
+      return false;
+    });
+  }, [onBackInterceptChange, subcategoryFormVisible, categoryFormVisible, viewingCategoryId]);
+
+  useEffect(() => () => onBackInterceptChange?.(null), [onBackInterceptChange]);
 
   function navigateToSubcategories(cat: Category) {
     setViewingCategoryId(cat.id);

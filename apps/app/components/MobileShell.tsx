@@ -301,6 +301,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const lastObservedQueueCount = useRef<number | null>(null);
   const syncMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transactionLoadMoreRef = useRef<(() => void) | null>(null);
+  const pageBackInterceptRef = useRef<(() => boolean) | null>(null);
+  const setPageBackIntercept = useCallback((intercept: (() => boolean) | null) => { pageBackInterceptRef.current = intercept; }, []);
   const contentScrollRef = useRef<ScrollView>(null);
   const contentScrollY = useRef(0);
   // Stable so the transactions screen can use them inside memoized row callbacks.
@@ -893,7 +895,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "categories") {
-      return <TaxonomyScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onBack={() => setCurrentPage("dashboard")} />;
+      return <TaxonomyScreen userId={userId} deviceId={deviceId} syncVersion={syncVersion} onBack={() => setCurrentPage("dashboard")} onBackInterceptChange={setPageBackIntercept} />;
     }
 
     if (currentPage === "financial-accounts") {
@@ -1066,7 +1068,10 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Back"
-              onPress={() => setCurrentPage(parentPage[currentPage] ?? "dashboard")}
+              onPress={() => {
+                if (pageBackInterceptRef.current?.()) return;
+                setCurrentPage(parentPage[currentPage] ?? "dashboard");
+              }}
               hitSlop={10}
             >
               <CaretLeft size={20} color={palette.ink2} weight="bold" />
