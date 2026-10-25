@@ -260,6 +260,14 @@ export async function getFinancialPlanSpending(userId: string, planId: string): 
   };
 }
 
+// Matches the Financial Plan screen's "Remaining Money in Plan": available funds minus spending so far.
+export async function getFinancialPlanBudgetRemaining(userId: string, plan: AcceptedFinancialPlan): Promise<number | null> {
+  const availableFunds = plan.recommendation.availableFundsCentavos;
+  if (typeof availableFunds !== "number" || !Number.isSafeInteger(availableFunds)) return null;
+  const { spentCentavos } = await getFinancialPlanSpending(userId, plan.id);
+  return availableFunds - spentCentavos;
+}
+
 export async function getAcceptedFinancialPlanForPeriod(userId: string, periodStart: string, periodEnd: string): Promise<AcceptedFinancialPlan | null> {
   assertDate(periodStart, "periodStart");
   assertDate(periodEnd, "periodEnd");

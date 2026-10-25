@@ -150,6 +150,21 @@ describe("financial plan repository", () => {
     await expect(getFinancialPlanSpending("user-2", "plan-1")).resolves.toEqual({ allocationSpending: {}, spentCentavos: 0 });
   });
 
+  it("reports budget remaining as available plan funds minus recorded spending", async () => {
+    mockGetPlanSpendingReview.mockResolvedValue({ rows: [], actualTotalCentavos: 1_250_000 });
+
+    const { getFinancialPlanBudgetRemaining } = await import("../financialPlans");
+    const plan = { id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: { availableFundsCentavos: 5_000_000 } };
+    await expect(getFinancialPlanBudgetRemaining("user-1", plan)).resolves.toBe(3_750_000);
+    expect(mockGetPlanSpendingReview).toHaveBeenCalledWith("user-1", "plan-1");
+  });
+
+  it("reports no budget remaining when the plan has no available funds", async () => {
+    const { getFinancialPlanBudgetRemaining } = await import("../financialPlans");
+    await expect(getFinancialPlanBudgetRemaining("user-1", { id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: {} })).resolves.toBeNull();
+    expect(mockGetPlanSpendingReview).not.toHaveBeenCalled();
+  });
+
   it("resolves plan references to owned display names in bounded queries", async () => {
     const db = {
       getAllAsync: jest.fn()
