@@ -33,6 +33,19 @@ describe("Savings Goal contribution schedules", () => {
     expect(advanceContributionSchedule("2027-02-28", monthly)).toBe("2027-03-31");
   });
 
+  it("returns to the selected quarterly date after a shorter month", () => {
+    const quarterly = goal({ contributionFrequency: "quarterly", contributionDayOfMonth: 31 });
+    expect(advanceContributionSchedule("2027-01-31", quarterly)).toBe("2027-04-30");
+    expect(advanceContributionSchedule("2027-04-30", quarterly)).toBe("2027-07-31");
+  });
+
+  it("puts twice-a-month days past the 28th on February's last day", () => {
+    const semiMonthly = goal({ contributionFrequency: "semi_monthly", contributionDayOfMonth: 15, contributionSecondDayOfMonth: 30 });
+    expect(advanceContributionSchedule("2027-02-15", semiMonthly)).toBe("2027-02-28");
+    expect(advanceContributionSchedule("2028-02-15", semiMonthly)).toBe("2028-02-29");
+    expect(advanceContributionSchedule("2027-02-28", semiMonthly)).toBe("2027-03-15");
+  });
+
   it("requires a cadence and anchor date", () => {
     expect(validateContributionSchedule({ ...goal(), contributionFrequency: null })).toContain("frequency");
     expect(validateContributionSchedule({ ...goal(), nextContributionDate: null })).toContain("next contribution date");

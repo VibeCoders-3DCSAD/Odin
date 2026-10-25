@@ -45,6 +45,10 @@ describe("Financial Plan commitment reservations", () => {
     expect(scheduledReservationDates("2027-01-31", "monthly", { start: "2027-02-01", end: "2027-03-31" }, { dayOfMonth: 31 })).toEqual(["2027-02-28", "2027-03-31"]);
   });
 
+  it("keeps the selected quarterly date after a 30-day month", () => {
+    expect(scheduledReservationDates("2027-01-31", "quarterly", { start: "2027-04-01", end: "2027-07-31" }, { dayOfMonth: 31 })).toEqual(["2027-04-30", "2027-07-31"]);
+  });
+
   it("includes every weekly contribution due in the plan month", () => {
     expect(scheduledReservationDates("2026-10-28", "weekly", { start: "2026-11-01", end: "2026-11-30" })).toEqual(["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
   });

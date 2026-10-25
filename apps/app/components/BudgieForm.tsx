@@ -253,6 +253,12 @@ export function Note({ children }: { children: ReactNode }) {
   return <Text style={styles.note}>{children}</Text>;
 }
 
+// Shown under day-of-month inputs once a day past the 28th is entered; schedules fall back to the month's last day.
+export function MonthEndNote({ days }: { days: Array<number | string | null | undefined> }) {
+  if (!days.some((day) => Number(day) > 28 && Number(day) <= 31)) return null;
+  return <Note>Days 29, 30 and 31 become the 28th in February (the 29th in leap years), and the 31st becomes the 30th in months with 30 days.</Note>;
+}
+
 export const styles = StyleSheet.create({
   card: { backgroundColor: v4.surface, borderWidth: 1, borderColor: v4.border, borderRadius: 16, paddingHorizontal: 15, paddingVertical: 14, gap: 12, shadowColor: v4.ink, shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
   cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },

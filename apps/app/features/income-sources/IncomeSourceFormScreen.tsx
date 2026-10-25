@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { ArrowLeft, MagnifyingGlass, Tag } from "phosphor-react-native";
-import { Banner, BottomSheet, Chip, FieldError, FieldLabel, FormCard, Note, OptionRow, PickerField, SectionLabel, TextField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
+import { Banner, BottomSheet, Chip, FieldError, FieldLabel, FormCard, MonthEndNote, Note, OptionRow, PickerField, SectionLabel, TextField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialAccounts";
 import {
   createIncomeSource,
@@ -120,9 +120,7 @@ export default function IncomeSourceFormScreen({ userId, deviceId, incomeSourceI
     }
   }
 
-  // Days past a month's end fall back to its last day.
   const enteredDays = frequency === "semi_monthly" ? [schedule.paydayDayOfMonth, schedule.paydaySecondDayOfMonth] : frequency === "monthly" ? [schedule.paydayDayOfMonth] : [];
-  const lateMonthDay = Math.max(0, ...enteredDays.filter((day): day is number => day !== null && day > 28));
   const accountName = accounts.find((account) => account.id === destinationAccountId)?.name;
   const categoryName = subcategories.find((subcategory) => subcategory.id === subcategoryId)?.label;
   const search = categorySearch.trim().toLowerCase();
@@ -175,7 +173,7 @@ export default function IncomeSourceFormScreen({ userId, deviceId, incomeSourceI
               </View>
             ) : null}
             {errors.schedule ? <FieldError>{errors.schedule}</FieldError> : null}
-            {lateMonthDay > 0 ? <Note>{`Months with fewer than ${lateMonthDay} days pay on their last day.`}</Note> : null}
+            <MonthEndNote days={enteredDays} />
           </FormCard>
 
           <FormCard>

@@ -56,7 +56,7 @@ describe("IncomeSourceFormScreen", () => {
     fireEvent.press(await view.findByText("Twice a month"));
     fireEvent.changeText(view.getByLabelText("Date 1"), "28");
     fireEvent.changeText(view.getByLabelText("Date 2"), "31");
-    expect(view.getByText("Months with fewer than 31 days pay on their last day.")).toBeTruthy();
+    expect(view.getByText(/Days 29, 30 and 31 become the 28th in February/)).toBeTruthy();
     fireEvent.press(view.getAllByText("Add income source").at(-1)!);
     expect(view.getByText(/^Date 1 must be the 27th or earlier/)).toBeTruthy();
   });

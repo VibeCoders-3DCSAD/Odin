@@ -1,6 +1,6 @@
 import React from "react";
 import { View } from "react-native";
-import { Chip, FieldError, FormCard, Note, SectionLabel, styles } from "../../components/BudgieForm";
+import { Chip, FieldError, FormCard, MonthEndNote, Note, SectionLabel, styles } from "../../components/BudgieForm";
 import RecurringScheduleFields from "../../components/RecurringScheduleFields";
 import { SavingsDate, SavingsInput, SavingsToggle } from "./SavingsFormControls";
 import { CONTRIBUTION_CHOICES, CREDIT_CHOICES, WEEKDAY_NAMES, type SavingsFormDraft, type SavingsFormErrors, type SavingsFormType } from "./savingsAccountFormDraft";
@@ -43,7 +43,7 @@ export function SavingsContributionFields({ draft, errors, update }: Omit<Props,
       <SavingsInput label="Planned contribution amount" value={draft.contribution} onChange={(contribution) => update({ contribution })} numeric suffix="PHP" placeholder="0.00" error={errors.contribution} />
       <RecurringScheduleFields showFrequencySelector={false} frequencies={[]} weekdayLabels={WEEKDAY_NAMES} value={{ frequency, intervalCount: "1", dayOfMonth: draft.firstDay, secondDayOfMonth: draft.secondDay, dayOfWeek: draft.weekday, monthOfYear: null }} onChange={(next) => update({ firstDay: next.dayOfMonth, secondDay: next.secondDayOfMonth, weekday: next.dayOfWeek })} />
       {errors.schedule ? <FieldError>{errors.schedule}</FieldError> : null}
-      {draft.frequency === "monthly" || draft.frequency === "semi_monthly" ? <Note>Use date numbers from 1 to 31. For shorter months, a date beyond month-end uses the last day.</Note> : null}
+      {draft.frequency === "monthly" || draft.frequency === "semi_monthly" ? <MonthEndNote days={[draft.firstDay, draft.frequency === "semi_monthly" ? draft.secondDay : null]} /> : null}
       <Note>Scheduled amounts help plan your savings. Record each contribution when it happens.</Note>
     </> : <Note>Contribute manually whenever you choose.</Note>}
   </FormCard>;

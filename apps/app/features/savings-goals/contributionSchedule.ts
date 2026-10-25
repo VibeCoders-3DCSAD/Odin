@@ -123,13 +123,13 @@ export function advanceContributionSchedule(date: string, schedule: SavingsContr
   if (frequency === "daily") return addDays(date, interval);
   if (frequency === "weekly") return addDays(date, 7 * interval);
   if (frequency === "biweekly") return addDays(date, 14 * interval);
-  if (frequency === "monthly") {
-    const next = addMonths(date, interval);
+  // Monthly and quarterly dates return to the chosen day, so a 31st clamped to the 30th is the 31st again next time.
+  if (frequency === "monthly" || frequency === "quarterly") {
+    const next = addMonths(date, (frequency === "quarterly" ? 3 : 1) * interval);
     if (!validDay(schedule.contributionDayOfMonth)) return next;
     const month = new Date(`${next}T00:00:00Z`);
     return dateAtDay(month.getUTCFullYear(), month.getUTCMonth(), schedule.contributionDayOfMonth);
   }
-  if (frequency === "quarterly") return addMonths(date, 3 * interval);
   if (frequency === "yearly") return addMonths(date, 12 * interval);
   if (frequency === "custom") return addDays(date, schedule.customIntervalDays!);
   if (frequency !== "semi_monthly") return null;

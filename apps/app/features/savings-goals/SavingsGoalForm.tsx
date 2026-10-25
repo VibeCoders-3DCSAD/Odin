@@ -4,6 +4,7 @@ import { SAVINGS_GOAL_PLACEHOLDERS, SAVINGS_GOAL_PRIORITY_LABELS, SAVINGS_GOAL_P
 import { LocalDbError } from "../../local-db/helpers";
 import { createSavingsGoal, updateSavingsGoal, type SavingsGoal } from "../../local-db/repositories/savingsGoals";
 import RecurringScheduleFields, { type RecurringScheduleFrequency, type RecurringScheduleValue } from "../../components/RecurringScheduleFields";
+import { MonthEndNote } from "../../components/BudgieForm";
 import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { deriveGoalContributionDate, GOAL_CONTRIBUTION_FREQUENCIES, type GoalContributionFrequency } from "./contributionSchedule";
 import { recommendGoalContribution } from "./helpers/contributionRecommendation";
@@ -121,6 +122,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
         {contributionFrequency !== null && !CONTRIBUTION_OPTIONS.some((option) => option.value === contributionFrequency) ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Existing schedule: {contributionFrequency}. Choose a frequency above to change it.</Text> : null}
         {contributionFrequency === null ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>No scheduled contributions. You can still contribute manually.</Text> : <>
         <RecurringScheduleFields appearance="form" showFrequencySelector={false} weekdayLabels={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]} frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={scheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); setMessage(null); }} frequencyLabel="CONTRIBUTION FREQUENCY" dayOfMonthError={invalid && (contributionFrequency === "semi_monthly" || contributionFrequency === "monthly") && (!Number.isInteger(Number(contributionDay)) || Number(contributionDay) < 1 || Number(contributionDay) > 31)} secondDayOfMonthError={invalid && contributionFrequency === "semi_monthly" && !contributionSecondDay} />
+        {contributionFrequency === "monthly" || contributionFrequency === "semi_monthly" ? <MonthEndNote days={[contributionDay, contributionFrequency === "semi_monthly" ? contributionSecondDay : null]} /> : null}
         {contributionFrequency === "custom" ? <Field label="Custom interval days" value={customIntervalDays} onChangeText={setCustomIntervalDays} placeholder="e.g. 45" numeric invalid={invalid && (!Number.isSafeInteger(Number(customIntervalDays)) || Number(customIntervalDays) <= 0)} /> : null}
         <Field label="Planned contribution amount" value={plannedContribution} onChangeText={setPlannedContribution} placeholder="0.00" numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(plannedContribution)) || toCentavos(plannedContribution) < 0)} />
         {suggestedContribution !== null ? <View style={{ gap: 7 }}>
