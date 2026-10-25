@@ -59,7 +59,7 @@ describe("Financial Plan recommendations with recorded spending", () => {
 
     expect(result.recommendation.debtReservations).toHaveLength(debtCount);
     expect(result.recommendation.savingsReservations).toHaveLength(savingsCount);
-    expect(result.inputSnapshot.commitmentSelection).toEqual({ debtRepayments: !skipDebtRepayments, savingsContributions: !skipSavingsContributions });
+    expect(result.inputSnapshot.commitmentSelection).toEqual({ debtRepayments: !skipDebtRepayments, savingsContributions: !skipSavingsContributions, scheduledPayments: true });
     expect(result.recommendation.availableFundsCentavos).toBe(available);
     expect(result.recommendation.debtSurplusCentavos).toBe(0);
     expect(result.recommendation.savingsSurplusCentavos).toBe(0);

@@ -27,7 +27,7 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries", "groceries", "transport"], plannedAmountCentavos: 100_000 });
     expect(response.status).toBe(200);
     expect(response.body.payload.status).toBe("RECOMMENDATION_READY");
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries", "transport"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true });
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries", "transport"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true, skipScheduledPayments: false });
     expect((await request(app).post("/odin/api/financial-plans/recommendation").send({})).status).toBe(401);
   });
 
@@ -41,7 +41,7 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
   it("passes a selected development month to the recommendation service", async () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, planMonth: "2026-11" });
     expect(response.status).toBe(200);
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: true, skipSavingsContributions: true }, "2026-11");
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: true, skipSavingsContributions: true, skipScheduledPayments: false }, "2026-11");
   });
 
   it.each(["2026-13", "2026-1", "2026-11-01", 202611, null])("rejects an invalid plan month %p", async (planMonth) => {
@@ -68,20 +68,26 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["pet-care"], plannedAmountCentavos: 100_000, manualAllocations: [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }] });
 
     expect(response.status).toBe(200);
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["pet-care"], [], [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }], { skipDebtRepayments: true, skipSavingsContributions: true });
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["pet-care"], [], [{ target: "subcategory", id: "pet-care", amountCentavos: 2_500 }], { skipDebtRepayments: true, skipSavingsContributions: true, skipScheduledPayments: false });
   });
 
   it("accepts explicit reservation skips", async () => {
-    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries"], plannedAmountCentavos: 100_000, skipDebtRepayments: true, skipSavingsContributions: true });
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ includedSubcategoryIds: ["groceries"], plannedAmountCentavos: 100_000, skipDebtRepayments: true, skipSavingsContributions: true, skipScheduledPayments: false });
 
     expect(response.status).toBe(200);
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true });
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, ["groceries"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true, skipScheduledPayments: false });
+  });
+
+  it("excludes billers and remittances only when asked", async () => {
+    const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, skipScheduledPayments: true });
+    expect(response.status).toBe(200);
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: true, skipSavingsContributions: true, skipScheduledPayments: true });
   });
 
   it("excludes debt and savings when inclusion preferences are omitted", async () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000 });
     expect(response.status).toBe(200);
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: true, skipSavingsContributions: true });
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: true, skipSavingsContributions: true, skipScheduledPayments: false });
   });
 
   it.each(["skipDebtRepayments", "skipSavingsContributions"])("requires reviewed amounts when %s is false", async (key) => {
@@ -93,14 +99,14 @@ describe("POST /odin/api/financial-plans/recommendation", () => {
   it("preserves an explicitly reviewed empty commitment list", async () => {
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, skipDebtRepayments: false, commitmentBudgets: [] });
     expect(response.status).toBe(200);
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: false, skipSavingsContributions: true, commitmentBudgets: [] });
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: false, skipSavingsContributions: true, skipScheduledPayments: false, commitmentBudgets: [] });
   });
 
   it("passes validated commitment budgets and rejects malformed amounts", async () => {
     const commitmentBudgets = [{ key: "debt:loan:2026-10-20", amountCentavos: 7_500 }];
     const response = await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, skipDebtRepayments: false, commitmentBudgets });
     expect(response.status).toBe(200);
-    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: false, skipSavingsContributions: true, commitmentBudgets });
+    expect(getFinancialPlanRecommendation).toHaveBeenCalledWith(validUserId, expect.anything(), 100_000, [], [], [], { skipDebtRepayments: false, skipSavingsContributions: true, skipScheduledPayments: false, commitmentBudgets });
     for (const amountCentavos of [-1, 1.5, "7500", null]) {
       expect((await request(app).post("/odin/api/financial-plans/recommendation").set(authHeader()).send({ plannedAmountCentavos: 100_000, commitmentBudgets: [{ ...commitmentBudgets[0], amountCentavos }] })).status).toBe(422);
     }

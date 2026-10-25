@@ -17,6 +17,7 @@ export type FinancialPlanReservation = {
   debtAccountId?: string | null;
   creditCardStatementId?: string | null;
   savingsGoalId?: string | null;
+  scheduledPaymentId?: string | null;
   amountCentavos: number;
   dueDate?: string | null;
   label?: string;
@@ -34,7 +35,7 @@ export type FinancialPlanRecommendation = {
   status: FinancialPlanStatus;
   period: { start: string; end: string };
   inputSnapshot: {
-    commitmentSelection?: { debtRepayments: boolean; savingsContributions: boolean };
+    commitmentSelection?: { debtRepayments: boolean; savingsContributions: boolean; scheduledPayments?: boolean };
     plannedAmountCentavos: number;
     forecast: Record<string, unknown>;
     restrictions: Record<string, unknown>;

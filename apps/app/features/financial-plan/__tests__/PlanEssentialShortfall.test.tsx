@@ -57,3 +57,8 @@ it("reports an uncovered minimum even when its allocation and forecast are zero"
   const view = render(<PlanEssentialShortfall allocations={[{ ...allocations[1]!, allocatedAmountCentavos: 0, forecastAmountCentavos: 0 }]} restrictions={restrictions} />);
   expect(view.getByText("Essentials shortfall: ₱400.00")).toBeTruthy();
 });
+
+it("hides the card when only fractional centavos are missing", () => {
+  const view = render(<PlanEssentialShortfall allocations={[{ ...allocations[1]!, allocatedAmountCentavos: 40_000, forecastAmountCentavos: 40_000.0000002 }]} restrictions={restrictions} />);
+  expect(view.queryByRole("alert")).toBeNull();
+});

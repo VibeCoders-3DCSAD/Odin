@@ -36,7 +36,7 @@ export function allocationLabel(allocation: FinancialPlanAllocation): string {
 }
 
 export function reservationLabel(reservation: FinancialPlanReservation): string {
-  return reservation.label ?? (reservation.savingsGoalId ? "Savings goal" : reservation.debtAccountId ? "Debt account" : reservation.creditCardStatementId ? "Credit card statement" : "Required reservation");
+  return reservation.label ?? (reservation.savingsGoalId ? "Savings goal" : reservation.debtAccountId ? "Debt account" : reservation.creditCardStatementId ? "Credit card statement" : reservation.scheduledPaymentId ? "Biller or remittance" : "Required reservation");
 }
 
 export function applyFinancialPlanLabels<T extends { allocations: FinancialPlanAllocation[]; debtReservations: FinancialPlanReservation[]; savingsReservations: FinancialPlanReservation[] }>(recommendation: T, labels: FinancialPlanLabels): T {

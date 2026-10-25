@@ -72,14 +72,7 @@ export function scheduledPaymentDueDates(payment: ScheduledPaymentRow, from: str
 }
 
 // Each due date in the period still owes its scheduled amount less what was already paid against it.
-export function scheduledPaymentReservations(payments: ScheduledPaymentRow[], paid: { scheduled_payment_id: string; occurrence_date: string; amount_centavos: number }[], period: { start: string; end: string }) {
-  const paidByOccurrence = new Map<string, number>();
-  for (const record of paid) {
-    const key = `${record.scheduled_payment_id}:${record.occurrence_date}`;
-    paidByOccurrence.set(key, (paidByOccurrence.get(key) ?? 0) + record.amount_centavos);
-  }
-  return payments.flatMap((payment) => scheduledPaymentDueDates(payment, period.start, period.end).flatMap((dueDate) => {
-    const amountCentavos = Math.max(payment.amount_centavos - (paidByOccurrence.get(`${payment.id}:${dueDate}`) ?? 0), 0);
-    return amountCentavos > 0 ? [{ scheduledPaymentId: payment.id, amountCentavos, dueDate }] : [];
-  }));
+// A plan covers the whole period, so every occurrence keeps its full amount even after it is paid.
+export function scheduledPaymentReservations(payments: ScheduledPaymentRow[], period: { start: string; end: string }) {
+  return payments.flatMap((payment) => payment.amount_centavos > 0 ? scheduledPaymentDueDates(payment, period.start, period.end).map((dueDate) => ({ scheduledPaymentId: payment.id, amountCentavos: payment.amount_centavos, dueDate })) : []);
 }

@@ -19,7 +19,7 @@ describe("Financial Plan development month request", () => {
 
   it.each([true, false])("sends a selected month only when development is %p", async (development) => {
     Object.defineProperty(globalThis, "__DEV__", { value: development, writable: true, configurable: true });
-    await requestFinancialPlanRecommendation("token", [], [], 100_000, [], { debtRepayments: false, savingsContributions: false }, undefined, "2026-11");
+    await requestFinancialPlanRecommendation("token", [], [], 100_000, [], { debtRepayments: false, savingsContributions: false, scheduledPayments: false }, undefined, "2026-11");
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     if (development) expect(body.planMonth).toBe("2026-11");
     else expect(body).not.toHaveProperty("planMonth");

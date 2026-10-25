@@ -20,10 +20,9 @@ it("matches the selected subcategory once and leaves its siblings alone", () => 
   expect(scheduledCategoryAmounts([payment], [{ id: "food", target: "category" }], parentBySubcategory, period).size).toBe(0);
 });
 
-it.each([0, 10_000, 30_000, 40_000])("deducts the full scheduled baseline even when %i has already been paid", (paid) => {
-  const records = [{ scheduled_payment_id: payment.id, occurrence_date: "2026-10-15", amount_centavos: paid }];
-  const reservations = scheduledPaymentReservations([payment], records, period);
-  expect(reservations.reduce((sum, row) => sum + row.amountCentavos, 0)).toBe(Math.max(30_000 - paid, 0));
+it("reserves and deducts the full scheduled amount", () => {
+  const reservations = scheduledPaymentReservations([payment], period);
+  expect(reservations.reduce((sum, row) => sum + row.amountCentavos, 0)).toBe(30_000);
   expect(subtractScheduledRequirements([category], scheduledCategoryAmounts([payment], [category], parentBySubcategory, period))[0]).toMatchObject({ forecastCentavos: 70_000, floorCentavos: 20_000 });
 });
 

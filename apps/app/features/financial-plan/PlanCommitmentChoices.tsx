@@ -7,22 +7,23 @@ type Props = {
 };
 
 const choices = [
-  { key: "savingsContributions", label: "Include savings contributions", excluded: "Savings contributions excluded from this plan." },
-  { key: "debtRepayments", label: "Include debt repayments", excluded: "Debt repayments excluded from this plan. Existing payments are still due." },
+  { key: "savingsContributions", label: "I'll budget savings manually", excluded: "Savings contributions excluded from this plan." },
+  { key: "debtRepayments", label: "I'll budget debt repayments manually", excluded: "Debt repayments excluded from this plan. Existing payments are still due." },
+  { key: "scheduledPayments", label: "I'll budget billers & remittances manually", excluded: "Billers and remittances excluded from this plan. Existing bills are still due." },
 ] as const;
 
 export function PlanCommitmentChoices({ skips, onChange }: Props) {
   return <View style={styles.section}>
-    <Text style={styles.heading}>Savings &amp; debt</Text>
-    <Text style={styles.description}>Choose what to include. Set the amounts on the next screen.</Text>
+    <Text style={styles.heading}>Savings, debt &amp; bills</Text>
+    <Text style={styles.description}>All are included by default. Set the amounts on the next screen.</Text>
     {choices.map(({ key, label, excluded }) => {
-      const checked = !skips[key];
+      const checked = skips[key];
       return <View key={key} style={styles.choice}>
         <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{ checked }} onPress={() => onChange({ ...skips, [key]: !skips[key] })} style={[styles.row, checked && styles.selected]}>
           <View style={[styles.checkbox, checked && styles.checked]}><Text style={styles.check}>{checked ? "✓" : ""}</Text></View>
           <Text style={styles.label}>{label}</Text>
         </Pressable>
-        {!checked ? <Text style={styles.excluded}>{excluded}</Text> : null}
+        {checked ? <Text style={styles.excluded}>{excluded}</Text> : null}
       </View>;
     })}
   </View>;

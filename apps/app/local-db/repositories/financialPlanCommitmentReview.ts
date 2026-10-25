@@ -6,6 +6,7 @@ import type {
   PlanDebtCommitmentRow,
   PlanSavingsCommitmentRow,
 } from "../../features/financial-plan/pastPlanTypes";
+import type { PlanCommitmentPayments } from "../../features/financial-plan/helpers/commitmentPayments";
 
 type PlanPeriodRow = { id: string; period_start: string; period_end: string };
 type ReservationRow = { target_id: string; reserved_centavos: number; due_date: string | null };
@@ -146,5 +147,41 @@ export async function getPlanCommitmentReview(userId: string, planId: string): P
       debtActualCentavos: sum(debts, (row) => row.actualCentavos),
       debtAdditionalCentavos: sum(debts, (row) => row.additionalCentavos),
     },
+  };
+}
+
+// Card payments count against their statement whenever they were made; billers count against the occurrence they were recorded for.
+// A biller occurrence is settled when any of its payments was marked as paid in full.
+const PERIOD_PAYMENTS_SQL = `
+  SELECT 'savings:' || savings_goal_id AS payment_key, SUM(amount_centavos) AS paid_centavos, 0 AS settled
+  FROM savings_goal_activities
+  WHERE user_id = ? AND deleted = 0 AND activity_kind = 'contribution' AND activity_date >= ? AND activity_date <= ?
+  GROUP BY savings_goal_id
+  UNION ALL
+  SELECT 'debt:' || debt_account_id, SUM(amount_centavos), 0
+  FROM debt_payments
+  WHERE user_id = ? AND deleted = 0 AND payment_date >= ? AND payment_date <= ?
+  GROUP BY debt_account_id
+  UNION ALL
+  SELECT 'statement:' || statement_id, SUM(amount_centavos), 0
+  FROM credit_card_payments
+  WHERE user_id = ? AND deleted = 0 AND statement_id IS NOT NULL
+  GROUP BY statement_id
+  UNION ALL
+  SELECT 'scheduled:' || scheduled_payment_id || ':' || occurrence_date, SUM(amount_centavos), MAX(settles_occurrence)
+  FROM scheduled_payment_records
+  WHERE user_id = ? AND deleted = 0 AND occurrence_date >= ? AND occurrence_date <= ?
+  GROUP BY scheduled_payment_id, occurrence_date`;
+
+/** Paid amounts and settled biller occurrences for an accepted plan's period, keyed like plan commitments (biller keys include the occurrence date). */
+export async function getPlanCommitmentPayments(userId: string, period: { start: string; end: string }): Promise<PlanCommitmentPayments> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ payment_key: string; paid_centavos: number; settled: number }>(
+    PERIOD_PAYMENTS_SQL,
+    userId, period.start, period.end, userId, period.start, period.end, userId, userId, period.start, period.end,
+  );
+  return {
+    paidCentavos: Object.fromEntries(rows.map((row) => [row.payment_key, Number(row.paid_centavos)])),
+    settledKeys: rows.filter((row) => row.settled === 1).map((row) => row.payment_key),
   };
 }

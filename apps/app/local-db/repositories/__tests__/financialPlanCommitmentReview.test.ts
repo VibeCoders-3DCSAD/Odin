@@ -30,6 +30,11 @@ const ACTUALS_SCHEMA = `
     id text primary key, user_id text not null, cycle_id text not null, statement_id text, transaction_id text,
     amount_centavos integer not null, payment_date text not null, source_account_id text, notes text,
     version integer not null default 1, deleted integer not null default 0, created_at text not null, updated_at text not null, last_synced_at text
+  );
+  CREATE TABLE scheduled_payment_records (
+    id text primary key, user_id text not null, scheduled_payment_id text not null, transaction_id text not null,
+    occurrence_date text not null, payment_date text not null, amount_centavos integer not null, source text not null default 'manual', notes text, settles_occurrence integer not null default 0,
+    version integer not null default 1, deleted integer not null default 0, created_at text not null, updated_at text not null, last_synced_at text
   );`;
 
 function createDb() {
@@ -69,8 +74,8 @@ async function setup() {
   await financialPlansMigration.up(db as any);
   await db.execAsync(ACTUALS_SCHEMA);
   mockInitDatabase.mockResolvedValue(db);
-  const { getPlanCommitmentReview } = await import("../financialPlanCommitmentReview");
-  return { run, review: (planId = "plan-1", userId = USER) => getPlanCommitmentReview(userId, planId) };
+  const { getPlanCommitmentPayments, getPlanCommitmentReview } = await import("../financialPlanCommitmentReview");
+  return { run, review: (planId = "plan-1", userId = USER) => getPlanCommitmentReview(userId, planId), payments: () => getPlanCommitmentPayments(USER, { start: "2026-09-01", end: "2026-09-30" }) };
 }
 
 describe("getPlanCommitmentReview", () => {
@@ -148,6 +153,52 @@ describe("getPlanCommitmentReview", () => {
     expect(result?.totals).toEqual({
       savingsReservedCentavos: 0, savingsActualCentavos: 0, savingsAdditionalCentavos: 0,
       debtReservedCentavos: 6_000, debtActualCentavos: 5_850, debtAdditionalCentavos: 1_350,
+    });
+  });
+});
+
+const billerPayment = (run: Run, scheduledId: string, amount: number, occurrenceDate: string, { userId = USER, deleted = 0, settles = 0 } = {}) =>
+  run("INSERT INTO scheduled_payment_records (id, user_id, scheduled_payment_id, transaction_id, occurrence_date, payment_date, amount_centavos, settles_occurrence, deleted, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", nextId("spr"), userId, scheduledId, nextId("tx"), occurrenceDate, occurrenceDate, amount, settles, deleted, TS, TS);
+
+describe("getPlanCommitmentPayments", () => {
+  beforeEach(() => { jest.resetModules(); mockInitDatabase.mockReset(); });
+
+  it("totals period payments per goal and debt, statement payments on any date, and biller payments per occurrence", async () => {
+    const { run, payments } = await setup();
+    activity(run, "goal-1", 400, "2026-09-03");
+    activity(run, "goal-1", 600, "2026-09-20");
+    activity(run, "goal-1", 900, "2026-08-31");
+    activity(run, "goal-1", 900, "2026-09-10", { kind: "withdrawal" });
+    debtPayment(run, "debt-1", 2_000, "2026-09-15");
+    debtPayment(run, "debt-1", 2_000, "2026-09-15", { deleted: 1 });
+    cardPayment(run, "stmt-1", 1_500, "2026-08-29");
+    cardPayment(run, null, 777, "2026-09-09");
+    billerPayment(run, "bill-1", 1_000, "2026-09-05");
+    billerPayment(run, "bill-1", 300, "2026-09-19");
+    billerPayment(run, "bill-1", 300, "2026-10-03");
+    billerPayment(run, "bill-1", 500, "2026-09-05", { userId: OTHER_USER });
+
+    await expect(payments()).resolves.toEqual({
+      paidCentavos: {
+        "savings:goal-1": 1_000,
+        "debt:debt-1": 2_000,
+        "statement:stmt-1": 1_500,
+        "scheduled:bill-1:2026-09-05": 1_000,
+        "scheduled:bill-1:2026-09-19": 300,
+      },
+      settledKeys: [],
+    });
+  });
+
+  it("reports biller occurrences marked as paid without changing their paid amount", async () => {
+    const { run, payments } = await setup();
+    billerPayment(run, "bill-1", 1_000, "2026-09-05");
+    billerPayment(run, "bill-1", 800, "2026-09-05", { settles: 1 });
+    billerPayment(run, "bill-1", 1_800, "2026-09-19");
+
+    await expect(payments()).resolves.toEqual({
+      paidCentavos: { "scheduled:bill-1:2026-09-05": 1_800, "scheduled:bill-1:2026-09-19": 1_800 },
+      settledKeys: ["scheduled:bill-1:2026-09-05"],
     });
   });
 });

@@ -29,16 +29,13 @@ describe("scheduledPaymentDueDates", () => {
 });
 
 describe("scheduledPaymentReservations", () => {
-  it("reserves each due date in the month less what was paid against it", () => {
+  it("reserves every due date in the month at its full amount", () => {
     const weekly = { ...base, id: "sss", amount_centavos: 10_000, frequency: "weekly" as const, due_day_of_week: 5 };
-    const reservations = scheduledPaymentReservations([base, weekly], [
-      { scheduled_payment_id: "rent", occurrence_date: "2026-10-01", amount_centavos: 200_000 },
-      { scheduled_payment_id: "sss", occurrence_date: "2026-10-02", amount_centavos: 10_000 },
-    ], { start: "2026-10-01", end: "2026-10-31" });
+    const reservations = scheduledPaymentReservations([base, weekly], { start: "2026-10-01", end: "2026-10-31" });
 
     expect(reservations).toEqual([
-      { scheduledPaymentId: "rent", amountCentavos: 1_000_000, dueDate: "2026-10-01" },
-      ...["2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"].map((dueDate) => ({ scheduledPaymentId: "sss", amountCentavos: 10_000, dueDate })),
+      { scheduledPaymentId: "rent", amountCentavos: base.amount_centavos, dueDate: "2026-10-01" },
+      ...["2026-10-02", "2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"].map((dueDate) => ({ scheduledPaymentId: "sss", amountCentavos: 10_000, dueDate })),
     ]);
   });
 });

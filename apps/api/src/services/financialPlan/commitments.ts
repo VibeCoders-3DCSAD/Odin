@@ -6,11 +6,11 @@ export const SAVINGS_COMMITMENT_FIELDS = "id, planned_contribution_amount_centav
 type Period = { start: string; end: string };
 type Debt = { id: string; current_balance_centavos: number; minimum_payment_centavos: number; next_due_date: string | null; payment_frequency: string; payment_schedule: { semiMonthlyDays?: [number, number]; customIntervalDays?: number } | null };
 type Goal = { id: string; planned_contribution_amount_centavos: number | null; next_contribution_date: string | null; contribution_frequency: string | null; contribution_day_of_month: number | null; contribution_second_day_of_month: number | null; contribution_interval_count: number | null; custom_interval_days: number | null };
-export type Commitment = { debtAccountId?: string | null; creditCardStatementId?: string | null; savingsGoalId?: string | null; dueDate: string; amountCentavos: number };
+export type Commitment = { debtAccountId?: string | null; creditCardStatementId?: string | null; savingsGoalId?: string | null; scheduledPaymentId?: string | null; dueDate: string; amountCentavos: number };
 export type CommitmentBudget = { key: string; amountCentavos: number };
 
 export function commitmentKey(row: Commitment): string {
-  return `${row.debtAccountId ? `debt:${row.debtAccountId}` : row.creditCardStatementId ? `statement:${row.creditCardStatementId}` : `savings:${row.savingsGoalId}`}:${row.dueDate}`;
+  return `${row.debtAccountId ? `debt:${row.debtAccountId}` : row.creditCardStatementId ? `statement:${row.creditCardStatementId}` : row.scheduledPaymentId ? `scheduled:${row.scheduledPaymentId}` : `savings:${row.savingsGoalId}`}:${row.dueDate}`;
 }
 
 export function debtCommitments(debts: Debt[], period: Period): Commitment[] {
@@ -21,16 +21,12 @@ export function savingsCommitments(goals: Goal[], period: Period): Commitment[] 
   return goals.flatMap((goal) => (goal.planned_contribution_amount_centavos ?? 0) > 0 ? scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { dayOfMonth: goal.contribution_day_of_month, intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null }).map((dueDate) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos!, dueDate })) : []);
 }
 
-export function statementCommitments(statements: { id: string; minimum_due_centavos: number; due_date: string }[], payments: { statement_id: string | null; amount_centavos: number }[]): Commitment[] {
-  const paid = new Map<string, number>();
-  for (const payment of payments) if (payment.statement_id) paid.set(payment.statement_id, (paid.get(payment.statement_id) ?? 0) + payment.amount_centavos);
-  return statements.flatMap((statement) => {
-    const amountCentavos = Math.max(0, statement.minimum_due_centavos - (paid.get(statement.id) ?? 0));
-    return amountCentavos > 0 ? [{ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos, dueDate: statement.due_date }] : [];
-  });
+// A plan covers the whole month, so a statement keeps its full minimum due even after it is paid.
+export function statementCommitments(statements: { id: string; minimum_due_centavos: number; due_date: string }[]): Commitment[] {
+  return statements.flatMap((statement) => statement.minimum_due_centavos > 0 ? [{ debtAccountId: null, creditCardStatementId: statement.id, amountCentavos: statement.minimum_due_centavos, dueDate: statement.due_date }] : []);
 }
 
-export function applyCommitmentBudgets(rows: Commitment[], budgets: CommitmentBudget[]): Commitment[] {
+export function applyCommitmentBudgets<T extends Commitment>(rows: T[], budgets: CommitmentBudget[]): T[] {
   const amounts = new Map(budgets.map((budget) => [budget.key, budget.amountCentavos]));
   return rows.map((row) => ({ ...row, amountCentavos: amounts.get(commitmentKey(row)) ?? row.amountCentavos }));
 }
@@ -39,7 +35,7 @@ export function validateCommitmentBudgets(value: unknown): CommitmentBudget[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > 200) throw new FinancialPlanInputError("Commitment budgets are invalid");
   const budgets = value.map((row): CommitmentBudget => {
-    if (!row || typeof row !== "object" || typeof row.key !== "string" || row.key.length > 180 || !/^(debt|statement|savings):[^:]+:\d{4}-\d{2}-\d{2}$/.test(row.key) || !Number.isSafeInteger(row.amountCentavos) || row.amountCentavos < 0 || row.amountCentavos > 100_000_000_000) throw new FinancialPlanInputError("Commitment budget is invalid");
+    if (!row || typeof row !== "object" || typeof row.key !== "string" || row.key.length > 180 || !/^(debt|statement|savings|scheduled):[^:]+:\d{4}-\d{2}-\d{2}$/.test(row.key) || !Number.isSafeInteger(row.amountCentavos) || row.amountCentavos < 0 || row.amountCentavos > 100_000_000_000) throw new FinancialPlanInputError("Commitment budget is invalid");
     return { key: row.key, amountCentavos: row.amountCentavos };
   });
   if (new Set(budgets.map((row) => row.key)).size !== budgets.length) throw new FinancialPlanInputError("Duplicate commitment budgets");

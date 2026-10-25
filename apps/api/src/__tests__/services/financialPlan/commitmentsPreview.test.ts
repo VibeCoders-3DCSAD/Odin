@@ -1,14 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFinancialPlanCommitments } from "../../../services/financialPlan/commitmentsPreview.js";
 
-it("scopes every preview read to its user and subtracts statement payments", async () => {
+it("scopes every preview read to its user and lists every commitment in the month at its full amount", async () => {
   const rows: Record<string, unknown[]> = {
     debt_accounts: [{ id: "loan", current_balance_centavos: 100_000, minimum_payment_centavos: 20_000, next_due_date: "2026-11-10", payment_frequency: "monthly", payment_schedule: {} }],
     savings_goals: [{ id: "goal", planned_contribution_amount_centavos: 5_000, next_contribution_date: "2026-11-12", contribution_frequency: "weekly" }],
     credit_card_statements: [{ id: "statement", minimum_due_centavos: 10_000, due_date: "2026-11-20" }],
-    credit_card_payments: [{ statement_id: "statement", amount_centavos: 4_000 }],
     scheduled_payments: [{ id: "rent", amount_centavos: 30_000, frequency: "monthly", due_day_of_month: 15, starts_on: "2026-01-15", ends_on: null }],
-    scheduled_payment_records: [{ scheduled_payment_id: "rent", occurrence_date: "2026-11-15", amount_centavos: 10_000 }],
   };
   const queries: Array<{ eq: jest.Mock; limit: jest.Mock }> = [];
   const client = { from: jest.fn((table: string) => {
@@ -17,9 +15,9 @@ it("scopes every preview read to its user and subtracts statement payments", asy
     return query;
   }) };
   const result = await getFinancialPlanCommitments("owner", client as unknown as SupabaseClient, "2026-11");
-  expect(result.debtReservations.map((row) => row.amountCentavos)).toEqual([20_000, 6_000]);
-  expect(result.savingsReservations.map((row) => row.dueDate)).toEqual(["2026-11-12", "2026-11-19", "2026-11-26"]);
-  expect(result.obligations).toEqual([{ scheduledPaymentId: "rent", amountCentavos: 20_000, dueDate: "2026-11-15" }]);
+  expect(result.debtReservations.map((row) => row.amountCentavos)).toEqual([20_000, 10_000]);
+  expect(result.savingsReservations.map((row) => row.dueDate)).toEqual(["2026-11-05", "2026-11-12", "2026-11-19", "2026-11-26"]);
+  expect(result.obligations).toEqual([{ scheduledPaymentId: "rent", amountCentavos: 30_000, dueDate: "2026-11-15" }]);
   for (const query of queries) {
     expect(query.eq).toHaveBeenCalledWith("user_id", "owner");
     expect(query.eq).toHaveBeenCalledWith("deleted", false);

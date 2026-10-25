@@ -1,6 +1,5 @@
 import { buildFinancialPlanExplanationContext } from "./helpers/explanationContext.js";
 import { FinancialPlanInputError, FinancialPlanUnavailableError } from "./errors.js";
-import { addScheduleMonths } from "./commitmentSchedule.js";
 export { FinancialPlanInputError, FinancialPlanUnavailableError } from "./errors.js";
 export { scheduledReservationDates } from "./commitmentSchedule.js";
 import { applyCommitmentBudgets, commitmentKey, debtCommitments, savingsCommitments, statementCommitments, validateCommitmentBudgets, type CommitmentBudget } from "./commitments.js";
@@ -28,13 +27,12 @@ type Category = { id: string; slug: string; label: string; minimum_amount_centav
 type Timestamped = { updated_at: string };
 type Debt = Timestamped & { id: string; current_balance_centavos: number; minimum_payment_centavos: number; payment_frequency: string; payment_schedule: { semiMonthlyDays?: [number, number]; customIntervalDays?: number } | null; next_due_date: string | null; annual_interest_rate_bps: number; allows_extra_payments: boolean };
 type Goal = Timestamped & { id: string; planned_contribution_amount_centavos: number | null; contribution_frequency: string | null; contribution_interval_count: number | null; contribution_day_of_month: number | null; contribution_second_day_of_month: number | null; custom_interval_days: number | null; next_contribution_date: string | null; goal_type: string; target_amount_centavos: number; current_amount_centavos: number };
-type CardPayment = { statement_id: string | null; transaction_id: string | null; amount_centavos: number };
 type Statement = { id: string; minimum_due_centavos: number; due_date: string };
 type FinancialAccount = Timestamped & { kind: string; current_balance_centavos: number };
 type Transaction = Timestamped & { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null; source_savings_goal_id?: string | null; destination_savings_goal_id?: string | null };
 type OnboardingSession = { raw_answers: Record<string, unknown> | null };
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
-type ReservationSkips = { skipDebtRepayments?: boolean; skipSavingsContributions?: boolean; commitmentBudgets?: CommitmentBudget[] };
+type ReservationSkips = { skipDebtRepayments?: boolean; skipSavingsContributions?: boolean; skipScheduledPayments?: boolean; commitmentBudgets?: CommitmentBudget[] };
 type AnomalyEvaluation = { transaction_id: string; is_anomaly: boolean };
 type TransactionWithAnomalies = Transaction & { anomaly_evaluations: AnomalyEvaluation[] | null };
 
@@ -219,8 +217,7 @@ function userFacingForecastRationale(value: string): string {
 
 export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = [], reservationSkips: ReservationSkips = {}, planMonth?: string) {
   const period = financialPlanPeriod(planMonth);
-  const statementPaymentWindowStart = addScheduleMonths(period.start, -1);
-  const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, cardPaymentsResult, debtPaymentsResult, scheduledPaymentsResult, scheduledPaidResult, scheduledPaymentTransactionsResult] = await Promise.all([
+  const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, debtPaymentsResult, scheduledPaymentsResult, scheduledPaymentTransactionsResult] = await Promise.all([
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos, updated_at").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("financial_accounts").select("kind, current_balance_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
@@ -230,10 +227,8 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id, source_savings_goal_id, destination_savings_goal_id, updated_at, anomaly_evaluations!anomaly_evaluations_transaction_id_fkey(transaction_id, is_anomaly)").eq("user_id", userId).eq("status", "posted").eq("deleted", false).eq("anomaly_evaluations.is_anomaly", true).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
     supabase.from("financial_condition_assessments").select("id, assessed_at, rule_set_version, output_snapshot").eq("user_id", userId).order("assessed_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("onboarding_sessions").select("raw_answers").eq("user_id", userId).eq("status", "submitted").order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("credit_card_payments").select("statement_id, transaction_id, amount_centavos, payment_date").eq("user_id", userId).eq("deleted", false).gte("payment_date", statementPaymentWindowStart).lte("payment_date", period.end).limit(500),
     supabase.from("debt_payments").select("transaction_id").eq("user_id", userId).eq("deleted", false).gte("payment_date", period.start).lte("payment_date", period.end).not("transaction_id", "is", null).limit(500),
     supabase.from("scheduled_payments").select("id, name, subcategory_id, amount_centavos, frequency, due_day_of_month, due_second_day_of_month, due_day_of_week, due_month, starts_on, ends_on").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(200),
-    supabase.from("scheduled_payment_records").select("scheduled_payment_id, occurrence_date, amount_centavos").eq("user_id", userId).eq("deleted", false).gte("occurrence_date", period.start).lte("occurrence_date", period.end).limit(1000),
     supabase.from("scheduled_payment_records").select("transaction_id").eq("user_id", userId).eq("deleted", false).gte("payment_date", period.start).lte("payment_date", period.end).limit(1000),
   ]);
   const inputFailures = [
@@ -245,10 +240,9 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     { source: "credit_card_statements", error: statementsResult.error },
     { source: "transactions", error: transactionsResult.error },
     { source: "onboarding_sessions", error: onboardingResult.error },
-    { source: "credit_card_payments", error: cardPaymentsResult.error },
     { source: "debt_payments", error: debtPaymentsResult.error },
     { source: "scheduled_payments", error: scheduledPaymentsResult.error },
-    { source: "scheduled_payment_records", error: scheduledPaidResult.error ?? scheduledPaymentTransactionsResult.error },
+    { source: "scheduled_payment_records", error: scheduledPaymentTransactionsResult.error },
   ].flatMap(({ source, error }) => error ? [{
     source,
     code: error.code,
@@ -271,12 +265,14 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   if (availableMoney <= 0) throw new FinancialPlanInputError("No eligible financial-account balance is available");
   if (!Number.isSafeInteger(plannedAmountCentavos) || plannedAmountCentavos <= 0 || plannedAmountCentavos > availableMoney) throw new FinancialPlanInputError("Planning amount exceeds available money");
   const dueDebts = debtCommitments((debtsResult.data ?? []) as Debt[], period);
-  const cardPayments = (cardPaymentsResult.data ?? []) as Array<CardPayment & { payment_date: string }>;
-  const dueStatements = statementCommitments((statementsResult.data ?? []) as Statement[], cardPayments);
+  const dueStatements = statementCommitments((statementsResult.data ?? []) as Statement[]);
   const dueSavings = savingsCommitments((goalsResult.data ?? []) as Goal[], period);
   const budgets = validateCommitmentBudgets(reservationSkips.commitmentBudgets);
-  const commitmentSelection = { debtRepayments: !reservationSkips.skipDebtRepayments, savingsContributions: !reservationSkips.skipSavingsContributions };
-  const ownedKeys = new Set([...dueDebts, ...dueStatements, ...dueSavings].map(commitmentKey));
+  const commitmentSelection = { debtRepayments: !reservationSkips.skipDebtRepayments, savingsContributions: !reservationSkips.skipSavingsContributions, scheduledPayments: !reservationSkips.skipScheduledPayments };
+  const scheduledPayments = (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { name: string; subcategory_id: string | null }>;
+  const scheduledPaymentById = new Map(scheduledPayments.map((payment) => [payment.id, payment]));
+  const dueObligations = scheduledPaymentReservations(scheduledPayments, period).map((reservation) => ({ ...reservation, label: scheduledPaymentById.get(reservation.scheduledPaymentId)?.name, subcategoryId: scheduledPaymentById.get(reservation.scheduledPaymentId)?.subcategory_id }));
+  const ownedKeys = new Set([...dueDebts, ...dueStatements, ...dueSavings, ...dueObligations].map(commitmentKey));
   if (budgets.some((budget) => !ownedKeys.has(budget.key))) throw new FinancialPlanInputError("Commitment changed or is unavailable");
   const reviewedKeys = new Set(budgets.map((budget) => budget.key));
   const selectedCommitments = [...(reservationSkips.skipDebtRepayments === false ? [...dueDebts, ...dueStatements] : []), ...(reservationSkips.skipSavingsContributions === false ? dueSavings : [])];
@@ -285,9 +281,8 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const statementReservations = reservationSkips.skipDebtRepayments ? [] : applyCommitmentBudgets(dueStatements, budgets);
   const savingsReservations = reservationSkips.skipSavingsContributions ? [] : applyCommitmentBudgets(dueSavings, budgets);
   const commitmentRequirements = { debts: [...dueDebts, ...dueStatements], savings: dueSavings };
-  const scheduledPayments = (scheduledPaymentsResult.data ?? []) as Array<ScheduledPaymentRow & { name: string; subcategory_id: string | null }>;
-  const scheduledPaymentById = new Map(scheduledPayments.map((payment) => [payment.id, payment]));
-  const obligations = scheduledPaymentReservations(scheduledPayments, (scheduledPaidResult.data ?? []) as { scheduled_payment_id: string; occurrence_date: string; amount_centavos: number }[], period).map((reservation) => ({ ...reservation, label: scheduledPaymentById.get(reservation.scheduledPaymentId)?.name, subcategoryId: scheduledPaymentById.get(reservation.scheduledPaymentId)?.subcategory_id }));
+  // Billers and remittances keep their full amount due unless the user budgeted them.
+  const obligations = reservationSkips.skipScheduledPayments ? [] : applyCommitmentBudgets(dueObligations, budgets);
   const reserved = [...debtReservations, ...statementReservations, ...savingsReservations, ...obligations].reduce((sum, item) => sum + item.amountCentavos, 0);
   const available = plannedAmountCentavos - reserved;
   const explanationContext = buildFinancialPlanExplanationContext({
@@ -359,7 +354,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const minimumRequired = categories.reduce((sum, category) => sum + category.floorCentavos, 0);
   if (isFinancialPlanInfeasible(available, minimumRequired)) {
     const forecast = fallbackForecast(period, categories);
-    const inputSnapshot = { plannedAmountCentavos, commitmentSelection, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations }, debtRequirements: { reservations: commitmentRequirements.debts }, savingsRequirements: { reservations: commitmentRequirements.savings }, classification: classificationResult.data ?? { status: "unavailable" } };
+    const inputSnapshot = { plannedAmountCentavos, commitmentSelection, forecast, restrictions: { allocations: categories }, obligations: { reservations: obligations, requirements: dueObligations }, debtRequirements: { reservations: commitmentRequirements.debts }, savingsRequirements: { reservations: commitmentRequirements.savings }, classification: classificationResult.data ?? { status: "unavailable" } };
     const requiredFundsCentavos = reserved + minimumRequired;
     const shortfallCentavos = Math.max(0, requiredFundsCentavos - plannedAmountCentavos);
     const explanationEvidence: FinancialPlanEvidence = { ...explanationContext, planPeriodLabel: new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: MANILA }).format(new Date(`${period.start}T00:00:00Z`)), surplusCentavos: 0, debtSurplusCentavos: 0, savingsSurplusCentavos: 0, shortfall: { plannedAmountCentavos, requiredFundsCentavos, shortfallCentavos }, seasonalPreferences, forecastChanges: [] };
@@ -422,7 +417,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const strategy = strategyResult.data?.strategy === "snowball" ? "snowball" : "avalanche";
   const priorityIds = (prioritiesResult.data ?? []).map((priority) => priority.debt_account_id).filter((id): id is string => typeof id === "string");
   const eligibleDebtId = reservationSkips.skipDebtRepayments || strategyResult.error || prioritiesResult.error ? null : selectEligibleDebt(debts, strategy, priorityIds);
-  const inputSnapshot = { plannedAmountCentavos, commitmentSelection, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations }, debtRequirements: { reservations: [...debtReservations, ...statementReservations] }, savingsRequirements: { reservations: savingsReservations }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
+  const inputSnapshot = { plannedAmountCentavos, commitmentSelection, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations, requirements: dueObligations }, debtRequirements: { reservations: commitmentRequirements.debts }, savingsRequirements: { reservations: commitmentRequirements.savings }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
   // Recommendations use monthly targets; recorded spending is tracked separately.
   const ml = await recommendPlanCategories(userId, period, available, plannedCategories, forecast);
   const recommendation = ml.recommendation as { feasibility?: string; required_funds?: number; shortfall?: number; unallocated_surplus?: number; allocations?: unknown };

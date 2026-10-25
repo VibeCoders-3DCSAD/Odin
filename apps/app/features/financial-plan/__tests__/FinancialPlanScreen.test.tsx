@@ -16,6 +16,11 @@ const mockListSubcategories = jest.fn();
 const mockRequestFinancialPlanRecommendation = jest.fn();
 const mockRequestFinancialPlanCommitments = jest.fn();
 const mockRunSync = jest.fn();
+const mockGetPlanCommitmentPayments = jest.fn();
+
+jest.mock("../../../local-db/repositories/financialPlanCommitmentReview", () => ({
+  getPlanCommitmentPayments: (...args: unknown[]) => mockGetPlanCommitmentPayments(...args),
+}));
 
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   createFinancialPlan: (...args: unknown[]) => mockCreateFinancialPlan(...args),
@@ -77,6 +82,7 @@ describe("FinancialPlanScreen", () => {
     mockGetFinancialPlanLabels.mockResolvedValue({ categories: { food: "Food" }, subcategories: {}, debtAccounts: {}, savingsGoals: {}, creditCardStatements: {} });
     mockGetFinancialPlanSpending.mockResolvedValue({ allocationSpending: { "category:food": 0 }, spentCentavos: 0 });
     mockDeleteFinancialPlan.mockResolvedValue({});
+    mockGetPlanCommitmentPayments.mockReset().mockResolvedValue({ paidCentavos: {}, settledKeys: [] });
     mockListFinancialAccounts.mockResolvedValue([]);
     mockListCategories.mockResolvedValue([]);
     mockListSubcategories.mockResolvedValue([]);
@@ -99,6 +105,22 @@ describe("FinancialPlanScreen", () => {
     const output = JSON.stringify(view.toJSON());
     expect(output.indexOf("Essentials shortfall:")).toBeLessThan(output.indexOf("Plan insights"));
     expect(view.getAllByText("Essentials shortfall: ₱200.00")).toHaveLength(1);
+  });
+
+  it("hides optional surplus guidance once the plan is accepted", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({
+      id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31",
+      inputSnapshot: { forecast: { quality: "HIGH" } },
+      recommendation: {
+        availableFundsCentavos: 100_000,
+        allocations: [{ allocationRule: "FLEXIBLE", allocatedAmountCentavos: 60_000, floorAmountCentavos: 0, categoryId: "food" }],
+        debtReservations: [], savingsReservations: [],
+        surplusRecommendation: { unallocatedSurplusCentavos: 40_000, assessmentStatus: "insufficient_data" },
+      },
+    });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Reset Financial Plan")).toBeTruthy());
+    expect(view.queryByText("Optional surplus guidance")).toBeNull();
   });
 
   async function openRecommendationForAcceptance(explanationRequest?: unknown) {
@@ -137,59 +159,120 @@ describe("FinancialPlanScreen", () => {
   }
 
   it.each([
-    { choice: "Include savings contributions", shown: "Savings goal", hidden: "Debt account", remaining: "₱930.00", debtRepayments: true, savingsContributions: false, key: "savings:goal-1:2026-10-25", amountCentavos: 5_000 },
-    { choice: "Include debt repayments", shown: "Debt account", hidden: "Savings goal", remaining: "₱880.00", debtRepayments: false, savingsContributions: true, key: "debt:debt-1:2026-10-20", amountCentavos: 10_000 },
-  ])("plans only the selected commitment: $choice", async ({ choice, shown, hidden, remaining, debtRepayments, savingsContributions, key, amountCentavos }) => {
+    { choice: "I'll budget debt repayments manually", shown: "Savings goal", hidden: "Debt account", debtRepayments: true, savingsContributions: false, key: "savings:goal-1:2026-10-25" },
+    { choice: "I'll budget savings manually", shown: "Debt account", hidden: "Savings goal", debtRepayments: false, savingsContributions: true, key: "debt:debt-1:2026-10-20" },
+  ])("plans only the commitment left included: $choice", async ({ choice, shown, hidden, debtRepayments, savingsContributions, key }) => {
     const view = await openCommitmentSetup();
     expect(view.getByLabelText(choice).props.accessibilityState.checked).toBe(false);
-    expect(view.queryByLabelText(`${shown} budget amount in pesos`)).toBeNull();
     fireEvent.press(view.getByLabelText(choice));
+    expect(view.getByLabelText(choice).props.accessibilityState.checked).toBe(true);
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     expect(view.getByLabelText(`${shown} budget amount in pesos`)).toBeTruthy();
     expect(view.queryByLabelText(`${hidden} budget amount in pesos`)).toBeNull();
-    expect(view.getByText(remaining)).toBeTruthy();
+    fireEvent.changeText(view.getByLabelText(`${shown} budget amount in pesos`), "30");
+    fireEvent.changeText(view.getByLabelText("Biller or remittance budget amount in pesos"), "20");
+    expect(view.getByText("₱950.00")).toBeTruthy();
     expect(view.getByText("-₱20.00")).toBeTruthy();
     expect(mockRequestFinancialPlanRecommendation).not.toHaveBeenCalled();
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    fireEvent.press(view.getByLabelText("Yes, continue"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalled());
     await waitFor(() => expect(view.getByText("Category Allocations")).toBeTruthy());
-    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5]).toEqual({ debtRepayments, savingsContributions, commitmentBudgets: [{ key, amountCentavos }] });
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5]).toEqual({ debtRepayments, savingsContributions, scheduledPayments: false, commitmentBudgets: [{ key, amountCentavos: 3_000 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 2_000 }] });
   });
 
-  it("generates immediately with explicit exclusions when neither commitment is selected", async () => {
+  it("generates the plan right away with every commitment at its amount due when all are included", async () => {
     const view = await openCommitmentSetup();
+    expect(view.getByLabelText("I'll budget debt repayments manually").props.accessibilityState.checked).toBe(false);
+    expect(view.getByLabelText("I'll budget savings manually").props.accessibilityState.checked).toBe(false);
+    expect(view.getByLabelText("I'll budget billers & remittances manually").props.accessibilityState.checked).toBe(false);
     fireEvent.press(view.getByLabelText("Continue to Plan"));
+    await waitFor(() => expect(view.getByText("Category Allocations")).toBeTruthy());
+    expect(view.queryByLabelText("Back to plan setup")).toBeNull();
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5]).toEqual({ debtRepayments: false, savingsContributions: false, scheduledPayments: false, commitmentBudgets: [{ key: "debt:debt-1:2026-10-20", amountCentavos: 10_000 }, { key: "savings:goal-1:2026-10-25", amountCentavos: 5_000 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 2_000 }] });
+  });
+
+  it("leaves billers and remittances out of the plan when they are excluded", async () => {
+    const view = await openCommitmentSetup();
+    fireEvent.press(view.getByLabelText("I'll budget billers & remittances manually"));
+    expect(view.getByText("Billers and remittances excluded from this plan. Existing bills are still due.")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    expect(view.queryByLabelText("Biller or remittance budget amount in pesos")).toBeNull();
+    fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "100");
+    fireEvent.changeText(view.getByLabelText("Savings goal budget amount in pesos"), "50");
+    expect(view.getByText("₱850.00")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    await waitFor(() => expect(view.getByText("Category Allocations")).toBeTruthy());
+    expect(view.queryByText("Billers and Remittances")).toBeNull();
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5]).toEqual({ debtRepayments: false, savingsContributions: false, scheduledPayments: true, commitmentBudgets: [{ key: "debt:debt-1:2026-10-20", amountCentavos: 10_000 }, { key: "savings:goal-1:2026-10-25", amountCentavos: 5_000 }] });
+  });
+
+  it("starts manual budgeting empty when a commitment is excluded", async () => {
+    const view = await openCommitmentSetup();
+    fireEvent.press(view.getByLabelText("I'll budget savings manually"));
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("");
+    expect(view.getByLabelText("Biller or remittance budget amount in pesos").props.value).toBe("");
+    expect(view.getByText("Amount due: ₱20.00")).toBeTruthy();
+    expect(view.getByText("Due 2026-10-22")).toBeTruthy();
+    expect(view.getByText("Amount due: ₱100.00")).toBeTruthy();
+    expect(view.getByText("Due 2026-10-20")).toBeTruthy();
+    fireEvent.changeText(view.getByLabelText("Biller or remittance budget amount in pesos"), "20");
+    expect(view.getByText("₱980.00")).toBeTruthy();
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    expect(view.getByText("Continue with lower amounts?")).toBeTruthy();
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
+    expect(mockRequestFinancialPlanRecommendation).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText("Review amounts"));
+    expect(view.queryByText("Continue with lower amounts?")).toBeNull();
+    expect(mockRequestFinancialPlanRecommendation).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    fireEvent.press(view.getByLabelText("Yes, continue"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalled());
-    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5]).toEqual({ debtRepayments: true, savingsContributions: true });
-    expect(view.queryByLabelText("Recommend Budget Allocation")).toBeNull();
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5]).toEqual({ debtRepayments: false, savingsContributions: true, scheduledPayments: false, commitmentBudgets: [{ key: "debt:debt-1:2026-10-20", amountCentavos: 0 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 2_000 }] });
+  });
+
+  it("allocates on the first press without warnings when every commitment is fully funded", async () => {
+    const view = await openCommitmentSetup();
+    fireEvent.press(view.getByLabelText("I'll budget savings manually"));
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "100");
+    fireEvent.changeText(view.getByLabelText("Biller or remittance budget amount in pesos"), "20");
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(1));
+    expect(view.queryByText(/below their amount due/)).toBeNull();
   });
 
   it("prevents generation when commitments and scheduled bills exceed the planning amount", async () => {
     const view = await openCommitmentSetup();
-    fireEvent.press(view.getByLabelText("Include debt repayments"));
+    fireEvent.press(view.getByLabelText("I'll budget savings manually"));
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "990");
+    fireEvent.changeText(view.getByLabelText("Biller or remittance budget amount in pesos"), "20");
     expect(view.getByText("-₱10.00")).toBeTruthy();
-    expect(view.getByLabelText("Recommend Budget Allocation").props.accessibilityState.disabled).toBe(true);
+    expect(view.getByLabelText("Calculate Allocations").props.accessibilityState.disabled).toBe(true);
     expect(mockRequestFinancialPlanRecommendation).not.toHaveBeenCalled();
   });
 
   it("preserves draft amounts and choices when returning to setup and retrying a failed request", async () => {
     const view = await openCommitmentSetup();
-    fireEvent.press(view.getByLabelText("Include debt repayments"));
+    fireEvent.press(view.getByLabelText("I'll budget savings manually"));
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "75.25");
     fireEvent.press(view.getByLabelText("Back to plan setup"));
-    expect(view.getByLabelText("Include debt repayments").props.accessibilityState.checked).toBe(true);
+    expect(view.getByLabelText("I'll budget savings manually").props.accessibilityState.checked).toBe(true);
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("75.25");
     mockRequestFinancialPlanRecommendation.mockRejectedValueOnce(new Error("Try again."));
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    fireEvent.press(view.getByLabelText("Yes, continue"));
     await waitFor(() => expect(view.getByText("Try again.")).toBeTruthy());
     expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("75.25");
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    fireEvent.press(view.getByLabelText("Yes, continue"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(2));
-    expect(mockRequestFinancialPlanRecommendation.mock.calls[1][5].commitmentBudgets).toEqual([{ key: "debt:debt-1:2026-10-20", amountCentavos: 7_525 }]);
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[1][5].commitmentBudgets).toEqual([{ key: "debt:debt-1:2026-10-20", amountCentavos: 7_525 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 0 }]);
   });
 
   it("loads current spending immediately after acceptance and keeps tracking insights when late AI text arrives", async () => {
@@ -264,6 +347,37 @@ describe("FinancialPlanScreen", () => {
     expect(view.queryByLabelText("Billers and Remittances surplus amount in pesos")).toBeNull();
   });
 
+  it("shows whether each saved commitment is paid, partially paid or unpaid", async () => {
+    const saved = await mockGetAcceptedFinancialPlanForPeriod();
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ ...saved,
+      inputSnapshot: { ...saved.inputSnapshot, debtRequirements: { reservations: [{ debtAccountId: "loan", amountCentavos: 20_000, dueDate: "2026-10-10" }] }, obligations: {
+        reservations: [{ scheduledPaymentId: "rent", label: "Monthly rent", amountCentavos: 30_000, dueDate: "2026-10-20" }, { scheduledPaymentId: "family", label: "Family remittance", amountCentavos: 5_000, dueDate: "2026-10-25" }],
+        requirements: [{ scheduledPaymentId: "rent", amountCentavos: 30_000, dueDate: "2026-10-20" }, { scheduledPaymentId: "family", amountCentavos: 5_000, dueDate: "2026-10-25" }],
+      } },
+      recommendation: { ...saved.recommendation, debtReservations: [{ debtAccountId: "loan", label: "Car loan", amountCentavos: 10_000, dueDate: "2026-10-10" }] },
+    });
+    mockGetPlanCommitmentPayments.mockResolvedValue({ paidCentavos: { "scheduled:rent:2026-10-20": 30_000, "scheduled:family:2026-10-25": 1_000, "debt:loan": 10_000 }, settledKeys: ["scheduled:family:2026-10-25"] });
+    mockGetFinancialPlanLabels.mockResolvedValue({ categories: { food: "Food" }, subcategories: {}, debtAccounts: { loan: "Car loan" }, savingsGoals: {}, creditCardStatements: {} });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+
+    await waitFor(() => expect(view.getByLabelText("Monthly rent: Paid")).toBeTruthy());
+    expect(mockGetPlanCommitmentPayments).toHaveBeenCalledWith("user-1", { start: "2026-10-01", end: "2026-10-31" });
+    expect(view.getByLabelText("Car loan: Partially paid")).toBeTruthy();
+    expect(view.getByText("Paid ₱100.00 of ₱200.00")).toBeTruthy();
+    expect(view.getByLabelText("Family remittance: Paid")).toBeTruthy();
+    expect(view.getByText("Paid ₱10.00 of ₱50.00")).toBeTruthy();
+  });
+
+  it("keeps the saved plan open without payment statuses when payments cannot be read", async () => {
+    const saved = await mockGetAcceptedFinancialPlanForPeriod();
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ ...saved, inputSnapshot: { ...saved.inputSnapshot, obligations: { reservations: [{ scheduledPaymentId: "rent", label: "Monthly rent", amountCentavos: 30_000, dueDate: "2026-10-20" }] } } });
+    mockGetPlanCommitmentPayments.mockRejectedValue(new Error("db locked"));
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+
+    await waitFor(() => expect(view.getByText("Monthly rent")).toBeTruthy());
+    expect(view.queryByLabelText("Monthly rent: Unpaid")).toBeNull();
+  });
+
   it("shows an empty biller reservation section for a legacy saved plan", async () => {
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByText("Billers and Remittances")).toBeTruthy());
@@ -300,7 +414,7 @@ describe("FinancialPlanScreen", () => {
     expect(mockGetAcceptedFinancialPlanForPeriod).toHaveBeenCalledWith("user-1", "2026-11-01", "2026-11-30");
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     await waitFor(() => expect(view.getByText("Review your plan for 2026-11-01 to 2026-11-30.")).toBeTruthy());
-    expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledWith("token", ["rent"], [], 100_000, [], { debtRepayments: true, savingsContributions: true }, expect.anything(), "2026-11");
+    expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledWith("token", ["rent"], [], 100_000, [], { debtRepayments: false, savingsContributions: false, scheduledPayments: false, commitmentBudgets: [] }, expect.anything(), "2026-11");
     expect(view.getByText(/Development preview only/)).toBeTruthy();
     expect(view.queryByLabelText("Accept and save Financial Plan")).toBeNull();
     fireEvent.press(view.getByLabelText("Advanced plan settings"));
@@ -483,10 +597,7 @@ describe("FinancialPlanScreen", () => {
 
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
-    fireEvent.press(view.getByLabelText("Include debt repayments"));
-    fireEvent.press(view.getByLabelText("Include savings contributions"));
     fireEvent.press(view.getByLabelText("Continue to Plan"));
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
     await waitFor(() => expect(view.getByLabelText("Skip Debt Repayments")).toBeTruthy());
 
     fireEvent.press(view.getByLabelText("Skip Debt Repayments"));
@@ -497,7 +608,7 @@ describe("FinancialPlanScreen", () => {
     });
 
     await waitFor(() => expect(view.getByText("Skipped plan commitments")).toBeTruthy());
-    expect(mockRequestFinancialPlanRecommendation.mock.calls[1]![5]).toEqual({ debtRepayments: true, savingsContributions: false, commitmentBudgets: [] });
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[1]![5]).toEqual({ debtRepayments: true, savingsContributions: false, scheduledPayments: false, commitmentBudgets: [] });
     alert.mockRestore();
   });
 
@@ -518,10 +629,7 @@ describe("FinancialPlanScreen", () => {
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
 
-    fireEvent.press(view.getByLabelText("Include debt repayments"));
-    fireEvent.press(view.getByLabelText("Include savings contributions"));
     fireEvent.press(view.getByLabelText("Continue to Plan"));
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(view.getByText(/Due 2026-11-12/)).toBeTruthy());
     expect(view.getByText("Debt repayments")).toBeTruthy();
@@ -539,25 +647,28 @@ describe("FinancialPlanScreen", () => {
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
     expect(view.queryByLabelText("Debt account budget amount in pesos")).toBeNull();
-    fireEvent.press(view.getByLabelText("Include debt repayments"));
-    fireEvent.press(view.getByLabelText("Include savings contributions"));
+    fireEvent.press(view.getByLabelText("I'll budget savings manually"));
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     expect(view.getByText("Amount due: ₱100.00")).toBeTruthy();
     expect(view.queryByText("Category Allocations")).toBeNull();
     expect(mockRequestFinancialPlanRecommendation).not.toHaveBeenCalled();
     const debt = view.getByLabelText("Debt account budget amount in pesos");
     fireEvent(debt, "focus");
-    fireEvent.changeText(debt, "");
-    expect(view.getByLabelText("Recommend Budget Allocation").props.accessibilityState.disabled).toBe(true);
+    fireEvent.changeText(debt, "abc");
+    expect(view.getByLabelText("Calculate Allocations").props.accessibilityState.disabled).toBe(true);
     fireEvent.changeText(debt, "7");
     fireEvent.changeText(debt, "75.");
     expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("75.");
     fireEvent.changeText(debt, "75.25");
     expect(view.getByText("Amount due: ₱100.00")).toBeTruthy();
-    expect(view.getByText(/may result in a missed payment/)).toBeTruthy();
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    expect(view.getByText("Continue with lower amounts?")).toBeTruthy();
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
+    expect(mockRequestFinancialPlanRecommendation).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText("Yes, continue"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalled());
-    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5].commitmentBudgets).toEqual([{ key: "debt:debt-1:2026-10-20", amountCentavos: 7_525 }, { key: "savings:goal-1:2026-10-25", amountCentavos: 5_000 }]);
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5].commitmentBudgets).toEqual([{ key: "debt:debt-1:2026-10-20", amountCentavos: 7_525 }]);
   });
 
   it("recalculates remaining funds and prevents saving an increased commitment above the budget", async () => {
@@ -570,16 +681,41 @@ describe("FinancialPlanScreen", () => {
     } } });
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
-    fireEvent.press(view.getByLabelText("Include debt repayments"));
-    fireEvent.press(view.getByLabelText("Include savings contributions"));
     fireEvent.press(view.getByLabelText("Continue to Plan"));
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
     await waitFor(() => expect(view.getByText("Remaining Money in Plan")).toBeTruthy());
     fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "300");
     expect(view.getByText("-₱100.00")).toBeTruthy();
-    expect(view.queryByLabelText("Accept and save Financial Plan")).toBeNull();
-    expect(view.getByLabelText("Update Budget Allocation")).toBeTruthy();
+    expect(view.getByLabelText("Accept and save Financial Plan").props.accessibilityState.disabled).toBe(true);
     expect(view.getByText("Amount due: ₱100.00")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Calculate Allocations"));
+    await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(2));
+    expect(mockRequestFinancialPlanRecommendation.mock.calls[1][5].commitmentBudgets).toEqual([{ key: "debt:debt-1:2026-10-20", amountCentavos: 30_000 }]);
+  });
+
+  it("lets the user edit a biller after allocation and warns before accepting an underfunded bill", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
+    const bill = { scheduledPaymentId: "bill-1", label: "Electricity", amountCentavos: 2_000, dueDate: "2026-10-22" };
+    mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
+      status: "RECOMMENDATION_READY", period: { start: "2026-10-01", end: "2026-10-31" }, inputSnapshot: { plannedAmountCentavos: 100_000, obligations: { reservations: [bill], requirements: [bill] } }, explanations: [],
+      recommendation: { availableFundsCentavos: 98_000, allocations: [{ subcategoryId: "rent", allocationRule: "MINIMUM", floorAmountCentavos: 20_000, allocatedAmountCentavos: 20_000 }], debtReservations: [], savingsReservations: [] },
+    } } });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    await waitFor(() => expect(view.getByText("Remaining Money in Plan")).toBeTruthy());
+    expect(view.getByText("₱780.00")).toBeTruthy();
+    fireEvent.changeText(view.getByLabelText("Electricity budget amount in pesos"), "5");
+    expect(view.getByText("₱795.00")).toBeTruthy();
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
+    fireEvent.press(view.getByLabelText("Accept and save Financial Plan"));
+    expect(view.getByText("Continue with lower amounts?")).toBeTruthy();
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
+    expect(mockCreateFinancialPlan).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText("Yes, continue"));
+    await waitFor(() => expect(mockCreateFinancialPlan).toHaveBeenCalled());
+    expect(mockCreateFinancialPlan.mock.calls[0][2]).toMatchObject({ inputSnapshot: { obligations: { reservations: [{ ...bill, amountCentavos: 500 }], requirements: [bill] } }, recommendation: { availableFundsCentavos: 99_500 } });
   });
 
   it("retains original amounts due when reopening a plan with a smaller budget", async () => {
@@ -598,31 +734,19 @@ describe("FinancialPlanScreen", () => {
     mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: { status: "INFEASIBLE", period: { start: "2026-10-01", end: "2026-10-31" }, inputSnapshot: { debtRequirements: { reservations: [due] } }, explanations: [], recommendation: { availableFundsCentavos: 50_000, requiredFundsCentavos: 125_000, shortfallCentavos: 25_000, allocations: [{ subcategoryId: "rent", allocationRule: "MINIMUM", floorAmountCentavos: 75_000, allocatedAmountCentavos: 75_000 }], debtReservations: [due], savingsReservations: [] } } } });
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
-    fireEvent.press(view.getByLabelText("Include debt repayments"));
-    fireEvent.press(view.getByLabelText("Include savings contributions"));
     fireEvent.press(view.getByLabelText("Continue to Plan"));
-    fireEvent.press(view.getByLabelText("Recommend Budget Allocation"));
     await waitFor(() => expect(view.getByText("This plan cannot cover all requirements")).toBeTruthy());
     fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "250");
     expect(view.queryByText("This plan cannot cover all requirements")).toBeNull();
-    expect(view.queryByLabelText("Accept and save Financial Plan")).toBeNull();
     expect(view.getByText("Amount due: ₱500.00")).toBeTruthy();
-    mockRequestFinancialPlanRecommendation.mockRejectedValueOnce(new Error("Budget recommendation unavailable."));
-    fireEvent.press(view.getByLabelText("Update Budget Allocation"));
-    await waitFor(() => expect(view.getByText("Budget recommendation unavailable.")).toBeTruthy());
-    expect(view.queryByLabelText("Accept and save Financial Plan")).toBeNull();
-    expect(mockCreateFinancialPlan).not.toHaveBeenCalled();
-    expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("250.00");
-    mockRequestFinancialPlanRecommendation.mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
-      status: "RECOMMENDATION_READY", period: { start: "2026-10-01", end: "2026-10-31" },
-      inputSnapshot: { debtRequirements: { reservations: [due] } }, explanations: [],
-      recommendation: { availableFundsCentavos: 75_000, allocations: [{ subcategoryId: "rent", allocationRule: "MINIMUM", floorAmountCentavos: 75_000, allocatedAmountCentavos: 75_000 }], debtReservations: [{ ...due, amountCentavos: 25_000 }], savingsReservations: [] },
-    } } });
-    fireEvent.press(view.getByLabelText("Update Budget Allocation"));
-    await waitFor(() => expect(view.getByLabelText("Accept and save Financial Plan")).toBeTruthy());
-    expect(mockRequestFinancialPlanRecommendation.mock.calls[2][5].commitmentBudgets).toEqual([{ key: "debt:loan:2026-10-20", amountCentavos: 25_000 }]);
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
     fireEvent.press(view.getByLabelText("Accept and save Financial Plan"));
+    expect(view.getByText("Continue with lower amounts?")).toBeTruthy();
+    expect(view.queryByText(/may result in a missed payment/)).toBeNull();
+    expect(mockCreateFinancialPlan).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText("Yes, continue"));
     await waitFor(() => expect(mockCreateFinancialPlan).toHaveBeenCalled());
+    expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(1);
     expect(mockCreateFinancialPlan.mock.calls[0][2]).toMatchObject({ inputSnapshot: { debtRequirements: { reservations: [due] } }, recommendation: { availableFundsCentavos: 75_000 }, debtReservations: [{ ...due, amountCentavos: 25_000 }] });
   });
 });

@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ReservationSkips } from "./api";
 import { PlanCommitmentBudgetSection } from "./PlanCommitmentBudgetSection";
+import { UnderfundedCommitmentsDialog } from "./UnderfundedCommitmentsDialog";
 import { formatPeso } from "./financialPlanPresentation";
-import type { CommitmentPreview } from "./helpers/commitmentBudget";
+import { commitmentTotals, hasUnderfundedCommitment, type CommitmentKind, type CommitmentPreview } from "./helpers/commitmentBudget";
 
 type Props = {
   requirements: CommitmentPreview;
@@ -11,37 +13,44 @@ type Props = {
   plannedAmountCentavos: number;
   invalid: boolean;
   error: string | null;
-  onAmountChange: (kind: "debtReservations" | "savingsReservations", index: number, amount: string) => void;
+  onAmountChange: (kind: CommitmentKind, index: number, amount: string) => void;
   onValidityChange: (key: string, valid: boolean) => void;
   onBack: () => void;
-  onRecommend: () => void;
+  // The next step decides how the remaining money reaches categories (ML recommendation or manual entry).
+  actionLabel?: string;
+  onAllocate: () => void;
 };
 
-export function PlanCommitmentReview({ requirements, draft, skips, plannedAmountCentavos, invalid, error, onAmountChange, onValidityChange, onBack, onRecommend }: Props) {
-  const savings = skips.savingsContributions ? 0 : draft.savingsReservations.reduce((sum, row) => sum + row.amountCentavos, 0);
-  const debt = skips.debtRepayments ? 0 : draft.debtReservations.reduce((sum, row) => sum + row.amountCentavos, 0);
-  const bills = (draft.obligations ?? []).reduce((sum, row) => sum + row.amountCentavos, 0);
-  const remaining = plannedAmountCentavos - savings - debt - bills;
+export function PlanCommitmentReview({ requirements, draft, skips, plannedAmountCentavos, invalid, error, onAmountChange, onValidityChange, onBack, actionLabel = "Calculate Allocations", onAllocate }: Props) {
+  const { savingsCentavos: savings, debtCentavos: debt, scheduledCentavos: bills, remainingCentavos: remaining } = commitmentTotals(draft, skips, plannedAmountCentavos);
   const disabled = invalid || remaining < 0;
+  // Amounts below what is due are confirmed in a dialog when the user moves on, not flagged while they type.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const allocate = () => {
+    if (hasUnderfundedCommitment(requirements, draft, skips)) setConfirmOpen(true);
+    else onAllocate();
+  };
   return <View style={styles.page}>
     <Pressable accessibilityRole="button" accessibilityLabel="Back to plan setup" onPress={onBack} style={styles.back}><Text style={styles.backText}>‹ Back to setup</Text></Pressable>
     <Text accessibilityRole="header" style={styles.heading}>Financial Plan</Text>
-    <Text style={styles.description}>Set aside money for {draft.period.start} to {draft.period.end}, then recommend a budget for your categories.</Text>
+    <Text style={styles.description}>Set aside money for each savings goal, debt, bill and remittance for {draft.period.start} to {draft.period.end}, then allocate the remaining money to your categories.</Text>
     <PlanCommitmentBudgetSection requirements={requirements} draft={draft} skips={skips} onAmountChange={onAmountChange} onValidityChange={onValidityChange} />
     {skips.debtRepayments ? <Text style={styles.description}>Debt repayments excluded from this plan. Existing payments are still due.</Text> : null}
     {skips.savingsContributions ? <Text style={styles.description}>Savings contributions excluded from this plan.</Text> : null}
+    {skips.scheduledPayments ? <Text style={styles.description}>Billers and remittances excluded from this plan. Existing bills are still due.</Text> : null}
     <View style={styles.summary}>
       {([
         ["Planning amount", plannedAmountCentavos],
         ["Savings contributions", -savings],
         ["Debt repayments", -debt],
-        ["Other scheduled commitments", -bills],
+        ["Billers and remittances", -bills],
       ] as const).map(([label, amount]) => <View key={label} style={styles.row}><Text style={styles.summaryLabel}>{label}</Text><Text style={styles.summaryAmount}>{formatPeso(amount)}</Text></View>)}
-      <View style={[styles.row, styles.total]}><Text style={styles.totalLabel}>Available for categories</Text><Text style={styles.totalAmount}>{invalid ? "Check amounts" : formatPeso(remaining)}</Text></View>
+      <View style={[styles.row, styles.total]}><Text style={styles.totalLabel}>Remaining money in plan</Text><Text style={styles.totalAmount}>{invalid ? "Check amounts" : formatPeso(remaining)}</Text></View>
     </View>
     {remaining < 0 ? <Text accessibilityRole="alert" style={styles.error}>Your planned payments exceed the planning amount. Reduce an amount or return to setup.</Text> : null}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-    <Pressable accessibilityRole="button" accessibilityLabel="Recommend Budget Allocation" disabled={disabled} onPress={onRecommend} style={[styles.button, disabled && styles.disabled]}><Text style={styles.buttonText}>Recommend Budget Allocation</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={actionLabel} disabled={disabled} onPress={allocate} style={[styles.button, disabled && styles.disabled]}><Text style={styles.buttonText}>{actionLabel}</Text></Pressable>
+    <UnderfundedCommitmentsDialog visible={confirmOpen} onCancel={() => setConfirmOpen(false)} onConfirm={() => { setConfirmOpen(false); onAllocate(); }} />
   </View>;
 }
 

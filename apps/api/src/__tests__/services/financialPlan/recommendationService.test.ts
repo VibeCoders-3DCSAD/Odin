@@ -48,6 +48,15 @@ describe("Financial Plan commitment reservations", () => {
   it("includes every weekly contribution due in the plan month", () => {
     expect(scheduledReservationDates("2026-10-28", "weekly", { start: "2026-11-01", end: "2026-11-30" })).toEqual(["2026-11-04", "2026-11-11", "2026-11-18", "2026-11-25"]);
   });
+
+  it.each([
+    { frequency: "weekly", next: "2026-10-23", schedule: {}, dates: ["2026-10-02", "2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"] },
+    { frequency: "monthly", next: "2026-11-20", schedule: {}, dates: ["2026-10-20"] },
+    { frequency: "semi_monthly", next: "2026-10-30", schedule: { semiMonthlyDays: [15, 30] as [number, number] }, dates: ["2026-10-15", "2026-10-30"] },
+    { frequency: "custom", next: "2026-10-25", schedule: { customIntervalDays: 10 }, dates: ["2026-10-05", "2026-10-15", "2026-10-25"] },
+  ])("includes $frequency occurrences earlier in the month than the next date", ({ frequency, next, schedule, dates }) => {
+    expect(scheduledReservationDates(next, frequency, { start: "2026-10-01", end: "2026-10-31" }, schedule)).toEqual(dates);
+  });
 });
 
 describe("Financial Plan period", () => {
