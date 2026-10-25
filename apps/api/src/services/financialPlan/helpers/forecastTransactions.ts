@@ -17,7 +17,7 @@ export function planForecastTransactions(cleanTransactions: ForecastTransaction[
       date: transaction.transaction_date,
       amount: transaction.amount_centavos / 100,
       category: (transaction.subcategory_id ? categorySlugBySubcategoryId.get(transaction.subcategory_id) : undefined) ?? "Other",
-      transactionType: transaction.transaction_type,
+      transactionType: "expense" as const,
       ...(yearlyIds.has(transaction.id) ? { recurrence: "yearly" as const } : {}),
     }]
     : []);
