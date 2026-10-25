@@ -154,10 +154,10 @@ describe("forecast ML adapter", () => {
     await expect(getMlForecast("user-1", { historicalTransactions: [transaction, currentQuarterTransaction] }, jest.fn().mockRejectedValue(new Error("offline")))).rejects.toMatchObject({ status: 503 });
   });
 
-  it("targets next month through the end of the third quarter after it", () => {
-    expect(forecastMonths(new Date("2026-10-18T12:00:00.000Z"))).toEqual(["2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09"]);
-    expect(forecastMonths(new Date("2026-11-30T12:00:00.000Z"))).toHaveLength(10);
-    expect(forecastMonths(new Date("2026-12-05T12:00:00.000Z"))).toEqual(["2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09", "2027-10", "2027-11", "2027-12"]);
+  it("targets the current month through the end of the third quarter after next month's", () => {
+    expect(forecastMonths(new Date("2026-10-18T12:00:00.000Z"))).toEqual(["2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09"]);
+    expect(forecastMonths(new Date("2026-11-30T12:00:00.000Z"))).toHaveLength(11);
+    expect(forecastMonths(new Date("2026-12-05T12:00:00.000Z"))).toEqual(["2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09", "2027-10", "2027-11", "2027-12"]);
   });
 
   it("forecasts every month in one call and totals each quarter from its months", async () => {
@@ -176,14 +176,15 @@ describe("forecast ML adapter", () => {
     const result = await getMlQuarterlyForecast("user-1", { historicalTransactions: [currentQuarterTransaction] }, fetcher);
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetcher.mock.calls[0]![1].body).target_months).toEqual(months);
-    expect(result.months.slice(0, 3)).toEqual([
+    expect(result.months.slice(0, 4)).toEqual([
+      { month: "2026-10", totalCentavos: 100_000, categories: [{ category: "food", amountCentavos: 100_000 }] },
       { month: "2026-11", totalCentavos: 100_000, categories: [{ category: "food", amountCentavos: 100_000 }] },
       { month: "2026-12", totalCentavos: 300_000, categories: [{ category: "food", amountCentavos: 300_000 }] },
       { month: "2027-01", totalCentavos: 100_000, categories: [{ category: "food", amountCentavos: 100_000 }] },
     ]);
     expect(result.quarters.map((quarter) => quarter.quarter)).toEqual(["2026Q4", "2027Q1", "2027Q2", "2027Q3"]);
-    // November and December stand in for all of Q4: (1,000 + 3,000) x 3 / 2.
-    expect(result.quarters[0]).toEqual({ quarter: "2026Q4", totalCentavos: 600_000, categories: [{ category: "food", amountCentavos: 600_000 }] });
+    // October, November, and December make up all of Q4: 1,000 + 1,000 + 3,000.
+    expect(result.quarters[0]).toEqual({ quarter: "2026Q4", totalCentavos: 500_000, categories: [{ category: "food", amountCentavos: 500_000 }] });
     expect(result.quarters[1]!.totalCentavos).toBe(300_000);
     expect(result).toMatchObject({ modelVersion: "hfce-sarima-v4-category-quarterly", baselineMethod: "same_period_last_year", seasonalUncertainty: false, quality: "PERSONALIZED" });
   });

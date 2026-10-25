@@ -170,12 +170,14 @@ function quarterOf(month: string): string {
   return `${month.slice(0, 4)}Q${Math.floor((Number(month.slice(5, 7)) - 1) / MONTHS_PER_QUARTER) + 1}`;
 }
 
-// Next month through the end of the third quarter after it, so the opening quarter may be partial.
+// The current month, so it can be compared with its actual spending so far, through the end of the third
+// quarter after next month's. The opening quarter may be partial; December asks for thirteen months.
 export function forecastMonths(now = new Date()): string[] {
   const year = now.getUTCFullYear();
-  const nextMonthIndex = now.getUTCMonth() + 1;
+  const currentMonthIndex = now.getUTCMonth();
+  const nextMonthIndex = currentMonthIndex + 1;
   const endIndex = Math.floor(nextMonthIndex / MONTHS_PER_QUARTER) * MONTHS_PER_QUARTER + FORECAST_QUARTERS * MONTHS_PER_QUARTER;
-  return Array.from({ length: endIndex - nextMonthIndex }, (_, index) => utcMonth(year, nextMonthIndex + index));
+  return Array.from({ length: endIndex - currentMonthIndex }, (_, index) => utcMonth(year, currentMonthIndex + index));
 }
 
 function sumByCategory(points: CategoryAmount[], scale = 1): CategoryAmount[] {
@@ -188,9 +190,8 @@ function withTotal<T extends { categories: CategoryAmount[] }>(group: T): T & { 
   return { ...group, totalCentavos: group.categories.reduce((total, point) => total + point.amountCentavos, 0) };
 }
 
-// odin-ml scales each month's baseline by its quarter's HFCE multiplier. HFCE is quarterly, so months in a
-// quarter differ only through the baseline: the same month last year once there is a full year of history.
-// A partial opening quarter scales its forecast months up to a full three.
+// From six months of history odin-ml walks each month forward from last month by HFCE, splitting each
+// quarter's growth evenly across its months. A partial opening quarter scales its forecast months up to a full three.
 export async function getMlQuarterlyForecast(userId: string, request: ForecastRequest, fetcher: typeof fetch = fetch): Promise<QuarterlyForecastPayload> {
   const targetMonths = forecastMonths();
   const payload = await getMlForecast(userId, { historicalTransactions: request.historicalTransactions, targetMonths }, fetcher);
