@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import type { ForecastChartPoint } from "./DebtForecastChart";
 
-const P = { ink: "#1B1C1A", muted: "#6B7A6F", line: "#EAEAE6", card: "#F1F0EB" } as const;
 const COMPACT_ROW_LIMIT = 6;
 const INITIAL_FORECAST_ROWS = 3;
 const FORECAST_ROW_CHUNK = 8;
@@ -28,19 +28,19 @@ export function DebtForecastTable({ points, milestoneDate, dateGranularity = "da
   const remainingForecastRows = Math.max(0, forecastPoints.length - visibleForecastRows);
   const nextForecastRowCount = points.length > COMPACT_ROW_LIMIT ? Math.min(FORECAST_ROW_CHUNK, remainingForecastRows) : 0;
 
-  return <View style={{ marginTop: 14 }} accessibilityLabel="Debt balance details">
-    <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 12, color: P.ink }}>Balance details</Text>
-    {rows.map((point) => {
+  return <View accessibilityLabel="Debt balance details" style={{ gap: 8 }}>
+    <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 12.5, color: v4.ink }}>Balance details</Text>
+    <View style={ui.list}>{rows.map((point, index) => {
       const milestone = point.date === milestoneDate;
       const dateLabel = dateGranularity === "month"
         ? new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${point.date}T00:00:00.000Z`))
         : point.date;
-      return <View key={point.id} accessibilityLabel={`${point.date}, ${point.isForecast ? "forecast" : "actual"} balance ${formatPeso(point.balanceCentavos)}${milestone ? ", debt-free milestone" : ""}`} style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8, padding: 10, borderRadius: 10, backgroundColor: milestone ? "#E8F5ED" : P.card }}>
-        <View style={{ minWidth: 56, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, backgroundColor: point.isForecast ? "#E6EFFC" : "#E7E7E2" }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 9.5, color: point.isForecast ? "#2563EB" : P.muted }}>{point.isForecast ? "Forecast" : "Actual"}</Text></View>
-        <Text style={{ flex: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>{milestone ? `Debt-free milestone · ${dateLabel}` : dateLabel}</Text>
-        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11.5, color: P.ink }}>{formatPeso(point.balanceCentavos)}</Text>
+      return <View key={point.id} accessibilityLabel={`${point.date}, ${point.isForecast ? "forecast" : "actual"} balance ${formatPeso(point.balanceCentavos)}${milestone ? ", debt-free milestone" : ""}`} style={[{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: milestone ? "#E9F6EF" : undefined }, index > 0 ? ui.listRowDivider : null]}>
+        <View style={{ minWidth: 60, alignItems: "center", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: point.isForecast ? "#E6EFFC" : "#EFEBE3" }}><Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 10, color: point.isForecast ? "#1D4ED8" : v4.ink2 }}>{point.isForecast ? "Forecast" : "Actual"}</Text></View>
+        <Text style={{ flex: 1, fontFamily: v4Font, fontSize: 12, color: milestone ? "#004D1B" : v4.ink2, fontWeight: milestone ? "700" : "400" }}>{milestone ? `Debt-free milestone · ${dateLabel}` : dateLabel}</Text>
+        <Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 12.5, color: v4.ink, fontVariant: ["tabular-nums"] }}>{formatPeso(point.balanceCentavos)}</Text>
       </View>;
-    })}
-    {nextForecastRowCount > 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`Show ${nextForecastRowCount} more forecast balance${nextForecastRowCount === 1 ? "" : "s"}`} onPress={() => setVisibleForecastRows((count) => count + FORECAST_ROW_CHUNK)} style={{ alignSelf: "flex-start", marginTop: 10 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11.5, color: "#066B40" }}>{`Show ${nextForecastRowCount} more`}</Text></Pressable> : null}
+    })}</View>
+    {nextForecastRowCount > 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`Show ${nextForecastRowCount} more forecast balance${nextForecastRowCount === 1 ? "" : "s"}`} onPress={() => setVisibleForecastRows((count) => count + FORECAST_ROW_CHUNK)} hitSlop={8} style={{ alignSelf: "flex-start" }}><Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 12.5, color: v4.brand }}>{`Show ${nextForecastRowCount} more`}</Text></Pressable> : null}
   </View>;
 }
