@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
+import { Banner, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
 import { listDebtPayments, type DebtPayment } from "../../local-db/repositories/debtPayments";
 import { getLatestFinancialPlan } from "../../local-db/repositories/financialPlans";
 import NonCreditDebtCard from "./NonCreditDebtCard";
 import NonCreditDebtForecastSection from "./NonCreditDebtForecastSection";
 import NonCreditDebtForm from "./NonCreditDebtForm";
+import { getDebtTypeLabel } from "./debtTypes";
+import { Button, DebtTypeIcon, debtTypeTint } from "./debtUi";
 
 type Props = { userId: string; deviceId: string; debtId: string; onBack: () => void; onRecordPayment: (debtId: string) => void; onEditPayment: (payment: DebtPayment) => void };
 
@@ -31,8 +34,18 @@ export default function NonCreditDebtDetailScreen({ userId, deviceId, debtId, on
     }
   }
   useEffect(() => { load().catch(() => setDebt(null)); }, [debtId, userId]);
-  if (debt === undefined) return <ActivityIndicator color="#013220" />;
-  if (debt === null) return <View><Text style={{ fontFamily: "Manrope", color: "#B42318" }}>This debt is unavailable.</Text><Pressable accessibilityRole="button" accessibilityLabel="Back to Non Credit Card Debts" onPress={onBack} style={{ marginTop: 12 }}><Text style={{ color: "#013220", fontWeight: "700" }}>Back to debts</Text></Pressable></View>;
+  if (debt === undefined) return <ActivityIndicator color={v4.brand} />;
+  if (debt === null) return <View style={{ gap: 12 }}><Banner tone="error">This debt is unavailable.</Banner><Button variant="ghost" label="Back to debts" accessibilityLabel="Back to Non Credit Card Debts" onPress={onBack} /></View>;
   if (editing) return <NonCreditDebtForm userId={userId} deviceId={deviceId} debt={debt} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); load().catch(() => {}); }} />;
-  return <View><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>Non Credit Card Debts</Text><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 3 }}>{debt.name}</Text><View style={{ marginTop: 16 }}><NonCreditDebtCard userId={userId} deviceId={deviceId} debt={debt} onEdit={() => setEditing(true)} onRecordPayment={onRecordPayment} onEditPayment={onEditPayment} onChanged={() => load().catch(() => {})} /><NonCreditDebtForecastSection debt={debt} payments={payments} projectedContributionCentavos={projectedContributionCentavos} /></View></View>;
+  return <View style={{ gap: 14 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+      <View style={[ui.listTile, { backgroundColor: debtTypeTint(debt.type).bg, width: 40, height: 40, borderRadius: 12 }]}><DebtTypeIcon type={debt.type} /></View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 20, color: v4.ink }}>{debt.name}</Text>
+        <Text style={ui.listSubtitle}>{getDebtTypeLabel(debt.type)}</Text>
+      </View>
+    </View>
+    <NonCreditDebtCard userId={userId} deviceId={deviceId} debt={debt} onEdit={() => setEditing(true)} onRecordPayment={onRecordPayment} onEditPayment={onEditPayment} onChanged={() => load().catch(() => {})} />
+    <NonCreditDebtForecastSection debt={debt} payments={payments} projectedContributionCentavos={projectedContributionCentavos} />
+  </View>;
 }

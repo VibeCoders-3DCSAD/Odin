@@ -30,7 +30,7 @@ describe("NonCreditDebtListScreen", () => {
 
   it("loads the requested status filter", async () => {
     const view = render(<NonCreditDebtListScreen userId="user-1" deviceId="device-1" onBack={jest.fn()} onOpenDebt={jest.fn()} />);
-    await view.findByText("Car loan");
+    await view.findByLabelText("Open Car loan");
     fireEvent.press(view.getByLabelText("Show finished debts"));
     await waitFor(() => expect(mockListDebtAccounts).toHaveBeenLastCalledWith("user-1", "finished"));
   });
@@ -44,7 +44,7 @@ describe("NonCreditDebtListScreen", () => {
 
   it("persists a debt priority for surplus allocation", async () => {
     const view = render(<NonCreditDebtListScreen userId="user-1" deviceId="device-1" onBack={jest.fn()} onOpenDebt={jest.fn()} />);
-    await view.findByText("Car loan");
+    await view.findByLabelText("Open Car loan");
     fireEvent.press(view.getByLabelText("Prioritize Car loan"));
     await waitFor(() => expect(mockSaveDebtPriorities).toHaveBeenCalledWith("user-1", "device-1", ["debt-1"]));
   });
