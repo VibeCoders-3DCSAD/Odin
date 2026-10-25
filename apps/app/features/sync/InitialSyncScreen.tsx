@@ -25,7 +25,7 @@ export function InitialSyncScreen({ progress, failed, onRetry, onSkip }: Props) 
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: initialSyncBackground, alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <Image source={initialSyncArt} accessibilityIgnoresInvertColors style={{ width: 264, aspectRatio: 16 / 9 }} resizeMode="contain" />
+      <Image source={initialSyncArt} accessibilityIgnoresInvertColors style={{ width: 240, height: 135 }} resizeMode="contain" />
       <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink, marginTop: 24, textAlign: "center" }}>
         {failed ? "Sync paused" : "Setting up your account"}
       </Text>
