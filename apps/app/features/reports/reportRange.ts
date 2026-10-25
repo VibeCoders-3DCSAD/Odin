@@ -1,7 +1,6 @@
 import type { ReportRange } from "../../local-db/repositories/financialReports";
 
 export type ReportPeriod = "this_month" | "last_month" | "this_year" | "this_week";
-export type CashFlowComparison = { range: ReportRange; label: string; averageByActiveMonth: boolean };
 
 function localDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -25,39 +24,4 @@ export function rangeFor(period: ReportPeriod, now = new Date()): ReportRange {
   const start = new Date(now);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   return { startDate: localDate(start), endDate };
-}
-
-export function cashFlowComparisonFor(period: ReportPeriod, now = new Date()): CashFlowComparison {
-  if (period === "this_year") {
-    const year = now.getFullYear() - 1;
-    return {
-      range: { startDate: `${year}-01-01`, endDate: `${year}-12-31` },
-      label: "last year's average month",
-      averageByActiveMonth: true,
-    };
-  }
-
-  if (period === "this_month" || period === "last_month") {
-    const monthsAgo = period === "this_month" ? 1 : 2;
-    const previousMonth = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
-    return {
-      range: {
-        startDate: localDate(previousMonth),
-        endDate: localDate(new Date(now.getFullYear(), now.getMonth() - monthsAgo + 1, 0)),
-      },
-      label: period === "this_month" ? "last month" : "the previous month",
-      averageByActiveMonth: false,
-    };
-  }
-
-  const currentWeek = rangeFor("this_week", now);
-  const previousWeekEnd = new Date(`${currentWeek.startDate}T00:00:00`);
-  previousWeekEnd.setDate(previousWeekEnd.getDate() - 1);
-  const previousWeekStart = new Date(previousWeekEnd);
-  previousWeekStart.setDate(previousWeekStart.getDate() - 6);
-  return {
-    range: { startDate: localDate(previousWeekStart), endDate: localDate(previousWeekEnd) },
-    label: "last week",
-    averageByActiveMonth: false,
-  };
 }

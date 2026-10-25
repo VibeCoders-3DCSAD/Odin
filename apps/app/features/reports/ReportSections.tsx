@@ -1,21 +1,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { ArrowDownLeft, ArrowUpRight } from "phosphor-react-native";
 import Svg, { Path } from "react-native-svg";
 import {
-  getAccountSummary,
-  getAccountBalanceAt,
   getAllocationSummary,
   getBudgetActualSummary,
-  getCashFlowComparisonSummary,
-  getCashFlowSummary,
   getDebtSummary,
   getCashOutflowDistribution,
   getSavingsSummary,
   listCategoryBreakdown,
   type ReportRange,
 } from "../../local-db/repositories/financialReports";
-import type { CashFlowComparison } from "./reportRange";
+import { getLatestForecastSnapshot } from "../../local-db/repositories/forecastSnapshots";
+import { listMonthlySpending, recentMonths } from "../../local-db/repositories/forecastTransactions";
+import { fetchSpendingForecast } from "../forecast/fetchSpendingForecast";
+import { categoryLabel } from "../forecast/QuarterlyForecastCharts";
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", positive: "#087A4A", negative: "#B42318" };
 const PIE_COLORS = ["#087A4A", "#4C956C", "#D4A373", "#5B8E7D", "#BC6C25", "#8A5A44"];
@@ -59,23 +57,6 @@ function State({ loading, error, children }: { loading: boolean; error: boolean;
 
 type RefreshProps = { refreshKey: number };
 
-export function CashFlowSection({ userId, range, comparison, refreshKey }: { userId: string; range: ReportRange; comparison: CashFlowComparison } & RefreshProps) {
-  const { data, loading, error } = useReportData(async () => {
-    // Against an average month, this period is averaged the same way so a year's total is not compared with one month.
-    const [current, currentAverage, previous] = await Promise.all([
-      getCashFlowSummary(userId, range),
-      comparison.averageByActiveMonth ? getCashFlowComparisonSummary(userId, range, true) : null,
-      getCashFlowComparisonSummary(userId, comparison.range, comparison.averageByActiveMonth),
-    ]);
-    return { current, compared: currentAverage ?? current, previous };
-  }, [userId, range.startDate, range.endDate, comparison.range.startDate, comparison.range.endDate, comparison.averageByActiveMonth, refreshKey]);
-  return <Section title="Cash flow"><State loading={loading} error={error}>{data ? <View style={{ marginTop: 14, gap: 8 }}>
-    <ComparisonMetric label="Income" current={data.current.incomeCentavos} compared={data.compared.incomeCentavos} previous={data.previous.incomeCentavos} comparisonLabel={comparison.label} perMonth={comparison.averageByActiveMonth} />
-    <ComparisonMetric label="Outflow" current={data.current.outflowCentavos} compared={data.compared.outflowCentavos} previous={data.previous.outflowCentavos} comparisonLabel={comparison.label} perMonth={comparison.averageByActiveMonth} increaseIsPositive={false} />
-    <Metric label="Net cash flow" value={money(data.current.netCashFlowCentavos)} color={data.current.netCashFlowCentavos >= 0 ? P.positive : P.negative} strong />
-  </View> : <LoadingValue>No posted income or expenses in this period.</LoadingValue>}</State></Section>;
-}
-
 export function ExpenseDistributionSection({ userId, range, refreshKey }: { userId: string; range: ReportRange } & RefreshProps) {
   const { data, loading, error } = useReportData(() => getCashOutflowDistribution(userId, range), [userId, range.startDate, range.endDate, refreshKey]);
   const total = data?.reduce((sum, item) => sum + item.amountCentavos, 0) ?? 0;
@@ -90,15 +71,71 @@ export function ExpenseDistributionSection({ userId, range, refreshKey }: { user
   </View> : <LoadingValue>No cash outflows to break down in this period.</LoadingValue>}</State></Section>;
 }
 
-export function AccountSummarySection({ userId, comparison, refreshKey }: { userId: string; comparison: CashFlowComparison } & RefreshProps) {
-  const { data, loading, error } = useReportData(async () => {
-    const [current, previous] = await Promise.all([getAccountSummary(userId), getAccountBalanceAt(userId, comparison.range.endDate)]);
-    return { current, previous };
-  }, [userId, comparison.range.endDate, refreshKey]);
-  return <Section title="Accounts"><State loading={loading} error={error}>{data ? <View style={{ marginTop: 14 }}>
-    <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{data.current.accountCount} active {data.current.accountCount === 1 ? "account" : "accounts"}</Text>
-    <ComparisonMetric label="Total balance" current={data.current.balanceCentavos} previous={data.previous.balanceCentavos} comparisonLabel={comparison.label} />
-  </View> : null}</State></Section>;
+// savedAt is when the saved forecast ran; null when it was recalculated from the spending before the month.
+type ForecastActual = { month: string; savedAt: string | null; forecastCentavos: number; actualCentavos: number; gaps: ForecastGap[] };
+type MonthForecast = { month: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[]; savedAt: string | null };
+type ForecastGap = { category: string; differenceCentavos: number };
+
+// The categories that strayed furthest from last month's forecast.
+const FORECAST_GAP_CATEGORIES = 3;
+
+const NO_LAST_MONTH_FORECAST = { notice: "Last month had no earlier spending to forecast from." };
+
+// The latest spending forecast saved during last month, as the reports chart showed it.
+async function savedLastMonthForecast(userId: string, lastMonth: string): Promise<MonthForecast | null> {
+  const saved = await getLatestForecastSnapshot(userId, lastMonth);
+  const month = saved?.months?.find((point) => point.month === lastMonth);
+  return saved && month ? { ...month, savedAt: saved.generatedAt } : null;
+}
+
+// Without a saved run, the same spending forecast is made again as of last month's first day.
+async function recalculatedLastMonthForecast(userId: string, accessToken: string, lastMonth: string): Promise<MonthForecast | { notice: string }> {
+  const result = await fetchSpendingForecast(userId, accessToken, { asOf: `${lastMonth}-01` });
+  if ("notice" in result) return NO_LAST_MONTH_FORECAST;
+  const month = result.payload.months?.find((point) => point.month === lastMonth);
+  return month ? { ...month, savedAt: null } : NO_LAST_MONTH_FORECAST;
+}
+
+async function loadForecastActual(userId: string, accessToken: string): Promise<ForecastActual | { notice: string }> {
+  const [lastMonth] = recentMonths(2);
+  const forecast = await savedLastMonthForecast(userId, lastMonth!) ?? await recalculatedLastMonthForecast(userId, accessToken, lastMonth!);
+  if ("notice" in forecast) return forecast;
+  const [actual] = await listMonthlySpending(userId, [forecast.month]);
+  const amounts = new Map<string, { forecastCentavos: number; actualCentavos: number }>();
+  const amountsFor = (category: string) => amounts.get(category) ?? amounts.set(category, { forecastCentavos: 0, actualCentavos: 0 }).get(category)!;
+  for (const point of actual?.categories ?? []) amountsFor(point.category).actualCentavos += point.amountCentavos;
+  for (const point of forecast.categories) amountsFor(point.category).forecastCentavos += point.amountCentavos;
+  const gaps = [...amounts].map(([category, amount]) => ({ category, differenceCentavos: amount.actualCentavos - amount.forecastCentavos }))
+    .filter((gap) => Math.round(gap.differenceCentavos) !== 0)
+    .sort((a, b) => Math.abs(b.differenceCentavos) - Math.abs(a.differenceCentavos))
+    .slice(0, FORECAST_GAP_CATEGORIES);
+  return { month: forecast.month, savedAt: forecast.savedAt, forecastCentavos: forecast.totalCentavos, actualCentavos: actual?.totalCentavos ?? 0, gaps };
+}
+
+// Last month's forecast against what was actually spent that month.
+export function ForecastActualSection({ userId, accessToken, refreshKey }: { userId: string; accessToken: string } & RefreshProps) {
+  const { data, loading, error } = useReportData(() => loadForecastActual(userId, accessToken), [userId, accessToken, refreshKey]);
+  const result = data && "month" in data ? data : null;
+  const difference = result ? result.actualCentavos - result.forecastCentavos : 0;
+  return <Section title="Forecast vs actual (last month)"><State loading={loading} error={error}>{result ? <View style={{ marginTop: 14, gap: 8 }}>
+    <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{monthTitle(result.month)} · {result.savedAt ? `forecast saved ${new Date(result.savedAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", timeZone: "Asia/Manila" })}` : "forecast recalculated from your earlier spending"}</Text>
+    <Metric label="Forecast" value={money(result.forecastCentavos)} />
+    <Metric label="Actual spending" value={money(result.actualCentavos)} />
+    <Metric label={difference > 0 ? "Over forecast" : "Under forecast"} value={money(Math.abs(difference))} color={difference > 0 ? P.negative : P.positive} strong />
+    {result.gaps.length ? <View style={{ borderTopColor: P.line, borderTopWidth: 1, gap: 8, marginTop: 6, paddingTop: 10 }}>
+      <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Biggest differences</Text>
+      {result.gaps.map((gap) => <ForecastGapRow key={gap.category} gap={gap} />)}
+    </View> : null}
+  </View> : <LoadingValue>{data && "notice" in data ? data.notice : "No forecast for last month."}</LoadingValue>}</State></Section>;
+}
+
+function ForecastGapRow({ gap }: { gap: ForecastGap }) {
+  const over = gap.differenceCentavos > 0;
+  return <Metric label={categoryLabel(gap.category)} value={`${money(Math.abs(gap.differenceCentavos))} ${over ? "over" : "under"}`} color={over ? P.negative : P.positive} />;
+}
+
+function monthTitle(month: string): string {
+  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1)).toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
 export function BudgetActualSection({ userId, range, refreshKey }: { userId: string; range: ReportRange } & RefreshProps) {
@@ -146,26 +183,6 @@ export function AllocationSummarySection({ userId, range, refreshKey }: { userId
 
 function Metric({ label, value, color = P.ink, strong = false }: { label: string; value: string; color?: string; strong?: boolean }) {
   return <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}><Text style={{ color: P.muted, flex: 1, fontFamily: "Manrope", fontSize: 12 }}>{label}</Text><Text style={{ color, fontFamily: "Manrope", fontSize: 12, fontWeight: strong ? "800" : "700" }}>{value}</Text></View>;
-}
-
-// compared is the value measured against previous when it differs from the one shown, such as a monthly average.
-function ComparisonMetric({ label, current, compared = current, previous, comparisonLabel, perMonth = false, increaseIsPositive = true }: { label: string; current: number; compared?: number; previous: number; comparisonLabel: string; perMonth?: boolean; increaseIsPositive?: boolean }) {
-  const difference = compared - previous;
-  const hasBaseline = previous !== 0;
-  const percentage = hasBaseline ? `${difference > 0 ? "+" : difference < 0 ? "-" : ""}${Math.abs(difference / previous * 100).toFixed(1)}` : null;
-  const isIncrease = difference >= 0;
-  const changeColor = difference === 0 ? P.muted : isIncrease === increaseIsPositive ? P.positive : P.negative;
-  if (previous === 0) {
-    return <View style={{ marginTop: 10 }}><Metric label={label} value={money(current)} strong /><LoadingValue>{current === 0 ? `No change from ${comparisonLabel}.` : `No prior value for ${comparisonLabel}.`}</LoadingValue></View>;
-  }
-  return <View style={{ marginTop: 10 }}>
-    <Metric label={label} value={money(current)} strong />
-    <View style={{ alignItems: "center", flexDirection: "row", gap: 4, marginTop: 5 }}>
-      {isIncrease ? <ArrowUpRight size={14} color={changeColor} weight="bold" /> : <ArrowDownLeft size={14} color={changeColor} weight="bold" />}
-      <Text style={{ color: changeColor, fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>{percentage}%</Text>
-      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{perMonth ? "per month " : ""}vs {comparisonLabel}</Text>
-    </View>
-  </View>;
 }
 
 function ExpensePieChart({ items, total }: { items: { amountCentavos: number }[]; total: number }) {

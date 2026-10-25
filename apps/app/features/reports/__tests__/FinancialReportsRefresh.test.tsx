@@ -6,10 +6,10 @@ const mockForecast = jest.fn((_props: unknown) => null);
 jest.mock("../../forecast/SpendingForecastScreen", () => ({ __esModule: true, default: (props: unknown) => mockForecast(props) }));
 jest.mock("../../alerts/AnomalyAlertsScreen", () => ({ __esModule: true, default: () => null }));
 jest.mock("../ReportSections", () => ({
-  AccountSummarySection: () => null, AllocationSummarySection: () => null,
-  BudgetActualSection: () => null, CategoryBreakdownSection: () => null,
-  CashFlowSection: () => null, DebtSummarySection: () => null,
-  ExpenseDistributionSection: () => null, SavingsProgressSection: () => null,
+  AllocationSummarySection: () => null, BudgetActualSection: () => null,
+  CategoryBreakdownSection: () => null, DebtSummarySection: () => null,
+  ExpenseDistributionSection: () => null, ForecastActualSection: () => null,
+  SavingsProgressSection: () => null,
 }));
 
 it("refreshes the forecast after a sync update and a manual report refresh", () => {

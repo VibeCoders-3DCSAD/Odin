@@ -3,16 +3,15 @@ import { Pressable, Text, View } from "react-native";
 import AnomalyAlertsScreen from "../alerts/AnomalyAlertsScreen";
 import SpendingForecastScreen from "../forecast/SpendingForecastScreen";
 import {
-  AccountSummarySection,
   AllocationSummarySection,
   BudgetActualSection,
   CategoryBreakdownSection,
-  CashFlowSection,
   DebtSummarySection,
   ExpenseDistributionSection,
+  ForecastActualSection,
   SavingsProgressSection,
 } from "./ReportSections";
-import { cashFlowComparisonFor, rangeFor, type ReportPeriod } from "./reportRange";
+import { rangeFor, type ReportPeriod } from "./reportRange";
 
 type Props = { userId: string; deviceId: string; accessToken: string; syncVersion?: number };
 
@@ -30,12 +29,11 @@ export default function FinancialReportsScreen({ userId, deviceId, accessToken, 
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
   const refreshKey = manualRefreshKey + syncVersion;
   const range = rangeFor(period);
-  const cashFlowComparison = cashFlowComparisonFor(period);
 
   return <View>
     <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 22, fontWeight: "800" }}>Financial Reports</Text>
     <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 14, lineHeight: 21, marginTop: 5 }}>
-      A clear read on your money, from cash flow to goals and debt.
+      A clear read on your money, from spending to goals and debt.
     </Text>
 
     <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 13, fontWeight: "800", marginTop: 20 }}>Reporting period</Text>
@@ -53,8 +51,7 @@ export default function FinancialReportsScreen({ userId, deviceId, accessToken, 
 
     <View style={{ gap: 14, marginTop: 20 }}>
       <ExpenseDistributionSection userId={userId} range={range} refreshKey={refreshKey} />
-      <CashFlowSection userId={userId} range={range} comparison={cashFlowComparison} refreshKey={refreshKey} />
-      <AccountSummarySection userId={userId} comparison={cashFlowComparison} refreshKey={refreshKey} />
+      <ForecastActualSection userId={userId} accessToken={accessToken} refreshKey={refreshKey} />
       <BudgetActualSection userId={userId} range={range} refreshKey={refreshKey} />
       <SavingsProgressSection userId={userId} refreshKey={refreshKey} />
       <DebtSummarySection userId={userId} refreshKey={refreshKey} />

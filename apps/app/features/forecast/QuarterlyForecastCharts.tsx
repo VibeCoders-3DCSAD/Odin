@@ -52,7 +52,7 @@ function categoryName(category: string): string {
   return CATEGORY_NAMES[category] ?? category.replaceAll("_", " ");
 }
 
-function categoryLabel(category: string): string {
+export function categoryLabel(category: string): string {
   const label = categoryName(category);
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
