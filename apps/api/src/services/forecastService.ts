@@ -7,6 +7,8 @@ export type ForecastTransaction = {
   category: string;
   transactionType: "income" | "expense";
   description?: string;
+  // An unusual payment the user said happens once a year, so the forecast repeats it in that month.
+  recurrence?: "yearly";
 };
 
 export type ForecastRequest = {
@@ -100,6 +102,7 @@ function parseTransaction(value: unknown): ForecastTransaction {
   if (typeof input.category !== "string" || !input.category.trim() || input.category.length > MAX_TEXT_LENGTH) throw new ForecastValidationError("category is invalid");
   if (input.transactionType !== "income" && input.transactionType !== "expense") throw new ForecastValidationError("transactionType is invalid");
   if (input.description != null && (typeof input.description !== "string" || input.description.length > MAX_TEXT_LENGTH)) throw new ForecastValidationError("description is invalid");
+  if (input.recurrence != null && input.recurrence !== "yearly") throw new ForecastValidationError("recurrence is invalid");
   return {
     transactionId: input.transactionId,
     date: input.date,
@@ -107,6 +110,7 @@ function parseTransaction(value: unknown): ForecastTransaction {
     category: input.category.trim(),
     transactionType: input.transactionType,
     ...(typeof input.description === "string" && input.description.trim() ? { description: input.description.trim() } : {}),
+    ...(input.recurrence === "yearly" ? { recurrence: "yearly" as const } : {}),
   };
 }
 
@@ -126,6 +130,7 @@ export async function getMlForecast(userId: string, request: ForecastRequest, fe
       category: transaction.category,
       transaction_type: transaction.transactionType,
       ...(transaction.description ? { description: transaction.description } : {}),
+      ...(transaction.recurrence ? { recurrence: transaction.recurrence } : {}),
     })),
     categories,
     ...(request.targetMonth ? { target_month: request.targetMonth } : {}),

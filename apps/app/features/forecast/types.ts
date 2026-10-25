@@ -5,6 +5,8 @@ export type ForecastTransaction = {
   category: string;
   transactionType: "income" | "expense";
   description?: string;
+  // An unusual payment the user said happens once a year, so the forecast repeats it in that month.
+  recurrence?: "yearly";
 };
 
 export type ForecastRequest = {

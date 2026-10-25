@@ -2,8 +2,12 @@ import { jest } from "@jest/globals";
 
 const mockInitDatabase = jest.fn<(...args: any[]) => any>();
 const mockListUnusualSpendings = jest.fn<(...args: any[]) => any>();
+const mockListSavedRecurrences = jest.fn<(...args: any[]) => any>();
 jest.mock("../../client", () => ({ initDatabase: () => mockInitDatabase() }));
-jest.mock("../unusualSpending", () => ({ listUnusualSpendings: (...args: unknown[]) => mockListUnusualSpendings(...args) }));
+jest.mock("../unusualSpending", () => ({
+  listUnusualSpendings: (...args: unknown[]) => mockListUnusualSpendings(...args),
+  listSavedRecurrences: (...args: unknown[]) => mockListSavedRecurrences(...args),
+}));
 
 describe("listForecastTransactions", () => {
   beforeEach(() => { jest.resetModules(); mockInitDatabase.mockReset(); });
@@ -43,16 +47,19 @@ describe("listForecastTransactions", () => {
     expect(getAllAsync.mock.calls[1]![0]).not.toContain("scheduled_payment_records");
   });
 
-  it("leaves out unconfirmed unusual spending only when asked", async () => {
+  it("leaves out unanswered and one-time unusual spending only when asked, and tags yearly payments from saved answers", async () => {
     const row = (id: string) => ({ id, transaction_date: "2026-03-06", amount_centavos: 4_200_000, transaction_type: "expense", merchant_name: null, counterparty_name: null, notes: null, category_slug: "communication" });
-    const getAllAsync = jest.fn<(...args: any[]) => any>().mockImplementation(async () => [row("laptop"), row("phone"), row("confirmed")]);
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockImplementation(async () => [row("tuition"), row("gift"), row("laptop"), row("phone"), row("confirmed")]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    mockListUnusualSpendings.mockResolvedValue([{ transactionId: "laptop", confirmedRecurring: false }, { transactionId: "confirmed", confirmedRecurring: true }]);
+    // The check flags the laptop and gift; the tuition is no longer flagged but keeps its saved yearly answer.
+    mockListUnusualSpendings.mockResolvedValue([{ transactionId: "laptop" }, { transactionId: "gift" }, { transactionId: "confirmed" }]);
+    mockListSavedRecurrences.mockResolvedValue(new Map([["gift", "one_time"], ["confirmed", "frequent"], ["tuition", "yearly"]]));
     const { _resetDbCacheForTesting, listForecastTransactions } = await import("../forecastTransactions");
     _resetDbCacheForTesting();
-    const ids = async (excludeUnusualSpending: boolean) => (await listForecastTransactions("user-1", { excludeUnusualSpending })).map((item) => item.transactionId);
-    await expect(ids(true)).resolves.toEqual(["confirmed", "phone"]);
-    await expect(ids(false)).resolves.toEqual(["confirmed", "phone", "laptop"]);
+    const list = (excludeUnusualSpending: boolean) => listForecastTransactions("user-1", { excludeUnusualSpending });
+    const kept = await list(true);
+    expect(kept.map((item) => [item.transactionId, item.recurrence])).toEqual([["confirmed", undefined], ["phone", undefined], ["tuition", "yearly"]]);
+    await expect(list(false).then((items) => items.map((item) => item.transactionId))).resolves.toEqual(["confirmed", "phone", "laptop", "gift", "tuition"]);
   });
 
   it("lists the quarters before the current one, oldest first", async () => {

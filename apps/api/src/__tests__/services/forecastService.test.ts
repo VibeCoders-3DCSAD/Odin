@@ -76,6 +76,21 @@ describe("forecast ML adapter", () => {
     expect(result).toEqual(expect.objectContaining({ status: "SUCCESS", forecasts: [{ category: "food", month: "2026-10", quarter: "2026Q4", amountCentavos: 850025, userBaselineCentavos: 700000, hfceMultiplier: 1.214321, hfceForecastAmountMillionPhp: 12345.67, explanation: "Personalized food forecast.", baselineMethod: "same_period_last_year", seasonalUncertainty: false }] }));
   });
 
+  it("passes a yearly payment's recurrence to odin-ml and rejects any other recurrence", async () => {
+    const tuition = { ...currentQuarterTransaction, recurrence: "yearly" as const };
+    expect(parseForecastRequest({ historicalTransactions: [tuition] }).historicalTransactions[0]).toEqual(tuition);
+    expect(() => parseForecastRequest({ historicalTransactions: [{ ...transaction, recurrence: "monthly" }] })).toThrow("recurrence is invalid");
+
+    jest.useFakeTimers().setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
+    process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";
+    process.env.ODIN_TRUSTED_HISTORY_SHARED_SECRET = "test-secret";
+    const fetcher = jest.fn().mockResolvedValue({ ok: true, json: async () => mlResponse });
+    await getMlForecast("user-1", { historicalTransactions: [tuition, transaction] }, fetcher);
+    const [sentTuition, sentOther] = JSON.parse(fetcher.mock.calls[0]![1].body).historical_transactions;
+    expect(sentTuition).toMatchObject({ recurrence: "yearly" });
+    expect(sentOther).not.toHaveProperty("recurrence");
+  });
+
   it("asks for the requested target month and omits it otherwise", async () => {
     jest.useFakeTimers().setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
     process.env.FORECASTING_ML_BASE_URL = "http://ml.internal";

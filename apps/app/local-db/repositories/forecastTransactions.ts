@@ -1,7 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import type { ForecastTransaction } from "../../features/forecast/types";
-import { listUnusualSpendings } from "./unusualSpending";
+import { listSavedRecurrences, listUnusualSpendings, type SpendingRecurrence } from "./unusualSpending";
 import { SCHEDULED_PAYMENTS_CATEGORY } from "../../features/forecast/scheduledForecast";
 
 // Room for a full year of history, which the seasonal forecast compares against.
@@ -37,8 +37,8 @@ type ListForecastTransactionsOptions = {
   fromDate?: string;
   // Leave out biller and remittance payments, which the quarterly forecast adds back at their scheduled amounts.
   excludeScheduledPayments?: boolean;
-  // Leave out one-off purchases the personal IQR check flags, unless the user confirmed them as recurring,
-  // so a same-quarter-last-year forecast does not expect them again.
+  // Leave out purchases the personal IQR check flags unless the user said they will be frequent or yearly,
+  // so the forecast does not expect a one-off again. Yearly ones are tagged to recur in their month.
   excludeUnusualSpending?: boolean;
 };
 
@@ -97,9 +97,13 @@ export async function listForecastTransactions(userId: string, { fromDate, exclu
        LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
     ...(fromDate ? [userId, fromDate] : [userId]),
   );
-  const oneOffs = excludeUnusualSpending
-    ? new Set((await listUnusualSpendings(userId)).filter((insight) => !insight.confirmedRecurring).map((insight) => insight.transactionId))
-    : new Set<string>();
+  // Saved answers decide what recurs, so a payment the check no longer flags keeps its answer.
+  const [detected, saved] = excludeUnusualSpending
+    ? await Promise.all([listUnusualSpendings(userId), listSavedRecurrences(userId)])
+    : [[], new Map<string, SpendingRecurrence | null>()];
+  const recurs = (id: string) => saved.get(id) === "frequent" || saved.get(id) === "yearly";
+  const oneOffs = new Set([...detected.map((insight) => insight.transactionId), ...saved.keys()].filter((id) => !recurs(id)));
+  const yearly = new Set([...saved].flatMap(([id, recurrence]) => recurrence === "yearly" ? [id] : []));
   return rows.reverse().flatMap((row) => {
     if (!Number.isInteger(row.amount_centavos) || row.amount_centavos <= 0 || oneOffs.has(row.id)) return [];
     const conciseDescription = description(row);
@@ -110,6 +114,7 @@ export async function listForecastTransactions(userId: string, { fromDate, exclu
       category: row.category_slug?.trim() || "Other",
       transactionType: row.transaction_type,
       ...(conciseDescription ? { description: conciseDescription } : {}),
+      ...(yearly.has(row.id) ? { recurrence: "yearly" as const } : {}),
     }];
   });
 }
