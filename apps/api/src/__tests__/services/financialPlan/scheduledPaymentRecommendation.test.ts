@@ -73,6 +73,16 @@ it("applies forecast changes to the baseline left after scheduled payments", asy
   expect(plan.explanationRequest.evidence.forecastChanges).toEqual([expect.objectContaining({ baselineCentavos: 70_000, forecastCentavos: 84_000 })]);
 });
 
+it("grows scheduled payments by HFCE alone, not by last year's seasonal spending", async () => {
+  // A 100,000 baseline grown 1.2 by HFCE, plus 80,000 of last year's seasonal spending in this month.
+  jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [{ category: "housing_water_utilities", month: "2026-10", quarter: "Q4", amountCentavos: 200_000, userBaselineCentavos: 100_000, hfceMultiplier: 1.2, hfceForecastAmountMillionPhp: 1, explanation: "" }], snapshot: { month: "2026-10", totalAmountCentavos: 200_000, categoryForecasts: [{ category: "housing_water_utilities", amountCentavos: 200_000 }], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
+  jest.mocked(recommendPlanCategories).mockImplementation(async (_user, _period, _available, categories) => ({ recommendation: { feasibility: "FEASIBLE", allocations: categories.map((category) => ({ category_id: category.id, amount: category.floorCentavos / 100 })) } }));
+  const plan = await getFinancialPlanRecommendation("user-1", client(0), 200_000, ["rent"]);
+  // 200,000 - 30,000 scheduled * 1.2 = 164,000; scaling by 200,000 / 100,000 would leave only 140,000.
+  expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(164_000);
+  expect(plan.explanationRequest.evidence.forecastChanges).toEqual([expect.objectContaining({ baselineCentavos: 70_000, forecastCentavos: 164_000 })]);
+});
+
 it("reports a shortfall using only the residual Fixed requirement plus the scheduled reservation", async () => {
   const plan = await getFinancialPlanRecommendation("user-1", client(0, 50_000), 15_000);
   expect(plan.status).toBe("INFEASIBLE");

@@ -106,6 +106,12 @@ export function forecastCoversPlanPeriod(forecast: ForecastPayload, period: { st
   return forecast.snapshot.month === period.start.slice(0, 7);
 }
 
+// The HFCE growth odin-ml applied to the user's baseline. Scheduled payments grow by it alone: the forecast's
+// amount can also carry last year's seasonal spending, which a scheduled bill does not repeat.
+function forecastGrowth(detail: ForecastPayload["forecasts"][number] | undefined): number {
+  return detail && Number.isFinite(detail.hfceMultiplier) && detail.hfceMultiplier > 0 ? detail.hfceMultiplier : 1;
+}
+
 export function manilaToday(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: MANILA, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
@@ -389,8 +395,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
         // Apply the forecast's change only to the baseline remaining after scheduled payments.
         const forecastDeductions = new Map([...scheduledByTarget].map(([id, amount]) => {
           const detail = mlForecast.forecasts.find((point) => point.category === categorySlugBySubcategoryId.get(id));
-          const factor = detail && detail.userBaselineCentavos > 0 ? detail.amountCentavos / detail.userBaselineCentavos : 1;
-          return [id, amount * factor];
+          return [id, amount * forecastGrowth(detail)];
         }));
         forecast = subtractScheduledForecast(mapPlanForecast(userId, mlForecast, grossCategories, categorySlugBySubcategoryId), forecastDeductions, new Map(categories.map((category) => [category.id, category.floorCentavos])));
         forecastDetails = mlForecast.forecasts;
@@ -447,8 +452,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     const allocationCentavos = categoryAllocations.reduce((sum, allocation) => sum + allocation.allocatedAmountCentavos, 0);
     const scheduledCentavos = categories.filter((target) => categorySlugBySubcategoryId.get(target.id) === detail.category).reduce((sum, target) => sum + (scheduledByTarget.get(target.id) ?? 0), 0);
     const baselineCentavos = Math.max(0, detail.userBaselineCentavos - scheduledCentavos);
-    const factor = detail.userBaselineCentavos > 0 ? detail.amountCentavos / detail.userBaselineCentavos : 1;
-    const forecastCentavos = Math.max(0, detail.amountCentavos - scheduledCentavos * factor);
+    const forecastCentavos = Math.max(0, detail.amountCentavos - scheduledCentavos * forecastGrowth(detail));
     const differenceCentavos = forecastCentavos - baselineCentavos;
     return [{ evidenceId: `forecast:${detail.category}`, categoryName: category.label, categorySlug: detail.category, baselineCentavos, forecastCentavos, allocationCentavos, allocationForecastDifferenceCentavos: allocationCentavos - forecastCentavos, differenceCentavos, percentageChange: baselineCentavos > 0 ? differenceCentavos / baselineCentavos * 100 : null, forecastRationale: userFacingForecastRationale(detail.explanation), possibleSeasonalContext: null }];
   });

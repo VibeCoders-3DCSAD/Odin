@@ -120,7 +120,7 @@ describe("Financial Plan recommendations with recorded spending", () => {
   it("does not apply a Christmas expense pattern to Communication or change the recommendation", async () => {
     (getMlForecast as jest.Mock).mockResolvedValue({
       snapshot: { month: "2026-10", categoryForecasts: [{ category: "communication", amountCentavos: 168_000 }], modelVersion: "test", generatedAt: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" },
-      forecasts: [{ category: "communication", month: "2026-10", amountCentavos: 168_000, userBaselineCentavos: 140_000, explanation: "" }],
+      forecasts: [{ category: "communication", month: "2026-10", amountCentavos: 168_000, userBaselineCentavos: 140_000, hfceMultiplier: 1.2, explanation: "" }],
     });
     const result = await getFinancialPlanRecommendation("user", client(50_000, null, {
       onboarding_sessions: [{ raw_answers: { high_expense_seasons: ["summer"], low_expense_seasons: ["christmas_ber_months"] } }],
@@ -147,7 +147,7 @@ describe("Financial Plan recommendations with recorded spending", () => {
   it("includes confirmed payment reservations as separate explanation evidence without adding them to the category budget", async () => {
     (getMlForecast as jest.Mock).mockResolvedValue({
       snapshot: { month: "2026-10", categoryForecasts: [{ category: "communication", amountCentavos: 168_000 }], modelVersion: "test", generatedAt: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" },
-      forecasts: [{ category: "communication", month: "2026-10", amountCentavos: 168_000, userBaselineCentavos: 140_000, explanation: "" }],
+      forecasts: [{ category: "communication", month: "2026-10", amountCentavos: 168_000, userBaselineCentavos: 140_000, hfceMultiplier: 1.2, explanation: "" }],
     });
     (recommendPlanCategories as jest.Mock).mockResolvedValue({ recommendation: { feasibility: "FEASIBLE", allocations: [{ category_id: "internet", amount: 800 }] } });
     const result = await getFinancialPlanRecommendation("user", client(50_000, null, {
@@ -185,8 +185,8 @@ describe("Financial Plan recommendations with recorded spending", () => {
     (getMlForecast as jest.Mock).mockResolvedValue({
       snapshot: { month: "2026-10", categoryForecasts: [{ category: "communication", amountCentavos: 168_000 }, { category: "education", amountCentavos: 500_000 }], modelVersion: "test", generatedAt: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" },
       forecasts: [
-        { category: "communication", month: "2026-10", amountCentavos: 168_000, userBaselineCentavos: 140_000, explanation: "" },
-        { category: "education", month: "2026-10", amountCentavos: 500_000, userBaselineCentavos: 100_000, explanation: "" },
+        { category: "communication", month: "2026-10", amountCentavos: 168_000, userBaselineCentavos: 140_000, hfceMultiplier: 1.2, explanation: "" },
+        { category: "education", month: "2026-10", amountCentavos: 500_000, userBaselineCentavos: 100_000, hfceMultiplier: 1.2, explanation: "" },
       ],
     });
     const result = await getFinancialPlanRecommendation("user", client(50_000, null, {
