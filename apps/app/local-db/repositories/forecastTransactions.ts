@@ -4,11 +4,11 @@ import type { ForecastTransaction } from "../../features/forecast/types";
 import { listSavedRecurrences, listUnusualSpendings, type SpendingRecurrence } from "./unusualSpending";
 import { SCHEDULED_PAYMENTS_CATEGORY } from "../../features/forecast/scheduledForecast";
 import { localToday } from "../../features/billers/schedule";
+import { historyWindow, isFullYear, seasonalMonthSpend } from "@odin/spending-insights/seasonalMonth";
 
 // Room for a full year of history, which the seasonal forecast compares against.
 const MAX_FORECAST_TRANSACTIONS = 2_000;
 const MAX_DESCRIPTION_LENGTH = 160;
-const MAX_RECOMMENDED_SUBCATEGORIES = 200;
 
 type ForecastTransactionRow = {
   id: string;
@@ -60,28 +60,132 @@ export function getRecentExpenseStartDate(now = new Date()): string {
   return start.toISOString().slice(0, 10);
 }
 
-export async function listRecentExpenseCategoryIds(userId: string, fromDate = getRecentExpenseStartDate()): Promise<string[]> {
-  const db = await getDb();
-  const rows = await db.getAllAsync<{ category_id: string }>(
-    `SELECT DISTINCT category_id
-       FROM transactions
-       WHERE user_id = ? AND transaction_type = 'expense' AND status = 'posted' AND deleted = 0
-         AND transaction_date >= ? AND category_id IS NOT NULL AND subcategory_id IS NULL
-       ORDER BY category_id
-       LIMIT ${MAX_RECOMMENDED_SUBCATEGORIES}`,
-    userId,
-    fromDate,
-  );
-  return rows.flatMap((row) => typeof row.category_id === "string" && row.category_id ? [row.category_id] : []);
+export type PlanRecommendations = {
+  subcategoryIds: string[];
+  categoryIds: string[];
+  // Targets with spending the plan already knows about, which need no one-time amount.
+  historySubcategoryIds: string[];
+  historyCategoryIds: string[];
+  // Whether a full year of history decided the recommendations by season.
+  seasonal: boolean;
+  // What each target is expected to spend in planMonth, without biller payments, which the plan reserves separately.
+  // A category's amount includes its subcategories' spending.
+  expectedSpend: { subcategories: Record<string, number>; categories: Record<string, number> };
+};
+
+type PlanSpendRow = { id: string; transaction_date: string; amount_centavos: number; subcategory_id: string | null; category_id: string | null; scheduled: number };
+
+// Purchases the personal IQR check flags, unless the user said they will be frequent or yearly, stay out of
+// the forecast; yearly ones recur only in their month.
+async function unusualSpendingIds(userId: string): Promise<{ oneOffs: Set<string>; yearly: Set<string> }> {
+  const [detected, saved] = await Promise.all([listUnusualSpendings(userId), listSavedRecurrences(userId)]);
+  const recurs = (id: string) => saved.get(id) === "frequent" || saved.get(id) === "yearly";
+  return {
+    oneOffs: new Set([...detected.map((insight) => insight.transactionId), ...saved.keys()].filter((id) => !recurs(id))),
+    yearly: new Set([...saved].flatMap(([id, recurrence]) => recurrence === "yearly" ? [id] : [])),
+  };
 }
 
-export async function listRecentExpenseSubcategoryIds(userId: string, fromDate = getRecentExpenseStartDate()): Promise<string[]> {
+// The categories a plan for planMonth (YYYY-MM) starts with. Like the Spending Forecast, a full year of history
+// follows last year's seasons, so Christmas gifts come back in December and school fees drop out between terms.
+// Less history recommends what was spent in the past 6 months.
+export async function listPlanRecommendations(userId: string, planMonth: string, now = new Date()): Promise<PlanRecommendations> {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ subcategory_id: string }>(
-    `SELECT DISTINCT subcategory_id FROM transactions WHERE user_id = ? AND transaction_type = 'expense' AND status = 'posted' AND deleted = 0 AND transaction_date >= ? AND subcategory_id IS NOT NULL ORDER BY subcategory_id LIMIT ${MAX_RECOMMENDED_SUBCATEGORIES}`,
-    userId, fromDate,
+  const rows = await db.getAllAsync<PlanSpendRow>(
+    `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id, COALESCE(s.category_id, t.category_id) AS category_id,
+            EXISTS (SELECT 1 FROM scheduled_payment_records r WHERE r.user_id = t.user_id AND r.transaction_id = t.id AND r.deleted = 0) AS scheduled
+       FROM transactions t
+       LEFT JOIN subcategories s ON s.id = t.subcategory_id AND s.deleted = 0
+      WHERE t.user_id = ? AND t.transaction_type = 'expense' AND t.status = 'posted' AND t.deleted = 0
+        AND t.amount_centavos > 0 AND t.transaction_date >= ?
+      ORDER BY t.transaction_date DESC
+      LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
+    userId, getForecastHistoryStartDate(now),
   );
-  return rows.flatMap((row) => typeof row.subcategory_id === "string" && row.subcategory_id ? [row.subcategory_id] : []);
+  const { oneOffs, yearly } = await unusualSpendingIds(userId);
+  const clean = rows.filter((row) => !oneOffs.has(row.id));
+  // The plan's own twelve-month history, which decides whether a category may take a one-time amount.
+  const historyStart = new Date(now);
+  historyStart.setUTCMonth(historyStart.getUTCMonth() - 12);
+  const recent = clean.filter((row) => row.transaction_date >= historyStart.toISOString().slice(0, 10));
+  const historySubcategoryIds = [...new Set(recent.flatMap((row) => row.subcategory_id ? [row.subcategory_id] : []))];
+  const historyCategoryIds = [...new Set(recent.flatMap((row) => row.category_id ? [row.category_id] : []))];
+  const today = localToday(now);
+  const window = historyWindow(clean.map((row) => row.transaction_date.slice(0, 7)), today.slice(0, 7));
+  const expectedSpend = expectedPlanSpend(clean, yearly, window, planMonth, recent);
+  if (!isFullYear(window)) {
+    const recentStart = getRecentExpenseStartDate(now);
+    const lastSixMonths = clean.filter((row) => row.transaction_date >= recentStart);
+    return {
+      subcategoryIds: [...new Set(lastSixMonths.flatMap((row) => row.subcategory_id ? [row.subcategory_id] : []))],
+      categoryIds: [...new Set(lastSixMonths.flatMap((row) => !row.subcategory_id && row.category_id ? [row.category_id] : []))],
+      historySubcategoryIds, historyCategoryIds, seasonal: false, expectedSpend,
+    };
+  }
+  const monthly = new Map<string, Map<string, number>>();
+  const yearlyByTarget = new Map<string, Map<string, number>>();
+  const add = (byTarget: Map<string, Map<string, number>>, targetId: string, row: PlanSpendRow) => {
+    const months = byTarget.get(targetId) ?? new Map<string, number>();
+    const month = row.transaction_date.slice(0, 7);
+    months.set(month, (months.get(month) ?? 0) + row.amount_centavos);
+    byTarget.set(targetId, months);
+  };
+  const subcategoryIds = new Set<string>();
+  const directCategoryIds = new Set<string>();
+  for (const row of clean) {
+    const byTarget = yearly.has(row.id) ? yearlyByTarget : monthly;
+    const targetId = row.subcategory_id ? `subcategory:${row.subcategory_id}` : row.category_id ? `category:${row.category_id}` : null;
+    if (!targetId) continue;
+    if (row.subcategory_id) subcategoryIds.add(row.subcategory_id);
+    else directCategoryIds.add(row.category_id!);
+    add(byTarget, targetId, row);
+  }
+  const noSpend = new Map<string, number>();
+  const expected = (targetId: string) => seasonalMonthSpend({ window, monthly: monthly.get(targetId) ?? noSpend, yearly: yearlyByTarget.get(targetId) ?? noSpend, targetMonth: planMonth }) > 0;
+  return {
+    subcategoryIds: [...subcategoryIds].filter((id) => expected(`subcategory:${id}`)),
+    categoryIds: [...directCategoryIds].filter((id) => expected(`category:${id}`)),
+    historySubcategoryIds, historyCategoryIds, seasonal: true, expectedSpend,
+  };
+}
+
+// Mirrors the plan's category forecast on the server: a full year follows last year's season for planMonth,
+// less history uses the average month over the past twelve.
+function expectedPlanSpend(clean: PlanSpendRow[], yearly: Set<string>, window: string[], planMonth: string, recent: PlanSpendRow[]): PlanRecommendations["expectedSpend"] {
+  const spending = clean.filter((row) => !row.scheduled);
+  const subcategories: Record<string, number> = {};
+  const categories: Record<string, number> = {};
+  if (!isFullYear(window)) {
+    const months = Math.max(new Set(recent.map((row) => row.transaction_date.slice(0, 7))).size, 1);
+    const recentIds = new Set(recent.map((row) => row.id));
+    for (const row of spending) {
+      if (!recentIds.has(row.id)) continue;
+      if (row.subcategory_id) subcategories[row.subcategory_id] = (subcategories[row.subcategory_id] ?? 0) + row.amount_centavos / months;
+      if (row.category_id) categories[row.category_id] = (categories[row.category_id] ?? 0) + row.amount_centavos / months;
+    }
+    return { subcategories, categories };
+  }
+  const monthly = new Map<string, Map<string, number>>();
+  const yearlyByTarget = new Map<string, Map<string, number>>();
+  const add = (targetId: string, row: PlanSpendRow) => {
+    const byTarget = yearly.has(row.id) ? yearlyByTarget : monthly;
+    const months = byTarget.get(targetId) ?? new Map<string, number>();
+    const month = row.transaction_date.slice(0, 7);
+    months.set(month, (months.get(month) ?? 0) + row.amount_centavos);
+    byTarget.set(targetId, months);
+  };
+  for (const row of spending) {
+    if (row.subcategory_id) add(`subcategory:${row.subcategory_id}`, row);
+    if (row.category_id) add(`category:${row.category_id}`, row);
+  }
+  const noSpend = new Map<string, number>();
+  for (const targetId of new Set([...monthly.keys(), ...yearlyByTarget.keys()])) {
+    const amount = seasonalMonthSpend({ window, monthly: monthly.get(targetId) ?? noSpend, yearly: yearlyByTarget.get(targetId) ?? noSpend, targetMonth: planMonth });
+    if (amount <= 0) continue;
+    const [kind, id] = targetId.split(":") as ["subcategory" | "category", string];
+    (kind === "subcategory" ? subcategories : categories)[id] = amount;
+  }
+  return { subcategories, categories };
 }
 
 export async function listForecastTransactions(userId: string, { fromDate, excludeScheduledPayments = false, excludeUnusualSpending = false }: ListForecastTransactionsOptions = {}): Promise<ForecastTransaction[]> {

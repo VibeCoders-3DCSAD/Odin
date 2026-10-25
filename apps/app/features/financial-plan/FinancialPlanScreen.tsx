@@ -3,7 +3,7 @@ import { Sparkle } from "phosphor-react-native";
 import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from "react-native";
 import { createFinancialPlan, deleteFinancialPlan, getAcceptedFinancialPlanForPeriod, getCurrentFinancialPlanPeriod, getFinancialPlanLabels, getFinancialPlanSpending, type AcceptedFinancialPlan } from "../../local-db/repositories/financialPlans";
 import { getPlanCommitmentPayments } from "../../local-db/repositories/financialPlanCommitmentReview";
-import { listRecentExpenseCategoryIds, listRecentExpenseSubcategoryIds } from "../../local-db/repositories/forecastTransactions";
+import { listPlanRecommendations, type PlanRecommendations } from "../../local-db/repositories/forecastTransactions";
 import { listCategories, listSubcategories, updateCategory, updateSubcategory, type Category, type Subcategory } from "../../local-db/repositories/taxonomy";
 import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
 import { runSync } from "../../local-db/sync/runSync";
@@ -11,6 +11,7 @@ import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { requestFinancialPlanCommitments, requestFinancialPlanExplanations, requestFinancialPlanRecommendation, type ManualPlanAllocation, type ReservationSkips } from "./api";
 import { hasUnderfundedReservation, manualCommitmentDraft, parseBudgetAmount, planCommitmentBudgets, planObligations, requirementReservations, selectedCommitmentBudgets, updateCommitmentBudget, type CommitmentKind, type CommitmentPreview, type CommitmentSkips } from "./helpers/commitmentBudget";
 import { previewPaidCentavos, type PlanCommitmentPayments } from "./helpers/commitmentPayments";
+import { recommendPlanAmount } from "./helpers/planAmountRecommendation";
 import { planSpendingInsights } from "./helpers/planSpendingInsights";
 import { DevPlanMonthSettings } from "./DevPlanMonthSettings";
 import { PlanAllocations } from "./PlanAllocations";
@@ -76,6 +77,10 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
   const [includedCategoryIds, setIncludedCategoryIds] = useState<Set<string>>(new Set());
   const [recommendedIds, setRecommendedIds] = useState<Set<string>>(new Set());
   const [recommendedCategoryIds, setRecommendedCategoryIds] = useState<Set<string>>(new Set());
+  const [historyIds, setHistoryIds] = useState<Set<string>>(new Set());
+  const [historyCategoryIds, setHistoryCategoryIds] = useState<Set<string>>(new Set());
+  const [seasonalRecommendations, setSeasonalRecommendations] = useState(false);
+  const [expectedSpend, setExpectedSpend] = useState<PlanRecommendations["expectedSpend"]>();
   const [availableMoneyCentavos, setAvailableMoneyCentavos] = useState(0);
   const [plannedAmount, setPlannedAmount] = useState("");
   const [manualAllocations, setManualAllocations] = useState<ManualPlanAllocation[]>([]);
@@ -162,7 +167,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
 
   useEffect(() => {
     let active = true;
-    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listRecentExpenseSubcategoryIds(userId), listRecentExpenseCategoryIds(userId), getCurrentPeriodPlan(userId, selectedMonth), listFinancialAccounts(userId, "active")]).then(async ([topLevelResult, result, recentIds, recentCategoryIds, savedPlan, accounts]) => {
+    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listPlanRecommendations(userId, selectedMonth), getCurrentPeriodPlan(userId, selectedMonth), listFinancialAccounts(userId, "active")]).then(async ([topLevelResult, result, recommendations, savedPlan, accounts]) => {
       if (!active) return;
       if (savedPlan) {
         const view = await loadSavedPlanView(userId, savedPlan);
@@ -185,15 +190,21 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       setInvalidCommitmentFields({});
       setTopLevelCategories(topLevelResult);
       setCategories(result);
-      const validRecentIds = new Set(recentIds.filter((id) => result.some((category) => category.id === id)));
+      const validRecentIds = new Set(recommendations.subcategoryIds.filter((id) => result.some((category) => category.id === id)));
       const requiredIds = result.filter((category) => category.fixed_amount_centavos !== null || category.minimum_amount_centavos !== null).map((category) => category.id);
-      const validRecentCategoryIds = new Set(recentCategoryIds.filter((id) => topLevelResult.some((category) => category.id === id)));
+      const validRecentCategoryIds = new Set(recommendations.categoryIds.filter((id) => topLevelResult.some((category) => category.id === id)));
       const requiredCategoryIds = topLevelResult.filter((category) => category.fixed_amount_centavos != null || category.minimum_amount_centavos != null).map((category) => category.id);
       setRecommendedIds(validRecentIds);
+      setHistoryIds(new Set(recommendations.historySubcategoryIds));
+      setHistoryCategoryIds(new Set(recommendations.historyCategoryIds));
+      setSeasonalRecommendations(recommendations.seasonal);
       const parentIdsWithHistory = result.filter((subcategory) => validRecentIds.has(subcategory.id)).flatMap((subcategory) => subcategory.category_id ? [subcategory.category_id] : []);
       setRecommendedCategoryIds(new Set([...validRecentCategoryIds, ...parentIdsWithHistory]));
-       setIncludedIds(new Set([...requiredIds, ...validRecentIds]));
-       setIncludedCategoryIds(new Set([...requiredCategoryIds, ...validRecentCategoryIds]));
+      const initialIds = new Set([...requiredIds, ...validRecentIds]);
+      const initialCategoryIds = new Set([...requiredCategoryIds, ...validRecentCategoryIds]);
+       setIncludedIds(initialIds);
+       setIncludedCategoryIds(initialCategoryIds);
+      setExpectedSpend(recommendations.expectedSpend);
         setManualAllocations([]);
        setReservationSkips({ debtRepayments: false, savingsContributions: false, scheduledPayments: false });
       setManualCommitments({ debtRepayments: false, savingsContributions: false, scheduledPayments: false });
@@ -202,7 +213,9 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
         .filter((account) => account.kind !== "savings" && account.kind !== "credit_card")
         .reduce((sum, account) => sum + account.current_balance_centavos, 0);
       setAvailableMoneyCentavos(available);
-      setPlannedAmount((current) => current || (available / 100).toFixed(2));
+      // Starts at what the month needs, never more than the money available.
+      const recommended = recommendPlanAmount({ commitments: labeled, topLevelCategories: topLevelResult, subcategories: result, includedCategoryIds: initialCategoryIds, includedIds: initialIds, expectedSpend: recommendations.expectedSpend }).totalCentavos;
+      setPlannedAmount((current) => current || ((recommended > 0 ? Math.min(recommended, available) : available) / 100).toFixed(2));
       setState("selecting");
     }).catch((cause) => {
       if (!active) return;
@@ -394,7 +407,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
 
   if (state === "loading") return <View style={{ paddingTop: 32, alignItems: "center" }}><ActivityIndicator color="#0E6D46" /><Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#6B7A6F", marginTop: 10 }}>Preparing your plan...</Text></View>;
   const pastPlansAction = onOpenPastPlans ? <Pressable accessibilityRole="button" accessibilityLabel="View past Financial Plans" onPress={onOpenPastPlans} style={{ alignSelf: "flex-end", paddingVertical: 4 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 12, color: "#0E6D46" }}>Past plans</Text></Pressable> : null;
-  if (state === "selecting") return <View>{pastPlansAction}{advancedSettings}<PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} initialManualAllocations={manualAllocations} commitmentSection={<PlanCommitmentChoices manual={manualCommitments} onChange={(next) => { setCommitmentDraft((current) => current && commitmentPreview ? manualCommitmentDraft(current, commitmentPreview, manualCommitments, next, previewPaidCentavos(commitmentPreview, commitmentPaymentsPaid)) : current); setManualCommitments(next); }} />} onContinue={(allocations) => {
+  if (state === "selecting") return <View>{pastPlansAction}{advancedSettings}<PlanCategorySelection topLevelCategories={topLevelCategories} subcategories={categories} includedCategoryIds={includedCategoryIds} includedIds={includedIds} recommendedCategoryIds={recommendedCategoryIds} recommendedIds={recommendedIds} historyCategoryIds={historyCategoryIds} historyIds={historyIds} seasonalRecommendations={seasonalRecommendations} onToggle={toggleSubcategory} onToggleCategory={toggleTopLevelCategory} onSaveCategoryRule={saveTopLevelCategoryRule} onSaveRule={saveCategoryRule} plannedAmount={plannedAmount} availableMoneyCentavos={availableMoneyCentavos} planningAmountError={planningAmountError} onPlannedAmountChange={setPlannedAmount} initialManualAllocations={manualAllocations} commitments={commitmentPreview} expectedSpend={expectedSpend} commitmentSection={<PlanCommitmentChoices manual={manualCommitments} onChange={(next) => { setCommitmentDraft((current) => current && commitmentPreview ? manualCommitmentDraft(current, commitmentPreview, manualCommitments, next, previewPaidCentavos(commitmentPreview, commitmentPaymentsPaid)) : current); setManualCommitments(next); }} />} onContinue={(allocations) => {
     setManualAllocations(allocations);
     setError(null);
     // Without manual types, each commitment starts at its amount due and the plan is generated right away;

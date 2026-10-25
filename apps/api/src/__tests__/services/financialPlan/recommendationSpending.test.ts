@@ -117,6 +117,28 @@ describe("Financial Plan recommendations with recorded spending", () => {
     expect(302 - allocated.reduce((sum, amount) => sum + amount, 0)).toBeCloseTo(0.2);
   });
 
+  it("splits a category's forecast by last year's seasons once a full year of history exists", async () => {
+    const subcategories = ["internet", "gifts", "tuition"].map((id) => ({ id, category_id: "communication", label: id, minimum_amount_centavos: null, fixed_amount_centavos: null }));
+    (recommendPlanCategories as jest.Mock).mockResolvedValue({ recommendation: { feasibility: "FEASIBLE", allocations: subcategories.map(({ id }) => ({ category_id: id, amount: 0 })) } });
+    (getMlForecast as jest.Mock).mockResolvedValue({
+      snapshot: { month: "2026-10", categoryForecasts: [{ category: "communication", amountCentavos: 100_000 }], modelVersion: "test", generatedAt: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" },
+      forecasts: [],
+    });
+    const expense = (id: string, subcategoryId: string, date: string, amount: number) => ({ id, amount_centavos: amount, transaction_date: date, transaction_type: "expense", category_id: "communication", subcategory_id: subcategoryId, anomaly_evaluations: [] });
+    const months = ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+    const transactions = [
+      ...months.map((month) => expense(`internet-${month}`, "internet", `${month}-20`, 10_000)),
+      // Last October's gifts, and tuition paid in June and July only.
+      expense("gifts", "gifts", "2025-10-05", 40_000),
+      expense("tuition-june", "tuition", "2026-06-10", 30_000),
+      expense("tuition-july", "tuition", "2026-07-10", 30_000),
+    ];
+    await getFinancialPlanRecommendation("user", client(0, null, { subcategories, transactions }), 500_000, subcategories.map(({ id }) => id));
+
+    const optimizerCategories = (recommendPlanCategories as jest.Mock).mock.calls[0][3];
+    expect(optimizerCategories.map((category: { id: string; forecastCentavos: number }) => [category.id, category.forecastCentavos])).toEqual([["internet", 20_000], ["gifts", 80_000], ["tuition", 0]]);
+  });
+
   it("does not apply a Christmas expense pattern to Communication or change the recommendation", async () => {
     (getMlForecast as jest.Mock).mockResolvedValue({
       snapshot: { month: "2026-10", categoryForecasts: [{ category: "communication", amountCentavos: 168_000 }], modelVersion: "test", generatedAt: "2026-10-18T00:00:00Z", quality: "PERSONALIZED" },

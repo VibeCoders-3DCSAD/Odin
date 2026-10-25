@@ -129,13 +129,48 @@ describe("listForecastTransactions", () => {
     expect(getForecastHistoryStartDate(new Date("2026-09-15T12:00:00Z"))).toBe("2025-09-01");
   });
 
-  it("returns only recent posted expense subcategories for plan recommendations", async () => {
-    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([{ subcategory_id: "groceries" }, { subcategory_id: "transport" }]);
+  it("recommends by last year's seasons once there is a full year of history", async () => {
+    const months = ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+    const row = (id: string, date: string, subcategoryId: string | null, categoryId: string, amount = 10_000) => ({ id, transaction_date: date, amount_centavos: amount, subcategory_id: subcategoryId, category_id: categoryId });
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([
+      ...months.map((month) => row(`internet-${month}`, `${month}-20`, "internet", "communication")),
+      row("gifts", "2025-12-05", "gifts", "misc", 40_000),
+      row("tuition-june", "2026-06-10", "tuition", "education", 30_000),
+      row("tuition-july", "2026-07-10", "tuition", "education", 30_000),
+      row("one-off", "2025-12-08", "gadgets", "misc", 90_000),
+      row("fees", "2025-11-02", "fees", "misc", 5_000),
+    ]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
-    const { listRecentExpenseSubcategoryIds } = await import("../forecastTransactions");
+    mockListUnusualSpendings.mockResolvedValue([{ transactionId: "one-off" }]);
+    mockListSavedRecurrences.mockResolvedValue(new Map([["fees", "yearly"]]));
+    const { listPlanRecommendations } = await import("../forecastTransactions");
 
-    await expect(listRecentExpenseSubcategoryIds("user-1", "2026-03-30")).resolves.toEqual(["groceries", "transport"]);
-    expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("transaction_type = 'expense'"), "user-1", "2026-03-30");
-    expect(getAllAsync.mock.calls[0]![0]).toContain("transaction_date >= ?");
+    const december = await listPlanRecommendations("user-1", "2026-12", new Date("2026-10-18T04:00:00Z"));
+    expect(december).toMatchObject({ seasonal: true, subcategoryIds: ["internet", "gifts"], categoryIds: [] });
+    expect(december.historySubcategoryIds).toEqual(expect.arrayContaining(["internet", "gifts", "tuition", "fees"]));
+    expect(december.historySubcategoryIds).not.toContain("gadgets");
+    expect(Object.keys(december.expectedSpend.subcategories).sort()).toEqual(["gifts", "internet"]);
+    await expect(listPlanRecommendations("user-1", "2026-11", new Date("2026-10-18T04:00:00Z"))).resolves.toMatchObject({ subcategoryIds: ["internet", "fees"] });
+    expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("t.transaction_type = 'expense' AND t.status = 'posted'"), "user-1", "2025-10-01");
+  });
+
+  it("recommends the past 6 months of spending with less than a year of history", async () => {
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([
+      { id: "old", transaction_date: "2026-03-01", amount_centavos: 10_000, subcategory_id: "tuition", category_id: "education" },
+      { id: "recent", transaction_date: "2026-09-01", amount_centavos: 10_000, subcategory_id: "groceries", category_id: "food" },
+      { id: "direct", transaction_date: "2026-09-02", amount_centavos: 10_000, subcategory_id: null, category_id: "transport" },
+      { id: "bill", transaction_date: "2026-09-05", amount_centavos: 30_000, subcategory_id: "internet", category_id: "utilities", scheduled: 1 },
+    ]);
+    mockInitDatabase.mockResolvedValue({ getAllAsync });
+    mockListUnusualSpendings.mockResolvedValue([]);
+    mockListSavedRecurrences.mockResolvedValue(new Map());
+    const { listPlanRecommendations } = await import("../forecastTransactions");
+
+    await expect(listPlanRecommendations("user-1", "2026-10", new Date("2026-10-18T04:00:00Z"))).resolves.toEqual({
+      seasonal: false, subcategoryIds: ["groceries", "internet"], categoryIds: ["transport"],
+      historySubcategoryIds: ["tuition", "groceries", "internet"], historyCategoryIds: ["education", "food", "transport", "utilities"],
+      // Two months of spending averaged; the biller payment is reserved by the plan, so it is not expected spending.
+      expectedSpend: { subcategories: { tuition: 5_000, groceries: 5_000 }, categories: { education: 5_000, food: 5_000, transport: 5_000 } },
+    });
   });
 });

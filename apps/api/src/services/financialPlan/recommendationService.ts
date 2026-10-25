@@ -14,6 +14,7 @@ import { getServiceRoleClient } from "../../lib/supabase.js";
 import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledRequirements } from "./helpers/scheduledCategoryAmounts.js";
 import { scheduledPaymentReservations, type ScheduledPaymentRow } from "./scheduledPaymentDates.js";
 import { normalizeCustomEvents, eventMonthLabel } from "@odin/spending-insights/seasons.js";
+import { historyWindow, isFullYear, seasonalMonthSpend } from "@odin/spending-insights/seasonalMonth.js";
 
 const MANILA = "Asia/Manila";
 // Matches the most transactions a forecast request accepts, so a busy year is not cut short.
@@ -150,6 +151,7 @@ function mapPlanForecast(
   mlForecast: ForecastPayload,
   categories: MlPlanCategory[],
   categorySlugBySubcategoryId: Map<string, string | undefined>,
+  seasonal: boolean,
 ): MlExpenseForecastSnapshot {
   const forecastBySlug = new Map(mlForecast.snapshot.categoryForecasts.map((point) => [point.category, point.amountCentavos]));
   const targetsBySlug = new Map<string, MlPlanCategory[]>();
@@ -164,7 +166,7 @@ function mapPlanForecast(
     const total = slug ? forecastBySlug.get(slug) ?? 0 : 0;
     const totalWeight = targets.reduce((sum, target) => sum + target.forecastCentavos, 0);
     const mlDetail = slug ? mlForecast.forecasts.find((point) => point.category === slug) : undefined;
-    // If this top-level category has no twelve-month spend, split its forecast evenly.
+    // Split by each target's expected spend this month; with none, split the forecast evenly.
     const amount = totalWeight > 0
       ? total * category.forecastCentavos / totalWeight
       : total / targets.length;
@@ -180,7 +182,7 @@ function mapPlanForecast(
       spend_weight_centavos: category.forecastCentavos,
       total_weight_centavos: totalWeight,
       weight_percentage: totalWeight > 0 ? category.forecastCentavos / totalWeight * 100 : null,
-       allocation_method: totalWeight > 0 ? "twelve_month_spend_weighted" : "even_split_no_spend_history",
+       allocation_method: totalWeight > 0 ? (seasonal ? "seasonal_spend_weighted" : "twelve_month_spend_weighted") : "even_split_no_spend_history",
       allocated_centavos: amount,
       floor_centavos: category.floorCentavos,
        final_forecast_centavos: finalForecastCentavos,
@@ -322,6 +324,16 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const spendBySubcategory = new Map<string, number>();
   const spendByCategory = new Map<string, number>();
   const spendMonths = new Set<string>();
+  // Each target's monthly spend, with payments the user marked yearly kept apart so they recur only in their month.
+  const monthlyByTarget = new Map<string, Map<string, number>>();
+  const yearlyByTarget = new Map<string, Map<string, number>>();
+  const addMonthly = (targetId: string, transaction: TransactionWithAnomalies) => {
+    const byTarget = yearlyIds.has(transaction.id) ? yearlyByTarget : monthlyByTarget;
+    const months = byTarget.get(targetId) ?? new Map<string, number>();
+    const month = transaction.transaction_date.slice(0, 7);
+    months.set(month, (months.get(month) ?? 0) + transaction.amount_centavos);
+    byTarget.set(targetId, months);
+  };
   for (const transaction of cleanTransactions) {
     if (transaction.transaction_type === "expense" && transaction.transaction_date >= trailingTwelveMonthsStart) spendMonths.add(transaction.transaction_date.slice(0, 7));
     if (transaction.transaction_type === "expense" && transaction.subcategory_id && transaction.transaction_date >= trailingTwelveMonthsStart) {
@@ -329,9 +341,20 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     }
     const parentCategoryId = (transaction.subcategory_id ? parentBySubcategory.get(transaction.subcategory_id) : null) ?? transaction.category_id;
     if (transaction.transaction_type === "expense" && parentCategoryId && transaction.transaction_date >= trailingTwelveMonthsStart) spendByCategory.set(parentCategoryId, (spendByCategory.get(parentCategoryId) ?? 0) + transaction.amount_centavos);
+    if (transaction.transaction_type === "expense" && transaction.transaction_date >= historyStart) {
+      if (transaction.subcategory_id) addMonthly(transaction.subcategory_id, transaction);
+      if (parentCategoryId) addMonthly(parentCategoryId, transaction);
+    }
   }
-  // Spend totals cover up to twelve months; a fallback forecast needs one month's worth.
-  const monthlySpend = (totalCentavos: number | undefined) => (totalCentavos ?? 0) / Math.max(spendMonths.size, 1);
+  // Like the Spending Forecast, a full year of history follows last year's seasons: spending that turns on and
+  // off with the calendar, last year's spike in the same month, and yearly payments. Less history uses the
+  // average month, which a fallback forecast needs one of.
+  const seasonalWindow = historyWindow(cleanTransactions.flatMap((transaction) => transaction.transaction_type === "expense" ? [transaction.transaction_date.slice(0, 7)] : []), currentCalendarMonth().start.slice(0, 7));
+  const seasonal = isFullYear(seasonalWindow);
+  const noSpend = new Map<string, number>();
+  const expectedMonthSpend = (targetId: string, totalCentavos: number | undefined) => seasonal
+    ? seasonalMonthSpend({ window: seasonalWindow, monthly: monthlyByTarget.get(targetId) ?? noSpend, yearly: yearlyByTarget.get(targetId) ?? noSpend, targetMonth: period.start.slice(0, 7) })
+    : (totalCentavos ?? 0) / Math.max(spendMonths.size, 1);
   const slugByCategoryId = new Map(((categoriesResult.data ?? []) as Category[]).map((category) => [category.id, category.slug]));
   const categorySlugBySubcategoryId = new Map([
     ...subcategories.map((subcategory) => [subcategory.id, subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined] as const),
@@ -353,7 +376,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
       if (fixed === null && category.minimum_amount_centavos === null && !includedTopLevelIds.has(category.id)) return [];
       const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (category.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
       const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`category:${category.id}`) ?? 0);
-      return [{ id: category.id, target: "category" as const, priorityGroup: financialPlanPriorityGroup(category.slug), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: monthlySpend(spendByCategory.get(category.id)) }];
+      return [{ id: category.id, target: "category" as const, priorityGroup: financialPlanPriorityGroup(category.slug), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: expectedMonthSpend(category.id, spendByCategory.get(category.id)) }];
     }),
     ...subcategories.flatMap((subcategory) => {
     const fixed = subcategory.fixed_amount_centavos;
@@ -362,12 +385,12 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     if (!automaticallyIncluded && !includedIds.has(subcategory.id)) return [];
     const rule: MlPlanCategory["rule"] = fixed !== null ? "FIXED" : (subcategory.minimum_amount_centavos !== null ? "MINIMUM" : "FLEXIBLE");
     const floor = fixed ?? Math.max(minimum, manualFloorByTarget.get(`subcategory:${subcategory.id}`) ?? 0);
-    return [{ id: subcategory.id, target: "subcategory" as const, priorityGroup: financialPlanPriorityGroup(subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: monthlySpend(spendBySubcategory.get(subcategory.id)) }];
+    return [{ id: subcategory.id, target: "subcategory" as const, priorityGroup: financialPlanPriorityGroup(subcategory.category_id ? slugByCategoryId.get(subcategory.category_id) : undefined), priorityWeight: 1, rule, floorCentavos: floor, ceilingCentavos: fixed ?? Math.max(available, floor), forecastCentavos: expectedMonthSpend(subcategory.id, spendBySubcategory.get(subcategory.id)) }];
   }),
   ];
   const scheduledByTarget = scheduledCategoryAmounts(scheduledPayments, grossCategories, parentBySubcategory, period);
   const categories = subtractScheduledRequirements(grossCategories, scheduledByTarget);
-  const categoryBaselines = subtractScheduledAmounts(new Map([...spendByCategory, ...spendBySubcategory].map(([id, amount]) => [id, monthlySpend(amount)])), scheduledByTarget);
+  const categoryBaselines = subtractScheduledAmounts(new Map(grossCategories.map((category) => [category.id, category.forecastCentavos])), scheduledByTarget);
   if (!categories.length) throw new FinancialPlanInputError("Choose at least one expense category");
   const minimumRequired = categories.reduce((sum, category) => sum + category.floorCentavos, 0);
   if (isFinancialPlanInfeasible(available, minimumRequired)) {
@@ -408,7 +431,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     if (forecastTransactions.length) {
       const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions, targetMonth: period.start.slice(0, 7) });
       if (forecastCoversPlanPeriod(mlForecast, period)) {
-        forecast = mapPlanForecast(userId, mlForecast, categories, categorySlugBySubcategoryId);
+        forecast = mapPlanForecast(userId, mlForecast, categories, categorySlugBySubcategoryId, seasonal);
         forecastDetails = mlForecast.forecasts;
       } else {
         console.warn("financial plan forecast month mismatch; using spend fallback", { user_id: userId, forecast_month: mlForecast.snapshot.month, plan_month: period.start.slice(0, 7) });
