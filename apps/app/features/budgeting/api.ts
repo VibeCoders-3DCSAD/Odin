@@ -25,7 +25,7 @@ export type BudgetRecommendationRequest = {
   forecast?: BudgetRecommendationForecast;
 };
 
-export function toBudgetRecommendationForecast(payload: ForecastPayload): BudgetRecommendationForecast | null {
+export function toBudgetRecommendationForecast(payload: Omit<ForecastPayload, "snapshot">): BudgetRecommendationForecast | null {
   // Quarterly HFCE projections cannot safely be treated as monthly budget inputs.
   void payload;
   return null;

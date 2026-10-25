@@ -167,7 +167,7 @@ describe("financial plan repository", () => {
 
   it("resolves plan references to owned display names in bounded queries", async () => {
     const db = {
-      getAllAsync: jest.fn()
+      getAllAsync: jest.fn<(...args: any[]) => any>()
         .mockResolvedValueOnce([{ id: "category-1", label: "Household" }])
         .mockResolvedValueOnce([{ id: "subcategory-1", label: "Groceries" }])
         .mockResolvedValueOnce([{ id: "debt-1", name: "Car loan" }])

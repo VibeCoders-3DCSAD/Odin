@@ -2,7 +2,7 @@ import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dash
 import type { ForecastPayload, QuarterlyForecastPayload } from "../forecast/types";
 
 
-export type ForecastContent = ForecastPayload;
+export type ForecastContent = Omit<ForecastPayload, "snapshot">;
 
 function payload(snapshot: DashboardSnapshotWithMeta | null | undefined): Record<string, unknown> {
   if (!snapshot) return {};

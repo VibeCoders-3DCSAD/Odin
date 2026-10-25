@@ -2,7 +2,7 @@ import migration from "../067_drop_legacy_budget_tables";
 
 describe("drop legacy budget tables migration", () => {
   it("discards queued legacy operations before dropping their tables", async () => {
-    const execAsync = jest.fn(async () => undefined);
+    const execAsync = jest.fn(async (_sql: string) => undefined);
 
     await migration.up({ execAsync } as never);
 

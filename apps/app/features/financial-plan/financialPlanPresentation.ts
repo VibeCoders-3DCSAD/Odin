@@ -1,5 +1,5 @@
 import type { PlanCommitmentStatus } from "./pastPlanTypes";
-import type { FinancialPlanAllocation, FinancialPlanReservation } from "./types";
+import type { FinancialPlanAllocation, FinancialPlanReservation, FinancialPlanSurplusRecommendation } from "./types";
 
 export type FinancialPlanLabels = {
   categories: Record<string, string>;
@@ -39,8 +39,8 @@ export function reservationLabel(reservation: FinancialPlanReservation): string 
   return reservation.label ?? (reservation.savingsGoalId ? "Savings goal" : reservation.debtAccountId ? "Debt account" : reservation.creditCardStatementId ? "Credit card statement" : reservation.scheduledPaymentId ? "Biller or remittance" : "Required reservation");
 }
 
-export function applyFinancialPlanLabels<T extends { allocations: FinancialPlanAllocation[]; debtReservations: FinancialPlanReservation[]; savingsReservations: FinancialPlanReservation[] }>(recommendation: T, labels: FinancialPlanLabels): T {
-  const destination = "surplusRecommendation" in recommendation ? recommendation.surplusRecommendation?.advisoryDestination : null;
+export function applyFinancialPlanLabels<T extends { allocations: FinancialPlanAllocation[]; debtReservations: FinancialPlanReservation[]; savingsReservations: FinancialPlanReservation[]; surplusRecommendation?: FinancialPlanSurplusRecommendation }>(recommendation: T, labels: FinancialPlanLabels): T {
+  const destination = recommendation.surplusRecommendation?.advisoryDestination;
   return {
     ...recommendation,
     allocations: recommendation.allocations.map((allocation) => ({ ...allocation, label: allocation.subcategoryId ? labels.subcategories[allocation.subcategoryId] : allocation.categoryId ? labels.categories[allocation.categoryId] : undefined })),

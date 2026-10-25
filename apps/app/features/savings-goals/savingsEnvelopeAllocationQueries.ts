@@ -30,11 +30,11 @@ export async function getCurrentSavingsEnvelopeAllocation(userId: string, asOfDa
   const reservations = ((plan.recommendation.savingsReservations as Array<{ savingsGoalId?: string; amountCentavos?: number }> | undefined) ?? []);
   const reservedByGoalId = new Map<string, number>();
   for (const reservation of reservations) {
-    if (!reservation.savingsGoalId || !Number.isSafeInteger(reservation.amountCentavos)) continue;
+    if (!reservation.savingsGoalId || reservation.amountCentavos === undefined || !Number.isSafeInteger(reservation.amountCentavos)) continue;
     reservedByGoalId.set(reservation.savingsGoalId, (reservedByGoalId.get(reservation.savingsGoalId) ?? 0) + Math.max(0, reservation.amountCentavos));
   }
   const savingsSurplus = plan.recommendation.savingsSurplusCentavos;
-  const savingsSurplusCentavos = Number.isSafeInteger(savingsSurplus) ? Math.max(0, savingsSurplus) : 0;
+  const savingsSurplusCentavos = typeof savingsSurplus === "number" && Number.isSafeInteger(savingsSurplus) ? Math.max(0, savingsSurplus) : 0;
   const envelopeCentavos = [...reservedByGoalId.values()].reduce((total, amount) => total + amount, savingsSurplusCentavos);
   const reservationAllocation = allocateSavingsEnvelope(0, strategy, goals, accountRequiredCentavos);
   const reservedProposals = reservationAllocation.proposals.map((proposal) => {
