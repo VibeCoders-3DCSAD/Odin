@@ -141,7 +141,7 @@ describe("Financial Plan explanation service", () => {
     expect(forecast).toContain("We recommend a budget of ₱120 for Food");
     expect(forecast).toContain("We estimate your spending may be 12.4% higher than usual.");
     expect(forecast).toContain("₱7.60 higher than the ₱112.40 estimate");
-    expect(forecast).not.toContain("Christmas and Ber Months");
+    expect(forecast).toContain("Perhaps this is due to Christmas and Ber Months, when spending in this category often goes up.");
     expect(messages.every((message) => message.startsWith("We recommend"))).toBe(true);
   });
 
@@ -152,7 +152,7 @@ describe("Financial Plan explanation service", () => {
       differenceCentavos: 20_000, percentageChange: 20, possibleSeasonalContext: "Christmas and Ber Months",
     }] });
 
-    expect(messages).toContain("We recommend a budget of ₱1,200 for Food. We estimate your spending may be 20% higher than usual. No specific reason identified.");
+    expect(messages).toContain("We recommend a budget of ₱1,200 for Food. We estimate your spending may be 20% higher than usual. Perhaps this is due to Christmas and Ber Months, when spending in this category often goes up.");
     expect(messages.join(" ")).not.toMatch(/baseline|allocation|surplus|shortfall|forecast|relevant context/i);
   });
 

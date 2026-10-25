@@ -151,7 +151,7 @@ describe("Financial Plan recommendations with recorded spending", () => {
     expect(result.explanationRequest.evidence.seasonalPreferences).toEqual([
       expect.objectContaining({ season: "Christmas and Ber Months", preference: "lower_expense" }),
     ]);
-    expect(result.explanations[0]).toContain("No specific reason identified.");
+    expect(result.explanations[0]).toContain("Perhaps spending in this category will be higher than usual.");
     expect(result.explanations[0]).not.toContain("Christmas");
     expect(result.recommendation.allocations[0]).toMatchObject({ allocatedAmountCentavos: 168_000, forecastAmountCentavos: 168_000 });
     expect(recommendPlanCategories).toHaveBeenCalledWith("user", result.period, 500_000,

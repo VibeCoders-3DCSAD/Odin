@@ -21,7 +21,7 @@ const evidence: FinancialPlanEvidence = {
 describe("monthly spending reason selection", () => {
   it("does not treat custom names as category-specific spending causes", () => {
     const custom = { ...evidence, seasonalPreferences: [{ evidenceId: "high_expense_seasons:custom_event", season: "Undas / All Souls' Day", seasonWindow: "November", preference: "higher_expense" as const }] };
-    expect(possibleSeasonalReasons(custom, change)).toBe("");
+    expect(possibleSeasonalReasons(custom, change)).not.toContain("based on your selected");
   });
 
   it("accepts all bounded custom events after the client echoes the explanation context", () => {
@@ -52,25 +52,34 @@ describe("monthly spending reason selection", () => {
 
   it("does not apply rainy-season expenses to Food or any seasonal reason to Communication", () => {
     expect(possibleSeasonalReasons(evidence, { ...change, categorySlug: "food" })).not.toContain("Rainy Season");
-    expect(possibleSeasonalReasons(evidence, { ...change, categorySlug: "communication", categoryName: "Food" })).toBe("");
-    expect(possibleSeasonalReasons(evidence, { ...change, categorySlug: "custom" })).toBe("");
+    expect(possibleSeasonalReasons(evidence, { ...change, categorySlug: "communication", categoryName: "Food" })).toBe("Perhaps spending in this category will be higher than usual.");
+    expect(possibleSeasonalReasons(evidence, { ...change, categorySlug: "custom" })).toBe("Perhaps spending in this category will be higher than usual.");
   });
 
   it.each(["2026-02", "2027-02", "2027-04"])("does not infer movable holidays, purchases or school breaks in %s", (planMonth) => {
     const local = { ...evidence, planMonth, seasonalPreferences: [] };
-    expect(possibleSeasonalReasons(local, change)).toBe("");
-    expect(forecastChangeExplanation(local, change)).toContain("No specific reason identified.");
+    expect(possibleSeasonalReasons(local, change)).toMatch(/^Perhaps /);
     expect(forecastChangeExplanation(local, change)).not.toMatch(/Holy Week|Chinese New Year|Eid|tuition|repairs|gifts|travel/i);
   });
 
+  it("always gives a hedged reason in Q4 when no seasons were selected", () => {
+    const october = { ...evidence, planMonth: "2026-10", seasonalPreferences: [] };
+    const food = { ...change, evidenceId: "forecast:food", categorySlug: "food", categoryName: "Food" };
+    expect(forecastChangeExplanation(october, food)).toContain("Perhaps this is due to Undas / All Souls' Day and Christmas and Ber Months");
+    const health = { ...change, categorySlug: "health", categoryName: "Health", differenceCentavos: -5_100, percentageChange: -5.1 };
+    expect(forecastChangeExplanation(october, health)).toContain("Perhaps spending in this category will be lower than usual.");
+    const lowerChristmas = { ...october, seasonalPreferences: seasonalPreferencesFromAnswers({ low_expense_seasons: ["christmas_ber_months"] }, "2026-10-01") };
+    expect(possibleSeasonalReasons(lowerChristmas, food)).not.toContain("Christmas");
+  });
+
   it("rechecks the plan month instead of trusting previously selected seasonal evidence", () => {
-    expect(possibleSeasonalReasons({ ...evidence, planMonth: "2027-02" }, change)).toBe("");
-    expect(possibleSeasonalReasons({ ...evidence, planMonth: "invalid" }, change)).toBe("");
+    expect(possibleSeasonalReasons({ ...evidence, planMonth: "2027-02" }, change)).not.toContain("based on your selected");
+    expect(possibleSeasonalReasons({ ...evidence, planMonth: "invalid" }, change)).toBe("Perhaps spending in this category will be higher than usual.");
   });
 
   it("only uses lower patterns for a decrease and never reverses a seasonal event's cause", () => {
     const decrease = { ...change, forecastCentavos: 80_000, differenceCentavos: -20_000, percentageChange: -20 };
-    expect(possibleSeasonalReasons(evidence, decrease)).toBe("");
+    expect(possibleSeasonalReasons(evidence, decrease)).toBe("Perhaps spending in this category will be lower than usual.");
     const lower = { ...evidence, seasonalPreferences: seasonalPreferencesFromAnswers({ low_expense_seasons: ["christmas_ber_months"] }, "2026-11-01") };
     expect(possibleSeasonalReasons(lower, decrease)).toContain("selected lower-expense seasons");
     expect(seasonalForecastMismatchExplanations(lower)).toEqual([expect.stringContaining("You reported lower expenses")]);
