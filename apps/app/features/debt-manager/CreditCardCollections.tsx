@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Platform, Pressable, Text, TextInput, View } from "react-native";
+import { Platform, Text, View } from "react-native";
+import { Banner, FormCard, Note, PickerField, TextField, v4, v4Font } from "../../components/BudgieForm";
 import type { CreditCardCycle, CreditCardCycleTransaction } from "../../local-db/repositories/creditCardCycles";
 import type { CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import type { CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
@@ -8,34 +9,126 @@ import type { FinancialAccount } from "../../local-db/repositories/financialFoun
 import { calculateCreditCardPaymentStatus, creditBalanceCentavos, deleteStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
 import { requestCreditCardSettlement, type CreditCardSettlement } from "../../local-db/repositories/creditCardSettlements";
 import CreditCardStatementForm from "./CreditCardStatementForm";
+import { Button, Divider, InfoRow, LinkButton, List, ListRow, Pill, Pills, SectionHeader, formatPeso, formatShortDate, type Tone } from "./debtUi";
 
-const P = { shell: "#fcf8f0", brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#EAEAE6", card: "#F1F0EB", accent: "#DCEADE", error: "#D9001F" } as const;
-type Props = { userId: string; deviceId: string; accounts: FinancialAccount[]; cycles: CreditCardCycle[]; transactions: CreditCardCycleTransaction[]; statements: CreditCardStatement[]; installments: CreditCardInstallment[]; payments: CreditCardPayment[]; settlements: CreditCardSettlement[]; statementCycle: CreditCardCycle | null; onManageCycle: (account: FinancialAccount, cycle: CreditCardCycle | null) => void; onAddStatement: (cycle: CreditCardCycle) => void; onCancelStatement: () => void; onStatementSaved: () => Promise<void>; onPayStatement?: (context: StatementPaymentContext) => void; onEditPayment?: (payment: CreditCardPayment) => void; accountId?: string; today?: string };
-function money(value: number | null | undefined) { return value == null ? "Not available" : `₱${(value / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+type CycleListProps = { userId: string; deviceId: string; account: FinancialAccount; cycles: CreditCardCycle[]; transactions: CreditCardCycleTransaction[]; statements: CreditCardStatement[]; payments: CreditCardPayment[]; statementCycle: CreditCardCycle | null; onManageCycle: (account: FinancialAccount, cycle: CreditCardCycle | null) => void; onAddStatement: (cycle: CreditCardCycle) => void; onCancelStatement: () => void; onStatementSaved: () => Promise<void>; onPayStatement?: (context: StatementPaymentContext) => void; onEditPayment?: (payment: CreditCardPayment) => void; today?: string };
+type InstallmentListProps = { userId: string; deviceId: string; installments: CreditCardInstallment[]; settlements: CreditCardSettlement[]; onSaved: () => Promise<void>; today?: string };
+
 function parse(value: string) { const normalized = value.trim().replace(/,/g, ""); if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null; const [whole, fraction = ""] = normalized.split("."); const result = Number(whole) * 100 + Number((fraction + "00").slice(0, 2)); return Number.isSafeInteger(result) ? result : null; }
 function isoToday() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 
-function CycleCard({ account, cycle, count, transactions, statement, payment, statementCycle, props, today }: { account: FinancialAccount; cycle: CreditCardCycle; count: number; transactions: CreditCardCycleTransaction[]; statement?: CreditCardStatement; payment?: CreditCardPayment; statementCycle: CreditCardCycle | null; props: Props; today: string }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const current = (cycle.cycle_start_date <= today && cycle.cutoff_date >= today) || count === 1;
+const PAYMENT_STATUS: Record<ReturnType<typeof calculateCreditCardPaymentStatus>, { label: string; tone: Tone; banner: "info" | "warn" | "error"; message: string }> = {
+  fully_paid: { label: "Fully paid", tone: "ok", banner: "info", message: "This statement is fully paid. No remaining statement balance is currently recorded." },
+  minimum_satisfied: { label: "Minimum met", tone: "warn", banner: "warn", message: "The minimum payment is satisfied, but the remaining balance may incur finance charges." },
+  partially_paid: { label: "Below minimum", tone: "err", banner: "error", message: "This statement is not fully paid and the minimum amount due is not yet satisfied. Review the remaining payment." },
+};
+
+type CycleCardProps = { account: FinancialAccount; cycle: CreditCardCycle; current: boolean; transactions: CreditCardCycleTransaction[]; statement?: CreditCardStatement; payment?: CreditCardPayment; props: CycleListProps; today: string };
+
+function CycleCard({ account, cycle, current, transactions, statement, payment, props, today }: CycleCardProps) {
   const pending = cycle.cutoff_date < today && !statement;
+  const [expanded, setExpanded] = useState(current || pending);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const estimatedBalanceCentavos = transactions.filter((item) => item.transaction_date <= cycle.cutoff_date).reduce((total, item) => total + item.amount_centavos, 0);
-  return <View style={{ borderWidth: 1, borderColor: current ? P.brand : P.line, borderRadius: 16, overflow: "hidden", marginBottom: 12, backgroundColor: P.shell }}>
-    <View style={{ padding: 14, backgroundColor: current ? P.accent : P.card }}><View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}><View style={{ flex: 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 14, color: P.ink }}>{current ? "Current billing cycle" : "Billing cycle"}</Text><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink, marginTop: 4 }}>{account.name}</Text><Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 3 }}>{cycle.cycle_start_date} to {cycle.cutoff_date}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={`Edit billing cycle for ${account.name}`} onPress={() => props.onManageCycle(account, cycle)}><Text style={{ color: P.brand, fontWeight: "700" }}>Edit</Text></Pressable></View></View>
-    <View style={{ padding: 14, gap: 14 }}><View><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink }}>Cycle details</Text><Text style={{ color: P.muted, fontSize: 11.5, marginTop: 5 }}>Cycle start: {cycle.cycle_start_date}</Text><Text style={{ color: P.muted, fontSize: 11.5 }}>Cutoff: {cycle.cutoff_date}</Text><Text style={{ color: P.muted, fontSize: 11.5 }}>Statement: {cycle.statement_date ?? "Not recorded"}</Text></View>
-      {statement ? <View style={{ borderTopWidth: 1, borderTopColor: P.line, paddingTop: 12 }}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.ink }}>Recorded statement</Text><Text style={{ color: P.muted, fontSize: 11.5, marginTop: 5 }}>Statement date: {statement.statement_date} · Due: {statement.due_date}</Text><Text style={{ color: P.muted, fontSize: 11.5 }}>Balance: {money(statement.statement_balance_centavos)} · Minimum: {money(statement.minimum_due_centavos)}</Text><Text style={{ color: P.muted, fontSize: 11.5 }}>Finance charges: {money(statement.finance_charge_centavos)}</Text>{payment ? <View style={{ marginTop: 8 }}>{(() => { const status = calculateCreditCardPaymentStatus(payment.amount_centavos, statement.statement_balance_centavos, statement.minimum_due_centavos); const remaining = Math.max(0, statement.statement_balance_centavos - payment.amount_centavos); return <><Text style={{ color: P.ink, fontSize: 11.5 }}>Payment: {money(payment.amount_centavos)} · Remaining: {money(remaining)}</Text><Text style={{ color: P.muted, fontSize: 11.5 }}>{status === "fully_paid" ? "This statement is fully paid. No remaining statement balance is currently recorded." : status === "minimum_satisfied" ? "The minimum payment is satisfied, but the remaining balance may incur finance charges." : "This statement is not fully paid and the minimum amount due is not yet satisfied. Review the remaining payment."}</Text>{creditBalanceCentavos(payment.amount_centavos, statement.statement_balance_centavos) > 0 ? <Text style={{ color: P.muted, fontSize: 11.5 }}>This payment created a credit balance. Apply it only when confirmed.</Text> : null}</>; })()}{confirmingDelete ? <View style={{ marginTop: 7 }}><Text style={{ color: P.muted, fontSize: 11.5 }}>Deleting this payment removes it from the statement history and reverses its related transaction. Cancel to keep it or confirm deletion to continue.</Text><View style={{ flexDirection: "row", gap: 12, marginTop: 5 }}><Pressable onPress={() => setConfirmingDelete(false)}><Text style={{ color: P.muted, fontWeight: "700" }}>Cancel</Text></Pressable><Pressable onPress={() => deleteStatementPayment(props.userId, props.deviceId, payment.id).then(props.onStatementSaved).finally(() => setConfirmingDelete(false))}><Text style={{ color: P.error, fontWeight: "700" }}>Confirm delete</Text></Pressable></View></View> : <View style={{ flexDirection: "row", gap: 12, marginTop: 6 }}><Pressable accessibilityRole="button" accessibilityLabel={`Edit payment for ${account.name}`} onPress={() => props.onEditPayment?.(payment)}><Text style={{ color: P.brand, fontWeight: "700" }}>Edit payment</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Delete payment for ${account.name}`} onPress={() => setConfirmingDelete(true)}><Text style={{ color: P.error, fontWeight: "700" }}>Delete payment</Text></Pressable></View>}</View> : <Pressable accessibilityRole="button" accessibilityLabel={`Pay statement for ${account.name}`} onPress={() => props.onPayStatement?.({ statementId: statement.id, cycleId: cycle.id })} style={{ marginTop: 7 }}><Text style={{ color: P.brand, fontWeight: "700" }}>Pay statement</Text></Pressable>}</View> : <View><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>Estimated statement</Text><Text style={{ color: P.muted, fontSize: 11.5 }}>This statement balance is an estimate. Record the bank-provided statement when it is available.</Text></View>}
-      {pending ? <View style={{ gap: 6 }}><View style={{ borderRadius: 10, backgroundColor: P.accent, padding: 10 }}><Text style={{ color: P.ink, fontSize: 11.5, fontWeight: "700" }}>Estimated statement balance: {money(estimatedBalanceCentavos)}</Text><Text style={{ color: P.muted, fontSize: 11.5, marginTop: 3 }}>This statement balance is an estimate. Record the bank-provided statement when it is available.</Text></View><Text style={{ color: P.muted, fontSize: 11.5 }}>Have you received the statement for this billing cycle?</Text><Pressable accessibilityRole="button" accessibilityLabel="Add statement" onPress={() => props.onAddStatement(cycle)}><Text style={{ color: P.brand, fontWeight: "700" }}>Add statement</Text></Pressable>{statementCycle?.id === cycle.id ? <CreditCardStatementForm userId={props.userId} deviceId={props.deviceId} cycleId={cycle.id} cycleCutoffDate={cycle.cutoff_date} today={today} onCancel={props.onCancelStatement} onSaved={props.onStatementSaved} /> : null}</View> : null}
-      <View><Text style={{ fontFamily: "Manrope", fontWeight: "700", color: P.ink }}>Transactions</Text>{transactions.length === 0 ? <Text style={{ color: P.muted, fontSize: 11.5 }}>No purchases recorded in this billing cycle.</Text> : transactions.map((item) => <View key={item.transaction_id} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 7 }}><View><Text style={{ color: P.ink }}>{item.merchant_name ?? "Credit-card purchase"}</Text><Text style={{ color: P.muted, fontSize: 10.5 }}>{item.transaction_date} · {item.purchase_type === "installment" ? "Installment purchase" : "Regular purchase"}</Text></View><Text style={{ color: P.ink }}>{money(item.amount_centavos)}</Text></View>)}</View>
-    </View>
+  const paymentStatus = statement && payment ? PAYMENT_STATUS[calculateCreditCardPaymentStatus(payment.amount_centavos, statement.statement_balance_centavos, statement.minimum_due_centavos)] : null;
+
+  return <FormCard title={current ? "Current billing cycle" : "Billing cycle"} right={<LinkButton label="Edit" accessibilityLabel={`Edit billing cycle for ${account.name}`} onPress={() => props.onManageCycle(account, cycle)} />}>
+    <Text style={{ fontFamily: v4Font, fontSize: 12, color: v4.ink2, marginTop: -6 }}>{formatShortDate(cycle.cycle_start_date)} to {formatShortDate(cycle.cutoff_date)}</Text>
+    <Pills>
+      {statement ? <Pill label="Statement recorded" tone="ok" /> : <Pill label={pending ? "Statement pending" : "Estimate"} tone="warn" />}
+      {statement ? paymentStatus ? <Pill label={paymentStatus.label} tone={paymentStatus.tone} /> : <Pill label="Unpaid" tone="neutral" /> : null}
+    </Pills>
+    <InfoRow label={statement ? "Statement balance" : "Estimated balance"} value={formatPeso(statement ? statement.statement_balance_centavos : estimatedBalanceCentavos)} />
+    {expanded ? <>
+      {statement ? <>
+        <InfoRow label="Minimum due" value={formatPeso(statement.minimum_due_centavos)} />
+        <InfoRow label="Due date" value={formatShortDate(statement.due_date)} />
+        <InfoRow label="Finance charges" value={formatPeso(statement.finance_charge_centavos)} />
+      </> : null}
+      <InfoRow label="Cycle start" value={formatShortDate(cycle.cycle_start_date)} />
+      <InfoRow label="Cut-off" value={formatShortDate(cycle.cutoff_date)} />
+      <InfoRow label="Statement date" value={statement ? formatShortDate(statement.statement_date) : cycle.statement_date ? formatShortDate(cycle.statement_date) : "Not recorded"} />
+
+      {statement && payment && paymentStatus ? <>
+        <Divider />
+        <InfoRow label="Paid" value={formatPeso(payment.amount_centavos)} tone="ok" />
+        <InfoRow label="Remaining" value={formatPeso(Math.max(0, statement.statement_balance_centavos - payment.amount_centavos))} />
+        <Banner tone={paymentStatus.banner}>{paymentStatus.message}</Banner>
+        {creditBalanceCentavos(payment.amount_centavos, statement.statement_balance_centavos) > 0 ? <Note>This payment created a credit balance. Apply it only when confirmed.</Note> : null}
+        {confirmingDelete ? <View style={{ gap: 8 }}>
+          <Banner tone="error">Deleting this payment removes it from the statement history and reverses its related transaction. Cancel to keep it or confirm deletion to continue.</Banner>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Button flex variant="ghost" label="Cancel" onPress={() => setConfirmingDelete(false)} />
+            <Button flex variant="danger" label="Confirm delete" onPress={() => { deleteStatementPayment(props.userId, props.deviceId, payment.id).then(props.onStatementSaved).finally(() => setConfirmingDelete(false)); }} />
+          </View>
+        </View> : <View style={{ flexDirection: "row", gap: 18 }}>
+          <LinkButton label="Edit payment" accessibilityLabel={`Edit payment for ${account.name}`} onPress={() => props.onEditPayment?.(payment)} />
+          <LinkButton label="Delete payment" tone="err" accessibilityLabel={`Delete payment for ${account.name}`} onPress={() => setConfirmingDelete(true)} />
+        </View>}
+      </> : null}
+      {statement && !payment ? <Button label="Pay statement" accessibilityLabel={`Pay statement for ${account.name}`} onPress={() => props.onPayStatement?.({ statementId: statement.id, cycleId: cycle.id })} /> : null}
+
+      {!statement ? <Banner tone="warn">This statement balance is an estimate. Record the bank-provided statement when it is available.</Banner> : null}
+      {pending ? <>
+        <Note>Have you received the statement for this billing cycle?</Note>
+        <Button variant="ghost" label="Add statement" onPress={() => props.onAddStatement(cycle)} />
+        {props.statementCycle?.id === cycle.id ? <CreditCardStatementForm userId={props.userId} deviceId={props.deviceId} cycleId={cycle.id} cycleCutoffDate={cycle.cutoff_date} today={today} onCancel={props.onCancelStatement} onSaved={props.onStatementSaved} /> : null}
+      </> : null}
+
+      <Divider />
+      <Text style={{ fontFamily: v4Font, fontSize: 12.5, fontWeight: "800", color: v4.ink }}>Purchases · {transactions.length}</Text>
+      {transactions.length === 0 ? <Note>No purchases recorded in this billing cycle.</Note> : <List>{transactions.map((item, index) => <ListRow
+        key={item.transaction_id}
+        divider={index > 0}
+        title={item.merchant_name ?? "Credit-card purchase"}
+        subtitle={`${item.transaction_date} · ${item.purchase_type === "installment" ? "Installment purchase" : "Regular purchase"}`}
+        value={formatPeso(item.amount_centavos)}
+      />)}</List>}
+    </> : null}
+    {!current && !pending ? <LinkButton label={expanded ? "Hide details" : "Show details"} accessibilityLabel={`${expanded ? "Hide" : "Show"} billing cycle ${cycle.cycle_start_date} to ${cycle.cutoff_date}`} onPress={() => setExpanded((value) => !value)} /> : null}
+  </FormCard>;
+}
+
+// The card's billing cycles, newest first, with the current one on top.
+export function CreditCardCycleList(props: CycleListProps) {
+  const { account, cycles, transactions, statements, payments, today = isoToday() } = props;
+  const accountCycles = cycles.filter((cycle) => cycle.account_id === account.id);
+  const currentId = (accountCycles.find((cycle) => cycle.cycle_start_date <= today && cycle.cutoff_date >= today) ?? (accountCycles.length === 1 ? accountCycles[0] : undefined))?.id;
+  const ordered = accountCycles.slice().sort((left, right) => Number(right.id === currentId) - Number(left.id === currentId) || right.cutoff_date.localeCompare(left.cutoff_date));
+  return <View style={{ gap: 12 }}>
+    <SectionHeader title="Billing cycles" />
+    {ordered.length === 0 ? <Note>No billing cycle is recorded for this card yet.</Note> : ordered.map((cycle) => {
+      const statement = statements.find((item) => item.cycle_id === cycle.id);
+      return <CycleCard key={cycle.id} account={account} cycle={cycle} current={cycle.id === currentId} transactions={transactions.filter((item) => item.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} props={props} today={today} />;
+    })}
   </View>;
 }
 
-export default function CreditCardCollections(props: Props) {
-  const { userId, deviceId, accounts, cycles, transactions, statements, installments, payments, settlements, accountId, today = isoToday() } = props;
-  const visibleAccounts = accountId ? accounts.filter((account) => account.id === accountId) : accounts;
-  const visibleCycles = accountId ? cycles.filter((cycle) => cycle.account_id === accountId) : cycles;
-  const visibleInstallments = accountId ? installments.filter((installment) => installment.account_id === accountId) : installments;
+export function CreditCardInstallmentList({ userId, deviceId, installments, settlements, onSaved, today = isoToday() }: InstallmentListProps) {
   const [editing, setEditing] = useState<CreditCardInstallment | null>(null); const [amount, setAmount] = useState(""); const [principal, setPrincipal] = useState(""); const [fee, setFee] = useState(""); const [date, setDate] = useState(today); const [picker, setPicker] = useState(false); const [error, setError] = useState<string | null>(null);
-  async function settle() { if (!editing) return; const settlementAmount = parse(amount); const remainingPrincipal = parse(principal); const settlementFee = fee ? parse(fee) : 0; if (!settlementAmount || remainingPrincipal === null || settlementFee === null) { setError("Some early-settlement details are not valid."); return; } try { await requestCreditCardSettlement(userId, deviceId, { installmentId: editing.id, settlementDate: date, remainingPrincipalCentavos: remainingPrincipal, settlementAmountCentavos: settlementAmount, preterminationFeeCentavos: settlementFee }); await props.onStatementSaved(); setEditing(null); } catch { setError("Your early settlement could not be recorded."); } }
-  return <View>{visibleInstallments.length > 0 ? <View style={{ marginBottom: 18 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink }}>Active installments</Text>{visibleInstallments.map((item) => <View key={item.id} style={{ marginTop: 10, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: P.line }}><Text style={{ color: P.ink, fontWeight: "700" }}>{item.description}</Text><Text style={{ color: P.muted, fontSize: 11.5 }}>Remaining principal: {money(item.remaining_principal_centavos)}</Text>{settlements.filter((settlement) => settlement.installment_id === item.id).map((settlement) => <Text key={settlement.id} style={{ color: P.muted, fontSize: 11.5 }}>Settlement {settlement.status}: {money(settlement.settlement_amount_centavos)} on {settlement.settlement_date}</Text>)}{item.settlement_status === "active" ? <Pressable accessibilityRole="button" accessibilityLabel={`Record early settlement for ${item.description}`} onPress={() => { setEditing(item); setAmount(""); setPrincipal((item.remaining_principal_centavos / 100).toFixed(2)); setFee(""); setDate(today); }}><Text style={{ color: P.brand, fontWeight: "700", marginTop: 6 }}>Record early settlement</Text></Pressable> : null}</View>)}</View> : null}{editing ? <View style={{ gap: 8, padding: 12, backgroundColor: P.card, borderRadius: 12 }}><TextInput accessibilityLabel="Early settlement amount" value={amount} onChangeText={setAmount} placeholder="Enter settlement amount" keyboardType="decimal-pad" /><TextInput accessibilityLabel="Early settlement remaining principal" value={principal} onChangeText={setPrincipal} placeholder="Enter remaining principal" keyboardType="decimal-pad" /><TextInput accessibilityLabel="Pre-termination fee" value={fee} onChangeText={setFee} placeholder="Enter pre-termination fee" keyboardType="decimal-pad" /><Pressable accessibilityRole="button" accessibilityLabel="Select early settlement date" onPress={() => setPicker(true)}><Text>{date}</Text></Pressable>{picker ? <DateTimePicker value={new Date(`${date}T12:00:00`)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(event, value) => { if (event.type === "set" && value) setDate(`${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`); if (Platform.OS !== "ios") setPicker(false); }} /> : null}{error ? <Text style={{ color: P.error }}>{error}</Text> : null}<View style={{ flexDirection: "row", gap: 12 }}><Pressable onPress={() => setEditing(null)}><Text>Cancel</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Save early settlement" onPress={() => settle().catch(() => {})}><Text style={{ color: P.brand, fontWeight: "700" }}>Save settlement</Text></Pressable></View></View> : null}<Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 15, color: P.ink, marginVertical: 16 }}>Billing Cycles</Text>{visibleCycles.map((cycle) => { const account = visibleAccounts.find((item) => item.id === cycle.account_id); if (!account) return null; const statement = statements.find((item) => item.cycle_id === cycle.id); return <CycleCard key={cycle.id} account={account} cycle={cycle} count={visibleCycles.filter((item) => item.account_id === account.id).length} transactions={transactions.filter((item) => item.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} statementCycle={props.statementCycle} props={props} today={today} />; })}</View>;
+  async function settle() { if (!editing) return; const settlementAmount = parse(amount); const remainingPrincipal = parse(principal); const settlementFee = fee ? parse(fee) : 0; if (!settlementAmount || remainingPrincipal === null || settlementFee === null) { setError("Some early-settlement details are not valid."); return; } try { await requestCreditCardSettlement(userId, deviceId, { installmentId: editing.id, settlementDate: date, remainingPrincipalCentavos: remainingPrincipal, settlementAmountCentavos: settlementAmount, preterminationFeeCentavos: settlementFee }); await onSaved(); setEditing(null); } catch { setError("Your early settlement could not be recorded."); } }
+  if (installments.length === 0) return null;
+  return <View style={{ gap: 12 }}>
+    <SectionHeader title="Active installments" />
+    {installments.map((item) => <FormCard key={item.id} title={item.description}>
+      <InfoRow label="Remaining principal" value={formatPeso(item.remaining_principal_centavos)} />
+      <InfoRow label="Monthly amortization" value={formatPeso(item.monthly_amortization_centavos)} />
+      <InfoRow label="Months left" value={`${item.remaining_months} of ${item.term_months}`} />
+      {settlements.filter((settlement) => settlement.installment_id === item.id).map((settlement) => <Note key={settlement.id}>Settlement {settlement.status}: {formatPeso(settlement.settlement_amount_centavos)} on {settlement.settlement_date}</Note>)}
+      {item.settlement_status === "active" && editing?.id !== item.id ? <LinkButton label="Record early settlement" accessibilityLabel={`Record early settlement for ${item.description}`} onPress={() => { setEditing(item); setAmount(""); setPrincipal((item.remaining_principal_centavos / 100).toFixed(2)); setFee(""); setDate(today); setError(null); }} /> : null}
+      {editing?.id === item.id ? <View style={{ gap: 10 }}>
+        <Divider />
+        <TextField label="Settlement amount" accessibilityLabel="Early settlement amount" value={amount} onChangeText={setAmount} placeholder="Enter settlement amount" keyboardType="decimal-pad" />
+        <TextField label="Remaining principal" accessibilityLabel="Early settlement remaining principal" value={principal} onChangeText={setPrincipal} placeholder="Enter remaining principal" keyboardType="decimal-pad" />
+        <TextField label="Pre-termination fee" accessibilityLabel="Pre-termination fee" value={fee} onChangeText={setFee} placeholder="Enter pre-termination fee" keyboardType="decimal-pad" />
+        <PickerField label="Settlement date" accessibilityLabel="Select early settlement date" value={date} onPress={() => setPicker(true)} />
+        {picker ? <DateTimePicker value={new Date(`${date}T12:00:00`)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(event, value) => { if (event.type === "set" && value) setDate(`${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`); if (Platform.OS !== "ios") setPicker(false); }} /> : null}
+        {error ? <Banner tone="error">{error}</Banner> : null}
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Button flex variant="ghost" label="Cancel" onPress={() => setEditing(null)} />
+          <Button flex label="Save settlement" accessibilityLabel="Save early settlement" onPress={() => { settle().catch(() => {}); }} />
+        </View>
+      </View> : null}
+    </FormCard>)}
+  </View>;
 }

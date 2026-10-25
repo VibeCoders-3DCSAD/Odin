@@ -224,11 +224,13 @@ it("shows card details and all current cycle dates", async () => {
     const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
     await waitFor(() => {
       expect(view.getByText("Billing cycles and statement activity")).toBeTruthy();
-      expect(view.getByText("Billing Cycles")).toBeTruthy();
-      expect(view.getAllByText("Visa Platinum")).toHaveLength(2);
-    expect(view.getByText("Cycle start: 2024-01-16")).toBeTruthy();
-    expect(view.getByText("Cutoff: 2024-02-15")).toBeTruthy();
-    expect(view.getByText("Statement: 2024-02-20")).toBeTruthy();
+      expect(view.getByText("Billing cycles")).toBeTruthy();
+      expect(view.getByText("Visa Platinum")).toBeTruthy();
+    expect(view.getByText("Cycle start")).toBeTruthy();
+    expect(view.getAllByText("Jan 16, 2024").length).toBeGreaterThan(0);
+    expect(view.getByText("Cut-off")).toBeTruthy();
+    expect(view.getAllByText("Feb 15, 2024").length).toBeGreaterThan(0);
+    expect(view.getByText("Feb 20, 2024")).toBeTruthy();
   });
 });
 
@@ -282,7 +284,8 @@ it("shows current-cycle credit-card transactions", async () => {
   const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => {
     expect(view.getByText("Grocery Store")).toBeTruthy();
-    expect(view.getByText("₱1,250.00")).toBeTruthy();
+    expect(view.getByText("Estimated balance")).toBeTruthy();
+    expect(view.getAllByText("PHP 1,250.00")).toHaveLength(2);
     expect(view.getByText("2024-02-01 · Regular purchase")).toBeTruthy();
   });
 });
@@ -416,4 +419,21 @@ it("keeps transactions from a prior billing cycle visible", async () => {
 
   const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
   await waitFor(() => expect(view.getByText("Prior cycle purchase")).toBeTruthy());
+});
+
+it("collapses settled past cycles under the current one and expands them on request", async () => {
+  mockListFinancialAccounts.mockResolvedValue([{ id: "card-1", name: "Visa Platinum", kind: "credit_card", status: "active", creditCardDetails: null }]);
+  mockListCreditCardCycles.mockResolvedValue([
+    { id: "cycle-past", user_id: "user-1", account_id: "card-1", cycle_start_date: "2024-01-16", cutoff_date: "2024-02-15", statement_date: "2024-02-20", version: 1, deleted: false, created_at: "2024-01-01T00:00:00.000Z", updated_at: "2024-01-01T00:00:00.000Z" },
+    { id: "cycle-current", user_id: "user-1", account_id: "card-1", cycle_start_date: "2020-01-01", cutoff_date: "2099-12-31", statement_date: null, version: 1, deleted: false, created_at: "2020-01-01T00:00:00.000Z", updated_at: "2020-01-01T00:00:00.000Z" },
+  ]);
+  mockListCreditCardStatements.mockResolvedValue([{ id: "statement-1", user_id: "user-1", cycle_id: "cycle-past", statement_date: "2024-02-20", due_date: "2024-03-05", statement_balance_centavos: 250_000, minimum_due_centavos: 50_000, finance_charge_centavos: 0, authoritative: true, version: 1, deleted: false, created_at: "2024-02-20T00:00:00.000Z", updated_at: "2024-02-20T00:00:00.000Z" }]);
+
+  const view = render(<DebtManagerScreen userId="user-1" deviceId="device-1" accountId="card-1" />);
+  await waitFor(() => expect(view.getByText("Current billing cycle")).toBeTruthy());
+  expect(view.getByText("Statement balance")).toBeTruthy();
+  expect(view.queryByText("Minimum due")).toBeNull();
+  fireEvent.press(view.getByLabelText("Show billing cycle 2024-01-16 to 2024-02-15"));
+  expect(view.getByText("Minimum due")).toBeTruthy();
+  expect(view.getByLabelText("Pay statement for Visa Platinum")).toBeTruthy();
 });

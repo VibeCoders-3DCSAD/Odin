@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Text, View } from "react-native";
+import { Banner, FormCard, Note, PickerField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import { ensureCurrentCreditCardCycles, createCreditCardCycle, listCreditCardCycles, listCreditCardCycleTransactions, updateCreditCardCycle, type CreditCardCycle, type CreditCardCycleTransaction } from "../../local-db/repositories/creditCardCycles";
 import { calculateCurrentCreditCardCycle } from "../../local-db/repositories/creditCardCycleDates";
 import {
@@ -11,7 +12,7 @@ import { LocalDbError } from "../../local-db/helpers";
 import { listCreditCardStatements, type CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import { listCreditCardInstallments, type CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
 import { listCreditCardPayments, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
-import CreditCardCollections from "./CreditCardCollections";
+import { CreditCardCycleList, CreditCardInstallmentList } from "./CreditCardCollections";
 import CreditCardListScreen from "./CreditCardListScreen";
 import CreditCardForecastSection from "./CreditCardForecastSection";
 import { listCreditCardStrategies, type CreditCardStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
@@ -20,20 +21,7 @@ import CreditCardRepaymentStrategy from "./CreditCardRepaymentStrategy";
 import CreditCardAvailableCreditReconciliation from "./CreditCardAvailableCreditReconciliation";
 import { getPhilippineToday } from "./debtTrendRange";
 import { useCreditCardForecast } from "./hooks/useCreditCardForecast";
-
-const P = {
-  shell: "#fcf8f0",
-  brand: "#013220",
-  ink: "#1B1C1A",
-  muted: "#6B7A6F",
-  line: "#EAEAE6",
-  card: "#F1F0EB",
-  error: "#D9001F",
-} as const;
-
-function formatPeso(centavos: number | null | undefined): string {
-  return centavos == null ? "Not available" : `PHP ${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { Button, CARD_TINT, CardIcon, InfoRow, LinkButton, ProgressBar, SectionHeader, formatPeso } from "./debtUi";
 
 type Props = { userId: string; deviceId: string; accountId?: string; onBack?: () => void; onOpenCard?: (accountId: string) => void; onPayStatement?: (context: StatementPaymentContext) => void; onEditPayment?: (payment: CreditCardPayment) => void };
 
@@ -157,62 +145,67 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
   }
 
   if (loading && accounts.length === 0) {
-    return <View><Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.muted }}>{"Your credit-card information is loading. Wait a moment for the details to appear."}</Text><ActivityIndicator color={P.brand} style={{ marginTop: 14 }} /></View>;
+    return <View style={{ alignItems: "center", gap: 12, paddingVertical: 30 }}><ActivityIndicator color={v4.brand} /><Note>{"Your credit-card information is loading. Wait a moment for the details to appear."}</Note></View>;
   }
 
   if (accounts.length === 0 && !error) {
-    return <View><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>Debt Manager</Text><Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.muted, marginTop: 10 }}>No credit cards are recorded yet. Add a credit card to track billing cycles and payments.</Text></View>;
+    return <View style={{ gap: 10 }}><SectionHeader title="Credit Cards" /><Note>No credit cards are recorded yet. Add a credit card to track billing cycles and payments.</Note></View>;
   }
 
   if (!accountId) return <CreditCardListScreen accounts={accounts} cycles={cycles} onOpenCard={onOpenCard ?? (() => {})} />;
 
-  if (!selectedAccount) return <View><Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.error }}>This credit card is unavailable.</Text><Pressable accessibilityRole="button" accessibilityLabel="Back to Credit Cards" onPress={onBack} style={{ marginTop: 12 }}><Text style={{ color: P.brand, fontWeight: "700" }}>Back to Credit Cards</Text></Pressable></View>;
+  if (!selectedAccount) return <View style={{ gap: 12 }}><Banner tone="error">This credit card is unavailable.</Banner><Button variant="ghost" label="Back to Credit Cards" onPress={() => onBack?.()} /></View>;
   const latestStatement = statements
     .filter((statement) => statement.authoritative && !statement.deleted && statement.statement_date <= today && cycles.find((cycle) => cycle.id === statement.cycle_id)?.account_id === accountId)
     .sort((left, right) => right.statement_date.localeCompare(left.statement_date))[0];
   const creditLimitCentavos = selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0;
   const availableCreditCentavos = selectedAccount.creditCardDetails?.availableCreditCentavos ?? 0;
   const currentDebtCentavos = Math.max(0, creditLimitCentavos - availableCreditCentavos);
+  const usedRatio = creditLimitCentavos > 0 ? currentDebtCentavos / creditLimitCentavos : 0;
+  const alertRatio = (selectedAccount.creditCardDetails?.alertThresholdPercent ?? 80) / 100;
+  const shortPeso = (centavos: number) => `PHP ${Math.round(centavos / 100).toLocaleString("en-PH")}`;
 
   return (
-    <View>
-      <View style={{ marginBottom: 12 }}>
-        <View style={{ alignSelf: "flex-end", flexDirection: "row", gap: 14, marginBottom: 12 }}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Refresh credit-card information" onPress={() => load().catch(() => {})}><Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12, color: P.brand }}>Refresh</Text></Pressable>
+    <View style={{ gap: 14 }}>
+      <FormCard>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+          <View style={[ui.listTile, { backgroundColor: CARD_TINT.bg, width: 40, height: 40, borderRadius: 12 }]}><CardIcon /></View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 18, color: v4.ink }}>{selectedAccount.name}</Text>
+            <Text style={[ui.listSubtitle, { marginTop: 2 }]}>{selectedAccount.creditCardDetails?.issuer ?? selectedAccount.institutionName ?? "Billing cycles and statement activity"}</Text>
+          </View>
+          <LinkButton label="Refresh" accessibilityLabel="Refresh credit-card information" onPress={() => { load().catch(() => {}); }} />
         </View>
-        <View style={{ flexShrink: 1 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink }}>{selectedAccount.name}</Text>
-          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginTop: 3 }}>Billing cycles and statement activity</Text>
-           <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 7 }}>Credit limit: {formatPeso(creditLimitCentavos)} | Available credit: {formatPeso(availableCreditCentavos)}</Text>
-           <Text style={{ flexShrink: 1, fontFamily: "Manrope", fontSize: 11.5, color: P.muted, marginTop: 3 }}>Current card debt: {formatPeso(currentDebtCentavos)}</Text>
-            <CreditCardAvailableCreditReconciliation userId={userId} deviceId={deviceId} accountId={selectedAccount.id} creditLimitCentavos={creditLimitCentavos} onSaved={load} />
-        </View>
-      </View>
-      {stale ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, backgroundColor: P.card, padding: 10, borderRadius: 10, marginBottom: 12 }}>Credit-card information may be out of date. Refresh or reconcile it with the latest issuer records.</Text> : null}
-      {error && !stale ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.error, marginBottom: 12 }}>Your credit-card information could not be loaded or saved. Check your connection and try again.</Text> : null}
-      {cycleNotice ? <Text style={{ fontFamily: "Manrope", fontSize: 12, color: P.muted, marginBottom: 12 }}>{cycleNotice}</Text> : null}
-       {editingCycle ? (
-        <View style={{ borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 14, marginBottom: 12, backgroundColor: P.card }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: P.ink, marginBottom: 10 }}>{editingCycle.cycle ? "Override billing cycle" : "Add billing cycle"}</Text>
-           <Pressable accessibilityRole="button" accessibilityLabel="Billing-cycle start date" onPress={() => setCyclePicker("start")} style={{ backgroundColor: P.shell, padding: 10, borderRadius: 8, marginBottom: 8 }}><Text style={{ color: P.ink }}>{cycleStart || "Select billing-cycle start date"}</Text></Pressable>
-           <Pressable accessibilityRole="button" accessibilityLabel="Cut-off date" onPress={() => setCyclePicker("cutoff")} style={{ backgroundColor: P.shell, padding: 10, borderRadius: 8 }}><Text style={{ color: P.ink }}>{cycleCutoff || "Select cut-off date"}</Text></Pressable>
-           {cyclePicker ? <DateTimePicker value={new Date(`${(cyclePicker === "start" ? cycleStart : cycleCutoff) || today}T12:00:00`)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(event, date) => { if (event.type === "set" && date) { const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; if (cyclePicker === "start") setCycleStart(value); else setCycleCutoff(value); setCycleError(null); } if (Platform.OS !== "ios") setCyclePicker(null); }} /> : null}
-          {cycleError ? <Text style={{ color: P.error, fontFamily: "Manrope", fontSize: 12, marginTop: 7 }}>{cycleError}</Text> : null}
-          <View style={{ flexDirection: "row", gap: 16, marginTop: 10 }}><Pressable onPress={() => setEditingCycle(null)}><Text style={{ color: P.muted, fontWeight: "700" }}>Cancel</Text></Pressable><Pressable disabled={cycleSaving} onPress={() => saveCycle().catch(() => {})}><Text style={{ color: P.brand, fontWeight: "700" }}>{cycleSaving ? "Saving..." : "Save cycle"}</Text></Pressable></View>
-        </View>
-       ) : null}
-       <CreditCardRepaymentStrategy key={accountId} userId={userId} deviceId={deviceId} accountId={accountId} statement={latestStatement} strategy={strategy} onPreviewChange={setPreviewStrategy} onSaved={async () => { await load(); setPreviewStrategy(null); }} />
-        <CreditCardForecastSection forecast={forecast.forecast} isLoading={forecast.isLoading} creditLimitCentavos={selectedAccount.creditCardDetails?.creditLimitCentavos ?? 0} reconciliationAt={selectedAccount.creditCardDetails?.availableCreditReconciledAt} />
-       <CreditCardCollections
+        <Note>Billing cycles and statement activity</Note>
+        <ProgressBar label="Credit used" valueLabel={`${shortPeso(currentDebtCentavos)} of ${shortPeso(creditLimitCentavos)}`} ratio={usedRatio} tone={usedRatio >= alertRatio ? "err" : "ok"} />
+        <InfoRow label="Available credit" value={formatPeso(availableCreditCentavos)} tone="ok" />
+        <InfoRow label="Current card debt" value={formatPeso(currentDebtCentavos)} />
+        <InfoRow label="Credit limit" value={formatPeso(creditLimitCentavos)} />
+        <CreditCardAvailableCreditReconciliation userId={userId} deviceId={deviceId} accountId={selectedAccount.id} creditLimitCentavos={creditLimitCentavos} onSaved={load} />
+      </FormCard>
+      {stale ? <Banner tone="warn">Credit-card information may be out of date. Refresh or reconcile it with the latest issuer records.</Banner> : null}
+      {error && !stale ? <Banner tone="error">Your credit-card information could not be loaded or saved. Check your connection and try again.</Banner> : null}
+      {cycleNotice ? <Banner tone="info">{cycleNotice}</Banner> : null}
+      {editingCycle ? (
+        <FormCard title={editingCycle.cycle ? "Override billing cycle" : "Add billing cycle"}>
+          <PickerField label="Cycle start" accessibilityLabel="Billing-cycle start date" value={cycleStart || "Select billing-cycle start date"} placeholder={!cycleStart} onPress={() => setCyclePicker("start")} />
+          <PickerField label="Cut-off" accessibilityLabel="Cut-off date" value={cycleCutoff || "Select cut-off date"} placeholder={!cycleCutoff} onPress={() => setCyclePicker("cutoff")} error={Boolean(cycleError)} />
+          {cyclePicker ? <DateTimePicker value={new Date(`${(cyclePicker === "start" ? cycleStart : cycleCutoff) || today}T12:00:00`)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(event, date) => { if (event.type === "set" && date) { const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; if (cyclePicker === "start") setCycleStart(value); else setCycleCutoff(value); setCycleError(null); } if (Platform.OS !== "ios") setCyclePicker(null); }} /> : null}
+          {cycleError ? <Banner tone="error">{cycleError}</Banner> : null}
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Button flex variant="ghost" label="Cancel" onPress={() => setEditingCycle(null)} />
+            <Button flex label={cycleSaving ? "Saving..." : "Save cycle"} disabled={cycleSaving} onPress={() => { saveCycle().catch(() => {}); }} />
+          </View>
+        </FormCard>
+      ) : null}
+      <CreditCardCycleList
         userId={userId}
         deviceId={deviceId}
-        accounts={accounts}
+        account={selectedAccount}
         cycles={cycles}
         transactions={cycleTransactions}
         statements={statements}
-        installments={installments}
         payments={payments}
-        settlements={settlements}
         statementCycle={statementCycle}
         onManageCycle={openCycleEditor}
         onAddStatement={setStatementCycle}
@@ -220,8 +213,10 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
         onStatementSaved={load}
         onPayStatement={onPayStatement}
         onEditPayment={onEditPayment}
-        accountId={accountId}
       />
+      <CreditCardRepaymentStrategy key={accountId} userId={userId} deviceId={deviceId} accountId={accountId} statement={latestStatement} strategy={strategy} onPreviewChange={setPreviewStrategy} onSaved={async () => { await load(); setPreviewStrategy(null); }} />
+      <CreditCardForecastSection forecast={forecast.forecast} isLoading={forecast.isLoading} creditLimitCentavos={creditLimitCentavos} reconciliationAt={selectedAccount.creditCardDetails?.availableCreditReconciledAt} />
+      <CreditCardInstallmentList userId={userId} deviceId={deviceId} installments={installments.filter((installment) => installment.account_id === accountId)} settlements={settlements} onSaved={load} />
     </View>
   );
 }
