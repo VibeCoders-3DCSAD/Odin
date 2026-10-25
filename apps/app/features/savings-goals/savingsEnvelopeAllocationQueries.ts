@@ -1,4 +1,4 @@
-import { getAcceptedFinancialPlanForPeriod, getCurrentFinancialPlanPeriod } from "../../local-db/repositories/financialPlans";
+import { getAcceptedFinancialPlanForPeriod, getCurrentFinancialPlanPeriod, getFinancialPlanBudgetRemaining } from "../../local-db/repositories/financialPlans";
 import { getSavingsAllocationStrategy } from "../../local-db/repositories/savingsAllocationPreferences";
 import { listSavingsGoals } from "../../local-db/repositories/savingsGoals";
 import { getRequiredSavingsContributionsForPeriod } from "./requiredSavingsContributionQueries";
@@ -54,4 +54,10 @@ export async function getCurrentSavingsEnvelopeAllocation(userId: string, asOfDa
   });
   const requiredCentavos = accountRequiredCentavos + reservedProposals.reduce((total, proposal) => total + Math.max(0, proposal.requiredCentavos - proposal.recordedContributionCentavos), 0);
   return { envelopeCentavos, requiredCentavos, accountRequiredCentavos, shortfallCentavos: Math.max(0, requiredCentavos - envelopeCentavos), unallocatedCentavos: Math.max(0, envelopeCentavos - proposals.reduce((total, proposal) => total + proposal.proposedTotalCentavos, 0)), proposals };
+}
+
+export async function getCurrentPlanBudgetRemaining(userId: string, asOfDate: string): Promise<number | null> {
+  const period = getCurrentFinancialPlanPeriod(asOfDate);
+  const plan = await getAcceptedFinancialPlanForPeriod(userId, period.start, period.end);
+  return plan ? getFinancialPlanBudgetRemaining(userId, plan) : null;
 }
