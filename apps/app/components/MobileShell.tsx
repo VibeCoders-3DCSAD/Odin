@@ -250,6 +250,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [transactionReturnPage, setTransactionReturnPage] = useState<Page>("dashboard");
   const [transactionToEdit, setTransactionToEdit] = useState<Transaction | null>(null);
+  // Activity shows its edit form in place, without the shell's top bar and tabs, so the list stays mounted underneath.
+  const [editingFromActivity, setEditingFromActivity] = useState(false);
   const [pendingUnusualSpending, setPendingUnusualSpending] = useState<UnusualSpendingInsight | null>(null);
   const [statementPaymentContext, setStatementPaymentContext] = useState<StatementPaymentContext | null>(null);
   const [selectedCreditCardId, setSelectedCreditCardId] = useState<string | null>(null);
@@ -877,7 +879,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "transactions") {
-      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} getScrollOffset={getContentScrollY} scrollTo={scrollContentTo} syncVersion={syncVersion} />;
+      return <TransactionHistoryScreen userId={userId} deviceId={deviceId} accessToken={accessToken} unusualSpending={pendingUnusualSpending} onUnusualSpendingDismissed={() => setPendingUnusualSpending(null)} onNewTransaction={() => { setTransactionReturnPage("transactions"); setCurrentPage("add-transaction"); }} onLoadMoreChange={(loadMore) => { transactionLoadMoreRef.current = loadMore; }} getScrollOffset={getContentScrollY} scrollTo={scrollContentTo} syncVersion={syncVersion} onEditingChange={setEditingFromActivity} />;
     }
 
     if (currentPage === "categories") {
@@ -1008,7 +1010,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     return <ShellPlaceholderPage title={meta.title} subtitle={meta.subtitle} />;
   }
 
-  const v3Page = currentPage === "dashboard" || currentPage === "transactions";
+  const hideChrome = editingFromActivity && currentPage === "transactions";
+  const v3Page = (currentPage === "dashboard" || currentPage === "transactions") && !hideChrome;
   const shellColor = v3Page ? dashboardColors.page : palette.shell;
 
   return (
@@ -1020,7 +1023,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
           </View>
         ) : (
           <>
-        {activeTab ? (
+        {hideChrome ? null : activeTab ? (
           /* Top bar: profile and sync, logo, notifications */
           <View style={{ backgroundColor: shellColor, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center", borderBottomWidth: v3Page ? 1 : 0, borderBottomColor: dashboardColors.divider }}>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 11 }}>
@@ -1071,7 +1074,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         {/* Content */}
         <ScrollView
           className="flex-1"
-          contentContainerClassName={activeTab ? "pb-24" : "pb-8"}
+          contentContainerClassName={activeTab && !hideChrome ? "pb-24" : "pb-8"}
           contentContainerStyle={{ paddingHorizontal: CONTENT_GUTTER }}
           keyboardShouldPersistTaps="handled"
           onScroll={({ nativeEvent }) => {
@@ -1120,7 +1123,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
         </ScrollView>
 
         {/* Bottom tab bar */}
-        {activeTab ? (
+        {activeTab && !hideChrome ? (
           <View className="absolute bottom-0 left-0 right-0 items-center">
             <View
               style={{ maxWidth: TOOLBAR_MAX_WIDTH, backgroundColor: shellColor, paddingBottom: bottomInset + 8, minHeight: 62 + bottomInset }}

@@ -69,6 +69,8 @@ type Props = {
   scrollTo?: (y: number) => void;
   // Bumped by the shell after a sync pushes or pulls changes.
   syncVersion?: number;
+  // Lets the shell hide its top bar and tabs while the edit form is open, like the full-screen new transaction page.
+  onEditingChange?: (editing: boolean) => void;
 };
 
 const PAGE_SIZE = 25;
@@ -174,7 +176,7 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
   );
 }
 
-export default function TransactionHistoryScreen({ userId, deviceId, accessToken, unusualSpending, onUnusualSpendingDismissed, onNewTransaction, onLoadMoreChange, getScrollOffset, scrollTo, syncVersion = 0 }: Props) {
+export default function TransactionHistoryScreen({ userId, deviceId, accessToken, unusualSpending, onUnusualSpendingDismissed, onNewTransaction, onLoadMoreChange, getScrollOffset, scrollTo, syncVersion = 0, onEditingChange }: Props) {
   const { showToast } = useToast();
 
   // The page mounts with the spinner so navigating here is immediate; cached rows are painted on the next
@@ -320,6 +322,12 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     const frame = requestAnimationFrame(() => setVisibleCount(transactions.length));
     return () => cancelAnimationFrame(frame);
   }, [visibleCount, transactions.length]);
+
+  const editing = editTarget !== null;
+  useEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
+  useEffect(() => () => onEditingChange?.(false), [onEditingChange]);
 
   const seenSyncVersion = useRef(syncVersion);
   useEffect(() => {
@@ -510,13 +518,16 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   return (
     <>
     {editTarget ? (
-      <NewTransactionScreen
-        transaction={editTarget}
-        userId={userId}
-        deviceId={deviceId}
-        accessToken={accessToken}
-        onClose={() => { setEditTarget(null); load({ inPlace: true }); }}
-      />
+      // The form brings its own side padding; this cancels the shell's 20px content gutter so it is not doubled.
+      <View style={{ marginHorizontal: -20 }}>
+        <NewTransactionScreen
+          transaction={editTarget}
+          userId={userId}
+          deviceId={deviceId}
+          accessToken={accessToken}
+          onClose={() => { setEditTarget(null); load({ inPlace: true }); }}
+        />
+      </View>
     ) : null}
     <View
       style={{ gap: 11, paddingTop: 6, display: editTarget ? "none" : "flex" }}
