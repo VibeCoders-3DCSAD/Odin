@@ -1,6 +1,7 @@
 import { Router, type Response } from "express";
 import { validateCommitmentBudgets } from "../services/financialPlan/commitments.js";
 import { getFinancialPlanCommitments } from "../services/financialPlan/commitmentsPreview.js";
+import { getFinancialPlanForecast } from "../services/financialPlan/planForecast.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { FinancialPlanInputError, FinancialPlanUnavailableError, financialPlanPeriod, getFinancialPlanRecommendation } from "../services/financialPlan/recommendationService.js";
 import { FinancialPlanMlError } from "../services/financialPlan/mlAdapter.js";
@@ -19,6 +20,17 @@ router.post("/commitments", requireAuth, async (request: AuthenticatedRequest, r
   }
 });
 
+router.post("/forecast", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
+  try {
+    const month = request.body?.planMonth;
+    if (month !== undefined && typeof month !== "string") throw new FinancialPlanInputError("Plan month is invalid");
+    response.json({ payload: await getFinancialPlanForecast(request.userId!, request.supabase!, month) });
+  } catch (error) {
+    console.error("financial plan forecast failed", { user_id: request.userId, error });
+    response.status(error instanceof FinancialPlanInputError ? 422 : 503).json({ message: "Your spending forecast could not be loaded. Try again." });
+  }
+});
+
 router.post("/recommendation", requireAuth, async (request: AuthenticatedRequest, response: Response) => {
   try {
     const { includedSubcategoryIds, includedCategoryIds, plannedAmountCentavos, manualAllocations, skipDebtRepayments, skipSavingsContributions, skipScheduledPayments } = parseRecommendationInput(request.body);
@@ -34,7 +46,7 @@ router.post("/recommendation", requireAuth, async (request: AuthenticatedRequest
     response.status(200).json({ payload: await getFinancialPlanRecommendation(request.userId!, request.supabase!, plannedAmountCentavos, includedSubcategoryIds, includedCategoryIds, manualAllocations, { skipDebtRepayments, skipSavingsContributions, skipScheduledPayments, ...(request.body.commitmentBudgets === undefined ? {} : { commitmentBudgets }) }, ...(planMonth === undefined ? [] : [planMonth])) });
   } catch (error) {
     const status = error instanceof FinancialPlanInputError ? 422 : error instanceof FinancialPlanMlError || error instanceof FinancialPlanUnavailableError ? 503 : 500;
-    console.error("financial plan recommendation failed", { user_id: request.userId, request_id: request.header("x-request-id")?.slice(0, 128) ?? null, status, error_class: error instanceof Error ? error.constructor.name : "UnknownError" });
+    console.error("financial plan recommendation failed", { user_id: request.userId, request_id: request.header("x-request-id")?.slice(0, 128) ?? null, status, error });
     response.status(status).json({ error: status === 422 ? "Unprocessable Entity" : status === 500 ? "Internal Server Error" : "Service Unavailable", message: status === 422 ? "Financial Plan inputs are incomplete" : "Financial Plan is temporarily unavailable" });
   }
 });
@@ -47,7 +59,7 @@ router.post("/explanations", requireAuth, async (request: AuthenticatedRequest, 
     response.status(200).json({ payload: { explanations: await explainFinancialPlanRequest(explanationRequest, fetch, request.userId) } });
   } catch (error) {
     const status = error instanceof FinancialPlanExplanationRequestError ? 422 : 500;
-    console.error("financial plan explanation failed", { user_id: request.userId, status, error_class: error instanceof Error ? error.constructor.name : "UnknownError" });
+    console.error("financial plan explanation failed", { user_id: request.userId, status, error });
     response.status(status).json({ error: status === 422 ? "Unprocessable Entity" : "Internal Server Error", message: status === 422 ? "Financial Plan explanation request is invalid" : "Financial Plan explanations are temporarily unavailable" });
   }
 });

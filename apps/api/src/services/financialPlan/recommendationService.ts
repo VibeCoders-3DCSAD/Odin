@@ -1,3 +1,4 @@
+import { planForecastTransactions } from "./helpers/forecastTransactions.js";
 import { buildFinancialPlanExplanationContext } from "./helpers/explanationContext.js";
 import { FinancialPlanInputError, FinancialPlanUnavailableError } from "./errors.js";
 export { FinancialPlanInputError, FinancialPlanUnavailableError } from "./errors.js";
@@ -417,17 +418,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   try {
     // Same history as the Spending Forecast: the last twelve months of every category, without scheduled
     // payments, which the plan reserves at their set amounts instead.
-    const scheduledTransactionIds = new Set(((scheduledPaymentHistoryResult.data ?? []) as Array<{ transaction_id: string }>).map((record) => record.transaction_id));
-    const forecastTransactions = cleanTransactions.flatMap((transaction) => transaction.transaction_date >= historyStart && transaction.amount_centavos > 0 && !scheduledTransactionIds.has(transaction.id)
-      ? [{
-        transactionId: transaction.id,
-        date: transaction.transaction_date,
-        amount: transaction.amount_centavos / 100,
-        category: (transaction.subcategory_id ? categorySlugBySubcategoryId.get(transaction.subcategory_id) : undefined) ?? "Other",
-        transactionType: transaction.transaction_type,
-        ...(yearlyIds.has(transaction.id) ? { recurrence: "yearly" as const } : {}),
-      }]
-      : []);
+    const forecastTransactions = planForecastTransactions(cleanTransactions, yearlyIds, (scheduledPaymentHistoryResult.data ?? []) as Array<{ transaction_id: string }>, categorySlugBySubcategoryId, historyStart);
     if (forecastTransactions.length) {
       const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions, targetMonth: period.start.slice(0, 7) });
       if (forecastCoversPlanPeriod(mlForecast, period)) {
@@ -439,7 +430,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     }
   } catch (error) {
     if (!(error instanceof ForecastValidationError || error instanceof ForecastUpstreamError || error instanceof ForecastUnavailableError)) throw error;
-    console.warn("financial plan forecast unavailable; using spend fallback", { user_id: userId, error: error.message });
+    console.warn("financial plan forecast unavailable; using spend fallback", { user_id: userId, error });
     if (error instanceof ForecastUnavailableError) forecastUnavailableMessage = error.message;
   }
   const plannedCategories = applyFinancialPlanPriorityWeights(categories.map((category) => ({ ...category, forecastCentavos: forecast.categoryForecasts.find((point) => point.category === category.id)?.amountCentavos ?? category.floorCentavos })), categoryBaselines);

@@ -26,6 +26,26 @@ export async function requestFinancialPlanCommitments(accessToken: string, planM
   }
 }
 
+// The forecast the plan caps each category at, by category slug. Null when there is none, so the recommended
+// planning amount falls back to past spending instead of holding up the plan.
+export async function requestFinancialPlanForecast(accessToken: string, planMonth?: string): Promise<Record<string, number> | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await authorizedFetch(`${API_BASE_URL}/odin/api/financial-plans/forecast`, {
+      method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(__DEV__ && planMonth ? { planMonth } : {}), signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const body = await response.json() as { payload: { categoryForecasts: { category: string; amountCentavos: number }[] } | null };
+    return body.payload ? Object.fromEntries(body.payload.categoryForecasts.map((point) => [point.category, point.amountCentavos])) : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function requestFinancialPlanRecommendation(accessToken: string, includedSubcategoryIds: string[], includedCategoryIds: string[], plannedAmountCentavos: number, manualAllocations: ManualPlanAllocation[], reservationSkips: ReservationSkips, signal?: AbortSignal, planMonth?: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), RECOMMENDATION_TIMEOUT_MS);

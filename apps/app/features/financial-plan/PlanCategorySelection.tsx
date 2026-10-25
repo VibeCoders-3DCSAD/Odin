@@ -35,6 +35,7 @@ type Props = {
   // With expected spending, a recommended planning amount is shown under the amount field.
   commitments?: CommitmentPreview | null;
   expectedSpend?: PlanRecommendations["expectedSpend"];
+  forecast?: Record<string, number> | null;
 };
 
 type EditingTarget = { target: ManualPlanAllocation["target"]; id: string };
@@ -93,7 +94,7 @@ function GroupHeading({ title, includedCount }: { title: string; includedCount: 
   </View>;
 }
 
-export function PlanCategorySelection({ topLevelCategories, subcategories, includedCategoryIds = EMPTY_IDS, includedIds, recommendedCategoryIds = EMPTY_IDS, recommendedIds, historyCategoryIds = EMPTY_IDS, historyIds = EMPTY_IDS, seasonalRecommendations = false, onToggle, onToggleCategory, onSaveCategoryRule = saveNothing, onSaveRule, plannedAmount, availableMoneyCentavos, planningAmountError, onPlannedAmountChange, onContinue, initialManualAllocations = [], commitmentSection, commitments = null, expectedSpend }: Props) {
+export function PlanCategorySelection({ topLevelCategories, subcategories, includedCategoryIds = EMPTY_IDS, includedIds, recommendedCategoryIds = EMPTY_IDS, recommendedIds, historyCategoryIds = EMPTY_IDS, historyIds = EMPTY_IDS, seasonalRecommendations = false, onToggle, onToggleCategory, onSaveCategoryRule = saveNothing, onSaveRule, plannedAmount, availableMoneyCentavos, planningAmountError, onPlannedAmountChange, onContinue, initialManualAllocations = [], commitmentSection, commitments = null, expectedSpend, forecast = null }: Props) {
   const uncategorizedSubcategories = subcategories.filter((subcategory) => !subcategory.category_id);
   // The editor stays mounted with its last target so it can animate closed.
   const [editing, setEditing] = useState<EditingTarget | null>(null);
@@ -135,7 +136,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
   const hasInvalidManualAmount = manualAllocations().some((allocation) => allocation.amountCentavos <= 0);
   const includedCount = includedIds.size + includedCategoryIds.size;
   const cannotContinue = includedCount === 0 || planningAmountError !== null || hasInvalidManualAmount;
-  const recommendation = expectedSpend ? recommendPlanAmount({ commitments, topLevelCategories, subcategories, includedCategoryIds, includedIds, expectedSpend, manualAllocations: manualAllocations() }) : null;
+  const recommendation = expectedSpend ? recommendPlanAmount({ commitments, topLevelCategories, subcategories, includedCategoryIds, includedIds, expectedSpend, manualAllocations: manualAllocations(), forecast }) : null;
   const recommendedCentavos = recommendation ? Math.min(recommendation.totalCentavos, availableMoneyCentavos) : 0;
 
   const visibleCategories = topLevelCategories.filter((category) => childrenByCategory.has(category.id));
@@ -204,8 +205,8 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
         <Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11, marginTop: 6 }}>Available money: PHP {(availableMoneyCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
         {recommendation && recommendation.totalCentavos > 0 ? <View style={{ marginTop: 10, borderRadius: 11, backgroundColor: "#F0F7F3", paddingVertical: 9, paddingLeft: 11, paddingRight: 4 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Text style={{ flex: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Recommended: {formatPeso(recommendedCentavos)}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Use the recommended planning amount" onPress={() => onPlannedAmountChange((recommendedCentavos / 100).toFixed(2))} style={{ paddingHorizontal: 10, paddingVertical: 4 }}><Text style={{ color: "#0E6D46", fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Use this</Text></Pressable>
+            <Text style={{ flex: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Recommended Minimum: {formatPeso(recommendedCentavos)}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Use the recommended minimum planning amount" onPress={() => onPlannedAmountChange((recommendedCentavos / 100).toFixed(2))} style={{ paddingHorizontal: 10, paddingVertical: 4 }}><Text style={{ color: "#0E6D46", fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Use this</Text></Pressable>
           </View>
           <Text style={{ color: "#6B7A6F", fontFamily: "Manrope", fontSize: 11, marginTop: 1 }}>{formatPeso(recommendation.commitmentsCentavos)} commitments + {formatPeso(recommendation.spendingCentavos)} expected spending</Text>
           {recommendation.totalCentavos > availableMoneyCentavos ? <Text style={{ color: "#B45309", fontFamily: "Manrope", fontSize: 11, marginTop: 2 }}>Your available money is {formatPeso(recommendation.totalCentavos - availableMoneyCentavos)} short of this month's needs.</Text> : null}

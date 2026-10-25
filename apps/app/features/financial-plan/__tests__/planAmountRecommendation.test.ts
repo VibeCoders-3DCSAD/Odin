@@ -29,3 +29,30 @@ it("uses fixed amounts as set and never goes below a minimum or a one-time amoun
   });
   expect(result).toEqual({ commitmentsCentavos: 7_000, spendingCentavos: 32_500, totalCentavos: 39_500 });
 });
+
+it("recommends each category's share of the plan's forecast, which caps what the plan allocates", () => {
+  const result = recommendPlanAmount({
+    commitments: null,
+    topLevelCategories: [category("food", { slug: "food" }), category("fun", { slug: "recreation_culture" })],
+    subcategories: [subcategory("groceries", "food"), subcategory("dining", "food"), subcategory("movies", "fun", { minimum_amount_centavos: 9_000 })],
+    includedCategoryIds: new Set(),
+    includedIds: new Set(["groceries", "dining"]),
+    expectedSpend: { subcategories: { groceries: 6_000, dining: 2_000, movies: 1_000 }, categories: { food: 8_000, fun: 1_000 } },
+    forecast: { food: 12_000, recreation_culture: 5_000 },
+  });
+  // Food's ₱120 forecast splits 3:1 by past spending; movies keeps its ₱90 minimum above its ₱50 forecast.
+  expect(result).toEqual({ commitmentsCentavos: 0, spendingCentavos: 21_000, totalCentavos: 21_000 });
+});
+
+it("splits a forecast evenly between planned targets with no past spending", () => {
+  const result = recommendPlanAmount({
+    commitments: null,
+    topLevelCategories: [category("food", { slug: "food" })],
+    subcategories: [subcategory("groceries", "food"), subcategory("dining", "food")],
+    includedCategoryIds: new Set(),
+    includedIds: new Set(["groceries", "dining"]),
+    expectedSpend: { subcategories: {}, categories: {} },
+    forecast: { food: 10_000 },
+  });
+  expect(result.spendingCentavos).toBe(10_000);
+});

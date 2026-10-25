@@ -57,6 +57,7 @@ jest.mock("../api", () => ({
   requestFinancialPlanCommitments: (...args: unknown[]) => mockRequestFinancialPlanCommitments(...args),
   requestFinancialPlanRecommendation: (...args: unknown[]) => mockRequestFinancialPlanRecommendation(...args),
   requestFinancialPlanExplanations: (...args: unknown[]) => mockRequestFinancialPlanExplanations(...args),
+  requestFinancialPlanForecast: () => Promise.resolve(null),
 }));
 
 describe("FinancialPlanScreen", () => {
@@ -165,12 +166,12 @@ describe("FinancialPlanScreen", () => {
       { id: "coffee", category_id: null, label: "Coffee", kind: "expense", minimum_amount_centavos: null, fixed_amount_centavos: null },
     ]);
     // Commitments ₱170 (debt ₱100, savings ₱50, bill ₱20) + rent minimum ₱200 + groceries ₱122.50; coffee is not selected.
-    expect(view.getByText("Recommended: ₱492.50")).toBeTruthy();
+    expect(view.getByText("Recommended Minimum: ₱492.50")).toBeTruthy();
     expect(view.getByText("₱170.00 commitments + ₱322.50 expected spending")).toBeTruthy();
-    fireEvent.press(view.getByLabelText("Use the recommended planning amount"));
+    fireEvent.press(view.getByLabelText("Use the recommended minimum planning amount"));
     expect(view.getByLabelText("How much should we plan in pesos").props.value).toBe("492.50");
     fireEvent.press(view.getByText("Coffee"));
-    expect(view.getByText("Recommended: ₱532.50")).toBeTruthy();
+    expect(view.getByText("Recommended Minimum: ₱532.50")).toBeTruthy();
   });
 
   it("starts the planning amount at the recommendation and flags a month that needs more than is available", async () => {
@@ -182,7 +183,7 @@ describe("FinancialPlanScreen", () => {
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
     expect(view.getByLabelText("How much should we plan in pesos").props.value).toBe("300.00");
-    expect(view.getByText("Recommended: ₱300.00")).toBeTruthy();
+    expect(view.getByText("Recommended Minimum: ₱300.00")).toBeTruthy();
     expect(view.getByText("Your available money is ₱50.00 short of this month's needs.")).toBeTruthy();
   });
 
@@ -213,8 +214,22 @@ describe("FinancialPlanScreen", () => {
     expect(view.getByLabelText("I'll budget billers & remittances manually").props.accessibilityState.checked).toBe(false);
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     await waitFor(() => expect(view.getByText("Category Allocations")).toBeTruthy());
-    expect(view.queryByLabelText("Back to plan setup")).toBeNull();
+    // The manual commitment step is skipped.
+    expect(view.queryByText("Left for categories")).toBeNull();
     expect(mockRequestFinancialPlanRecommendation.mock.calls[0][5]).toEqual({ debtRepayments: false, savingsContributions: false, scheduledPayments: false, commitmentBudgets: [{ key: "debt:debt-1:2026-10-20", amountCentavos: 10_000 }, { key: "savings:goal-1:2026-10-25", amountCentavos: 5_000 }, { key: "scheduled:bill-1:2026-10-22", amountCentavos: 2_000 }] });
+  });
+
+  it("returns from the generated plan to setup with the planning amount kept", async () => {
+    const view = await openCommitmentSetup();
+    const plannedAmount = view.getByLabelText("How much should we plan in pesos").props.value;
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    expect(view.getByLabelText("Generating your Financial Plan")).toBeTruthy();
+    await waitFor(() => expect(view.getByText("Category Allocations")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Back to plan setup"));
+    expect(view.queryByText("Category Allocations")).toBeNull();
+    expect(view.getByLabelText("How much should we plan in pesos").props.value).toBe(plannedAmount);
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(2));
   });
 
   it("lists billers and remittances for manual budgeting when that box is ticked", async () => {
@@ -241,7 +256,17 @@ describe("FinancialPlanScreen", () => {
     expect(view.getByLabelText("Biller or remittance budget amount in pesos").props.value).toBe("");
     expect(view.queryByText(/excluded from this plan/)).toBeNull();
     // Nothing is set aside yet, so the remaining money equals the planning amount.
-    expect(view.getAllByText("₱1,000.00")).toHaveLength(2);
+    expect(view.getByText("₱1,000.00")).toBeTruthy();
+    expect(view.getByText("of ₱1,000.00 planning amount")).toBeTruthy();
+  });
+
+  it("fills a manual commitment with its amount due in one tap", async () => {
+    const view = await openCommitmentSetup();
+    fireEvent.press(view.getByLabelText("I'll budget debt repayments manually"));
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    fireEvent.press(view.getByLabelText("Use the amount due for Debt account"));
+    expect(view.getByLabelText("Debt account budget amount in pesos").props.value).toBe("100.00");
+    expect(view.queryByLabelText("Use the amount due for Debt account")).toBeNull();
   });
 
   it("fills manual commitments with what was already paid or contributed this month", async () => {
@@ -374,7 +399,8 @@ describe("FinancialPlanScreen", () => {
 
     expect(view.getByText("Food")).toBeTruthy();
     expect(view.getByText("Remaining Money in Plan")).toBeTruthy();
-    expect(view.getByText("₱1,000.00")).toBeTruthy();
+    // The remaining money and the plan funds breakdown match before any spending.
+    expect(view.getAllByText("₱1,000.00")).toHaveLength(2);
     expect(view.getByText("₱600.00 remaining of ₱600.00")).toBeTruthy();
     expect(view.queryByLabelText("Food flexible amount in pesos")).toBeNull();
     expect(view.queryByText(/Forecast trust:/)).toBeNull();
@@ -393,7 +419,7 @@ describe("FinancialPlanScreen", () => {
     expect(view.queryByText("Savings contributions")).toBeNull();
   });
 
-  it("shows saved billers between Savings & Debt and Category Allocations without deducting them again", async () => {
+  it("shows saved billers under Commitments and before Category Allocations without deducting them again", async () => {
     const saved = await mockGetAcceptedFinancialPlanForPeriod();
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ ...saved, inputSnapshot: { ...saved.inputSnapshot, obligations: { reservations: [
       { scheduledPaymentId: "rent", label: "Monthly rent", amountCentavos: 30_000, dueDate: "2026-10-20" },
@@ -401,10 +427,13 @@ describe("FinancialPlanScreen", () => {
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
     await waitFor(() => expect(view.getByText("Monthly rent")).toBeTruthy());
     expect(view.getByText(/Due 2026-10-20/)).toBeTruthy();
-    expect(view.getAllByText("₱300.00")).toHaveLength(2);
+    // The row, its section total, the Commitments total, and the summary breakdown.
+    expect(view.getAllByText("₱300.00")).toHaveLength(4);
     expect(view.getByText("₱1,000.00")).toBeTruthy();
+    // Available funds exclude the saved bill, so the plan total adds it back.
+    expect(view.getByText("₱1,300.00")).toBeTruthy();
     const text = JSON.stringify(view.toJSON());
-    expect(text.indexOf("Savings & Debt")).toBeLessThan(text.indexOf("Billers and Remittances"));
+    expect(text.indexOf("Commitments")).toBeLessThan(text.indexOf("Billers and Remittances"));
     expect(text.indexOf("Billers and Remittances")).toBeLessThan(text.indexOf("Category Allocations"));
     expect(view.queryByLabelText("Billers and Remittances surplus amount in pesos")).toBeNull();
   });
@@ -713,8 +742,10 @@ describe("FinancialPlanScreen", () => {
 
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(view.getByText(/Due 2026-11-12/)).toBeTruthy());
-    expect(view.getByText("Debt repayments")).toBeTruthy();
+    await waitFor(() => expect(view.getByText("Debt repayments")).toBeTruthy());
+    expect(view.queryByText(/Due 2026-11-12/)).toBeNull();
+    fireEvent.press(view.getByLabelText("Show Debt repayments"));
+    expect(view.getByText(/Due 2026-11-12/)).toBeTruthy();
     const debtAmount = view.getByLabelText("Debt account budget amount in pesos");
     expect(debtAmount.props.value).toBe("100.00");
     fireEvent.changeText(debtAmount, "75.00");
@@ -765,6 +796,7 @@ describe("FinancialPlanScreen", () => {
     await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     await waitFor(() => expect(view.getByText("Remaining Money in Plan")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Show Debt repayments"));
     fireEvent.changeText(view.getByLabelText("Debt account budget amount in pesos"), "300");
     expect(view.getByText("-₱100.00")).toBeTruthy();
     expect(view.getByLabelText("Accept and save Financial Plan").props.accessibilityState.disabled).toBe(true);
@@ -772,6 +804,27 @@ describe("FinancialPlanScreen", () => {
     fireEvent.press(view.getByLabelText("Calculate Allocations"));
     await waitFor(() => expect(mockRequestFinancialPlanRecommendation).toHaveBeenCalledTimes(2));
     expect(mockRequestFinancialPlanRecommendation.mock.calls[1][5].commitmentBudgets).toEqual([{ key: "debt:debt-1:2026-10-20", amountCentavos: 30_000 }]);
+  });
+
+  it("blocks acceptance while a category amount draft is invalid", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListCategories.mockResolvedValue([{ id: "food", label: "Food", slug: "food", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
+    mockListSubcategories.mockResolvedValue([]);
+    mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
+      status: "RECOMMENDATION_READY", period: { start: "2026-10-01", end: "2026-10-31" }, inputSnapshot: {}, explanations: [],
+      recommendation: { availableFundsCentavos: 100_000, allocations: [{ categoryId: "food", allocationRule: "FLEXIBLE", floorAmountCentavos: 0, allocatedAmountCentavos: 80_000 }], debtReservations: [], savingsReservations: [] },
+    } } });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Continue to Plan")).toBeTruthy());
+    fireEvent.press(view.getByLabelText("Continue to Plan"));
+    await waitFor(() => expect(view.getByLabelText("Food flexible amount in pesos")).toBeTruthy());
+    fireEvent.changeText(view.getByLabelText("Food flexible amount in pesos"), "invalid");
+    expect(view.getByLabelText("Accept and save Financial Plan").props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(view.getByLabelText("Accept and save Financial Plan"));
+    expect(mockCreateFinancialPlan).not.toHaveBeenCalled();
+    fireEvent.changeText(view.getByLabelText("Food flexible amount in pesos"), "800");
+    expect(view.getByLabelText("Accept and save Financial Plan").props.accessibilityState.disabled).toBe(false);
   });
 
   it("lets the user edit a biller after allocation and warns before accepting an underfunded bill", async () => {
@@ -788,6 +841,7 @@ describe("FinancialPlanScreen", () => {
     fireEvent.press(view.getByLabelText("Continue to Plan"));
     await waitFor(() => expect(view.getByText("Remaining Money in Plan")).toBeTruthy());
     expect(view.getByText("₱780.00")).toBeTruthy();
+    fireEvent.press(view.getByLabelText("Show Billers and Remittances"));
     fireEvent.changeText(view.getByLabelText("Electricity budget amount in pesos"), "5");
     expect(view.getByText("₱795.00")).toBeTruthy();
     expect(view.queryByText(/may result in a missed payment/)).toBeNull();
