@@ -20,6 +20,7 @@ jest.mock("../../../local-db/repositories/dashboardSnapshots", () => ({
   getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
   upsertSnapshot: (...args: unknown[]) => mockUpsertSnapshot(...args),
 }));
+jest.mock("../../../local-db/repositories/forecastSnapshots", () => ({ saveForecastSnapshot: async () => undefined }));
 jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
   getForecastHistoryStartDate: () => "2025-10-01",
   listForecastTransactions: (...args: unknown[]) => mockListForecastTransactions(...args),

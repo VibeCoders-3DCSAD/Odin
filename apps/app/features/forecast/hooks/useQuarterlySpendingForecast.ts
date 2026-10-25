@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { getSnapshot, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
+import { saveForecastSnapshot } from "../../../local-db/repositories/forecastSnapshots";
 import { listMonthlySpending, listQuarterlySpending, pastQuarters, recentMonths, type MonthSpending, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
 import { useConnectivityStore } from "../../../services/connectivity";
 import { getQuarterlyForecastContent } from "../../dashboard/dashboardSnapshotContent";
 import { requestForecastInterpretation } from "../api";
+import { localToday } from "../../billers/schedule";
 import { forecastInterpretation } from "../QuarterlyForecastCharts";
 import { fetchSpendingForecast } from "../fetchSpendingForecast";
 import type { QuarterlyForecastPayload } from "../types";
@@ -52,6 +54,8 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
         }
         const { payload } = result;
         await upsertSnapshot(userId, "forecast_quarterly", payload);
+        // A failed history save must not hide the fresh forecast.
+        await saveForecastSnapshot(userId, localToday().slice(0, 7), payload).catch(() => {});
         if (signal.aborted) return;
         setForecast(payload);
         setStale(false);
