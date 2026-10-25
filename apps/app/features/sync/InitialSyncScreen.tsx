@@ -5,7 +5,7 @@ import type { PullProgress } from "../../local-db/sync/runSync";
 
 const initialSyncArt = require("../../assets/initial-sync.gif");
 // Matches the GIF's own backdrop so the art doesn't sit in a visible box.
-export const initialSyncBackground = "#F2F2F2";
+export const initialSyncBackground = "#FFFFFF";
 
 type Props = {
   progress: PullProgress;
@@ -25,7 +25,7 @@ export function InitialSyncScreen({ progress, failed, onRetry, onSkip }: Props) 
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: initialSyncBackground, alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <Image source={initialSyncArt} accessibilityIgnoresInvertColors style={{ width: 264, height: 198 }} resizeMode="contain" />
+      <Image source={initialSyncArt} accessibilityIgnoresInvertColors style={{ width: 264, aspectRatio: 16 / 9 }} resizeMode="contain" />
       <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink, marginTop: 24, textAlign: "center" }}>
         {failed ? "Sync paused" : "Setting up your account"}
       </Text>
