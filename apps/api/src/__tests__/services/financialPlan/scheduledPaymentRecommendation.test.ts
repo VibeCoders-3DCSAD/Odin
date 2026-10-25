@@ -50,12 +50,36 @@ it.each([0, 10_000, 30_000])("deducts the full scheduled baseline once and reser
   expect(plan.inputSnapshot.obligations.reservations).toEqual([{ scheduledPaymentId: "monthly-rent", subcategoryId: "rent", label: "Monthly rent", amountCentavos: 30_000, dueDate: "2026-10-20" }]);
 });
 
-it("subtracts scheduled payments from an ML category forecast, including parent selections", async () => {
+it("uses the ML category forecast as is, since its history leaves out scheduled payments", async () => {
   jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [], snapshot: { month: "2026-10", totalAmountCentavos: 120_000, categoryForecasts: [{ category: "housing_water_utilities", amountCentavos: 120_000 }], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
   const plan = await getFinancialPlanRecommendation("user-1", client(0), 200_000, [], ["housing"]);
   expect(getMlForecast).toHaveBeenCalled();
-  expect(recommendPlanCategories).toHaveBeenCalledWith("user-1", expect.anything(), 170_000, [expect.objectContaining({ id: "housing", forecastCentavos: 90_000 })], expect.objectContaining({ totalAmountCentavos: 90_000 }));
-  expect(plan.recommendation.allocations[0]?.allocatedAmountCentavos).toBe(90_000);
+  expect(recommendPlanCategories).toHaveBeenCalledWith("user-1", expect.anything(), 170_000, [expect.objectContaining({ id: "housing", forecastCentavos: 120_000 })], expect.objectContaining({ totalAmountCentavos: 120_000 }));
+  expect(plan.recommendation.allocations[0]?.allocatedAmountCentavos).toBe(120_000);
+});
+
+it("sends the Spending Forecast's history: twelve months, every category, no scheduled payments or one-offs", async () => {
+  jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [], snapshot: { month: "2026-10", totalAmountCentavos: 0, categoryForecasts: [], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
+  const expense = { amount_centavos: 10_000, transaction_type: "expense", category_id: null, subcategory_id: "rent" };
+  await getFinancialPlanRecommendation("user-1", client(0, null, 1, {
+    transactions: [
+      { ...expense, id: "bill", transaction_date: "2026-09-20", anomaly_evaluations: [] },
+      { ...expense, id: "groceries", transaction_date: "2026-09-12", subcategory_id: "unplanned", anomaly_evaluations: [] },
+      { ...expense, id: "one-off", transaction_date: "2026-09-05", anomaly_evaluations: [{ transaction_id: "one-off", is_anomaly: true, recurrence: "one_time" }] },
+      { ...expense, id: "frequent", transaction_date: "2026-09-04", anomaly_evaluations: [{ transaction_id: "frequent", is_anomaly: true, recurrence: "frequent" }] },
+      { ...expense, id: "tuition", transaction_date: "2026-06-10", anomaly_evaluations: [{ transaction_id: "tuition", is_anomaly: true, recurrence: "yearly" }] },
+      { ...expense, id: "first-day", transaction_date: "2025-10-01", anomaly_evaluations: [] },
+      { ...expense, id: "too-old", transaction_date: "2025-09-30", anomaly_evaluations: [] },
+    ],
+    scheduled_payment_records: [{ transaction_id: "bill" }],
+  }), 200_000, ["rent"]);
+  const sent = jest.mocked(getMlForecast).mock.calls[0]![1].historicalTransactions;
+  expect(sent.map((transaction) => [transaction.transactionId, transaction.category, transaction.recurrence])).toEqual([
+    ["groceries", "Other", undefined],
+    ["frequent", "housing_water_utilities", undefined],
+    ["tuition", "housing_water_utilities", "yearly"],
+    ["first-day", "housing_water_utilities", undefined],
+  ]);
 });
 
 it("counts the scheduled portion toward a Fixed category instead of reserving it twice", async () => {
@@ -65,22 +89,11 @@ it("counts the scheduled portion toward a Fixed category instead of reserving it
   expect(plan.recommendation.allocations[0]).toMatchObject({ allocationRule: "FIXED", allocatedAmountCentavos: 20_000, floorAmountCentavos: 20_000, ceilingAmountCentavos: 20_000 });
 });
 
-it("applies forecast changes to the baseline left after scheduled payments", async () => {
+it("explains the forecast change with the ML baseline and amount unchanged", async () => {
   jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [{ category: "housing_water_utilities", month: "2026-10", quarter: "Q4", amountCentavos: 120_000, userBaselineCentavos: 100_000, hfceMultiplier: 1.2, hfceForecastAmountMillionPhp: 1, explanation: "" }], snapshot: { month: "2026-10", totalAmountCentavos: 120_000, categoryForecasts: [{ category: "housing_water_utilities", amountCentavos: 120_000 }], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
   const plan = await getFinancialPlanRecommendation("user-1", client(0), 200_000, ["rent"]);
-  // (100,000 baseline - 30,000 scheduled) * 1.2 = 84,000 category forecast.
-  expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(84_000);
-  expect(plan.explanationRequest.evidence.forecastChanges).toEqual([expect.objectContaining({ baselineCentavos: 70_000, forecastCentavos: 84_000 })]);
-});
-
-it("grows scheduled payments by HFCE alone, not by last year's seasonal spending", async () => {
-  // A 100,000 baseline grown 1.2 by HFCE, plus 80,000 of last year's seasonal spending in this month.
-  jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [{ category: "housing_water_utilities", month: "2026-10", quarter: "Q4", amountCentavos: 200_000, userBaselineCentavos: 100_000, hfceMultiplier: 1.2, hfceForecastAmountMillionPhp: 1, explanation: "" }], snapshot: { month: "2026-10", totalAmountCentavos: 200_000, categoryForecasts: [{ category: "housing_water_utilities", amountCentavos: 200_000 }], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
-  jest.mocked(recommendPlanCategories).mockImplementation(async (_user, _period, _available, categories) => ({ recommendation: { feasibility: "FEASIBLE", allocations: categories.map((category) => ({ category_id: category.id, amount: category.floorCentavos / 100 })) } }));
-  const plan = await getFinancialPlanRecommendation("user-1", client(0), 200_000, ["rent"]);
-  // 200,000 - 30,000 scheduled * 1.2 = 164,000; scaling by 200,000 / 100,000 would leave only 140,000.
-  expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(164_000);
-  expect(plan.explanationRequest.evidence.forecastChanges).toEqual([expect.objectContaining({ baselineCentavos: 70_000, forecastCentavos: 164_000 })]);
+  expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(120_000);
+  expect(plan.explanationRequest.evidence.forecastChanges).toEqual([expect.objectContaining({ baselineCentavos: 100_000, forecastCentavos: 120_000 })]);
 });
 
 it("reports a shortfall using only the residual Fixed requirement plus the scheduled reservation", async () => {

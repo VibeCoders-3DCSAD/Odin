@@ -159,7 +159,8 @@ describe("Financial Plan recommendations with recorded spending", () => {
       confirmedExpenses: [{ scheduledPaymentId: "internet-bill", categorySlug: "communication", dueDate: "2026-10-22", amountCentavos: 20_000 }],
       financialConstraints: { plannedAmountCentavos: 500_000, categoryBudgetCentavos: 480_000, scheduledPaymentsCentavos: 20_000 },
     });
-    expect(result.recommendation.allocations[0]).toMatchObject({ allocatedAmountCentavos: 80_000, forecastAmountCentavos: 144_000 });
+    // The forecast's history leaves out scheduled payments, so the bill is not taken out of it again.
+    expect(result.recommendation.allocations[0]).toMatchObject({ allocatedAmountCentavos: 80_000, forecastAmountCentavos: 168_000 });
     expect(result.explanations.join(" ")).toContain("Separately, ₱200 is reserved for recorded payments in this category.");
     expect(result.explanations[0]).toContain("A lower budget does not mean lower expected expenses");
     expect(recommendPlanCategories).toHaveBeenCalledWith("user", result.period, 480_000, expect.any(Array), expect.any(Object));

@@ -1,5 +1,5 @@
 import { scheduledPaymentDueDates, type ScheduledPaymentRow } from "../scheduledPaymentDates.js";
-import type { MlExpenseForecastSnapshot, MlPlanCategory } from "../mlAdapter.js";
+import type { MlPlanCategory } from "../mlAdapter.js";
 
 // Use the full month's scheduled amounts, including paid occurrences. Only the unpaid
 // remainder is reserved, but neither paid nor unpaid scheduled spending belongs in category budgets.
@@ -32,9 +32,4 @@ export function subtractScheduledRequirements(categories: MlPlanCategory[], sche
     const amount = scheduled.get(category.id) ?? 0;
     return { ...category, floorCentavos: Math.max(0, category.floorCentavos - amount), ceilingCentavos: Math.max(0, category.ceilingCentavos - amount), forecastCentavos: Math.max(0, category.forecastCentavos - amount) };
   });
-}
-
-export function subtractScheduledForecast(forecast: MlExpenseForecastSnapshot, scheduled: Map<string, number>, floors = new Map<string, number>()): MlExpenseForecastSnapshot {
-  const categoryForecasts = forecast.categoryForecasts.map((point) => ({ ...point, amountCentavos: Math.max(floors.get(point.category) ?? 0, point.amountCentavos - (scheduled.get(point.category) ?? 0)) }));
-  return { ...forecast, categoryForecasts, totalAmountCentavos: categoryForecasts.reduce((sum, point) => sum + point.amountCentavos, 0) };
 }

@@ -11,12 +11,13 @@ import { deterministicFinancialPlanExplanations, type FinancialPlanExplanationRe
 import { deriveSurplusRecommendation } from "./classificationPolicy.js";
 import { createFinancialConditionAssessment } from "../financialConditionAssessmentService.js";
 import { getServiceRoleClient } from "../../lib/supabase.js";
-import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledForecast, subtractScheduledRequirements } from "./helpers/scheduledCategoryAmounts.js";
+import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledRequirements } from "./helpers/scheduledCategoryAmounts.js";
 import { scheduledPaymentReservations, type ScheduledPaymentRow } from "./scheduledPaymentDates.js";
 import { normalizeCustomEvents, eventMonthLabel } from "@odin/spending-insights/seasons.js";
 
 const MANILA = "Asia/Manila";
-const MAX_HISTORY = 500;
+// Matches the most transactions a forecast request accepts, so a busy year is not cut short.
+const MAX_HISTORY = 2_000;
 const ESSENTIAL_HFCE_CATEGORY_SLUGS = new Set(["food", "housing_water_utilities", "health", "communication", "transport", "education", "furnishings_household", "clothing_footwear"]);
 const SEASONAL_LABELS: Record<string, string> = { q1: "January–March", q2: "April–June", q3: "July–September", q4: "October–December", rainy_season: "Rainy Season", back_to_school: "Back-to-School Season", undas: "Undas / All Souls' Day", christmas_ber_months: "Christmas and Ber Months", new_year: "New Year", summer: "Summer", annual_payments: "Tax and Annual-Payment Season", family_celebrations: "Birthday and Family-Celebration Months" };
 const SEASONAL_WINDOWS: Record<string, string> = { q1: "January to March", q2: "April to June", q3: "July to September", q4: "October to December", rainy_season: "June to November", back_to_school: "June to August", undas: "October to November", christmas_ber_months: "September to December", new_year: "January", summer: "March to May", annual_payments: "January to April", family_celebrations: "varies by the selected month" };
@@ -33,7 +34,7 @@ type Transaction = Timestamped & { id: string; amount_centavos: number; transact
 type OnboardingSession = { raw_answers: Record<string, unknown> | null };
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
 type ReservationSkips = { skipDebtRepayments?: boolean; skipSavingsContributions?: boolean; skipScheduledPayments?: boolean; commitmentBudgets?: CommitmentBudget[] };
-type AnomalyEvaluation = { transaction_id: string; is_anomaly: boolean };
+type AnomalyEvaluation = { transaction_id: string; is_anomaly: boolean; recurrence: "one_time" | "frequent" | "yearly" | null };
 type TransactionWithAnomalies = Transaction & { anomaly_evaluations: AnomalyEvaluation[] | null };
 
 function selectEligibleDebt(debts: Debt[], strategy: "avalanche" | "snowball", priorityIds: string[]): string | null {
@@ -77,6 +78,22 @@ export function excludeUnusualTransactions<T extends { id: string }>(transaction
   return transactions.filter((transaction) => !unusualTransactionIds.has(transaction.id));
 }
 
+// Like the Spending Forecast, unusual spending stays out unless the user said it will be frequent or yearly;
+// yearly ones are returned separately so the forecast repeats them in their month.
+export function unusualSpendingIds(transactions: Array<{ anomaly_evaluations: AnomalyEvaluation[] | null }>): { oneOffIds: Set<string>; yearlyIds: Set<string> } {
+  const evaluations = transactions.flatMap((transaction) => (transaction.anomaly_evaluations ?? []).filter((evaluation) => evaluation.is_anomaly));
+  return {
+    oneOffIds: new Set(evaluations.filter((evaluation) => evaluation.recurrence !== "frequent" && evaluation.recurrence !== "yearly").map((evaluation) => evaluation.transaction_id)),
+    yearlyIds: new Set(evaluations.filter((evaluation) => evaluation.recurrence === "yearly").map((evaluation) => evaluation.transaction_id)),
+  };
+}
+
+// The first day of the twelfth Manila month before this one, where the Spending Forecast's history starts.
+export function forecastHistoryStart(now = new Date()): string {
+  const { start } = currentCalendarMonth(now);
+  return new Date(Date.UTC(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 13, 1)).toISOString().slice(0, 10);
+}
+
 function latestSourceUpdate(...groups: unknown[][]): string | null {
   const updates = groups.flatMap((group) => group.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
@@ -104,12 +121,6 @@ export function financialPlanPeriod(planMonth?: string): { start: string; end: s
 // The budget optimizer rejects a forecast whose month differs from the plan period.
 export function forecastCoversPlanPeriod(forecast: ForecastPayload, period: { start: string }): boolean {
   return forecast.snapshot.month === period.start.slice(0, 7);
-}
-
-// The HFCE growth odin-ml applied to the user's baseline. Scheduled payments grow by it alone: the forecast's
-// amount can also carry last year's seasonal spending, which a scheduled bill does not repeat.
-function forecastGrowth(detail: ForecastPayload["forecasts"][number] | undefined): number {
-  return detail && Number.isFinite(detail.hfceMultiplier) && detail.hfceMultiplier > 0 ? detail.hfceMultiplier : 1;
 }
 
 export function manilaToday(now = new Date()): string {
@@ -223,19 +234,21 @@ function userFacingForecastRationale(value: string): string {
 
 export async function getFinancialPlanRecommendation(userId: string, supabase: SupabaseClient, plannedAmountCentavos: number, includedSubcategoryIds: string[] = [], includedCategoryIds: string[] = [], manualAllocations: ManualAllocation[] = [], reservationSkips: ReservationSkips = {}, planMonth?: string) {
   const period = financialPlanPeriod(planMonth);
-  const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, debtPaymentsResult, scheduledPaymentsResult, scheduledPaymentTransactionsResult] = await Promise.all([
+  const historyStart = forecastHistoryStart();
+  const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, debtPaymentsResult, scheduledPaymentsResult, scheduledPaymentTransactionsResult, scheduledPaymentHistoryResult] = await Promise.all([
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos, updated_at").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("financial_accounts").select("kind, current_balance_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("debt_accounts").select("id, current_balance_centavos, minimum_payment_centavos, payment_frequency, payment_schedule, next_due_date, annual_interest_rate_bps, allows_extra_payments, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("savings_goals").select("id, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, custom_interval_days, next_contribution_date, goal_type, target_amount_centavos, current_amount_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("credit_card_statements").select("id, minimum_due_centavos, due_date").eq("user_id", userId).eq("authoritative", true).eq("deleted", false).gte("due_date", period.start).lte("due_date", period.end).limit(100),
-    supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id, source_savings_goal_id, destination_savings_goal_id, updated_at, anomaly_evaluations!anomaly_evaluations_transaction_id_fkey(transaction_id, is_anomaly)").eq("user_id", userId).eq("status", "posted").eq("deleted", false).eq("anomaly_evaluations.is_anomaly", true).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
+    supabase.from("transactions").select("id, amount_centavos, transaction_date, transaction_type, category_id, subcategory_id, source_savings_goal_id, destination_savings_goal_id, updated_at, anomaly_evaluations!anomaly_evaluations_transaction_id_fkey(transaction_id, is_anomaly, recurrence)").eq("user_id", userId).eq("status", "posted").eq("deleted", false).eq("anomaly_evaluations.is_anomaly", true).order("transaction_date", { ascending: false }).limit(MAX_HISTORY),
     supabase.from("financial_condition_assessments").select("id, assessed_at, rule_set_version, output_snapshot").eq("user_id", userId).order("assessed_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("onboarding_sessions").select("raw_answers").eq("user_id", userId).eq("status", "submitted").order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("debt_payments").select("transaction_id").eq("user_id", userId).eq("deleted", false).gte("payment_date", period.start).lte("payment_date", period.end).not("transaction_id", "is", null).limit(500),
     supabase.from("scheduled_payments").select("id, name, subcategory_id, amount_centavos, frequency, due_day_of_month, due_second_day_of_month, due_day_of_week, due_month, starts_on, ends_on").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(200),
     supabase.from("scheduled_payment_records").select("transaction_id").eq("user_id", userId).eq("deleted", false).gte("payment_date", period.start).lte("payment_date", period.end).limit(1000),
+    supabase.from("scheduled_payment_records").select("transaction_id").eq("user_id", userId).eq("deleted", false).gte("payment_date", historyStart).not("transaction_id", "is", null).limit(MAX_HISTORY),
   ]);
   const inputFailures = [
     { source: "subcategories", error: subcategoriesResult.error },
@@ -249,6 +262,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     { source: "debt_payments", error: debtPaymentsResult.error },
     { source: "scheduled_payments", error: scheduledPaymentsResult.error },
     { source: "scheduled_payment_records", error: scheduledPaymentTransactionsResult.error },
+    { source: "scheduled_payment_records", error: scheduledPaymentHistoryResult.error },
   ].flatMap(({ source, error }) => error ? [{
     source,
     code: error.code,
@@ -299,10 +313,8 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   });
   const seasonalPreferences = seasonalPreferencesFromAnswers(((onboardingResult.data as OnboardingSession | null)?.raw_answers ?? {}), period.start);
   const transactions = (transactionsResult.data ?? []) as TransactionWithAnomalies[];
-  const unusualTransactionIds = new Set(transactions.flatMap((transaction) => (transaction.anomaly_evaluations ?? [])
-    .filter((evaluation) => evaluation.is_anomaly)
-    .map((evaluation) => evaluation.transaction_id)));
-  const cleanTransactions = excludeUnusualTransactions(transactions, unusualTransactionIds);
+  const { oneOffIds, yearlyIds } = unusualSpendingIds(transactions);
+  const cleanTransactions = excludeUnusualTransactions(transactions, oneOffIds);
   const trailingTwelveMonths = new Date();
   trailingTwelveMonths.setUTCMonth(trailingTwelveMonths.getUTCMonth() - 12);
   const trailingTwelveMonthsStart = trailingTwelveMonths.toISOString().slice(0, 10);
@@ -380,24 +392,23 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   let forecastDetails: ForecastPayload["forecasts"] = [];
   let forecastUnavailableMessage: string | null = null;
   try {
-    const plannedSubcategoryIds = new Set(categories.map((category) => category.id));
-    const forecastTransactions = cleanTransactions.flatMap((transaction) => {
-      const category = transaction.subcategory_id ? categorySlugBySubcategoryId.get(transaction.subcategory_id) : slugByCategoryId.get(transaction.category_id ?? "");
-      const parentId = (transaction.subcategory_id ? parentBySubcategory.get(transaction.subcategory_id) : null) ?? transaction.category_id;
-      const targetId = transaction.subcategory_id && plannedSubcategoryIds.has(transaction.subcategory_id) ? transaction.subcategory_id : parentId;
-      return category && targetId && plannedSubcategoryIds.has(targetId)
-        ? [{ transactionId: transaction.id, date: transaction.transaction_date, amount: transaction.amount_centavos / 100, category, transactionType: transaction.transaction_type }]
-        : [];
-    });
+    // Same history as the Spending Forecast: the last twelve months of every category, without scheduled
+    // payments, which the plan reserves at their set amounts instead.
+    const scheduledTransactionIds = new Set(((scheduledPaymentHistoryResult.data ?? []) as Array<{ transaction_id: string }>).map((record) => record.transaction_id));
+    const forecastTransactions = cleanTransactions.flatMap((transaction) => transaction.transaction_date >= historyStart && transaction.amount_centavos > 0 && !scheduledTransactionIds.has(transaction.id)
+      ? [{
+        transactionId: transaction.id,
+        date: transaction.transaction_date,
+        amount: transaction.amount_centavos / 100,
+        category: (transaction.subcategory_id ? categorySlugBySubcategoryId.get(transaction.subcategory_id) : undefined) ?? "Other",
+        transactionType: transaction.transaction_type,
+        ...(yearlyIds.has(transaction.id) ? { recurrence: "yearly" as const } : {}),
+      }]
+      : []);
     if (forecastTransactions.length) {
       const mlForecast = await getMlForecast(userId, { historicalTransactions: forecastTransactions, targetMonth: period.start.slice(0, 7) });
       if (forecastCoversPlanPeriod(mlForecast, period)) {
-        // Apply the forecast's change only to the baseline remaining after scheduled payments.
-        const forecastDeductions = new Map([...scheduledByTarget].map(([id, amount]) => {
-          const detail = mlForecast.forecasts.find((point) => point.category === categorySlugBySubcategoryId.get(id));
-          return [id, amount * forecastGrowth(detail)];
-        }));
-        forecast = subtractScheduledForecast(mapPlanForecast(userId, mlForecast, grossCategories, categorySlugBySubcategoryId), forecastDeductions, new Map(categories.map((category) => [category.id, category.floorCentavos])));
+        forecast = mapPlanForecast(userId, mlForecast, categories, categorySlugBySubcategoryId);
         forecastDetails = mlForecast.forecasts;
       } else {
         console.warn("financial plan forecast month mismatch; using spend fallback", { user_id: userId, forecast_month: mlForecast.snapshot.month, plan_month: period.start.slice(0, 7) });
@@ -450,9 +461,8 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     });
     if (categoryAllocations.length === 0) return [];
     const allocationCentavos = categoryAllocations.reduce((sum, allocation) => sum + allocation.allocatedAmountCentavos, 0);
-    const scheduledCentavos = categories.filter((target) => categorySlugBySubcategoryId.get(target.id) === detail.category).reduce((sum, target) => sum + (scheduledByTarget.get(target.id) ?? 0), 0);
-    const baselineCentavos = Math.max(0, detail.userBaselineCentavos - scheduledCentavos);
-    const forecastCentavos = Math.max(0, detail.amountCentavos - scheduledCentavos * forecastGrowth(detail));
+    const baselineCentavos = detail.userBaselineCentavos;
+    const forecastCentavos = detail.amountCentavos;
     const differenceCentavos = forecastCentavos - baselineCentavos;
     return [{ evidenceId: `forecast:${detail.category}`, categoryName: category.label, categorySlug: detail.category, baselineCentavos, forecastCentavos, allocationCentavos, allocationForecastDifferenceCentavos: allocationCentavos - forecastCentavos, differenceCentavos, percentageChange: baselineCentavos > 0 ? differenceCentavos / baselineCentavos * 100 : null, forecastRationale: userFacingForecastRationale(detail.explanation), possibleSeasonalContext: null }];
   });

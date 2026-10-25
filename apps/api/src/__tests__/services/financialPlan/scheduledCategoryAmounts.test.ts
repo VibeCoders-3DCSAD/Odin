@@ -1,4 +1,4 @@
-import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledForecast, subtractScheduledRequirements } from "../../../services/financialPlan/helpers/scheduledCategoryAmounts.js";
+import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledRequirements } from "../../../services/financialPlan/helpers/scheduledCategoryAmounts.js";
 import { scheduledPaymentReservations, type ScheduledPaymentRow } from "../../../services/financialPlan/scheduledPaymentDates.js";
 import type { MlPlanCategory } from "../../../services/financialPlan/mlAdapter.js";
 
@@ -30,11 +30,6 @@ it("counts the scheduled part toward Fixed requirements and clamps estimates and
   const deductions = new Map([["housing", 120_000]]);
   expect(subtractScheduledRequirements([{ ...category, rule: "FIXED", ceilingCentavos: 50_000 }], deductions)[0]).toMatchObject({ floorCentavos: 0, ceilingCentavos: 0, forecastCentavos: 0 });
   expect(subtractScheduledAmounts(new Map([["housing", 100_000]]), deductions).get("housing")).toBe(0);
-});
-
-it("reduces the ML forecast exactly once and recomputes its total", () => {
-  const forecast = { month: "2026-10", totalAmountCentavos: 110_000, categoryForecasts: [{ category: "housing", amountCentavos: 100_000 }, { category: "food", amountCentavos: 10_000 }], modelVersion: "v1", generatedAt: "2026-10-01", quality: "PERSONALIZED" as const };
-  expect(subtractScheduledForecast(forecast, new Map([["housing", 30_000]]))).toMatchObject({ totalAmountCentavos: 80_000, categoryForecasts: [{ category: "housing", amountCentavos: 70_000 }, { category: "food", amountCentavos: 10_000 }] });
 });
 
 it("does not subtract schedules outside the plan period", () => {
