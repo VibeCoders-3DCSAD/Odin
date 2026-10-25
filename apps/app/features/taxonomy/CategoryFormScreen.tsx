@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { createCategory, updateCategory } from "../../local-db/repositories/taxonomy";
-import { ArrowLeft } from "phosphor-react-native";
+import { ArrowLeft, Info } from "phosphor-react-native";
 import { DEFAULT_TAXONOMY_COLOR, TAXONOMY_COLORS, TAXONOMY_ICON_KEYS, TaxonomyIcon, taxonomyIconKey, type TaxonomyIconKey } from "./taxonomyVisuals";
 
 type CategoryFormScreenProps = {
@@ -123,6 +123,15 @@ export default function CategoryFormScreen({
                     {isCreate ? "New Category" : "Edit Category"}
                   </Text>
 
+                  {isCreate && (
+                    <View style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.card }}>
+                      <Info size={18} color={palette.ink2} weight="fill" />
+                      <Text style={{ flex: 1, fontFamily: "Manrope", fontSize: 12, lineHeight: 18, color: palette.ink2 }}>
+                        Custom categories are included in your financial plan, but Budgie can't forecast their spending or apply Filipino seasonal spending patterns to them.
+                      </Text>
+                    </View>
+                  )}
+
                   {category && !isCreate && (
                     <Text style={{ fontFamily: "Manrope", fontSize: 12, color: palette.mut }}>
                       Editing "{category.label}"
@@ -146,26 +155,6 @@ export default function CategoryFormScreen({
                     />
                   </View>
 
-                  <View style={{ gap: 8 }}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>ICON</Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                      {TAXONOMY_ICON_KEYS.map((key) => (
-                        <Pressable key={key} accessibilityRole="button" accessibilityLabel={`Use ${key} icon`} onPress={() => setIconKey(key)} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: iconKey === key ? colorHex : palette.card, borderWidth: 1, borderColor: iconKey === key ? colorHex : palette.line, alignItems: "center", justifyContent: "center" }}>
-                          <TaxonomyIcon iconKey={key} size={20} color={iconKey === key ? "#fff" : palette.ink2} weight="fill" />
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View style={{ gap: 8 }}>
-                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>COLOR</Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                      {TAXONOMY_COLORS.map((color) => (
-                        <Pressable key={color} accessibilityRole="button" accessibilityLabel={`Use ${color} color`} onPress={() => setColorHex(color)} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: color, borderWidth: colorHex === color ? 3 : 1, borderColor: colorHex === color ? palette.ink : "#fff" }} />
-                      ))}
-                    </View>
-                  </View>
-
                   <View>
                     <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2, marginBottom: 6 }}>
                       DESCRIPTION <Text style={{color: palette.error}}>*</Text>
@@ -183,6 +172,26 @@ export default function CategoryFormScreen({
                         backgroundColor: palette.card, minHeight: 80, textAlignVertical: "top",
                       }}
                     />
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>COLOR</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                      {TAXONOMY_COLORS.map((color) => (
+                        <Pressable key={color} accessibilityRole="button" accessibilityLabel={`Use ${color} color`} onPress={() => setColorHex(color)} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: color, borderWidth: colorHex === color ? 3 : 1, borderColor: colorHex === color ? palette.ink : "#fff" }} />
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: palette.ink2 }}>ICON</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {TAXONOMY_ICON_KEYS.map((key) => (
+                        <Pressable key={key} accessibilityRole="button" accessibilityLabel={`Use ${key} icon`} onPress={() => setIconKey(key)} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: iconKey === key ? colorHex : palette.card, borderWidth: 1, borderColor: iconKey === key ? colorHex : palette.line, alignItems: "center", justifyContent: "center" }}>
+                          <TaxonomyIcon iconKey={key} size={20} color={iconKey === key ? "#fff" : palette.ink2} weight="fill" />
+                        </Pressable>
+                      ))}
+                    </View>
                   </View>
 
                   {formError && (
