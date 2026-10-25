@@ -157,6 +157,8 @@ describe("forecast ML adapter", () => {
   it("targets the current month through the end of the third quarter after next month's", () => {
     expect(forecastMonths(new Date("2026-10-18T12:00:00.000Z"))).toEqual(["2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09"]);
     expect(forecastMonths(new Date("2026-11-30T12:00:00.000Z"))).toHaveLength(11);
+    // 12:30 AM on December 1 in Manila is still November 30 in UTC.
+    expect(forecastMonths(new Date("2026-11-30T16:30:00.000Z"))[0]).toBe("2026-12");
     expect(forecastMonths(new Date("2026-12-05T12:00:00.000Z"))).toEqual(["2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06", "2027-07", "2027-08", "2027-09", "2027-10", "2027-11", "2027-12"]);
   });
 

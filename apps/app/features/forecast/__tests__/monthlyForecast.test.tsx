@@ -31,6 +31,8 @@ describe("monthly spending forecast", () => {
     expect(monthlyForecast({ ...forecast, baselineMethod: "median_monthly" }, NOW)?.map((month) => month.month)).toEqual(shown);
     expect(monthlyForecast({ ...forecast, baselineMethod: "recency_weighted_provisional" }, NOW)).toBeNull();
     expect(monthlyForecast({ ...forecast, months: undefined }, NOW)).toBeNull();
+    // 1 AM on November 1 in Manila: November is this month, though it is still October in UTC.
+    expect(monthlyForecast(forecast, new Date("2026-10-31T17:00:00Z"))?.map((month) => month.month)).toEqual(["2026-11", "2026-12", "2027-01", "2027-02"]);
   });
 
   it("charts each forecast month after this one instead of quarter tabs", () => {

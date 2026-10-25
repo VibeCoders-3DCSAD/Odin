@@ -3,6 +3,7 @@ import { initDatabase } from "../client";
 import type { ForecastTransaction } from "../../features/forecast/types";
 import { listSavedRecurrences, listUnusualSpendings, type SpendingRecurrence } from "./unusualSpending";
 import { SCHEDULED_PAYMENTS_CATEGORY } from "../../features/forecast/scheduledForecast";
+import { localToday } from "../../features/billers/schedule";
 
 // Room for a full year of history, which the seasonal forecast compares against.
 const MAX_FORECAST_TRANSACTIONS = 2_000;
@@ -40,8 +41,15 @@ type ListForecastTransactionsOptions = {
   excludeUnusualSpending?: boolean;
 };
 
+// Forecast months follow the Asia/Manila calendar, so a month starts at midnight Philippine time on every device.
+function manilaMonth(now = new Date()): { year: number; monthIndex: number } {
+  const today = localToday(now);
+  return { year: Number(today.slice(0, 4)), monthIndex: Number(today.slice(5, 7)) - 1 };
+}
+
 export function getForecastHistoryStartDate(now = new Date()): string {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12, 1))
+  const { year, monthIndex } = manilaMonth(now);
+  return new Date(Date.UTC(year, monthIndex - 12, 1))
     .toISOString()
     .slice(0, 10);
 }
@@ -121,7 +129,8 @@ export type QuarterSpending = { quarter: string; totalCentavos: number; categori
 
 // The quarters (YYYYQn) that end before the current quarter, oldest first.
 export function pastQuarters(count: number, now = new Date()): string[] {
-  const current = now.getUTCFullYear() * 4 + Math.floor(now.getUTCMonth() / 3);
+  const { year, monthIndex } = manilaMonth(now);
+  const current = year * 4 + Math.floor(monthIndex / 3);
   return Array.from({ length: count }, (_, index) => {
     const quarter = current - count + index;
     return `${Math.floor(quarter / 4)}Q${(quarter % 4) + 1}`;
@@ -132,7 +141,8 @@ export type MonthSpending = { month: string; totalCentavos: number; categories: 
 
 // The last `count` months (YYYY-MM) through the current one, oldest first. The current month is still in progress.
 export function recentMonths(count: number, now = new Date()): string[] {
-  return Array.from({ length: count }, (_, index) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - count + 1 + index, 1)).toISOString().slice(0, 7));
+  const { year, monthIndex } = manilaMonth(now);
+  return Array.from({ length: count }, (_, index) => new Date(Date.UTC(year, monthIndex - count + 1 + index, 1)).toISOString().slice(0, 7));
 }
 
 const QUARTER_SQL = "substr(t.transaction_date, 1, 4) || 'Q' || ((CAST(substr(t.transaction_date, 6, 2) AS INTEGER) + 2) / 3)";

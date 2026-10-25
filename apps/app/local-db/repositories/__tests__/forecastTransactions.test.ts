@@ -90,6 +90,14 @@ describe("listForecastTransactions", () => {
     expect(recentMonths(3, new Date("2027-01-05T00:00:00Z"))).toEqual(["2026-11", "2026-12", "2027-01"]);
   });
 
+  it("starts a new month and quarter at midnight Philippine time", async () => {
+    const { getForecastHistoryStartDate, pastQuarters, recentMonths } = await import("../forecastTransactions");
+    // 1 AM on November 1 in Manila is still October 31 in UTC.
+    expect(recentMonths(3, new Date("2026-10-31T17:00:00Z"))).toEqual(["2026-09", "2026-10", "2026-11"]);
+    expect(getForecastHistoryStartDate(new Date("2026-10-31T17:00:00Z"))).toBe("2025-11-01");
+    expect(pastQuarters(1, new Date("2026-12-31T16:30:00Z"))).toEqual(["2026Q4"]);
+  });
+
   it("sums actual expenses per month and category, through the end of the last month", async () => {
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([
       { period: "2026-08", category: "food", amount_centavos: 300_000 },

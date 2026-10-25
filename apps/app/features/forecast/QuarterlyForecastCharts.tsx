@@ -4,6 +4,7 @@ import Svg, { Circle, Line, Path, Rect, Text as SvgText } from "react-native-svg
 import type { QuarterlyForecastPayload } from "./types";
 import { SCHEDULED_PAYMENTS_CATEGORY } from "./scheduledForecast";
 import { ForecastCategoryPicker } from "./ForecastCategoryPicker";
+import { localToday } from "../billers/schedule";
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", over: "#D9001F" };
 
@@ -99,8 +100,9 @@ const MONTHLY_FORECAST_MONTHS = 3;
 // Provisional histories forecast the same amount for every month of a quarter, so they stay quarterly.
 export function monthlyForecast(forecast: QuarterlyForecastPayload, now = new Date()): NonNullable<QuarterlyForecastPayload["months"]> | null {
   if (forecast.baselineMethod !== "same_period_last_year" && forecast.baselineMethod !== "median_monthly") return null;
-  const first = now.toISOString().slice(0, 7);
-  const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + MONTHLY_FORECAST_MONTHS, 1)).toISOString().slice(0, 7);
+  // Months follow the Asia/Manila calendar.
+  const first = localToday(now).slice(0, 7);
+  const last = new Date(Date.UTC(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1 + MONTHLY_FORECAST_MONTHS, 1)).toISOString().slice(0, 7);
   const months = (forecast.months ?? []).filter((month) => month.month >= first && month.month <= last);
   return months.length ? months : null;
 }
@@ -279,7 +281,7 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
   const months = monthlyForecast(forecast, now);
   const labels = months ? MONTH_LABELS : QUARTER_LABELS;
   const unit = months ? "months" : "quarters";
-  const thisMonth = now.toISOString().slice(0, 7);
+  const thisMonth = localToday(now).slice(0, 7);
   // The chart shows the current month's actual spending so far; its forecast goes to Forecast vs Actual.
   const thisMonthForecast = months?.find((month) => month.month === thisMonth);
   const thisMonthActual = monthHistory.find((month) => month.month === thisMonth);
