@@ -67,7 +67,8 @@ export default function App() {
     void useAuthStore.getState().hydrate();
     // Protect native snapshots as well as the React view during background transitions.
     if (Platform.OS === "ios") void ScreenCapture.enableAppSwitcherProtectionAsync(1).catch(() => {});
-    else void ScreenCapture.preventScreenCaptureAsync("odin-financial-data").catch(() => {});
+    // FLAG_SECURE blacks out scrcpy/screen recordings, so dev builds stay capturable for demos and QA.
+    else if (!__DEV__) void ScreenCapture.preventScreenCaptureAsync("odin-financial-data").catch(() => {});
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") void useAuthStore.getState().lock();
       else {
