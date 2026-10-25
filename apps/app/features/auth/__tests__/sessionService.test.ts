@@ -5,13 +5,13 @@ jest.mock("expo-secure-store", () => {
     setItemAsync: jest.fn(async (key, value) => { values.set(key, value); }),
     deleteItemAsync: jest.fn(async (key) => { values.delete(key); }) };
 });
-jest.mock("../../../lib/supabase", () => ({ supabase: { auth: { setSession: jest.fn() } } }));
+jest.mock("../../../lib/supabase", () => ({ supabase: { auth: { setSession: jest.fn(), refreshSession: jest.fn() } } }));
 jest.mock("../../../lib/api", () => ({ API_BASE_URL: "https://odin.test", REQUEST_TIMEOUT_MS: 10000 }));
 
 import { supabase } from "../../../lib/supabase";
 import { OFFLINE_ACCESS_MS, PIN_LOCKOUT_MS } from "../helpers/pinPolicy";
 import { clearRememberedAccount, readAccount, writeAccount } from "../services/authStorage";
-import { acceptOnlineLogin, refreshOnlineSession } from "../services/sessionService";
+import { acceptOnlineLogin, accessTokenExpiring, refreshOnlineSession } from "../services/sessionService";
 import { accountFixture, anotherUserId } from "./fixtures";
 
 describe("online verification", () => {
@@ -23,10 +23,12 @@ describe("online verification", () => {
     global.fetch = fetchMock;
     await writeAccount(accountFixture(now));
     const user = { id: accountFixture(now).session.userId, aud: "authenticated", created_at: new Date(now).toISOString(), app_metadata: {}, user_metadata: {} };
-    jest.mocked(supabase.auth.setSession).mockResolvedValue({ data: {
+    const rotated = { data: {
       user, session: { access_token: "rotated-access", refresh_token: "rotated-refresh", expires_in: 3600,
         token_type: "bearer", user },
-    }, error: null });
+    }, error: null };
+    jest.mocked(supabase.auth.setSession).mockResolvedValue(rotated);
+    jest.mocked(supabase.auth.refreshSession).mockResolvedValue(rotated);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -94,6 +96,27 @@ describe("online verification", () => {
     await refreshOnlineSession(false);
     expect(fetchMock).not.toHaveBeenCalled();
     expect((await readAccount())?.expiresAt).toBe(now + OFFLINE_ACCESS_MS);
+  });
+
+  const jwt = (exp: number) => `h.${btoa(JSON.stringify({ exp })).replace(/=+$/, "")}.s`;
+
+  it("treats a token inside the expiry margin as expiring", () => {
+    expect(accessTokenExpiring(jwt(now / 1000 + 30), now)).toBe(true);
+    expect(accessTokenExpiring(jwt(now / 1000 + 600), now)).toBe(false);
+    expect(accessTokenExpiring("not-a-jwt", now)).toBe(false);
+  });
+
+  it("refreshes an expiring token instead of reusing it", async () => {
+    await writeAccount({ ...accountFixture(now), session: { ...accountFixture(now).session, accessToken: jwt(now / 1000 - 1) } });
+    await expect(refreshOnlineSession(false)).resolves.toMatchObject({ accessToken: "rotated-access" });
+    expect(supabase.auth.refreshSession).toHaveBeenCalledWith({ refresh_token: "refresh" });
+    expect(supabase.auth.setSession).not.toHaveBeenCalled();
+    expect((await readAccount())?.session.refreshToken).toBe("rotated-refresh");
+  });
+
+  it("forces a refresh after the server rejects an unexpired token", async () => {
+    await refreshOnlineSession(false, true);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledWith({ refresh_token: "refresh" });
   });
 
   it("rejects wrong-account reauthentication before replacing the remembered session", async () => {

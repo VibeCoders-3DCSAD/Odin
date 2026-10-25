@@ -14,6 +14,16 @@ export class OnlineVerificationError extends AccessError {
 
 let refreshing: Promise<AccountSession> | null = null;
 let renewing = false;
+const EXPIRY_MARGIN_S = 60;
+
+/** True when a JWT expires within the margin; undecodable tokens are left for the server to judge. */
+export function accessTokenExpiring(token: string, now = Date.now()): boolean {
+  try {
+    const part = (token.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+    const { exp } = JSON.parse(atob(part.padEnd(Math.ceil(part.length / 4) * 4, "=")));
+    return typeof exp === "number" && exp - EXPIRY_MARGIN_S <= now / 1000;
+  } catch { return false; }
+}
 
 async function bootstrapSession(state: AuthenticatedState): Promise<OfflineAccount> {
   const controller = new AbortController();
@@ -74,15 +84,18 @@ export async function acceptOnlineLogin(state: AuthenticatedState): Promise<Offl
 }
 
 /** Refresh once per concurrent group. Session tokens are persisted only in the protected account record. */
-export function refreshOnlineSession(renewAllowance: boolean): Promise<AccountSession> {
+export function refreshOnlineSession(renewAllowance: boolean, forceRefresh = false): Promise<AccountSession> {
   if (refreshing) return renewAllowance && !renewing
     ? refreshing.then(() => refreshOnlineSession(true)) : refreshing;
   renewing = renewAllowance;
   refreshing = withAuthLock(async () => {
     const account = await readAccount();
     if (!account) throw new OnlineVerificationError(true, "Sign in to verify your account.");
-    const result = await supabase.auth.setSession({ access_token: account.session.accessToken,
-      refresh_token: account.session.refreshToken });
+    const { accessToken, refreshToken } = account.session;
+    // setSession only refreshes a fully expired token; rotate ahead of expiry or after a server rejection.
+    const result = forceRefresh || accessTokenExpiring(accessToken)
+      ? await supabase.auth.refreshSession({ refresh_token: refreshToken })
+      : await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
     if (result.error || !result.data.session) {
       const status = result.error && "status" in result.error ? result.error.status : undefined;
       const requiresLogin = status === 400 || status === 401 || status === 403;

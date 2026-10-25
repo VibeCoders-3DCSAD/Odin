@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import { authorizeLocalRequest, rejectServerSession, trackProtectedRequest } from "../../lib/localAccess";
+import { authorizedFetch, authorizeLocalRequest, rejectServerSession, trackProtectedRequest } from "../../lib/localAccess";
 import { initDatabase } from "../client";
 import { enqueueOperation } from "../helpers";
 import {
@@ -662,7 +662,8 @@ function fetchWithTimeout(
   const release = trackProtectedRequest(controller);
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  return fetch(url, { ...options, signal: controller.signal }).then((response) => {
+  // authorizedFetch already retried with a refreshed token, so a 401 here is a real rejection.
+  return authorizedFetch(url, { ...options, signal: controller.signal }).then((response) => {
     if (response.status === 401) rejectServerSession();
     return response;
   }).finally(() => { clearTimeout(timeoutId); release(); });

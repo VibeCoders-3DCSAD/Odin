@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { dashboardColors, dashboardStyles } from "../dashboardAppearance";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../../lib/api";
 import { useConnectivityStore } from "../../../services/connectivity";
+import { authorizedFetch } from "../../../lib/localAccess";
 
 type RuleAssessment = {
   status?: "SUCCESS" | "INSUFFICIENT_DATA" | "INSUFFICIENT_HISTORY";
@@ -92,7 +93,7 @@ async function request<T>(accessToken: string, path: string, method: "GET" | "PO
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await authorizedFetch(`${API_BASE_URL}${path}`, {
       method,
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: controller.signal,

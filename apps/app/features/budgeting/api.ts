@@ -1,5 +1,6 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { ForecastPayload, ForecastTransaction } from "../forecast/types";
+import { authorizedFetch } from "../../lib/localAccess";
 
 export type BudgetRecommendationHistoricalTransaction = Omit<ForecastTransaction, "description">;
 
@@ -43,7 +44,7 @@ export async function requestBudgetRecommendation(accessToken: string, request: 
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/budget/recommendations`, {
+    const response = await authorizedFetch(`${API_BASE_URL}/odin/api/budget/recommendations`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(request),

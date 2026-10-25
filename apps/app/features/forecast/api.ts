@@ -1,5 +1,6 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { ForecastPayload, ForecastRequest, ForecastUnavailableReason, QuarterlyForecastPayload } from "./types";
+import { authorizedFetch } from "../../lib/localAccess";
 
 export function requestForecast(accessToken: string, request: ForecastRequest, signal?: AbortSignal) {
   return postForecast<ForecastPayload>("/odin/api/forecast", accessToken, request, signal);
@@ -19,7 +20,7 @@ async function postForecast<T>(path: string, accessToken: string, request: Forec
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await authorizedFetch(`${API_BASE_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(request),

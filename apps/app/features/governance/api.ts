@@ -2,12 +2,13 @@ import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { AccountDeletionRequest, ConsentRecord, DataExportRequest, PrivacySettings } from "./types";
 import { hasCurrentTermsConsent } from "./constants";
 import type { SeasonalPreferences } from "@odin/spending-insights/seasons";
+import { authorizedFetch } from "../../lib/localAccess";
 
 export async function getPrivacySettings(accessToken: string) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
+    const response = await authorizedFetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: controller.signal,
     });
@@ -32,7 +33,7 @@ export async function updatePrivacySettings(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? 4_000);
   try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
+    const response = await authorizedFetch(`${API_BASE_URL}/odin/api/privacy/settings`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -61,7 +62,7 @@ function apiFetch<T>(
 ) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  return fetch(`${API_BASE_URL}${path}`, {
+  return authorizedFetch(`${API_BASE_URL}${path}`, {
     method: options?.method ?? "GET",
     headers: {
       "Content-Type": "application/json",

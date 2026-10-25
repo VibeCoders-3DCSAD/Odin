@@ -1,4 +1,5 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
+import { authorizedFetch } from "../../lib/localAccess";
 import type { FinancialPlanRecommendation } from "./types";
 import type { CommitmentBudget, CommitmentPreview } from "./helpers/commitmentBudget";
 
@@ -13,7 +14,7 @@ export async function requestFinancialPlanCommitments(accessToken: string, planM
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/financial-plans/commitments`, {
+    const response = await authorizedFetch(`${API_BASE_URL}/odin/api/financial-plans/commitments`, {
       method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(__DEV__ && planMonth ? { planMonth } : {}), signal: controller.signal,
     });
@@ -32,7 +33,7 @@ export async function requestFinancialPlanRecommendation(accessToken: string, in
   signal?.addEventListener("abort", abort, { once: true });
 
   try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/financial-plans/recommendation`, {
+    const response = await authorizedFetch(`${API_BASE_URL}/odin/api/financial-plans/recommendation`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ includedSubcategoryIds, includedCategoryIds, plannedAmountCentavos, manualAllocations, skipDebtRepayments: reservationSkips.debtRepayments, skipSavingsContributions: reservationSkips.savingsContributions, ...(reservationSkips.commitmentBudgets ? { commitmentBudgets: reservationSkips.commitmentBudgets } : {}), ...(__DEV__ && planMonth ? { planMonth } : {}) }),
@@ -52,7 +53,7 @@ export async function requestFinancialPlanExplanations(accessToken: string, expl
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`${API_BASE_URL}/odin/api/financial-plans/explanations`, {
+    const response = await authorizedFetch(`${API_BASE_URL}/odin/api/financial-plans/explanations`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(explanationRequest),

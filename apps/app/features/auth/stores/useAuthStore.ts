@@ -2,10 +2,10 @@ import { create } from "zustand";
 import { AccessError } from "../../../lib/helpers/accessErrors";
 import { accessNow, resetAccessClock } from "../helpers/accessClock";
 import { clearTransactionCache } from "../../ledger/transactionCache";
-import { abortProtectedRequests, configureLocalAccess } from "../../../lib/localAccess";
+import { abortProtectedRequests, configureLocalAccess, configureTokenResolver } from "../../../lib/localAccess";
 import { isValidPin, needsOnlineVerification, remainingLockout } from "../helpers/pinPolicy";
 import { clearRememberedAccount, readAccount, readEnvelope, readLegacySession, writeAccount } from "../services/authStorage";
-import { acceptOnlineLogin, OnlineVerificationError, refreshOnlineSession } from "../services/sessionService";
+import { acceptOnlineLogin, accessTokenExpiring, OnlineVerificationError, refreshOnlineSession } from "../services/sessionService";
 import { enrollPin, lockVault, unlockWithPin } from "../services/pinVault";
 import { withAuthLock } from "../services/authMutex";
 import { tracePinStep } from "../../../lib/helpers/pinSetupTrace";
@@ -201,25 +201,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
+async function refreshUnlockedSession(userId: string, forceRefresh = false): Promise<string> {
+  try {
+    const session = await refreshOnlineSession(false, forceRefresh);
+    const current = useAuthStore.getState();
+    if (current.phase !== "unlocked" || current.account?.session.userId !== userId) throw new Error("Budgie is locked.");
+    const account = await readAccount();
+    if (account) useAuthStore.setState({ account: localAccount(account) });
+    return session.accessToken;
+  } catch (error) {
+    if (error instanceof OnlineVerificationError && error.requiresLogin) {
+      await useAuthStore.getState().lock();
+      useAuthStore.setState({ phase: "recovery" });
+    }
+    throw error;
+  }
+}
+
 export function installNativeAccessGuard(): void {
+  configureTokenResolver(async (usedToken, rejected) => {
+    const { phase, account } = useAuthStore.getState();
+    if (phase !== "unlocked" || !account) return usedToken;
+    const current = account.session.accessToken;
+    // A concurrent request may already have rotated the token this one was rejected with.
+    if (!accessTokenExpiring(current) && (!rejected || current !== usedToken)) return current;
+    return refreshUnlockedSession(account.session.userId, rejected);
+  });
   configureLocalAccess(async (userId) => {
     const state = useAuthStore.getState();
     if (state.phase !== "unlocked" || state.account?.session.userId !== userId
       || needsOnlineVerification(state.account, accessNow(state.account))) throw new Error("Unlock and verify Budgie before syncing.");
-    try {
-      const session = await refreshOnlineSession(false);
-      const current = useAuthStore.getState();
-      if (current.phase !== "unlocked" || current.account?.session.userId !== userId) throw new Error("Budgie is locked.");
-      const account = await readAccount();
-      if (account) useAuthStore.setState({ account: localAccount(account) });
-      return session.accessToken;
-    } catch (error) {
-      if (error instanceof OnlineVerificationError && error.requiresLogin) {
-        await useAuthStore.getState().lock();
-        useAuthStore.setState({ phase: "recovery" });
-      }
-      throw error;
-    }
+    return refreshUnlockedSession(userId);
   }, () => {
     const state = useAuthStore.getState();
     return state.phase === "unlocked" && !!state.account && !needsOnlineVerification(state.account, accessNow(state.account));

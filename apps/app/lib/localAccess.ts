@@ -1,6 +1,9 @@
 // Installed by the native auth controller. Web retains its existing session flow.
 type AccessGuard = (userId: string) => Promise<string>;
+// Returns the token to send; `rejected` means the server refused `usedToken`.
+type TokenResolver = (usedToken: string, rejected: boolean) => Promise<string>;
 let guard: AccessGuard | null = null;
+let resolveToken: TokenResolver | null = null;
 let isAllowed: (() => boolean) | null = null;
 let invalidated: (() => void) | null = null;
 const requests = new Set<AbortController>();
@@ -13,6 +16,27 @@ export function configureLocalAccess(next: AccessGuard, allowed?: () => boolean,
 
 export async function authorizeLocalRequest(userId: string, accessToken: string): Promise<string> {
   return guard ? guard(userId) : accessToken;
+}
+
+export function configureTokenResolver(next: TokenResolver | null): void {
+  resolveToken = next;
+}
+
+/** fetch with a current bearer token: refreshed ahead of expiry, and once more if the server rejects it. */
+export async function authorizedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const supplied = headers.get("Authorization")?.replace(/^Bearer /, "");
+  const resolve = resolveToken;
+  if (!resolve || !supplied) return fetch(url, init);
+  const send = (token: string) => {
+    headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, { ...init, headers });
+  };
+  const token = await resolve(supplied, false).catch(() => supplied);
+  const response = await send(token);
+  if (response.status !== 401) return response;
+  const retry = await resolve(token, true).catch(() => null);
+  return retry ? send(retry) : response;
 }
 
 export function trackProtectedRequest(controller: AbortController): () => void {

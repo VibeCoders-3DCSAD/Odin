@@ -1,6 +1,7 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { Classification } from "../dashboard/components/FinancialHealthCard";
 import type { OnboardingSession, ProfileAssignment } from "./types";
+import { authorizedFetch } from "../../lib/localAccess";
 
 function apiFetch<T>(
   accessToken: string,
@@ -9,7 +10,7 @@ function apiFetch<T>(
 ) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  return fetch(`${API_BASE_URL}${path}`, {
+  return authorizedFetch(`${API_BASE_URL}${path}`, {
     method: options?.method ?? "GET",
     headers: {
       "Content-Type": "application/json",

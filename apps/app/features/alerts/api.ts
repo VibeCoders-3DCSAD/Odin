@@ -1,12 +1,13 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { Alert, AlertPage, AlertAction } from "./types";
+import { authorizedFetch } from "../../lib/localAccess";
 
 type ApiBody<T> = T & { error?: string; message?: string };
 
 function apiFetch<T>(accessToken: string, path: string, init: RequestInit = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  return fetch(`${API_BASE_URL}${path}`, {
+  return authorizedFetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

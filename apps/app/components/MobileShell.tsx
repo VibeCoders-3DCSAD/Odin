@@ -49,7 +49,7 @@ import DebtManagerOverview from "../features/debt-manager/DebtManagerOverview";
 import NonCreditDebtListScreen from "../features/debt-manager/NonCreditDebtListScreen";
 import NonCreditDebtDetailScreen from "../features/debt-manager/NonCreditDebtDetailScreen";
 import { useConnectivityStore } from "../services/connectivity";
-import { authorizeLocalRequest } from "../lib/localAccess";
+import { authorizedFetch, authorizeLocalRequest } from "../lib/localAccess";
 import { useToast } from "./Toast";
 import { runSync } from "../local-db/sync/runSync";
 import { initDatabase } from "../local-db/client";
@@ -598,7 +598,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}/odin/api/auth/logout`, {
+      response = await authorizedFetch(`${API_BASE_URL}/odin/api/auth/logout`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
