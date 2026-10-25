@@ -306,6 +306,11 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   // Stable so the transactions screen can use them inside memoized row callbacks.
   const getContentScrollY = useCallback(() => contentScrollY.current, []);
   const scrollContentTo = useCallback((y: number) => contentScrollRef.current?.scrollTo({ y, animated: false }), []);
+  // Set when the dashboard's forecast link opens Financial Reports; cleared once the user scrolls themselves.
+  const followReportsForecast = useRef(false);
+  const scrollToReportsForecast = useCallback((y: number) => {
+    if (followReportsForecast.current) contentScrollRef.current?.scrollTo({ y, animated: false });
+  }, []);
   const contentHeight = useRef(0);
   const viewportHeight = useRef(0);
   const [showScrollToEnd, setShowScrollToEnd] = useState(false);
@@ -996,7 +1001,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
 
     if (currentPage === "dashboard") {
-      return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} onNavigate={(page) => { setDashboardTarget(null); setCurrentPage(page as Page); }} onOpenReminder={(target) => {
+      return <DashboardScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} onNavigate={(page) => { setDashboardTarget(null); followReportsForecast.current = page === "financial-reports"; setCurrentPage(page as Page); }} onOpenReminder={(target) => {
         setDashboardTarget(target);
         if (target.kind === "biller") { setSelectedScheduledPaymentId(target.id); setCurrentPage("scheduled-payment-detail"); }
         if (target.kind === "income") { setEditingIncomeSourceId(target.id); setCurrentPage("income-source-form"); }
@@ -1008,7 +1013,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "financial-reports") {
-      return <FinancialReportsScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} />;
+      return <FinancialReportsScreen userId={userId} deviceId={deviceId} accessToken={accessToken} syncVersion={syncVersion} onForecastLayout={scrollToReportsForecast} />;
     }
 
     const meta = pageMeta[currentPage] ?? pageMeta.dashboard;
@@ -1087,6 +1092,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
             if (currentPage === "transactions" && distanceFromBottom < 200) transactionLoadMoreRef.current?.();
             updateScrollToEnd();
           }}
+          onScrollBeginDrag={() => { followReportsForecast.current = false; }}
           onContentSizeChange={(_width, height) => { contentHeight.current = height; updateScrollToEnd(); }}
           onLayout={({ nativeEvent }) => { viewportHeight.current = nativeEvent.layout.height; updateScrollToEnd(); }}
           scrollEventThrottle={16}

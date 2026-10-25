@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import AnomalyAlertsScreen from "../alerts/AnomalyAlertsScreen";
 import SpendingForecastScreen from "../forecast/SpendingForecastScreen";
@@ -13,7 +13,14 @@ import {
 } from "./ReportSections";
 import { rangeFor, type ReportPeriod } from "./reportRange";
 
-type Props = { userId: string; deviceId: string; accessToken: string; syncVersion?: number };
+type Props = {
+  userId: string;
+  deviceId: string;
+  accessToken: string;
+  syncVersion?: number;
+  // Called with the forecast section's offset in the shell's scroll content, each time it moves.
+  onForecastLayout?: (y: number) => void;
+};
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", tint: "#EFFEF7" };
 
@@ -24,13 +31,16 @@ const PERIODS: { value: ReportPeriod; label: string }[] = [
   { value: "this_week", label: "This week" },
 ];
 
-export default function FinancialReportsScreen({ userId, deviceId, accessToken, syncVersion = 0 }: Props) {
+export default function FinancialReportsScreen({ userId, deviceId, accessToken, syncVersion = 0, onForecastLayout }: Props) {
   const [period, setPeriod] = useState<ReportPeriod>("this_month");
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
   const refreshKey = manualRefreshKey + syncVersion;
   const range = rangeFor(period);
+  const screenY = useRef(0);
+  const forecastY = useRef(0);
+  const reportForecastLayout = () => onForecastLayout?.(screenY.current + forecastY.current);
 
-  return <View>
+  return <View onLayout={({ nativeEvent }) => { screenY.current = nativeEvent.layout.y; reportForecastLayout(); }}>
     <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 22, fontWeight: "800" }}>Financial Reports</Text>
     <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 14, lineHeight: 21, marginTop: 5 }}>
       A clear read on your money, from spending to goals and debt.
@@ -59,7 +69,7 @@ export default function FinancialReportsScreen({ userId, deviceId, accessToken, 
       <AllocationSummarySection userId={userId} range={range} refreshKey={refreshKey} />
     </View>
 
-    <View style={{ marginTop: 32 }}><SpendingForecastScreen userId={userId} accessToken={accessToken} refreshKey={refreshKey} embedded /></View>
+    <View onLayout={({ nativeEvent }) => { forecastY.current = nativeEvent.layout.y; reportForecastLayout(); }} style={{ marginTop: 32 }}><SpendingForecastScreen userId={userId} accessToken={accessToken} refreshKey={refreshKey} embedded /></View>
     <View style={{ marginTop: 32 }}><AnomalyAlertsScreen userId={userId} deviceId={deviceId} /></View>
   </View>;
 }
