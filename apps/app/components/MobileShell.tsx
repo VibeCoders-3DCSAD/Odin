@@ -959,7 +959,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
     }
 
     if (currentPage === "debt-manager") {
-      return <DebtManagerOverview userId={userId} onOpenCreditCards={() => setCurrentPage("credit-cards")} onOpenNonCreditDebts={() => setCurrentPage("non-credit-card-debts")} />;
+      return <DebtManagerOverview userId={userId} onOpenCreditCards={() => setCurrentPage("credit-cards")} onOpenNonCreditDebts={() => setCurrentPage("non-credit-card-debts")} onOpenCard={(accountId) => { setSelectedCreditCardId(accountId); setCurrentPage("credit-card-detail"); }} onOpenDebt={(debtId) => { setSelectedDebtId(debtId); setCurrentPage("non-credit-card-debt-detail"); }} />;
     }
 
     if (currentPage === "credit-cards") {

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor, within } from "@testing-library/react-native";
 import DebtManagerOverview from "../DebtManagerOverview";
 
 const mockListFinancialAccounts = jest.fn();
@@ -83,17 +83,27 @@ beforeEach(() => {
   await waitFor(() => {
     expect(view.getByText("Debt paid")).toBeTruthy();
     expect(view.getByText("PHP 8.00")).toBeTruthy();
-    expect(view.getByText("Overall progress")).toBeTruthy();
-    expect(view.getByText("PHP 30.00 remaining")).toBeTruthy();
-    expect(view.getByText("Payment trend")).toBeTruthy();
-    expect(view.getByText("Date")).toBeTruthy();
-    expect(view.getByText("Debt")).toBeTruthy();
-    expect(view.getByText("Payment made")).toBeTruthy();
+    expect(view.getByText("REMAINING DEBT")).toBeTruthy();
+    expect(within(view.getByLabelText("Debt overview summary")).getByText("PHP 30.00")).toBeTruthy();
+    expect(view.getByText("Recent payments")).toBeTruthy();
     expect(view.getAllByText("Loan").length).toBeGreaterThan(0);
     expect(view.getAllByText("Visa").length).toBeGreaterThan(0);
     expect(view.getByLabelText("2026-09-10, Loan, payment made PHP 3.00")).toBeTruthy();
     expect(view.getByText("Total debt trend")).toBeTruthy();
     });
+  });
+
+  it("lists cards and loans on the overview and opens each one", async () => {
+    const onOpenCard = jest.fn();
+    const onOpenDebt = jest.fn();
+    const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} onOpenCard={onOpenCard} onOpenDebt={onOpenDebt} />);
+
+    await waitFor(() => expect(view.getByText("Credit cards")).toBeTruthy());
+    expect(view.getByText("Loans and other debts")).toBeTruthy();
+    fireEvent.press(view.getByLabelText(/^Open Visa, /));
+    expect(onOpenCard).toHaveBeenCalledWith("card-1");
+    fireEvent.press(view.getByLabelText(/^Open Loan, PHP 20.00 remaining/));
+    expect(onOpenDebt).toHaveBeenCalledWith("debt-1");
   });
 
   it("shows the selected strategy without a debt budget", async () => {

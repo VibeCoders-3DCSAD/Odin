@@ -1,12 +1,8 @@
 import React from "react";
 import { Text, View } from "react-native";
+import { AmountHero, v4Font } from "../../components/BudgieForm";
 import type { DebtManagerSummary } from "./debtManagerSummary";
-
-const P = { shell: "#fcf8f0", brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#EAEAE6" } as const;
-
-function formatPeso(amountCentavos: number): string {
-  return `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { ProgressBar, formatPeso } from "./debtUi";
 
 function progressCopy(summary: DebtManagerSummary): string {
   const { activeCount, paidOffCount, aheadCount, onTrackCount, behindCount, notScheduledCount } = summary.progress;
@@ -18,20 +14,19 @@ function progressCopy(summary: DebtManagerSummary): string {
   if (onTrackCount > 0) details.push(`${onTrackCount} on track`);
   if (behindCount > 0) details.push(`${behindCount} behind target`);
   if (notScheduledCount > 0) details.push(`${notScheduledCount} without a schedule`);
-  return details.join(" | ");
+  return details.join(" · ");
 }
 
-export default function DebtOverviewSummary({ summary }: { summary: DebtManagerSummary }) {
-  return <View accessibilityLabel="Debt overview summary" style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
-    <View style={{ flexGrow: 1, flexBasis: 150, borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 14, backgroundColor: P.shell }}>
-      <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>Debt paid</Text>
-      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.brand, marginTop: 4 }}>{formatPeso(summary.totalPaidCentavos)}</Text>
-      <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: P.muted, marginTop: 4 }}>Recorded debt and statement payments</Text>
-    </View>
-    <View style={{ flexGrow: 1, flexBasis: 150, borderWidth: 1, borderColor: P.line, borderRadius: 14, padding: 14, backgroundColor: P.shell }}>
-      <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>Overall progress</Text>
-      <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 18, color: P.ink, marginTop: 4 }}>{formatPeso(summary.currentDebtCentavos)} remaining</Text>
-      <Text style={{ fontFamily: "Manrope", fontSize: 10.5, color: P.muted, marginTop: 4 }}>{progressCopy(summary)}</Text>
-    </View>
+// The overview hero: what is still owed, with recorded payments as progress toward zero.
+export default function DebtOverviewSummary({ summary, payoffDate }: { summary: DebtManagerSummary; payoffDate?: string }) {
+  const trackedCentavos = summary.totalPaidCentavos + summary.currentDebtCentavos;
+  return <View accessibilityLabel="Debt overview summary">
+    <AmountHero label="REMAINING DEBT" amountCentavos={summary.currentDebtCentavos}>
+      <Text style={{ fontFamily: v4Font, fontSize: 12, color: "rgba(255,255,255,0.78)", marginTop: 4 }}>{progressCopy(summary)}</Text>
+      <View style={{ marginTop: 14 }}>
+        <ProgressBar inverted label="Debt paid" valueLabel={formatPeso(summary.totalPaidCentavos)} ratio={trackedCentavos > 0 ? summary.totalPaidCentavos / trackedCentavos : 0} />
+      </View>
+      {payoffDate ? <Text style={{ fontFamily: v4Font, fontSize: 12.5, fontWeight: "700", color: "#FFFFFF", marginTop: 12 }}>Debt-free by {new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${payoffDate}T00:00:00Z`))}</Text> : null}
+    </AmountHero>
   </View>;
 }
