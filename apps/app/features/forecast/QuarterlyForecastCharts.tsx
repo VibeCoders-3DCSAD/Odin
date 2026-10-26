@@ -128,8 +128,11 @@ const RANGE_POINTS: Record<ForecastScale, Record<ForecastRange, { past: number; 
   quarterly: { past: { past: 6, next: 0 }, around: { past: 3, next: 3 }, ahead: { past: 2, next: 4 } },
 };
 
-function rangeLabel({ past, next }: { past: number; next: number }): string {
-  return [past ? `Past ${past}` : "", next ? `Next ${next}` : ""].filter(Boolean).join(" · ");
+// "Last 6 months", "Last 3 + next 3 months", "Next 6 months".
+function rangeLabel({ past, next }: { past: number; next: number }, scale: ForecastScale): string {
+  const unit = scale === "monthly" ? "months" : "quarters";
+  if (!next) return `Last ${past} ${unit}`;
+  return past ? `Last ${past} + next ${next} ${unit}` : `Next ${next} ${unit}`;
 }
 
 // Past this many points the axis labels every other point, counted from the first forecast point.
@@ -371,7 +374,7 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
   const choose = <T,>(set: (value: T) => void) => (value: T) => { set(value); setSelected(null); };
   const settings = <View style={{ alignItems: "flex-start", flexDirection: "row", flexWrap: "wrap", gap: 8, zIndex: 10 }}>
     {monthly ? <Segmented label="Show spending" options={[{ value: "monthly" as const, label: "Monthly" }, { value: "quarterly" as const, label: "Quarterly" }]} selected={scale} onSelect={choose(setScale)} /> : null}
-    <RangePicker options={(["past", "around", "ahead"] as const).map((value) => ({ value, label: rangeLabel(RANGE_POINTS[scale][value]) }))} selected={range} onSelect={choose(setRange)} />
+    <RangePicker options={(["past", "around", "ahead"] as const).map((value) => ({ value, label: rangeLabel(RANGE_POINTS[scale][value], scale) }))} selected={range} onSelect={choose(setRange)} />
   </View>;
   if (!current) {
     return <View style={{ marginTop: 20 }}>

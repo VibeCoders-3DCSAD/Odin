@@ -75,12 +75,12 @@ describe("monthly spending forecast", () => {
     const months = ["2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04"].map((month) => ({ month, ...food(100_000) }));
     const view = render(<QuarterlyForecastCharts forecast={{ ...forecast, months }} monthHistory={history} now={NOW} />);
 
-    chooseRange(view, "Past 6");
+    chooseRange(view, "Last 6 months");
     expect(view.getByText("6 months of actual spending and 0 forecast months")).toBeTruthy();
     expect(view.getByLabelText("Actual spending for 6 months and projected spending for 0 months")).toBeTruthy();
     expect(view.getByText("September 2026 · actual spending")).toBeTruthy();
 
-    chooseRange(view, "Next 6");
+    chooseRange(view, "Next 6 months");
     expect(view.getByLabelText("Total projected spending for 6 months")).toBeTruthy();
     expect(view.getByText("October 2026")).toBeTruthy();
     expect(view.getByText("Forecast vs Actual")).toBeTruthy();
@@ -93,7 +93,7 @@ describe("monthly spending forecast", () => {
 
     fireEvent.press(view.getByLabelText("Show spending: Quarterly"));
     expect(view.getByText("3 quarters of actual spending and 3 forecast quarters")).toBeTruthy();
-    chooseRange(view, "Past 2 · Next 4");
+    chooseRange(view, "Last 2 + next 4 quarters");
     expect(view.getByText("2 quarters of actual spending and 4 forecast quarters")).toBeTruthy();
     expect(view.getAllByRole("tab")).toHaveLength(4);
     expect(view.getByText("October 1 to December 31, 2026")).toBeTruthy();
@@ -102,9 +102,9 @@ describe("monthly spending forecast", () => {
   it("says a range has no spending yet instead of an empty chart", () => {
     const view = render(<QuarterlyForecastCharts forecast={forecast} now={NOW} />);
 
-    chooseRange(view, "Past 6");
+    chooseRange(view, "Last 6 months");
     expect(view.getByText("No recorded spending in this range yet.")).toBeTruthy();
-    chooseRange(view, "Next 6");
+    chooseRange(view, "Next 6 months");
     expect(view.getByLabelText("Total projected spending for 5 months")).toBeTruthy();
   });
 
