@@ -22,9 +22,9 @@ import { combineDebtBalanceSeries } from "./globalDebtForecast";
 import { getAcceptedFinancialPlanForPeriod, getCurrentFinancialPlanPeriod, type AcceptedFinancialPlan } from "../../local-db/repositories/financialPlans";
 import { getDebtStrategy, listDebtPriorities, type DebtPriority, type DebtStrategy } from "../../local-db/repositories/debtRepaymentPlans";
 import { allocateDebtRepayments, type DebtRepaymentAllocation } from "./debtRepaymentAllocation";
-import { getCreditCardPaymentRequirementCentavos } from "./creditCardPaymentRequirement";
 import DebtRepaymentPlanCard from "./DebtRepaymentPlanCard";
 import UpcomingPaymentsCard from "./UpcomingPaymentsCard";
+import { buildFinancialPlanRepayments } from "./helpers/financialPlanRepayments";
 import { buildUpcomingDebtPayments } from "./upcomingDebtPayments";
 
 type Props = { userId: string; onOpenCreditCards: () => void; onOpenNonCreditDebts: () => void; onOpenCard?: (accountId: string) => void; onOpenDebt?: (debtId: string) => void };
@@ -49,14 +49,14 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
     const { start, end } = currentDebtTrendWindow("month", undefined, new Date(`${today}T00:00:00Z`));
     return buildUpcomingDebtPayments({ periodStart: start, periodEnd: end, debts: trendDebts, creditCards: cards ?? [], creditCardCycles: cycles, creditCardCycleTransactions: transactions, creditCardStatements: statements, creditCardStrategies: strategies, creditCardPayments: payments, debtPayments }, today);
   }, [today, cards, cycles, debtPayments, payments, statements, strategies, transactions, trendDebts]);
-  const overview = useMemo<{ debtBudgetCentavos: number; globalTrend: GlobalDebtPoint[]; summary: DebtManagerSummary; allocation: DebtRepaymentAllocation; surplusAllocation: DebtRepaymentAllocation; creditCardRequirementCentavos: number; surplusRecommendations: SurplusRecommendation[]; cardRows: CardRow[]; debtStatuses: Map<string, DebtForecastStatus> }>(() => {
+  const overview = useMemo<{ debtBudgetCentavos: number; globalTrend: GlobalDebtPoint[]; summary: DebtManagerSummary; allocation: DebtRepaymentAllocation; surplusAllocation: DebtRepaymentAllocation; creditCardBudgetCentavos: number; loanBudgetCentavos: number; surplusRecommendations: SurplusRecommendation[]; cardRows: CardRow[]; debtStatuses: Map<string, DebtForecastStatus> }>(() => {
     const activeCards = cards ?? [];
     const asOfDate = getPhilippineToday();
     const cardForecasts = activeCards.map((card) => ({ card, forecast: buildCreditCardForecast({ cycles: cycles.filter((cycle) => cycle.account_id === card.id), transactions: transactions.filter((transaction) => transaction.account_id === card.id), statements, strategy: strategies.find((strategy) => strategy.accountId === card.id), payments, installments: installments.filter((installment) => installment.account_id === card.id), availableCreditCentavos: card.creditCardDetails?.availableCreditCentavos ?? 0, creditLimitCentavos: card.creditCardDetails?.creditLimitCentavos ?? 0, billingCycleEndDay: card.creditCardDetails?.cutoffDay ?? null, reconciledAvailableCreditCentavos: card.creditCardDetails?.reconciledAvailableCreditCentavos, preReconciliationAvailableCreditCentavos: card.creditCardDetails?.preReconciliationAvailableCreditCentavos, availableCreditReconciledAt: card.creditCardDetails?.availableCreditReconciledAt, asOfDate }) }));
-    const creditCardRequirementCentavos = getCreditCardPaymentRequirementCentavos({ cards: activeCards, cycles, statements, payments, strategies, asOfDate });
-    const debtReservations = ((financialPlan?.recommendation.debtReservations as Array<{ debtAccountId?: string | null; amountCentavos?: number }> | undefined) ?? []);
+    const debtReservations = ((financialPlan?.recommendation.debtReservations as Array<{ debtAccountId?: string | null; creditCardStatementId?: string | null; amountCentavos?: number }> | undefined) ?? []);
     const reservationCentavos = (reservation: { amountCentavos?: number }) => typeof reservation.amountCentavos === "number" && Number.isSafeInteger(reservation.amountCentavos) ? Math.max(0, reservation.amountCentavos) : 0;
     const nonCreditDebtReservationCentavos = debtReservations.reduce((total, reservation) => total + (reservation.debtAccountId ? reservationCentavos(reservation) : 0), 0);
+    const creditCardBudgetCentavos = debtReservations.reduce((total, reservation) => total + (reservation.creditCardStatementId ? reservationCentavos(reservation) : 0), 0);
     const planDebtSurplusCentavos = financialPlan?.recommendation.debtSurplusCentavos;
     const debtSurplusCentavos = typeof planDebtSurplusCentavos === "number" && Number.isSafeInteger(planDebtSurplusCentavos) ? Math.max(0, planDebtSurplusCentavos) : 0;
     const debtBudgetCentavos = debtReservations.reduce((total, reservation) => total + reservationCentavos(reservation), debtSurplusCentavos);
@@ -92,7 +92,7 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
       return { id: card.id, name: card.name, subtitle, debtCentavos: Math.max(0, (card.creditCardDetails?.creditLimitCentavos ?? 0) - (card.creditCardDetails?.availableCreditCentavos ?? 0)), strategyLabel: cardStrategyLabel(strategies.find((strategy) => strategy.accountId === card.id)?.strategy) };
     });
     const debtStatuses = new Map(debtForecasts.map(({ debt, forecast }) => [debt.id, forecast.status]));
-    return { debtBudgetCentavos, globalTrend, summary: buildDebtManagerSummary([...cardSummaryItems, ...debtSummaryItems], recordedPayments, asOfDate), allocation, surplusAllocation, creditCardRequirementCentavos, surplusRecommendations, cardRows, debtStatuses };
+    return { debtBudgetCentavos, globalTrend, summary: buildDebtManagerSummary([...cardSummaryItems, ...debtSummaryItems], recordedPayments, asOfDate), allocation, surplusAllocation, creditCardBudgetCentavos, loanBudgetCentavos: nonCreditDebtReservationCentavos, surplusRecommendations, cardRows, debtStatuses };
   }, [cards, cycles, debtPayments, debtPriorities, debtStrategy, financialPlan, installments, payments, strategies, statements, transactions, trendDebts]);
 
   async function load() { const today = getPhilippineToday(); const period = getCurrentFinancialPlanPeriod(today); const [accounts, activeDebts, finishedDebts, cycleRows, transactionRows, statementRows, paymentRows, installmentRows, strategyRows, allDebtPayments, plan, strategy, priorities] = await Promise.all([listFinancialAccounts(userId), listDebtAccounts(userId, "active"), listDebtAccounts(userId, "finished"), listCreditCardCycles(userId), listCreditCardCycleTransactions(userId), listCreditCardStatements(userId), listCreditCardPayments(userId), listCreditCardInstallments(userId), listCreditCardStrategies(userId), listAllDebtPayments(userId), getAcceptedFinancialPlanForPeriod(userId, period.start, period.end), getDebtStrategy(userId), listDebtPriorities(userId)]); setCards(accounts.filter((account) => account.kind === "credit_card" && account.status === "active")); setTrendDebts([...activeDebts, ...finishedDebts]); setDebtPayments(allDebtPayments); setCycles(cycleRows); setTransactions(transactionRows); setStatements(statementRows); setPayments(paymentRows); setInstallments(installmentRows); setStrategies(strategyRows); setFinancialPlan(plan); setDebtStrategy(strategy); setDebtPriorities(priorities); }
@@ -100,25 +100,17 @@ export default function DebtManagerOverview({ userId, onOpenCreditCards, onOpenN
 
   if (cards === null) return <ActivityIndicator color={v4.brand} />;
 
-  const financialPlanRepayments = Array.isArray(financialPlan?.recommendation.debtReservations)
-    ? financialPlan.recommendation.debtReservations.flatMap((reservation) => {
-      if (!reservation || typeof reservation !== "object") return [];
-      const { debtAccountId, creditCardStatementId, amountCentavos, dueDate } = reservation as { debtAccountId?: unknown; creditCardStatementId?: unknown; amountCentavos?: unknown; dueDate?: unknown };
-      if (typeof amountCentavos !== "number" || !Number.isSafeInteger(amountCentavos) || amountCentavos < 0) return [];
-      const debt = typeof debtAccountId === "string" ? trendDebts.find((item) => item.id === debtAccountId) : undefined;
-      const statement = typeof creditCardStatementId === "string" ? statements.find((item) => item.id === creditCardStatementId) : undefined;
-      const account = statement ? cards.find((item) => item.id === cycles.find((cycle) => cycle.id === statement.cycle_id)?.account_id) : undefined;
-      const label = debt?.name ?? (statement ? `${account?.name ?? "Credit card"} statement` : null);
-      return label ? [{ id: typeof debtAccountId === "string" ? debtAccountId : creditCardStatementId as string, label, amountCentavos, dueDate: typeof dueDate === "string" ? dueDate : null }] : [];
-    })
-    : [];
+  const financialPlanRepayments = buildFinancialPlanRepayments({
+    plan: financialPlan, period: getCurrentFinancialPlanPeriod(today), today,
+    debts: trendDebts, cards, statements, cycles, debtPayments, cardPayments: payments,
+  });
 
   const payoffDate = overview.globalTrend.find((point) => point.date >= today && point.debtCentavos <= 0)?.date;
   const loans = trendDebts.filter((debt) => debt.status !== "deleted");
 
   return <View style={{ gap: 14 }}>
     <DebtOverviewSummary summary={overview.summary} payoffDate={payoffDate} />
-    <DebtRepaymentPlanCard strategy={debtStrategy} hasPlan={financialPlan !== null} debtBudgetCentavos={overview.debtBudgetCentavos} creditCardRequirementCentavos={overview.creditCardRequirementCentavos} requiredPaymentCentavos={overview.allocation.requiredPaymentCentavos} shortfallCentavos={overview.allocation.shortfallCentavos} surplusCentavos={overview.surplusAllocation.surplusCentavos} repayments={financialPlanRepayments} surplusRecommendations={overview.surplusRecommendations} />
+    <DebtRepaymentPlanCard strategy={debtStrategy} hasPlan={financialPlan !== null} debtBudgetCentavos={overview.debtBudgetCentavos} creditCardBudgetCentavos={overview.creditCardBudgetCentavos} loanBudgetCentavos={overview.loanBudgetCentavos} shortfallCentavos={overview.allocation.shortfallCentavos} surplusCentavos={overview.surplusAllocation.surplusCentavos} repayments={financialPlanRepayments} surplusRecommendations={overview.surplusRecommendations} />
 
     <SectionHeader title="Credit cards" actionLabel="Manage" accessibilityLabel="Open Credit Cards" onAction={onOpenCreditCards} />
     <List>{overview.cardRows.length === 0
