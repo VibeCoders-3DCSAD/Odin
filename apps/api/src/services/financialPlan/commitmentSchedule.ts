@@ -28,7 +28,7 @@ function advanceReservationDate(date: string, frequency: string, schedule: Recur
   if (frequency === "biweekly") return addScheduleDays(date, 14 * interval);
   if (frequency === "monthly") return addScheduleMonths(date, interval, schedule.dayOfMonth);
   if (frequency === "quarterly") return addScheduleMonths(date, 3 * interval, schedule.dayOfMonth);
-  if (frequency === "yearly") return addScheduleMonths(date, 12 * interval);
+  if (frequency === "yearly") return addScheduleMonths(date, 12 * interval, schedule.dayOfMonth);
   if (frequency === "custom") return schedule.customIntervalDays && schedule.customIntervalDays > 0 ? addScheduleDays(date, schedule.customIntervalDays) : null;
   if (frequency !== "semi_monthly") return null;
 
@@ -45,7 +45,7 @@ function retreatReservationDate(date: string, frequency: string, schedule: Recur
   if (frequency === "biweekly") return addScheduleDays(date, -14 * interval);
   if (frequency === "monthly") return addScheduleMonths(date, -interval, schedule.dayOfMonth);
   if (frequency === "quarterly") return addScheduleMonths(date, -3 * interval, schedule.dayOfMonth);
-  if (frequency === "yearly") return addScheduleMonths(date, -12 * interval);
+  if (frequency === "yearly") return addScheduleMonths(date, -12 * interval, schedule.dayOfMonth);
   if (frequency === "custom") return schedule.customIntervalDays && schedule.customIntervalDays > 0 ? addScheduleDays(date, -schedule.customIntervalDays) : null;
   if (frequency !== "semi_monthly") return null;
 

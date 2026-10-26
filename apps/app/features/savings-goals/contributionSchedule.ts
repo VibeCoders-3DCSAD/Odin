@@ -82,7 +82,8 @@ function validDay(value: number | null): value is number {
   return value !== null && Number.isInteger(value) && value >= 1 && value <= 31;
 }
 
-type ContributionTiming = Pick<SavingsContributionSchedule, "contributionFrequency" | "contributionDayOfWeek" | "contributionDayOfMonth" | "contributionSecondDayOfMonth">;
+// The month only picks a yearly schedule's first date; later dates follow from it.
+type ContributionTiming = Pick<SavingsContributionSchedule, "contributionFrequency" | "contributionDayOfWeek" | "contributionDayOfMonth" | "contributionSecondDayOfMonth"> & { contributionMonth?: number | null };
 
 export function deriveGoalContributionDate(timing: ContributionTiming, asOfDate: string): string | null {
   if (!isIsoDate(asOfDate)) throw new Error("Invalid schedule reference date.");
@@ -94,8 +95,14 @@ export function deriveGoalContributionDate(timing: ContributionTiming, asOfDate:
     if (weekday === null || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) throw new Error("Select a contribution day from Sunday to Saturday.");
     return addDays(asOfDate, (weekday - current.getUTCDay() + 7) % 7);
   }
-  if (frequency !== "monthly" && frequency !== "semi_monthly") throw new Error("Choose a contribution frequency.");
+  if (frequency !== "monthly" && frequency !== "semi_monthly" && frequency !== "yearly") throw new Error("Choose a contribution frequency.");
   if (!validDay(first)) throw new Error("Enter a contribution date number from 1 to 31.");
+  if (frequency === "yearly") {
+    const month = timing.contributionMonth;
+    if (month == null || !Number.isInteger(month) || month < 1 || month > 12) throw new Error("Select the contribution month.");
+    const thisYear = dateAtDay(current.getUTCFullYear(), month - 1, first);
+    return thisYear >= asOfDate ? thisYear : dateAtDay(current.getUTCFullYear() + 1, month - 1, first);
+  }
   if (frequency === "semi_monthly" && (!validDay(second) || first >= second)) throw new Error("Enter two date numbers from 1 to 31, with the first before the second.");
   const days = frequency === "semi_monthly" ? [first, second!] : [first];
   const dates = days.map((day) => dateAtDay(current.getUTCFullYear(), current.getUTCMonth(), day));
@@ -111,7 +118,7 @@ export function validateContributionSchedule(schedule: SavingsContributionSchedu
   if (schedule.contributionFrequency === "semi_monthly") {
     if (!validDay(schedule.contributionDayOfMonth) || !validDay(schedule.contributionSecondDayOfMonth) || schedule.contributionDayOfMonth >= schedule.contributionSecondDayOfMonth) return "semi-monthly contributions require two ascending days from 1 to 31";
   }
-  if ((schedule.contributionFrequency === "monthly" || schedule.contributionFrequency === "quarterly") && schedule.contributionDayOfMonth !== null && !validDay(schedule.contributionDayOfMonth)) return "contribution day of month must be from 1 to 31";
+  if ((schedule.contributionFrequency === "monthly" || schedule.contributionFrequency === "quarterly" || schedule.contributionFrequency === "yearly") && schedule.contributionDayOfMonth !== null && !validDay(schedule.contributionDayOfMonth)) return "contribution day of month must be from 1 to 31";
   if ((schedule.contributionFrequency === "weekly" || schedule.contributionFrequency === "biweekly") && schedule.contributionDayOfWeek !== null && (!Number.isInteger(schedule.contributionDayOfWeek) || schedule.contributionDayOfWeek < 0 || schedule.contributionDayOfWeek > 6)) return "contribution day of week must be from 0 to 6";
   if (schedule.contributionFrequency === "custom" && (!Number.isSafeInteger(schedule.customIntervalDays) || (schedule.customIntervalDays ?? 0) <= 0)) return "custom contribution schedules require a positive interval in days";
   return null;
@@ -123,14 +130,13 @@ export function advanceContributionSchedule(date: string, schedule: SavingsContr
   if (frequency === "daily") return addDays(date, interval);
   if (frequency === "weekly") return addDays(date, 7 * interval);
   if (frequency === "biweekly") return addDays(date, 14 * interval);
-  // Monthly and quarterly dates return to the chosen day, so a 31st clamped to the 30th is the 31st again next time.
-  if (frequency === "monthly" || frequency === "quarterly") {
-    const next = addMonths(date, (frequency === "quarterly" ? 3 : 1) * interval);
+  // Monthly, quarterly and yearly dates return to the chosen day, so a 31st clamped to the 30th is the 31st again next time.
+  if (frequency === "monthly" || frequency === "quarterly" || frequency === "yearly") {
+    const next = addMonths(date, (frequency === "yearly" ? 12 : frequency === "quarterly" ? 3 : 1) * interval);
     if (!validDay(schedule.contributionDayOfMonth)) return next;
     const month = new Date(`${next}T00:00:00Z`);
     return dateAtDay(month.getUTCFullYear(), month.getUTCMonth(), schedule.contributionDayOfMonth);
   }
-  if (frequency === "yearly") return addMonths(date, 12 * interval);
   if (frequency === "custom") return addDays(date, schedule.customIntervalDays!);
   if (frequency !== "semi_monthly") return null;
 

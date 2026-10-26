@@ -177,9 +177,9 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
     const semiMonthlyDays: [number, number] = [Number(semiMonthlyFirstDay), Number(semiMonthlySecondDay)];
     const enteredDays = scheduleEdited && ENTERED_DAY_FREQUENCIES.includes(frequency);
     const dueDate = enteredDays ? upcomingDueDate(frequency, { dayOfWeek, dayOfMonth: Number(dueDay), semiMonthlyDays }, getPhilippineToday()) ?? "" : nextDueDate;
-    // A quarterly debt keeps the day of its picked date (a stored day survives an untouched edit), so Jan 31 falls on Apr 30 and then Jul 31.
-    const quarterlyDay = dueDate && (nextDueDate !== debt?.nextDueDate || !debt?.paymentSchedule.dayOfMonth) ? Number(dueDate.slice(8, 10)) : debt?.paymentSchedule.dayOfMonth;
-    const dayOfMonth = frequency === "monthly" ? Number(dueDay) : frequency === "quarterly" ? quarterlyDay : undefined;
+    // A quarterly or yearly debt keeps the day of its picked date (a stored day survives an untouched edit), so Jan 31 falls on Apr 30 and then Jul 31.
+    const pickedDay = dueDate && (nextDueDate !== debt?.nextDueDate || !debt?.paymentSchedule.dayOfMonth) ? Number(dueDate.slice(8, 10)) : debt?.paymentSchedule.dayOfMonth;
+    const dayOfMonth = frequency === "monthly" ? Number(dueDay) : frequency === "quarterly" || frequency === "yearly" ? pickedDay : undefined;
     const input: CreateDebtAccountInput = {
       type, name, lenderName: lender || null, originalBalanceCentavos: pesos(original), currentBalanceCentavos: pesos(balance), annualInterestRateBps: Math.round(Number(rate) * 100), minimumPaymentCentavos: pesos(payment), allowsExtraPayments, paymentFrequency: frequency, paymentSchedule: { semiMonthlyDays: frequency === "semi_monthly" ? semiMonthlyDays : undefined, customIntervalDays: frequency === "custom" ? Number(customIntervalDays) : undefined, dayOfMonth }, startDate, nextDueDate: dueDate, maturityDate: maturityDate || null, targetPayoffDate, interestPeriod: period, interestMethod: method, notes: notes || null,
       typeSpecific: {
@@ -258,7 +258,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
               <Field label="Payroll deduction" placeholder={DEBT_PLACEHOLDERS.salaryDeductionAmount} value={deduction} onChangeText={setDeduction} numeric prefix={php} error={errors.deduction} />
               <Note>Subtracted from the selected income source after its gross income is calculated.</Note>
             </View>
-            <Choices label="DEDUCTION SCHEDULE" values={PAYMENT_FREQUENCY_OPTIONS} selected={deductionSchedule} onChange={setDeductionSchedule} />
+            <Choices label="DEDUCTION SCHEDULE" values={PAYMENT_FREQUENCY_OPTIONS.filter((option) => option.value !== "yearly")} selected={deductionSchedule} onChange={setDeductionSchedule} />
           </>
         ) : null}
       </>
@@ -340,7 +340,7 @@ export default function NonCreditDebtForm({ userId, deviceId, debt, onCancel, on
           </>
         ) : null}
         {ENTERED_DAY_FREQUENCIES.includes(frequency) ? null : <DateField label="Next payment" placeholder={DEBT_PLACEHOLDERS.nextPaymentDate} value={nextDueDate || null} onChange={setNextDueDate} error={errors.nextDueDate} />}
-        <MonthEndNote days={frequency === "monthly" ? [dueDay] : frequency === "semi_monthly" ? [semiMonthlyFirstDay, semiMonthlySecondDay] : frequency === "quarterly" ? [nextDueDate.slice(8, 10)] : []} />
+        <MonthEndNote days={frequency === "monthly" ? [dueDay] : frequency === "semi_monthly" ? [semiMonthlyFirstDay, semiMonthlySecondDay] : frequency === "quarterly" || frequency === "yearly" ? [nextDueDate.slice(8, 10)] : []} />
         {frequency === "custom" ? <Field label="Every" placeholder="Enter number of days" value={customIntervalDays} onChangeText={setCustomIntervalDays} numeric suffix="days" error={errors.customIntervalDays} /> : null}
         <Field label="Term" placeholder={DEBT_PLACEHOLDERS.debtSpecificTerm} value={termMonths} onChangeText={setTermMonths} numeric suffix="months" error={errors.termMonths} />
         <DateField label="Maturity date (optional)" placeholder={DEBT_PLACEHOLDERS.maturityDate} value={maturityDate || null} onChange={setMaturityDate} />

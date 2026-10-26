@@ -8,7 +8,7 @@ export const DEBT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", 
 export const DEBT_STATUSES = ["active", "archived", "deleted", "paid_off"] as const;
 const INTEREST_METHODS: InterestMethod[] = ["flat_add_on", "diminishing_balance", "provider_calculated", "no_interest"];
 const INTEREST_PERIODS: InterestRatePeriod[] = ["annual", "monthly", "per_term", "none"];
-const PAYMENT_FREQUENCIES: PaymentFrequency[] = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "custom"];
+const PAYMENT_FREQUENCIES: PaymentFrequency[] = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "custom"];
 
 export type DebtTypePreset = typeof DEBT_TYPES[number];
 export type DebtAccountStatus = typeof DEBT_STATUSES[number];
@@ -17,9 +17,9 @@ export type DebtProgressStatus = "ahead" | "on_schedule" | "behind" | "finished"
 export type DebtRepaymentStatus = "advanced" | "on_track" | "underpaid" | "not_in_schedule";
 export type InterestMethod = "flat_add_on" | "diminishing_balance" | "provider_calculated" | "no_interest";
 export type InterestRatePeriod = "annual" | "monthly" | "per_term" | "none";
-export type PaymentFrequency = "daily" | "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "custom";
+export type PaymentFrequency = "daily" | "weekly" | "biweekly" | "semi_monthly" | "monthly" | "quarterly" | "yearly" | "custom";
 export type SalaryLoanProvider = "sss" | "gsis" | "pag_ibig" | "other";
-// dayOfMonth is the chosen due day for monthly and quarterly debts; months shorter than it use their last day.
+// dayOfMonth is the chosen due day for monthly, quarterly and yearly debts; months shorter than it use their last day.
 export type DebtPaymentSchedule = { semiMonthlyDays?: [number, number]; customIntervalDays?: number; dayOfMonth?: number };
 
 export type DebtPresetData = {

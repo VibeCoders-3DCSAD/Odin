@@ -41,6 +41,8 @@ describe("debt payment schedules", () => {
     expect(addPaymentPeriod("2026-02-28", "monthly", { dayOfMonth: 31 })).toBe("2026-03-31");
     expect(addPaymentPeriod("2026-04-30", "monthly", { dayOfMonth: 30 })).toBe("2026-05-30");
     expect(addPaymentPeriod("2026-04-30", "quarterly", { dayOfMonth: 31 })).toBe("2026-07-31");
+    expect(addPaymentPeriod("2027-02-28", "yearly", { dayOfMonth: 29 })).toBe("2028-02-29");
+    expect(addPaymentPeriod("2026-06-15", "yearly")).toBe("2027-06-15");
   });
 
   it("puts twice-a-month days past the 28th on February's last day", () => {

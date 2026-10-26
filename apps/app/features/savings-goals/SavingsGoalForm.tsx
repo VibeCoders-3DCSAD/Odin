@@ -19,6 +19,7 @@ const CONTRIBUTION_OPTIONS: { label: string; value: GoalContributionFrequency | 
   { label: "Weekly", value: "weekly" },
   { label: "Twice a Month", value: "semi_monthly" },
   { label: "Monthly", value: "monthly" },
+  { label: "Yearly", value: "yearly" },
   { label: "None", value: null },
 ];
 
@@ -44,7 +45,9 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
   const baseline = goal?.emergencyFundBaselineCentavos ?? null;
   const [plannedContribution, setPlannedContribution] = useState(goal ? fromCentavos(goal.plannedContributionAmountCentavos) : "0");
   const [contributionFrequency, setContributionFrequency] = useState<GoalContributionFrequency | null>(goal ? goal.contributionFrequency : "monthly");
-  const [contributionDay, setContributionDay] = useState(goal?.contributionDayOfMonth != null ? String(goal.contributionDayOfMonth) : goal?.contributionFrequency === "monthly" && goal.nextContributionDate ? String(Number(goal.nextContributionDate.slice(8, 10))) : "");
+  const [contributionDay, setContributionDay] = useState(goal?.contributionDayOfMonth != null ? String(goal.contributionDayOfMonth) : (goal?.contributionFrequency === "monthly" || goal?.contributionFrequency === "yearly") && goal.nextContributionDate ? String(Number(goal.nextContributionDate.slice(8, 10))) : "");
+  const goalMonth = goal?.contributionFrequency === "yearly" && goal.nextContributionDate ? Number(goal.nextContributionDate.slice(5, 7)) : null;
+  const [contributionMonth, setContributionMonth] = useState<number | null>(goalMonth);
   const [contributionSecondDay, setContributionSecondDay] = useState(goal?.contributionSecondDayOfMonth != null ? String(goal.contributionSecondDayOfMonth) : "");
   const [contributionDayOfWeek, setContributionDayOfWeek] = useState<number | null>(goal?.contributionDayOfWeek ?? (goal?.contributionFrequency === "weekly" && goal.nextContributionDate ? new Date(`${goal.nextContributionDate}T00:00:00Z`).getUTCDay() : null));
   const [customIntervalDays, setCustomIntervalDays] = useState(goal?.customIntervalDays != null ? String(goal.customIntervalDays) : "");
@@ -60,8 +63,8 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
     if (!name.trim() || !targetDate || !Number.isSafeInteger(targetAmountCentavos) || targetAmountCentavos <= 0 || !Number.isSafeInteger(startingAmountCentavos) || startingAmountCentavos < 0 || !Number.isSafeInteger(plannedContributionAmountCentavos) || plannedContributionAmountCentavos < 0 || (interestRateBps != null && (!Number.isSafeInteger(interestRateBps) || interestRateBps < 0))) {
       setMessage("Check the highlighted fields and try again."); return;
     }
-    const timing = { contributionFrequency, contributionDayOfMonth, contributionSecondDayOfMonth, contributionDayOfWeek };
-    const unchangedTiming = goal && contributionFrequency === goal.contributionFrequency && contributionDayOfMonth === (goal.contributionDayOfMonth ?? (goal.contributionFrequency === "monthly" && goal.nextContributionDate ? Number(goal.nextContributionDate.slice(8, 10)) : null)) && contributionSecondDayOfMonth === goal.contributionSecondDayOfMonth && contributionDayOfWeek === (goal.contributionDayOfWeek ?? (goal.contributionFrequency === "weekly" && goal.nextContributionDate ? new Date(`${goal.nextContributionDate}T00:00:00Z`).getUTCDay() : null));
+    const timing = { contributionFrequency, contributionDayOfMonth, contributionSecondDayOfMonth, contributionDayOfWeek, contributionMonth };
+    const unchangedTiming = goal && contributionFrequency === goal.contributionFrequency && contributionDayOfMonth === (goal.contributionDayOfMonth ?? ((goal.contributionFrequency === "monthly" || goal.contributionFrequency === "yearly") && goal.nextContributionDate ? Number(goal.nextContributionDate.slice(8, 10)) : null)) && contributionMonth === goalMonth && contributionSecondDayOfMonth === goal.contributionSecondDayOfMonth && contributionDayOfWeek === (goal.contributionDayOfWeek ?? (goal.contributionFrequency === "weekly" && goal.nextContributionDate ? new Date(`${goal.nextContributionDate}T00:00:00Z`).getUTCDay() : null));
     let nextContributionDate: string | null;
     try {
       // Preserve an existing schedule's history when its timing has not changed.
@@ -105,8 +108,9 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
     contributionDayOfWeek,
     customIntervalDays: customIntervalDays.trim() ? Number(customIntervalDays) : null,
     nextContributionDate: goal?.nextContributionDate ?? null,
+    contributionMonth,
   }, toCentavos(target), toCentavos(starting) + (goal ? goal.currentAmountCentavos - goal.startingAmountCentavos : 0), targetDate, getPhilippineToday());
-  const scheduleValue: RecurringScheduleValue = { frequency: contributionFrequency ?? "monthly", intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, monthOfYear: null };
+  const scheduleValue: RecurringScheduleValue = { frequency: contributionFrequency ?? "monthly", intervalCount: "1", dayOfMonth: contributionDay, secondDayOfMonth: contributionSecondDay, dayOfWeek: contributionDayOfWeek, monthOfYear: contributionMonth };
   return <View style={{ gap: 14 }}>
     <View><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 20, fontWeight: "800" }}>{goal ? "Edit savings goal" : "Add savings goal"}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 3 }}>Set a target and track the amount you have already saved.</Text></View>
     <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 14, padding: 14 }}>
@@ -121,8 +125,8 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
         <View style={{ gap: 7 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Contribution frequency</Text><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>{CONTRIBUTION_OPTIONS.map((option) => <Pressable key={option.label} accessibilityRole="radio" accessibilityLabel={option.label} accessibilityState={{ selected: contributionFrequency === option.value }} onPress={() => { setContributionFrequency(option.value); setMessage(null); }} style={{ backgroundColor: contributionFrequency === option.value ? P.brand : P.white, borderColor: P.line, borderRadius: 10, borderWidth: 1, padding: 10 }}><Text style={{ color: contributionFrequency === option.value ? P.white : P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{option.label}</Text></Pressable>)}</View></View>
         {contributionFrequency !== null && !CONTRIBUTION_OPTIONS.some((option) => option.value === contributionFrequency) ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Existing schedule: {contributionFrequency}. Choose a frequency above to change it.</Text> : null}
         {contributionFrequency === null ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>No scheduled contributions. You can still contribute manually.</Text> : <>
-        <RecurringScheduleFields appearance="form" showFrequencySelector={false} weekdayLabels={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]} frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={scheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); setMessage(null); }} frequencyLabel="CONTRIBUTION FREQUENCY" dayOfMonthError={invalid && (contributionFrequency === "semi_monthly" || contributionFrequency === "monthly") && (!Number.isInteger(Number(contributionDay)) || Number(contributionDay) < 1 || Number(contributionDay) > 31)} secondDayOfMonthError={invalid && contributionFrequency === "semi_monthly" && !contributionSecondDay} />
-        {contributionFrequency === "monthly" || contributionFrequency === "semi_monthly" ? <MonthEndNote days={[contributionDay, contributionFrequency === "semi_monthly" ? contributionSecondDay : null]} /> : null}
+        <RecurringScheduleFields appearance="form" showFrequencySelector={false} weekdayLabels={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]} frequencies={GOAL_CONTRIBUTION_FREQUENCIES as readonly RecurringScheduleFrequency[]} value={scheduleValue} onChange={(next) => { setContributionFrequency(next.frequency as GoalContributionFrequency); setContributionDay(next.dayOfMonth); setContributionSecondDay(next.secondDayOfMonth); setContributionDayOfWeek(next.dayOfWeek); setContributionMonth(next.monthOfYear); setMessage(null); }} frequencyLabel="CONTRIBUTION FREQUENCY" dayOfMonthError={invalid && (contributionFrequency === "semi_monthly" || contributionFrequency === "monthly" || contributionFrequency === "yearly") && (!Number.isInteger(Number(contributionDay)) || Number(contributionDay) < 1 || Number(contributionDay) > 31)} secondDayOfMonthError={invalid && contributionFrequency === "semi_monthly" && !contributionSecondDay} />
+        {contributionFrequency === "monthly" || contributionFrequency === "semi_monthly" || contributionFrequency === "yearly" ? <MonthEndNote days={[contributionDay, contributionFrequency === "semi_monthly" ? contributionSecondDay : null]} /> : null}
         {contributionFrequency === "custom" ? <Field label="Custom interval days" value={customIntervalDays} onChangeText={setCustomIntervalDays} placeholder="e.g. 45" numeric invalid={invalid && (!Number.isSafeInteger(Number(customIntervalDays)) || Number(customIntervalDays) <= 0)} /> : null}
         <Field label="Planned contribution amount" value={plannedContribution} onChangeText={setPlannedContribution} placeholder="0.00" numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(plannedContribution)) || toCentavos(plannedContribution) < 0)} />
         {suggestedContribution !== null ? <View style={{ gap: 7 }}>

@@ -1,7 +1,7 @@
 import { deriveGoalContributionDate, getTargetDateContributionAmount, type SavingsContributionSchedule } from "../contributionSchedule";
 
 export function recommendGoalContribution(
-  schedule: SavingsContributionSchedule,
+  schedule: SavingsContributionSchedule & { contributionMonth?: number | null },
   targetAmountCentavos: number,
   savedAmountCentavos: number,
   targetDate: string,
@@ -11,7 +11,7 @@ export function recommendGoalContribution(
   const frequency = schedule.contributionFrequency;
   if (frequency === null) return null;
   try {
-    const currentFrequency = ["daily", "weekly", "semi_monthly", "monthly"].includes(frequency);
+    const currentFrequency = ["daily", "weekly", "semi_monthly", "monthly", "yearly"].includes(frequency);
     const nextContributionDate = currentFrequency ? deriveGoalContributionDate(schedule, today) : schedule.nextContributionDate;
     return getTargetDateContributionAmount(
       { ...schedule, plannedContributionAmountCentavos: 0, nextContributionDate },

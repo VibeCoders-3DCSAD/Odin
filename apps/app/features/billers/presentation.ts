@@ -11,9 +11,9 @@ export const FREQUENCY_LABELS: Record<ScheduledPaymentFrequency, string> = {
   once: "None",
 };
 
-// The choices the form offers, matching savings goal contributions. Every 2 weeks, quarterly and yearly
+// The choices the form offers, matching savings goal contributions. Every 2 weeks and quarterly
 // are no longer offered but still schedule correctly for payments saved with them.
-export const FREQUENCY_OPTIONS = (["daily", "weekly", "semi_monthly", "monthly", "once"] as const).map((key) => ({ key, label: FREQUENCY_LABELS[key] }));
+export const FREQUENCY_OPTIONS = (["daily", "weekly", "semi_monthly", "monthly", "yearly", "once"] as const).map((key) => ({ key, label: FREQUENCY_LABELS[key] }));
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;

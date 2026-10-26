@@ -32,6 +32,7 @@ function dateAtDay(year: number, month: number, day: number) {
 export function addPaymentPeriod(date: string, frequency: PaymentFrequency, schedule: DebtPaymentSchedule = {}) {
   if (frequency === "monthly") return addMonths(date, 1, schedule.dayOfMonth);
   if (frequency === "quarterly") return addMonths(date, 3, schedule.dayOfMonth);
+  if (frequency === "yearly") return addMonths(date, 12, schedule.dayOfMonth);
   if (frequency === "semi_monthly") {
     const days = [...(schedule.semiMonthlyDays ?? [1, 15])].sort((left, right) => left - right);
     const current = new Date(`${date}T00:00:00Z`);
@@ -84,7 +85,7 @@ function scheduleCanReachZero(
   contributionCentavos: number,
 ) {
   if (debt.interestMethod === "no_interest" || debt.interestMethod === "provider_calculated" || debt.interestPeriod === "none" || debt.interestPeriod === "per_term") return true;
-  const paymentsPerYear: Partial<Record<PaymentFrequency, number>> = { daily: 365, weekly: 52, biweekly: 26, semi_monthly: 24, monthly: 12, quarterly: 4 };
+  const paymentsPerYear: Partial<Record<PaymentFrequency, number>> = { daily: 365, weekly: 52, biweekly: 26, semi_monthly: 24, monthly: 12, quarterly: 4, yearly: 1 };
   const interestEventsPerYear = debt.interestPeriod === "monthly" ? 12 : 1;
   const interestPrincipal = debt.interestMethod === "flat_add_on" ? debt.originalBalanceCentavos : debt.currentBalanceCentavos;
   const annualContributions = contributionCentavos * (paymentsPerYear[paymentFrequency] ?? 0);

@@ -6,7 +6,7 @@ export const DEBT_TYPE_OPTIONS: Array<{ value: DebtTypePreset; label: string }> 
   { value: "auto_loan", label: "Auto Loan" }, { value: "custom_debt", label: "Custom Debt" },
 ];
 export const PAYMENT_FREQUENCY_OPTIONS: Array<{ value: PaymentFrequency; label: string }> = [
-  { value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "semi_monthly", label: "Twice a Month" }, { value: "monthly", label: "Monthly" }, { value: "quarterly", label: "Quarterly" },
+  { value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "semi_monthly", label: "Twice a Month" }, { value: "monthly", label: "Monthly" }, { value: "quarterly", label: "Quarterly" }, { value: "yearly", label: "Yearly" },
 ];
 export const INTEREST_METHOD_OPTIONS: Array<{ value: InterestMethod; label: string }> = [
   { value: "flat_add_on", label: "Flat or Add-on" }, { value: "diminishing_balance", label: "Diminishing Balance" }, { value: "no_interest", label: "No Interest" },

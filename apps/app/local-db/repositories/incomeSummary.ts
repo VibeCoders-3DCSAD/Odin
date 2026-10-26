@@ -8,6 +8,7 @@ function monthlyMultiplier(frequency: IncomeFrequency | PaymentFrequency): numbe
     case "biweekly": return 26 / 12;
     case "semi_monthly": return 2;
     case "quarterly": return 1 / 3;
+    case "yearly": return 1 / 12;
     default: return 1;
   }
 }

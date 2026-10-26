@@ -27,6 +27,17 @@ describe("Savings Goal contribution schedules", () => {
     expect(deriveGoalContributionDate(goal({ contributionFrequency: "semi_monthly", contributionDayOfMonth: 5, contributionSecondDayOfMonth: 20 }), "2026-10-21")).toBe("2026-11-05");
   });
 
+  it("derives a yearly date in the chosen month, moving to next year once it has passed", () => {
+    expect(deriveGoalContributionDate({ ...goal({ contributionFrequency: "yearly", contributionDayOfMonth: 15 }), contributionMonth: 12 }, "2026-10-26")).toBe("2026-12-15");
+    expect(deriveGoalContributionDate({ ...goal({ contributionFrequency: "yearly", contributionDayOfMonth: 29 }), contributionMonth: 2 }, "2026-10-26")).toBe("2027-02-28");
+    expect(() => deriveGoalContributionDate({ ...goal({ contributionFrequency: "yearly", contributionDayOfMonth: 15 }), contributionMonth: null }, "2026-10-26")).toThrow("Select the contribution month.");
+  });
+
+  it("returns a yearly date to the chosen day after a leap year", () => {
+    const yearly = goal({ contributionFrequency: "yearly", contributionDayOfMonth: 29 });
+    expect(advanceContributionSchedule("2027-02-28", yearly)).toBe("2028-02-29");
+  });
+
   it("returns to the selected monthly date after a shorter month", () => {
     const monthly = goal({ contributionFrequency: "monthly", contributionDayOfMonth: 31 });
     expect(advanceContributionSchedule("2027-01-31", monthly)).toBe("2027-02-28");

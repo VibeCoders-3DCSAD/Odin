@@ -37,8 +37,8 @@ describe("BillerFormScreen", () => {
 
   it("offers the savings goal cadences and no planning toggles", async () => {
     const view = render(<BillerFormScreen {...props} />);
-    for (const label of ["Daily", "Weekly", "Twice a month", "Monthly", "None"]) expect(await view.findByText(label)).toBeTruthy();
-    for (const label of ["Every 2 weeks", "Quarterly", "Yearly", "Family support", "Dependent support", "Protected"]) expect(view.queryByText(label)).toBeNull();
+    for (const label of ["Daily", "Weekly", "Twice a month", "Monthly", "Yearly", "None"]) expect(await view.findByText(label)).toBeTruthy();
+    for (const label of ["Every 2 weeks", "Quarterly", "Family support", "Dependent support", "Protected"]) expect(view.queryByText(label)).toBeNull();
     expect(view.getByText("Payments are kept in your Financial Plan even when money is tight.")).toBeTruthy();
   });
 
