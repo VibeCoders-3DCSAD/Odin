@@ -436,7 +436,8 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const sourceUpdatedAt = latestSourceUpdate(subcategoriesResult.data ?? [], categoriesResult.data ?? [], accountsResult.data ?? [], debtsResult.data ?? [], goalsResult.data ?? [], transactionsResult.data ?? []);
   const goals = (goalsResult.data ?? []) as Goal[];
   const debts = (debtsResult.data ?? []) as Debt[];
-  const eligibleEmergencyGoalId = reservationSkips.skipSavingsContributions ? null : goals.find((goal) => goal.goal_type === "emergency_fund" && goal.current_amount_centavos < goal.target_amount_centavos)?.id ?? null;
+  // Extra savings remain possible beyond the target and independently of scheduled contributions.
+  const eligibleEmergencyGoalId = goals.find((goal) => goal.goal_type === "emergency_fund")?.id ?? null;
   const [strategyResult, prioritiesResult, cardsResult] = await debtPreferencesPromise;
   const strategy = strategyResult.data?.strategy === "snowball" ? "snowball" : "avalanche";
   const priorityIds = (prioritiesResult.data ?? []).map((priority) => priority.debt_account_id).filter((id): id is string => typeof id === "string");

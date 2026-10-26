@@ -29,7 +29,15 @@ describe("deriveSurplusRecommendation", () => {
 
   it("falls through when a signal has no eligible destination", () => {
     expect(deriveSurplusRecommendation({ ...base, eligibleDebtId: null, assessment: assessment({ ...overburdened, ...inadequate }) }).reasonCode).toBe("EMERGENCY_FUND_INADEQUATE");
-    expect(deriveSurplusRecommendation({ ...base, eligibleEmergencyGoalId: null, assessment: assessment(inadequate) }).reasonCode).toBe("REWARD_YOURSELF");
+    expect(deriveSurplusRecommendation({ ...base, eligibleEmergencyGoalId: null, assessment: assessment(inadequate) }).reasonCode).toBe("EMERGENCY_FUND_INADEQUATE");
+  });
+
+  it("does not suggest a reward when every warning lacks an eligible destination", () => {
+    expect(deriveSurplusRecommendation({ ...base, eligibleDebtId: null, eligibleEmergencyGoalId: null, eligibleCardIds: [], assessment: assessment({ ...inadequate, credit_card_behavior: [
+      { status: "SUCCESS", label: "REVOLVER", account_id: "card-1" },
+      { status: "SUCCESS", label: "HEAVY_REVOLVER", account_id: "card-2" },
+    ] }) })).toMatchObject({ reasonCode: "EMERGENCY_FUND_INADEQUATE", advisoryDestination: null });
+    expect(deriveSurplusRecommendation({ ...base, eligibleDebtId: null, assessment: assessment(overburdened) })).toMatchObject({ reasonCode: "DEBT_SIGNAL", advisoryDestination: null });
   });
 
   it("suggests the worst card that allows extra payments", () => {
@@ -37,9 +45,9 @@ describe("deriveSurplusRecommendation", () => {
     expect(deriveSurplusRecommendation({ ...base, eligibleCardIds: ["card-1", "card-2"], assessment: assessment(cards) })).toMatchObject({ reasonCode: "CREDIT_CARD_SIGNAL", advisoryDestination: { type: "credit_card", accountId: "card-2" } });
   });
 
-  it("skips cards paid in full or not allowing extra payments", () => {
+  it("keeps balance warnings even when cards do not allow extra payments", () => {
     expect(deriveSurplusRecommendation({ ...base, assessment: assessment({ credit_card_behavior: [{ status: "SUCCESS", label: "TRANSACTOR", account_id: "card-1" }] }) }).reasonCode).toBe("REWARD_YOURSELF");
-    expect(deriveSurplusRecommendation({ ...base, eligibleCardIds: [], assessment: assessment(revolving) }).reasonCode).toBe("REWARD_YOURSELF");
+    expect(deriveSurplusRecommendation({ ...base, eligibleCardIds: [], assessment: assessment(revolving) }).reasonCode).toBe("CREDIT_CARD_SIGNAL");
   });
 
   it("points a self-reported card answer at the first eligible card", () => {

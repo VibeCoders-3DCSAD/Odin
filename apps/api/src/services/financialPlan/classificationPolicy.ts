@@ -105,6 +105,12 @@ export function deriveSurplusRecommendation({
   }
   const cardId = selectCreditCard(assessment.outputSnapshot, eligibleCardIds);
   if (cardId) return result("CREDIT_CARD_SIGNAL", "applied", { type: "credit_card", accountId: cardId });
+  // A missing payment destination does not resolve the profile's warning.
+  // Preserve actionable suggestions above, but never turn unresolved warnings into a reward.
+  if (isSuccessful(debtBurden) && debtBurden?.label === "FINANCIALLY_OVERBURDENED") return result("DEBT_SIGNAL", "applied");
+  if (isSuccessful(emergencySavings) && emergencySavings?.label === "EMERGENCY_FUND_INADEQUATE") return result("EMERGENCY_FUND_INADEQUATE", "applied");
+  const cards = Array.isArray(assessment.outputSnapshot.credit_card_behavior) ? assessment.outputSnapshot.credit_card_behavior as CardAssessment[] : [];
+  if (cards.some((card) => cardSeverity(card) > 0)) return result("CREDIT_CARD_SIGNAL", "applied");
   if (isSuccessful(financialMargin)) {
     if (financialMargin?.label !== "NEGATIVE_FINANCIAL_MARGIN") return result("REWARD_YOURSELF", "applied");
     // A tight month still leaves money in this plan: debt comes first, then the emergency fund.

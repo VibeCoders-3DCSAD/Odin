@@ -75,7 +75,7 @@ describe("Financial Plan recommendations with recorded spending", () => {
     expect(recommendPlanCategories).not.toHaveBeenCalled();
   });
 
-  it.each(["savings", "debt"])("does not recommend surplus to excluded %s", async (destination) => {
+  it.each(["savings", "debt"])("keeps surplus guidance separate from scheduled %s exclusions", async (destination) => {
     (recommendPlanCategories as jest.Mock).mockResolvedValue({ recommendation: { feasibility: "FEASIBLE", unallocated_surplus: 100, allocations: [{ category_id: "internet", amount: 1680 }] } });
     const result = await getFinancialPlanRecommendation("user", client(50_000, null, {
       debt_accounts: [{ id: "loan", current_balance_centavos: 100_000, minimum_payment_centavos: 10_000, next_due_date: "2026-10-20", payment_frequency: "monthly", allows_extra_payments: true, annual_interest_rate_bps: 1_200 }],
@@ -87,8 +87,27 @@ describe("Financial Plan recommendations with recorded spending", () => {
       } }],
     }), 500_000, ["internet"], [], [], { skipDebtRepayments: true, skipSavingsContributions: true });
 
-    expect(result.recommendation.surplusRecommendation.advisoryDestination).toBeNull();
+    expect(result.recommendation.surplusRecommendation.advisoryDestination).toEqual(destination === "savings" ? { type: "emergency_fund", savingsGoalId: "goal" } : null);
     expect(result.recommendation.surplusRecommendation.unallocatedSurplusCentavos).toBe(10_000);
+  });
+
+  it.each([200_000, 300_000])("recommends extra emergency savings at a balance of %i even after reaching the goal target", async (currentAmount) => {
+    (recommendPlanCategories as jest.Mock).mockResolvedValue({ recommendation: { feasibility: "FEASIBLE", unallocated_surplus: 100, allocations: [{ category_id: "internet", amount: 1680 }] } });
+    (createFinancialConditionAssessment as jest.Mock).mockResolvedValue({ id: "assessment", assessed_at: "2026-10-18T00:00:00Z", rule_set_version: "financial_rules_v1", output_snapshot: {
+      financial_margin: { status: "SUCCESS", label: "POSITIVE_FINANCIAL_MARGIN" },
+      emergency_savings: { status: "SUCCESS", label: "EMERGENCY_FUND_INADEQUATE" },
+      credit_card_behavior: [
+        { status: "SUCCESS", label: "REVOLVER", account_id: "card-1" },
+        { status: "SUCCESS", label: "HEAVY_REVOLVER", account_id: "card-2" },
+      ],
+    } });
+    const result = await getFinancialPlanRecommendation("user", client(50_000, null, {
+      savings_goals: [{ id: "goal", goal_type: "emergency_fund", current_amount_centavos: currentAmount, target_amount_centavos: 200_000 }],
+    }), 500_000, ["internet"], [], [], { skipSavingsContributions: true, skipDebtRepayments: true });
+
+    expect(result.recommendation.surplusRecommendation).toMatchObject({ reasonCode: "EMERGENCY_FUND_INADEQUATE", advisoryDestination: { type: "emergency_fund", savingsGoalId: "goal" } });
+    expect(result.recommendation.savingsReservations).toEqual([]);
+    expect(result.recommendation.savingsSurplusCentavos).toBe(0);
   });
 
   it.each([50_000, 171_701])("keeps the monthly forecast and optimizer allocation when spending is %i centavos", async (spent) => {
