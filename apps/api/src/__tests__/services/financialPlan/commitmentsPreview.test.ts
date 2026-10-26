@@ -22,7 +22,8 @@ it("scopes every preview read to its user and lists every commitment in the mont
   // A debt paid off this month keeps the payment that cleared it; one paid off before the month has nothing left.
   expect(result.debtReservations.map((row) => [row.debtAccountId ?? row.creditCardStatementId, row.dueDate, row.amountCentavos])).toEqual([["loan", "2026-11-10", 20_000], ["paid-this-month", "2026-11-05", 15_000], ["statement", "2026-11-20", 10_000]]);
   expect(queries[0]!.in).toHaveBeenCalledWith("status", ["active", "paid_off"]);
-  expect(result.savingsReservations.map((row) => row.dueDate)).toEqual(["2026-11-05", "2026-11-12", "2026-11-19", "2026-11-26"]);
+  // Every weekly contribution in the month joins into one commitment due on the first.
+  expect(result.savingsReservations).toEqual([{ savingsGoalId: "goal", amountCentavos: 20_000, dueDate: "2026-11-05" }]);
   expect(result.obligations).toEqual([{ scheduledPaymentId: "rent", amountCentavos: 30_000, dueDate: "2026-11-15" }]);
   for (const query of queries) {
     expect(query.eq).toHaveBeenCalledWith("user_id", "owner");

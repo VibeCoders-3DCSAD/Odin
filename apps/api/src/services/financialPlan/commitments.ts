@@ -22,8 +22,13 @@ export function debtCommitments(debts: Debt[], period: Period): Commitment[] {
   return debts.flatMap((debt) => debt.current_balance_centavos > 0 || paidOffInPeriod(debt, period) ? scheduledReservationDates(debt.next_due_date, debt.payment_frequency, period, debt.payment_schedule ?? {}).map((dueDate) => ({ debtAccountId: debt.id, creditCardStatementId: null, amountCentavos: debt.current_balance_centavos > 0 ? Math.min(debt.current_balance_centavos, debt.minimum_payment_centavos) : debt.minimum_payment_centavos, dueDate })) : []);
 }
 
+// A goal saved more than once a month is one commitment for the month's total, due on its first contribution.
 export function savingsCommitments(goals: Goal[], period: Period): Commitment[] {
-  return goals.flatMap((goal) => (goal.planned_contribution_amount_centavos ?? 0) > 0 ? scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { dayOfMonth: goal.contribution_day_of_month, intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null }).map((dueDate) => ({ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos!, dueDate })) : []);
+  return goals.flatMap((goal) => {
+    if ((goal.planned_contribution_amount_centavos ?? 0) <= 0) return [];
+    const dates = scheduledReservationDates(goal.next_contribution_date, goal.contribution_frequency, period, { dayOfMonth: goal.contribution_day_of_month, intervalCount: goal.contribution_interval_count, customIntervalDays: goal.custom_interval_days, semiMonthlyDays: goal.contribution_day_of_month != null && goal.contribution_second_day_of_month != null ? [goal.contribution_day_of_month, goal.contribution_second_day_of_month] : null });
+    return dates.length ? [{ savingsGoalId: goal.id, amountCentavos: goal.planned_contribution_amount_centavos! * dates.length, dueDate: dates[0]! }] : [];
+  });
 }
 
 // A plan covers the whole month, so a statement keeps its full minimum due even after it is paid.
