@@ -10,16 +10,15 @@ import { SnapshotCard } from "./components/SnapshotCard";
 import { DashboardEmptyState } from "./components/DashboardEmptyState";
 import { DashboardPartialData } from "./components/DashboardPartialData";
 import { SpendingPie, TrendChart } from "./components/DashboardCharts";
-import { ForecastPanel } from "./components/ForecastPanel";
 import { FinancialHealthCard } from "./components/FinancialHealthCard";
 import { AttentionUpcoming } from "./components/AttentionUpcoming";
 import type { DashboardItemTarget } from "./types";
 import { SafeToSpendCard } from "./components/SafeToSpendCard";
-import { getForecastContent, getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
+import { getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
 import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getGreeting, getPreviousMonthName } from "./dashboardFormatting";
 import { useDashboardData } from "./hooks/useDashboardData";
+import { groupSpendingCategories } from "./helpers/spendingGroups";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
-import type { CategorySpending } from "../../local-db/repositories/dashboardSummary";
 import { dashboardColors as P, dashboardStyles } from "./dashboardAppearance";
 
 type Props = {
@@ -58,12 +57,9 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
   const balanceDetail = s.accountCount === 0
     ? "Add an account to see your balance"
     : balanceDelta ?? `Across ${s.accountCount} ${s.accountCount === 1 ? "account" : "accounts"}`;
+  // Include savings contributions in the chart total, including those recorded as transfers.
   const categoryExpenseTotal = s.categorySpending.reduce((sum, category) => sum + category.total_centavos, 0);
-  const visibleSpending = s.categorySpending.slice(0, 4);
-  const hiddenSpendingTotal = s.categorySpending.slice(4).reduce((sum, category) => sum + category.total_centavos, 0);
-  const spendingGroups: CategorySpending[] = hiddenSpendingTotal > 0
-    ? [...visibleSpending, { category_id: "remaining-categories", category_label: "Other categories", total_centavos: hiddenSpendingTotal, icon_key: "tag", color_hex: "#6B7A6F" }]
-    : visibleSpending;
+  const spendingGroups = groupSpendingCategories(s.categorySpending);
 
   const isEmpty = s.accountCount === 0
     && s.currentMonthIncomeCentavos === 0
@@ -73,15 +69,11 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
 
   if (isEmpty && !summaryUnavailable) return <View><DashboardEmptyState onNavigate={onNavigate} />{reminders}</View>;
 
-  // Forecast from snapshot
-  const forecastSnap = snapshots.forecast;
-  const forecast = getForecastContent(forecastSnap);
   const savingsSnap = snapshots.savings_goals;
   const savingsText = getSnapshotText(savingsSnap);
   const savingsCount = getSnapshotCount(savingsSnap);
   const savingsCentavos = getSnapshotCentavos(savingsSnap, ["saved_centavos", "current_amount_centavos"]);
   const savingsUnavailable = (snapshotsUnavailable && !savingsSnap) || (!!savingsSnap && !savingsText && savingsCount === null);
-  const forecastUnavailable = snapshotsUnavailable && !forecastSnap;
   const staleSnapshot = (snapshot: typeof savingsSnap) => !!snapshot && (snapshot.stale || snapshotsUnavailable);
 
   return (
@@ -147,13 +139,13 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
           )}
         </View>
       </View>
+      {reminders}
+
       <View style={[dashboardStyles.card, { marginTop: 12 }]}><Text style={{ fontFamily: "Manrope", fontSize: 14, color: P.secondary }}>Net monthly cash flow</Text><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: s.currentMonthIncomeCentavos - s.currentMonthExpenseCentavos >= 0 ? P.green : P.error, marginTop: 4 }}>{formatPeso(s.currentMonthIncomeCentavos - s.currentMonthExpenseCentavos)}</Text></View>
 
       <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
         <SnapshotCard title="Savings goals" stale={staleSnapshot(savingsSnap)} unavailable={savingsUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("savings-goals")} actionLabel={!savingsSnap || savingsCount === 0 ? "Create a goal" : undefined} copy={savingsText ?? (savingsUnavailable ? "Savings goal information is unavailable." : !savingsSnap || savingsCount === 0 ? "No savings goals yet. Create one when you're ready." : savingsCount === null ? "Savings goal summary is unavailable. Refresh to try again." : `${savingsCount} savings goal${savingsCount === 1 ? "" : "s"} in progress${savingsCentavos === null ? "." : ` · ${formatPeso(savingsCentavos)} saved.`}`)} />
       </View>
-
-      {reminders}
 
       <FinancialHealthCard accessToken={accessToken} />
 
@@ -263,7 +255,6 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
 
       <SafeToSpendCard userId={userId} reloadKey={s} onNavigate={onNavigate} />
 
-      <ForecastPanel forecast={forecast} stale={staleSnapshot(forecastSnap)} unavailable={forecastUnavailable} onRefresh={refresh} onNavigate={() => onNavigate("financial-reports")} />
       {refreshing ? <View style={{ alignItems: "center", marginTop: 12 }}><ActivityIndicator size="small" color={P.green} /></View> : null}
     </View>
   );

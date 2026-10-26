@@ -147,13 +147,53 @@ export async function getDashboardSummary(userId: string): Promise<DashboardSumm
        userId,
      ),
     db.getAllAsync<CategorySpending>(
-      `SELECT c.id AS category_id, COALESCE(c.label, 'Other') AS category_label,
-              c.icon_key, c.color_hex, SUM(t.amount_centavos) AS total_centavos
-       FROM transactions t
-       ${TAXONOMY_JOINS}
-        WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted' AND t.transaction_type = 'expense'
-          AND t.transaction_date >= ? AND t.transaction_date <= ?
-        GROUP BY c.id, c.label, c.icon_key, c.color_hex
+      `WITH classified AS (
+         SELECT t.amount_centavos, c.id AS category_id,
+                COALESCE(c.label, 'Other') AS category_label, c.icon_key, c.color_hex,
+                CASE
+                  WHEN EXISTS (SELECT 1 FROM debt_payments dp
+                               WHERE dp.transaction_id = t.id AND dp.user_id = t.user_id AND dp.deleted = 0)
+                    OR EXISTS (SELECT 1 FROM credit_card_payments cp
+                               WHERE cp.transaction_id = t.id AND cp.user_id = t.user_id AND cp.deleted = 0)
+                    THEN 'debt'
+                  WHEN t.destination_savings_goal_id IS NOT NULL THEN 'savings'
+                  WHEN EXISTS (SELECT 1 FROM scheduled_payment_records spr
+                               WHERE spr.transaction_id = t.id AND spr.user_id = t.user_id AND spr.deleted = 0)
+                    THEN 'biller'
+                  ELSE 'category'
+                END AS kind
+         FROM transactions t
+         ${TAXONOMY_JOINS}
+         WHERE t.user_id = ? AND t.deleted = 0 AND t.status = 'posted'
+           AND (t.transaction_type = 'expense'
+                OR (t.transaction_type = 'transfer' AND t.destination_savings_goal_id IS NOT NULL))
+           AND t.transaction_date >= ? AND t.transaction_date <= ?
+       ), spending AS (
+         SELECT CASE WHEN kind = 'category' THEN category_id ELSE 'outflow:' || kind END AS category_id,
+                CASE kind
+                  WHEN 'debt' THEN 'Debt repayments'
+                  WHEN 'savings' THEN 'Savings contributions'
+                  WHEN 'biller' THEN 'Billers & remittances'
+                  ELSE category_label
+                END AS category_label,
+                CASE kind
+                  WHEN 'debt' THEN 'credit-card'
+                  WHEN 'savings' THEN 'bank'
+                  WHEN 'biller' THEN 'tag'
+                  ELSE icon_key
+                END AS icon_key,
+                CASE kind
+                  WHEN 'debt' THEN '#B45309'
+                  WHEN 'savings' THEN '#15803D'
+                  WHEN 'biller' THEN '#2563EB'
+                  ELSE color_hex
+                END AS color_hex,
+                amount_centavos
+         FROM classified
+       )
+       SELECT category_id, category_label, icon_key, color_hex, SUM(amount_centavos) AS total_centavos
+       FROM spending
+       GROUP BY category_id, category_label, icon_key, color_hex
        ORDER BY total_centavos DESC`,
       userId,
       currentMonth.start,

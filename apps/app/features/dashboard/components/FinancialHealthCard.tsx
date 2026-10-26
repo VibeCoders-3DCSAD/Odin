@@ -80,11 +80,11 @@ function describeCard(assessment: CreditCardAssessment): { title: string; detail
     return { title: PROFILE_STATUS.cardPaidInFull, detail: `You paid off the full balance every month in the last year.${basis}`, color: P.aqua700 };
   }
   if (assessment.label === "HEAVY_REVOLVER") {
-    return { title: PROFILE_STATUS.cardAlways, detail: `You carried a balance every month in the last year, so interest is likely adding up.${basis}`, color: P.red };
+    return { title: PROFILE_STATUS.cardAlways, detail: `You carried a balance every month in the last year; interest may be adding up.${basis}`, color: P.red };
   }
   if (assessment.label === "REVOLVER") {
     const carried = months === null ? "You have carried a balance on this card." : `You carried a balance in ${months} of the months recorded so far.`;
-    return { title: PROFILE_STATUS.cardCarrying, detail: `${carried} We need twelve months of statements to see how often.`, color: P.sun };
+    return { title: PROFILE_STATUS.cardCarrying, detail: carried, color: P.sun };
   }
   const detail = months === null ? "You carried a balance in some months of the last year." : `You carried a balance in ${months} of the last 12 months.`;
   return { title: PROFILE_STATUS.cardSometimes, detail: `${detail}${basis}`, color: P.sun };

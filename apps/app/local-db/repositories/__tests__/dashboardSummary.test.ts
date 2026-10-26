@@ -168,3 +168,63 @@ describe("getDashboardSummary", () => {
     }
   });
 });
+
+
+it("breaks payment outflows out of Other without double counting or leaking other users' links", async () => {
+  const harness = createSqliteHarness();
+  try {
+    harness.sqlite.exec(`
+      CREATE TABLE transactions (id text, user_id text, transaction_type text default 'expense', status text default 'posted', deleted integer default 0, transaction_date text, amount_centavos integer, category_id text, subcategory_id text, destination_savings_goal_id text, merchant_name text, counterparty_name text, created_at text);
+      CREATE TABLE categories (id text, user_id text, label text, icon_key text, color_hex text);
+      CREATE TABLE subcategories (id text, user_id text, category_id text, label text, icon_key text, color_hex text);
+      CREATE TABLE financial_accounts (user_id text, current_balance_centavos integer, deleted integer, status text, include_in_dashboard_balance integer);
+      CREATE TABLE income_sources (user_id text, deleted integer);
+      CREATE TABLE financial_plans (user_id text, deleted integer, status text, period_start text, period_end text);
+      CREATE TABLE debt_payments (transaction_id text, user_id text, deleted integer default 0);
+      CREATE TABLE credit_card_payments (transaction_id text, user_id text, deleted integer default 0);
+      CREATE TABLE scheduled_payment_records (transaction_id text, user_id text, deleted integer default 0);
+      INSERT INTO categories VALUES ('food', 'user-1', 'Food', 'tag', '#123456');
+    `);
+    const { initDatabase } = require("../../client");
+    initDatabase.mockResolvedValue(harness.db);
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const insert = harness.sqlite.prepare("INSERT INTO transactions (id, user_id, transaction_date, amount_centavos, category_id, transaction_type, destination_savings_goal_id) VALUES (?, 'user-1', ?, ?, ?, ?, ?)");
+    for (const [id, amount, category, type, goal] of [
+      ['food', 100, 'food', 'expense', null],
+      ['debt', 200, null, 'expense', null],
+      ['card', 300, null, 'expense', null],
+      ['bill', 400, 'food', 'expense', null],
+      ['savings', 500, null, 'transfer', 'goal'],
+      ['expense-savings', 600, null, 'expense', 'goal'],
+      ['ordinary-transfer', 700, null, 'transfer', null],
+      ['unknown', 50, null, 'expense', null],
+      ['pending', 9000, null, 'expense', 'goal'],
+      ['deleted', 9000, null, 'expense', null],
+      ['foreign', 9000, null, 'expense', null],
+      ['outside-month', 9000, null, 'expense', null],
+    ] satisfies [string, number, string | null, string, string | null][]) insert.run(id, date, amount, category, type, goal);
+    harness.sqlite.exec(`
+      UPDATE transactions SET status = 'pending' WHERE id = 'pending';
+      UPDATE transactions SET deleted = 1 WHERE id = 'deleted';
+      UPDATE transactions SET user_id = 'user-2' WHERE id = 'foreign';
+      UPDATE transactions SET transaction_date = '2000-01-01' WHERE id = 'outside-month';
+      INSERT INTO debt_payments VALUES ('debt', 'user-1', 0), ('unknown', 'user-1', 1);
+      INSERT INTO credit_card_payments VALUES ('card', 'user-1', 0), ('unknown', 'user-2', 0);
+      INSERT INTO scheduled_payment_records VALUES ('bill', 'user-1', 0), ('bill', 'user-1', 0), ('unknown', 'user-2', 0);
+    `);
+    const result = await getDashboardSummary("user-1");
+    expect(result.categorySpending).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category_label: 'Debt repayments', total_centavos: 500 }),
+      expect.objectContaining({ category_label: 'Savings contributions', total_centavos: 1100 }),
+      expect.objectContaining({ category_label: 'Billers & remittances', total_centavos: 400 }),
+      expect.objectContaining({ category_label: 'Food', total_centavos: 100 }),
+      expect.objectContaining({ category_label: 'Other', total_centavos: 50 }),
+    ]));
+    expect(result.categorySpending).toHaveLength(5);
+    expect(result.categorySpending.reduce((sum, item) => sum + item.total_centavos, 0)).toBe(2150);
+    expect(result.currentMonthExpenseCentavos).toBe(1650);
+  } finally {
+    harness.sqlite.close();
+  }
+});

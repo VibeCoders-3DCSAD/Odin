@@ -56,13 +56,15 @@ it("keeps every populated dashboard section, amounts and navigation", async () =
   const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={onNavigate} onOpenReminder={onOpenReminder} />);
   await waitFor(() => expect(view.getByText("₱2,700 left until Oct 31")).toBeTruthy());
 
-  for (const title of ["Dashboard", "AVAILABLE BALANCE", "Income", "Expenses", "Net monthly cash flow", "Savings goals", "Needs Attention", "Upcoming", "Savings & Debt Profile", "Trends", "Spending", "Recent", "Safe to spend", "Spending forecast"]) {
+  for (const title of ["Dashboard", "AVAILABLE BALANCE", "Income", "Expenses", "Net monthly cash flow", "Savings goals", "Needs Attention", "Upcoming", "Savings & Debt Profile", "Trends", "Spending", "Recent", "Safe to spend"]) {
     expect(view.getAllByText(title).length).toBeGreaterThan(0);
   }
-  for (const text of ["PHP 62,480.00", "+32.4%", "52,000", "36,700", "₱15,300", "2 savings goals in progress · ₱82,500 saved.", "Electric bill", "Expected salary", "Emergency fund", "Debt burden", "Financial margin", "Credit card", "Lunch", "-₱320", "100%", "About ₱208 a day for 13 days.", "3.8k / 4k", "PHP 49,300"]) {
+  for (const text of ["PHP 62,480.00", "+32.4%", "52,000", "36,700", "₱15,300", "2 savings goals in progress · ₱82,500 saved.", "Electric bill", "Expected salary", "Emergency fund", "Debt burden", "Financial margin", "Credit card", "Lunch", "-₱320", "100%", "About ₱208 a day for 13 days.", "3.8k / 4k"]) {
     expect(view.getAllByText(text).length).toBeGreaterThan(0);
   }
-  const links: [string, string][] = [["View Savings goals", "savings-goals"], ["View all spending categories", "categories"], ["View all transactions", "transactions"], ["Open Financial Plan", "financial-plan"], ["View spending forecast", "financial-reports"]];
+  expect(view.queryByText("Spending forecast")).toBeNull();
+  expect(view.queryByLabelText("View spending forecast")).toBeNull();
+  const links: [string, string][] = [["View Savings goals", "savings-goals"], ["View all spending categories", "categories"], ["View all transactions", "transactions"], ["Open Financial Plan", "financial-plan"]];
   for (const [label, page] of links) {
     fireEvent.press(view.getByLabelText(label));
     expect(onNavigate).toHaveBeenLastCalledWith(page);
@@ -76,9 +78,11 @@ it("keeps every populated dashboard section, amounts and navigation", async () =
 it("preserves available sections and retry when the summary fails", () => {
   mockUseDashboardData.mockReturnValue({ ...populatedData(), summaryUnavailable: true });
   const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={jest.fn()} onOpenReminder={jest.fn()} />);
-  for (const text of ["Dashboard", "Dashboard summary unavailable", "Expense trends", "Savings goals", "Spending forecast", "Needs Attention", "Upcoming"]) {
+  for (const text of ["Dashboard", "Dashboard summary unavailable", "Expense trends", "Savings goals", "Needs Attention", "Upcoming"]) {
     expect(view.getByText(text)).toBeTruthy();
   }
+  expect(view.queryByText("Spending forecast")).toBeNull();
+  expect(view.queryByLabelText("View spending forecast")).toBeNull();
   fireEvent.press(view.getByLabelText("Retry dashboard refresh"));
   expect(refresh).toHaveBeenCalledTimes(1);
 });
@@ -96,4 +100,17 @@ it("asks for an account in the balance card when none exists", () => {
   const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={jest.fn()} onOpenReminder={jest.fn()} />);
   expect(view.getByText("Add an account to see your balance")).toBeTruthy();
   expect(view.getByText("PHP 0.00")).toBeTruthy();
+});
+
+
+it("shows the top five spending groups and combines the remainder as Others", () => {
+  const data = populatedData();
+  const labels = ['Food', 'Housing', 'Transport', 'Health', 'Debt repayments', 'Savings contributions', 'Billers & remittances'];
+  data.summary.categorySpending = labels.map((label, index) => ({ category_id: `group-${index}`, category_label: label, total_centavos: (10 - index) * 100, icon_key: 'tag', color_hex: '#123456' })).reverse();
+  mockUseDashboardData.mockReturnValue(data);
+  const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={jest.fn()} onOpenReminder={jest.fn()} />);
+  for (const label of labels.slice(0, 5)) expect(view.getByText(label)).toBeTruthy();
+  for (const label of labels.slice(5)) expect(view.queryByText(label)).toBeNull();
+  expect(view.getByText("Others")).toBeTruthy();
+  expect(view.getByLabelText(/^Spending total .* across Food: 1000, Housing: 900, Transport: 800, Health: 700, Debt repayments: 600, Others: 900$/)).toBeTruthy();
 });
