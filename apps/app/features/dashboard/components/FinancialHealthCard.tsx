@@ -4,6 +4,7 @@ import { dashboardColors, dashboardStyles } from "../dashboardAppearance";
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../../lib/api";
 import { useConnectivityStore } from "../../../services/connectivity";
 import { authorizedFetch } from "../../../lib/localAccess";
+import { formatIncomeShare, formatMonthsCovered, formatProfilePeso, PROFILE_STATUS } from "../../../lib/helpers/financialProfileWording";
 
 type RuleAssessment = {
   status?: "SUCCESS" | "INSUFFICIENT_DATA" | "INSUFFICIENT_HISTORY";
@@ -39,54 +40,54 @@ const P = {
 
 function describe(label: string, assessment?: RuleAssessment): { title: string; detail: string; color: string } {
   if (!assessment || assessment.status !== "SUCCESS") {
-    return { title: "Still learning", detail: "Add an income source and record expenses for three full months to check this.", color: P.muted };
+    return { title: PROFILE_STATUS.notEnoughData, detail: "Add an income source and record expenses for three full months to check this.", color: P.muted };
   }
   if (label === "Emergency fund") {
-    const months = typeof assessment.value === "number" ? `Your emergency savings could cover about ${assessment.value.toFixed(1)} months of expenses.` : "Your emergency savings coverage has been calculated.";
-    return { title: assessment.label === "EMERGENCY_FUND_ADEQUATE" ? "Good safety net" : "Build your safety net", detail: months, color: assessment.label === "EMERGENCY_FUND_ADEQUATE" ? P.aqua700 : P.sun };
+    const months = typeof assessment.value === "number" ? `Your emergency savings could cover ${formatMonthsCovered(assessment.value)}.` : "Your emergency savings coverage has been calculated.";
+    return { title: assessment.label === "EMERGENCY_FUND_ADEQUATE" ? PROFILE_STATUS.emergencyCovered : PROFILE_STATUS.emergencyBuilding, detail: months, color: assessment.label === "EMERGENCY_FUND_ADEQUATE" ? P.aqua700 : P.sun };
   }
   if (label === "Debt burden") {
-    const percent = typeof assessment.value === "number" ? `Required debt payments use ${Math.round(assessment.value * 100)}% of your monthly income.` : "Your required debt payments have been compared with your income.";
-    return { title: assessment.label === "FINANCIALLY_OVERBURDENED" ? "Debt needs attention" : "Debt is manageable", detail: percent, color: assessment.label === "FINANCIALLY_OVERBURDENED" ? P.red : P.aqua700 };
+    const percent = typeof assessment.value === "number" ? `Required debt payments use ${formatIncomeShare(assessment.value)}.` : "Your required debt payments have been compared with your income.";
+    return { title: assessment.label === "FINANCIALLY_OVERBURDENED" ? PROFILE_STATUS.debtTooHigh : PROFILE_STATUS.debtManageable, detail: percent, color: assessment.label === "FINANCIALLY_OVERBURDENED" ? P.red : P.aqua700 };
   }
   const amount = typeof assessment.value === "number"
     ? assessment.value < 0
-      ? `You are short by PHP ${Math.abs(assessment.value).toLocaleString("en-PH", { maximumFractionDigits: 0 })} after monthly expenses and debt payments.`
-      : `You have PHP ${assessment.value.toLocaleString("en-PH", { maximumFractionDigits: 0 })} left after monthly expenses and debt payments.`
+      ? `You are short by ${formatProfilePeso(assessment.value)} after monthly expenses and debt payments.`
+      : `You have ${formatProfilePeso(assessment.value)} left after monthly expenses and debt payments.`
     : "Your monthly income, expenses, and debt payments have been compared.";
-  return { title: assessment.label === "NEGATIVE_FINANCIAL_MARGIN" ? "Spending is too tight" : "You have breathing room", detail: amount, color: assessment.label === "NEGATIVE_FINANCIAL_MARGIN" ? P.red : P.aqua700 };
+  return { title: assessment.label === "NEGATIVE_FINANCIAL_MARGIN" ? PROFILE_STATUS.marginShort : PROFILE_STATUS.marginLeftOver, detail: amount, color: assessment.label === "NEGATIVE_FINANCIAL_MARGIN" ? P.red : P.aqua700 };
 }
 
 function describeCard(assessment: CreditCardAssessment): { title: string; detail: string; color: string } {
   if (assessment.status !== "SUCCESS") {
-    return { title: "Still learning", detail: "Record twelve months of credit card statements to check how you use this card.", color: P.muted };
+    return { title: PROFILE_STATUS.notEnoughData, detail: "Record twelve months of credit card statements to check how you use this card.", color: P.muted };
   }
   const months = typeof assessment.value === "number" ? assessment.value : null;
   const basis = assessment.source === "self_reported" ? " Based on what you shared during setup." : "";
   if (assessment.reported_duration === "no_credit_card") {
-    return { title: "No credit card", detail: `You said you don't use a credit card.${basis}`, color: P.muted };
+    return { title: PROFILE_STATUS.cardNone, detail: `You said you don't use a credit card.${basis}`, color: P.muted };
   }
   if (assessment.reported_duration === "always_before_due") {
-    return { title: "Paid on time", detail: `You said you always pay on or before the due date.${basis}`, color: P.aqua700 };
+    return { title: PROFILE_STATUS.cardPaidOnTime, detail: `You said you always pay on or before the due date.${basis}`, color: P.aqua700 };
   }
   if (assessment.reported_duration === "1_to_11_months") {
-    return { title: "Sometimes carries a balance", detail: `You reported carrying an unpaid balance for 1–11 months.${basis}`, color: P.sun };
+    return { title: PROFILE_STATUS.cardSometimes, detail: `You reported carrying an unpaid balance for 1–11 months.${basis}`, color: P.sun };
   }
   if (assessment.reported_duration === "over_a_year") {
-    return { title: "Balance carried over a year", detail: `You reported carrying an unpaid balance for over a year.${basis}`, color: P.red };
+    return { title: PROFILE_STATUS.cardOverAYear, detail: `You reported carrying an unpaid balance for over a year.${basis}`, color: P.red };
   }
   if (assessment.label === "TRANSACTOR") {
-    return { title: "Paid in full", detail: `You paid off the full balance every month in the last year.${basis}`, color: P.aqua700 };
+    return { title: PROFILE_STATUS.cardPaidInFull, detail: `You paid off the full balance every month in the last year.${basis}`, color: P.aqua700 };
   }
   if (assessment.label === "HEAVY_REVOLVER") {
-    return { title: "Balance carried monthly", detail: `You carried a balance every month in the last year, so interest is likely adding up.${basis}`, color: P.red };
+    return { title: PROFILE_STATUS.cardAlways, detail: `You carried a balance every month in the last year, so interest is likely adding up.${basis}`, color: P.red };
   }
   if (assessment.label === "REVOLVER") {
     const carried = months === null ? "You have carried a balance on this card." : `You carried a balance in ${months} of the months recorded so far.`;
-    return { title: "Carries a balance", detail: `${carried} We need twelve months of statements to see how often.`, color: P.sun };
+    return { title: PROFILE_STATUS.cardCarrying, detail: `${carried} We need twelve months of statements to see how often.`, color: P.sun };
   }
   const detail = months === null ? "You carried a balance in some months of the last year." : `You carried a balance in ${months} of the last 12 months.`;
-  return { title: "Sometimes carries a balance", detail: `${detail}${basis}`, color: P.sun };
+  return { title: PROFILE_STATUS.cardSometimes, detail: `${detail}${basis}`, color: P.sun };
 }
 
 async function request<T>(accessToken: string, path: string, method: "GET" | "POST"): Promise<T | null> {

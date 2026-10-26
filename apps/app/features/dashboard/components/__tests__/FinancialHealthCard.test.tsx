@@ -22,13 +22,13 @@ function assessmentResponse(snapshot = assessment) {
 it("automatically assesses on each online mount without an Update button", async () => {
   mockFetch.mockResolvedValue(assessmentResponse());
   const view = render(<FinancialHealthCard accessToken="token" />);
-  await waitFor(() => expect(view.getByText("Good safety net")).toBeTruthy());
+  await waitFor(() => expect(view.getByText("Well covered")).toBeTruthy());
   expect(mockFetch).toHaveBeenCalledWith("http://test/odin/api/financial-classification/v2/assess", expect.objectContaining({ method: "POST" }));
   expect(view.queryByLabelText("Refresh check-in")).toBeNull();
   expect(view.queryByText("Update")).toBeNull();
   view.unmount();
   const remounted = render(<FinancialHealthCard accessToken="token" />);
-  await waitFor(() => expect(remounted.getByText("Good safety net")).toBeTruthy());
+  await waitFor(() => expect(remounted.getByText("Well covered")).toBeTruthy());
   expect(mockFetch).toHaveBeenCalledTimes(2);
 });
 
@@ -39,14 +39,14 @@ it("skips requests offline and refreshes when connectivity returns", async () =>
   expect(mockFetch).not.toHaveBeenCalled();
   mockOnline = true;
   view.rerender(<FinancialHealthCard accessToken="token" />);
-  await waitFor(() => expect(view.getByText("Good safety net")).toBeTruthy());
+  await waitFor(() => expect(view.getByText("Well covered")).toBeTruthy());
   expect(mockFetch).toHaveBeenCalledTimes(1);
 });
 
 it("falls back to the latest assessment when automatic refresh fails", async () => {
   mockFetch.mockRejectedValueOnce(new Error("Unavailable")).mockResolvedValueOnce(assessmentResponse());
   const view = render(<FinancialHealthCard accessToken="token" />);
-  await waitFor(() => expect(view.getByText("Good safety net")).toBeTruthy());
+  await waitFor(() => expect(view.getByText("Well covered")).toBeTruthy());
   expect(mockFetch).toHaveBeenLastCalledWith("http://test/odin/api/financial-classification/v2/latest", expect.objectContaining({ method: "GET" }));
   expect(view.getByText("Unable to refresh your profile. Your connection or the server may be unavailable.")).toBeTruthy();
 });
@@ -60,6 +60,10 @@ it.each([
   const classification: Classification = { credit_card_behavior: [{ status: "SUCCESS", source: "self_reported", label, value: null, reported_duration: duration }] };
   const view = render(<FinancialHealthCard accessToken="token" initialClassification={classification} />);
   expect(view.getByText(`${detail} Based on what you shared during setup.`)).toBeTruthy();
+  if (duration === "always_before_due") {
+    expect(view.getByText("Paid on time")).toBeTruthy();
+    expect(view.queryByText("Paid in full")).toBeNull();
+  }
   expect(view.queryByText(/in 1 of the last 12 months/)).toBeNull();
   expect(mockFetch).not.toHaveBeenCalled();
 });

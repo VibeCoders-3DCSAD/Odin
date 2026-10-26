@@ -106,8 +106,8 @@ it("shows the classification returned when finalizing the questionnaire", async 
   const view = render(<OnboardingFlow accessToken="token" userId="user-1" onComplete={jest.fn()} />);
   fireEvent.press(await view.findByText("Submit Assessment"));
   expect(await view.findByText("Assessment Complete")).toBeTruthy();
-  expect(await view.findByText("Good safety net")).toBeTruthy();
-  expect(view.getByText("You have breathing room")).toBeTruthy();
+  expect(await view.findByText("Well covered")).toBeTruthy();
+  expect(view.getByText("Money left over")).toBeTruthy();
   expect(view.getByText("Paid in full")).toBeTruthy();
   expect(view.queryByText("Research eligibility")).toBeNull();
   expect(mockEligibility).not.toHaveBeenCalled();
