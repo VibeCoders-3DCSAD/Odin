@@ -1,6 +1,8 @@
 import { detectUnusualSpendings } from "@odin/spending-insights";
 import { buildSeedData, requiredSubcategorySlugs } from "../seed-history.js";
-import { buildSeedRecurringSpending } from "../helpers/seed-recurring-spending.js";
+import { buildSeedRecurringSpending, buildSeedTuitionMonths } from "../helpers/seed-recurring-spending.js";
+import { buildPersonaSeedData } from "../seed-personas.js";
+import { recurringMonthSpend, resolveRecurringPayments } from "@odin/spending-insights/recurringMonths.js";
 
 const userId = "seed-user";
 const subcategoryIds = new Map(requiredSubcategorySlugs.map((slug) => [slug, `subcategory-${slug}`]));
@@ -29,4 +31,24 @@ it("does not confirm another user's purchases or other subcategories", () => {
   const data = buildSeedData({ userId, today, seed: 42, subcategoryIds });
   expect(buildSeedRecurringSpending("another-user", data.transactions, subcategoryIds, today)).toEqual([]);
   expect(buildSeedRecurringSpending(userId, data.transactions, new Map(), today)).toEqual([]);
+});
+
+it("expects the seasonal mom's tuition for all four children in January through June only", () => {
+  const today = "2026-10-21";
+  const data = buildPersonaSeedData({ userId, today, seed: 42, subcategoryIds, persona: "seasonal-mom" });
+  const answers = buildSeedTuitionMonths(userId, data.transactions, subcategoryIds, today);
+  // Four children a month, January through June 2026; last year's payments are outside the thirteen-month window.
+  expect(answers).toHaveLength(24);
+  expect(answers.every((row) => row.recurrence === "yearly" && row.recurrence_months.join() === "1,2,3,4,5,6" && row.should_alert_user === false)).toBe(true);
+  const byId = new Map(data.transactions.map((row) => [row.id, row]));
+  const resolved = resolveRecurringPayments(answers.map((row) => ({ key: row.subcategory_id, transactionDate: byId.get(row.transaction_id)!.transaction_date, amountCentavos: row.amount_centavos, months: row.recurrence_months })));
+  expect(recurringMonthSpend(resolved, "2027-01")).toBe(1_400_000);
+  expect(recurringMonthSpend(resolved, "2027-06")).toBe(1_400_000);
+  expect(recurringMonthSpend(resolved, "2026-11")).toBe(0);
+});
+
+it("finds no tuition to flag for a persona without school fees", () => {
+  const today = "2026-10-21";
+  const data = buildPersonaSeedData({ userId, today, seed: 42, subcategoryIds, persona: "healthy-worker" });
+  expect(buildSeedTuitionMonths(userId, data.transactions, subcategoryIds, today)).toEqual([]);
 });

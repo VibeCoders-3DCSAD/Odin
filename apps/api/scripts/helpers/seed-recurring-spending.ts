@@ -33,3 +33,32 @@ export function buildSeedRecurringSpending(userId: string, transactions: Transac
     baseline_snapshot: { scope: "category_iqr" }, version: 1, deleted: false, updated_at: timestamp,
   }));
 }
+
+// The seasonal mom's tuition is paid January through June each school year, so every payment the app's
+// unusual-spending window still reads is answered "in certain months" for those months. The forecast then
+// expects it in that season only, and Preferences lists it for editing.
+const TUITION_MONTHS = [1, 2, 3, 4, 5, 6];
+
+export function buildSeedTuitionMonths(userId: string, transactions: Transaction[], subcategoryIds: Map<string, string>, today: string) {
+  const tuitionId = subcategoryIds.get("education_tuition");
+  if (!tuitionId) return [];
+  // Thirteen months, the same window the app reads unusual spending from.
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCMonth(start.getUTCMonth() - 13);
+  const fromDate = start.toISOString().slice(0, 10);
+  const timestamp = `${today}T12:00:00+08:00`;
+  return transactions.filter((transaction) => transaction.user_id === userId
+    && transaction.transaction_type === "expense" && transaction.subcategory_id === tuitionId
+    && transaction.transaction_date >= fromDate && transaction.transaction_date <= today
+    && transaction.amount_centavos > 0).map((transaction) => ({
+    id: randomUUID(), user_id: userId, transaction_id: transaction.id,
+    subcategory_id: tuitionId, amount_centavos: transaction.amount_centavos,
+    evaluated_at: timestamp, confirmed_recurring_at: null, recurrence: "yearly", recurrence_months: TUITION_MONTHS,
+    model_version: UNUSUAL_SPENDING_MODEL_VERSION, profile_label: null,
+    history_days: 0, raw_anomaly_score: 0,
+    is_anomaly: true, should_alert_user: false, review_status: "not_alerted",
+    // Outside the school season the family spends nothing on tuition.
+    feature_vector: { usual_spending_centavos: 0, lower_bound_centavos: 0, upper_bound_centavos: 0 },
+    baseline_snapshot: { scope: "seasonal_tuition" }, version: 1, deleted: false, updated_at: timestamp,
+  }));
+}

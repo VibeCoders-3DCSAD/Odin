@@ -29,6 +29,13 @@ describe("recurring months", () => {
     expect(recurringMonthSpend(resolved, "2027-06")).toBe(52_000);
   });
 
+  it("adds payments made the same day, such as tuition for each child", () => {
+    const children = [1, 2, 3, 4].map(() => payment("2026-06-20", 350_000, [1, 2, 3, 4, 5, 6]));
+    const resolved = resolveRecurringPayments([payment("2026-05-20", 350_000, [1, 2, 3, 4, 5, 6]), ...children]);
+    expect(resolved).toHaveLength(4);
+    expect(recurringMonthSpend(resolved, "2027-01")).toBe(1_400_000);
+  });
+
   it("adds payments for different subcategories in the same month", () => {
     const resolved = resolveRecurringPayments([payment("2026-03-01", 10_000, [3], "insurance"), payment("2026-03-05", 7_000, [3], "registration")]);
     expect(recurringMonthSpend(resolved, "2027-03")).toBe(17_000);

@@ -19,15 +19,16 @@ function paymentMonths(payment) {
   return payment.months ?? [Number(payment.transactionDate.slice(5, 7))];
 }
 
-// The latest payment for each key (a subcategory) claims each of its months, so this year's tuition replaces
-// last year's instead of adding to it. Older payments keep only the months nothing newer claimed.
+// The latest payments for each key (a subcategory) claim each of their months, so this year's tuition replaces
+// last year's instead of adding to it. Payments on the same day add up, such as tuition for each child.
+// Older payments keep only the months nothing newer claimed.
 function resolveRecurringPayments(payments) {
   const claimed = new Map();
   const newestFirst = [...payments].sort((left, right) => right.transactionDate.localeCompare(left.transactionDate));
   return newestFirst.flatMap((payment) => {
-    const taken = claimed.get(payment.key) ?? new Set();
-    const months = paymentMonths(payment).filter((month) => !taken.has(month));
-    for (const month of months) taken.add(month);
+    const taken = claimed.get(payment.key) ?? new Map();
+    const months = paymentMonths(payment).filter((month) => (taken.get(month) ?? payment.transactionDate) === payment.transactionDate);
+    for (const month of months) taken.set(month, payment.transactionDate);
     claimed.set(payment.key, taken);
     return months.length ? [{ ...payment, months }] : [];
   });
