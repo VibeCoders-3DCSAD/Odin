@@ -199,6 +199,7 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
         </FormCard>
       ) : null}
       <CreditCardCycleList
+        key={`${userId}:${selectedAccount.id}`}
         userId={userId}
         deviceId={deviceId}
         account={selectedAccount}

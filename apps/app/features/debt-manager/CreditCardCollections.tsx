@@ -89,18 +89,22 @@ function CycleCard({ account, cycle, current, transactions, statement, payment, 
   </FormCard>;
 }
 
+const CYCLES_PER_PAGE = 3;
+
 // The card's billing cycles, newest first, with the current one on top.
 export function CreditCardCycleList(props: CycleListProps) {
   const { account, cycles, transactions, statements, payments, today = isoToday() } = props;
+  const [visibleCount, setVisibleCount] = useState(CYCLES_PER_PAGE);
   const accountCycles = cycles.filter((cycle) => cycle.account_id === account.id);
   const currentId = (accountCycles.find((cycle) => cycle.cycle_start_date <= today && cycle.cutoff_date >= today) ?? (accountCycles.length === 1 ? accountCycles[0] : undefined))?.id;
   const ordered = accountCycles.slice().sort((left, right) => Number(right.id === currentId) - Number(left.id === currentId) || right.cutoff_date.localeCompare(left.cutoff_date));
   return <View style={{ gap: 12 }}>
     <SectionHeader title="Billing cycles" />
-    {ordered.length === 0 ? <Note>No billing cycle is recorded for this card yet.</Note> : ordered.map((cycle) => {
+    {ordered.length === 0 ? <Note>No billing cycle is recorded for this card yet.</Note> : ordered.slice(0, visibleCount).map((cycle) => {
       const statement = statements.find((item) => item.cycle_id === cycle.id);
       return <CycleCard key={cycle.id} account={account} cycle={cycle} current={cycle.id === currentId} transactions={transactions.filter((item) => item.cycle_id === cycle.id)} statement={statement} payment={statement ? payments.find((item) => item.statement_id === statement.id) : undefined} props={props} today={today} />;
     })}
+    {visibleCount < ordered.length ? <Button variant="ghost" label="Load More" onPress={() => setVisibleCount((count) => count + CYCLES_PER_PAGE)} /> : null}
   </View>;
 }
 
