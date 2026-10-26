@@ -14,6 +14,7 @@ jest.mock("../../../local-db/repositories/financialReports", () => ({
 jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
   getForecastHistoryStartDate: jest.requireActual("../../../local-db/repositories/forecastTransactions").getForecastHistoryStartDate,
   listForecastTransactions: (...args: unknown[]) => mockListForecastTransactions(...args),
+  listRecurringForecastPayments: async () => [],
   listMonthlySpending: (...args: unknown[]) => mockListMonthlySpending(...args),
   recentMonths: () => ["2026-09", "2026-10"],
 }));

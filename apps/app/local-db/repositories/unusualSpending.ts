@@ -2,7 +2,8 @@ import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation } from "../helpers";
 import { randomUUID } from "../uuid";
-import { detectUnusualSpendings, UNUSUAL_SPENDING_MODEL_VERSION as MODEL_VERSION, type SpendingRecurrence, type SpendingTransaction, type UnusualSpendingInsight } from "@odin/spending-insights";
+import { detectRecurringPayments, detectUnusualSpendings, UNUSUAL_SPENDING_MODEL_VERSION as MODEL_VERSION, type SpendingRecurrence, type SpendingTransaction, type UnusualSpendingInsight } from "@odin/spending-insights";
+import { normalizeRecurrenceMonths } from "@odin/spending-insights/recurringMonths";
 export { detectUnusualSpendings, type SpendingRecurrence, type UnusualSpendingInsight } from "@odin/spending-insights";
 
 const MAX_TRANSACTIONS = 5_000;
@@ -50,22 +51,51 @@ async function listTransactions(userId: string, fromDate: string): Promise<Spend
     : []);
 }
 
-/** Every saved unusual-spending evaluation by transaction ID, with the user's answer or null if unanswered. */
-export async function listSavedRecurrences(userId: string): Promise<Map<string, SpendingRecurrence | null>> {
+export type SavedAnswers = {
+  // Every saved unusual-spending evaluation by transaction ID, with the user's answer or null if unanswered.
+  recurrences: Map<string, SpendingRecurrence | null>;
+  // The calendar months (1-12) each yearly answer comes back in, when the user chose them.
+  months: Map<string, number[]>;
+};
+
+// The stored JSON month list, or null when absent or malformed.
+function parseRecurrenceMonths(value: string | null): number[] | null {
+  if (!value) return null;
+  try {
+    return normalizeRecurrenceMonths(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+export async function listSavedAnswers(userId: string): Promise<SavedAnswers> {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ transaction_id: string; recurrence: SpendingRecurrence | null }>(
-    "SELECT transaction_id, recurrence FROM anomaly_evaluations WHERE user_id = ? AND deleted = 0",
+  const rows = await db.getAllAsync<{ transaction_id: string; recurrence: SpendingRecurrence | null; recurrence_months: string | null }>(
+    "SELECT transaction_id, recurrence, recurrence_months FROM anomaly_evaluations WHERE user_id = ? AND deleted = 0",
     userId,
   );
-  return new Map(rows.map((row) => [row.transaction_id, row.recurrence]));
+  return {
+    recurrences: new Map(rows.map((row) => [row.transaction_id, row.recurrence])),
+    months: new Map(rows.flatMap((row) => {
+      const months = row.recurrence === "yearly" ? parseRecurrenceMonths(row.recurrence_months) : null;
+      return months ? [[row.transaction_id, months] as const] : [];
+    })),
+  };
+}
+
+async function detectionInputs(userId: string, now: Date): Promise<[SpendingTransaction[], SavedAnswers]> {
+  return Promise.all([listTransactions(userId, unusualSpendingStartDate(now)), listSavedAnswers(userId)]);
 }
 
 export async function listUnusualSpendings(userId: string, now = new Date()): Promise<UnusualSpendingInsight[]> {
-  const [transactions, recurrences] = await Promise.all([
-    listTransactions(userId, unusualSpendingStartDate(now)),
-    listSavedRecurrences(userId),
-  ]);
-  return detectUnusualSpendings(transactions, recurrences);
+  const [transactions, saved] = await detectionInputs(userId, now);
+  return detectUnusualSpendings(transactions, saved.recurrences, saved.months);
+}
+
+/** Payments that come back in certain months: answered yearly, or covered by such an answer. */
+export async function listRecurringPayments(userId: string, now = new Date()): Promise<Array<SpendingTransaction & { months: number[] | null }>> {
+  const [transactions, saved] = await detectionInputs(userId, now);
+  return detectRecurringPayments(transactions, saved.recurrences, saved.months);
 }
 
 // Only spending above the usual range is worth an alert; unusually low spending is still detected,
@@ -83,12 +113,13 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
     upper_bound_centavos: number;
     severity: number;
     recurrence: SpendingRecurrence | null;
+    recurrence_months: string | null;
   }>(
     `SELECT t.id, t.transaction_date, t.amount_centavos, t.subcategory_id,
             s.label AS subcategory_label, a.name AS account_name,
             e.usable_history_count, e.usual_spending_centavos,
             e.lower_bound_centavos, e.upper_bound_centavos, e.severity,
-            e.recurrence
+            e.recurrence, e.recurrence_months
        FROM anomaly_evaluations e
        JOIN transactions t ON t.id = e.transaction_id
          AND t.user_id = e.user_id AND t.deleted = 0
@@ -115,6 +146,7 @@ export async function listPersistedUnusualSpendings(userId: string): Promise<Unu
       subcategoryId: row.subcategory_id,
       confirmedRecurring: row.recurrence === "frequent",
       recurrence: row.recurrence,
+      recurrenceMonths: row.recurrence === "yearly" ? parseRecurrenceMonths(row.recurrence_months) : null,
     }]
     : []).filter(isHigherSpending);
 }
@@ -152,10 +184,12 @@ export async function saveUnusualSpending(userId: string, deviceId: string, insi
 
 /**
  * Records the user's answer to an unusual expense. A frequent expense joins its baseline; a yearly one
- * stays out of it and recurs in the forecast a year later; a one-time expense is left out of both.
- * The first answer is final.
+ * stays out of it and recurs in the forecast in the months chosen (its own month without them);
+ * a one-time expense is left out of both. The first answer is final.
  */
-export async function answerUnusualSpending(userId: string, deviceId: string, transactionId: string, recurrence: SpendingRecurrence): Promise<void> {
+export async function answerUnusualSpending(userId: string, deviceId: string, transactionId: string, recurrence: SpendingRecurrence, recurrenceMonths?: readonly number[]): Promise<void> {
+  const months = recurrenceMonths === undefined ? null : normalizeRecurrenceMonths(recurrenceMonths);
+  if (recurrenceMonths !== undefined && (recurrence !== "yearly" || !months)) throw new Error("recurrence months need a yearly answer and distinct months from 1 to 12");
   const db = await getDb();
   const timestamp = new Date().toISOString();
   await db.withTransactionAsync(async () => {
@@ -168,14 +202,14 @@ export async function answerUnusualSpending(userId: string, deviceId: string, tr
     // confirmed_recurring_at still marks frequent spending for app versions that predate the answer.
     const confirmedAt = recurrence === "frequent" ? timestamp : null;
     await db.runAsync(
-      "UPDATE anomaly_evaluations SET recurrence = ?, confirmed_recurring_at = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?",
-      recurrence, confirmedAt, timestamp, row.id, userId,
+      "UPDATE anomaly_evaluations SET recurrence = ?, confirmed_recurring_at = ?, recurrence_months = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?",
+      recurrence, confirmedAt, months ? JSON.stringify(months) : null, timestamp, row.id, userId,
     );
     await enqueueOperation(db, {
       userId, deviceId, entity: "anomaly_evaluations", recordId: row.id, operationType: "update",
       baseVersion: row.version,
-      changedFields: confirmedAt ? ["recurrence", "confirmed_recurring_at"] : ["recurrence"],
-      payload: confirmedAt ? { recurrence, confirmed_recurring_at: confirmedAt } : { recurrence },
+      changedFields: ["recurrence", ...(confirmedAt ? ["confirmed_recurring_at"] : []), ...(months ? ["recurrence_months"] : [])],
+      payload: { recurrence, ...(confirmedAt ? { confirmed_recurring_at: confirmedAt } : {}), ...(months ? { recurrence_months: months } : {}) },
       failureMessage: "Your unusual spending answer could not be synchronized.",
     });
   });

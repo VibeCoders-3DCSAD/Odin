@@ -44,6 +44,7 @@ describe("anomaly evaluation sync validation", () => {
   it.each([
     { recurrence: "frequent", confirmed_recurring_at: "2026-10-31T08:00:00.000Z" },
     { recurrence: "yearly" },
+    { recurrence: "yearly", recurrence_months: [6, 11] },
     { recurrence: "one_time" },
   ])("accepts the user's answer %o", async (payload) => {
     await expect(answer(payload)).resolves.toMatchObject({ payload });
@@ -56,5 +57,22 @@ describe("anomaly evaluation sync validation", () => {
   it("requires a confirmation time for a frequent answer and refuses one otherwise", async () => {
     await expect(answer({ recurrence: "frequent" })).rejects.toThrow("confirmed_recurring_at must be an ISO-8601 timestamp");
     await expect(answer({ recurrence: "yearly", confirmed_recurring_at: "2026-10-31T08:00:00.000Z" })).rejects.toThrow("confirmed_recurring_at is only recorded for frequent spending");
+  });
+
+  it("puts chosen months in calendar order", async () => {
+    await expect(answer({ recurrence: "yearly", recurrence_months: [11, 6] })).resolves.toMatchObject({ payload: { recurrence_months: [6, 11] } });
+  });
+
+  it.each([
+    { recurrence: "one_time", recurrence_months: [6] },
+    { confirmed_recurring_at: "2026-10-31T08:00:00.000Z", recurrence_months: [6] },
+    { recurrence: "yearly", recurrence_months: [] },
+    { recurrence: "yearly", recurrence_months: [0] },
+    { recurrence: "yearly", recurrence_months: [13] },
+    { recurrence: "yearly", recurrence_months: [6, 6] },
+    { recurrence: "yearly", recurrence_months: [6.5] },
+    { recurrence: "yearly", recurrence_months: "6" },
+  ])("rejects months %o", async (payload) => {
+    await expect(answer(payload)).rejects.toThrow("recurrence_months must be distinct months from 1 to 12 on a yearly answer");
   });
 });

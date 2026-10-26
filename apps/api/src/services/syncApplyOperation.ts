@@ -1,6 +1,7 @@
 import { validateSavingsGoalContributionPayload } from "./helpers/savingsGoalContribution.js";
 import { validateSavingsExpenseWithdrawalPayload } from "./helpers/savingsExpenseWithdrawals.js";
 import { normalizeSavingsInterestReference } from "@odin/savings-interest";
+import { normalizeRecurrenceMonths } from "@odin/spending-insights/recurringMonths.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Operation = {
@@ -56,7 +57,7 @@ const ANOMALY_WHITELIST_UPDATE_FIELDS = new Set(["status", "notes"]);
 const ALERT_SUPPRESSION_CREATE_FIELDS = new Set(["category", "source_type", "status", "merchant_name", "subcategory_id", "category_id", "amount_center_centavos", "amount_tolerance_bps", "starts_at", "ends_at", "reason", "metadata"]);
 const ALERT_SUPPRESSION_UPDATE_FIELDS = new Set(["status", "ends_at", "reason"]);
 const ANOMALY_EVALUATION_CREATE_FIELDS = new Set(["transaction_id", "subcategory_id", "amount_centavos", "usable_history_count", "usual_spending_centavos", "lower_bound_centavos", "upper_bound_centavos", "severity", "model_version", "evaluated_at"]);
-const ANOMALY_EVALUATION_UPDATE_FIELDS = new Set(["recurrence", "confirmed_recurring_at"]);
+const ANOMALY_EVALUATION_UPDATE_FIELDS = new Set(["recurrence", "confirmed_recurring_at", "recurrence_months"]);
 const ANOMALY_RECURRENCES = new Set(["one_time", "frequent", "yearly"]);
 const TAXONOMY_ICON_KEYS = new Set([
   "bowl-food", "wine", "t-shirt", "house", "armchair", "first-aid",
@@ -1015,6 +1016,7 @@ async function validateUpdatePayload(
     assertOnlyAllowed(payload, ANOMALY_EVALUATION_UPDATE_FIELDS);
     const sanitized = sanitizePayload(payload, ANOMALY_EVALUATION_UPDATE_FIELDS);
     if (sanitized.recurrence === undefined) {
+      if (sanitized.recurrence_months !== undefined) throw new Error("recurrence_months must be distinct months from 1 to 12 on a yearly answer");
       requireIsoTimestamp(sanitized, "confirmed_recurring_at");
       return sanitized;
     }
@@ -1023,6 +1025,11 @@ async function validateUpdatePayload(
     }
     if (sanitized.recurrence === "frequent") requireIsoTimestamp(sanitized, "confirmed_recurring_at");
     else if (sanitized.confirmed_recurring_at !== undefined) throw new Error("confirmed_recurring_at is only recorded for frequent spending");
+    if (sanitized.recurrence_months != null) {
+      const months = normalizeRecurrenceMonths(sanitized.recurrence_months);
+      if (sanitized.recurrence !== "yearly" || !months) throw new Error("recurrence_months must be distinct months from 1 to 12 on a yearly answer");
+      sanitized.recurrence_months = months;
+    }
     return sanitized;
   } else {
     throw new Error(`entity '${entity}' is not in the sync allowlist`);

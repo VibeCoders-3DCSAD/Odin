@@ -58,7 +58,7 @@ it("uses the ML category forecast as is, since its history leaves out scheduled 
   expect(plan.recommendation.allocations[0]?.allocatedAmountCentavos).toBe(120_000);
 });
 
-it("sends the Spending Forecast's history: twelve months, every category, no scheduled payments or one-offs", async () => {
+it("sends the Spending Forecast's history: twelve months, every category, no scheduled payments, one-offs, or payments in certain months", async () => {
   jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [], snapshot: { month: "2026-10", totalAmountCentavos: 0, categoryForecasts: [], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
   const expense = { amount_centavos: 10_000, transaction_type: "expense", category_id: null, subcategory_id: "rent" };
   await getFinancialPlanRecommendation("user-1", client(0, null, 1, {
@@ -74,12 +74,27 @@ it("sends the Spending Forecast's history: twelve months, every category, no sch
     scheduled_payment_records: [{ transaction_id: "bill" }],
   }), 200_000, ["rent"]);
   const sent = jest.mocked(getMlForecast).mock.calls[0]![1].historicalTransactions;
-  expect(sent.map((transaction) => [transaction.transactionId, transaction.category, transaction.recurrence])).toEqual([
-    ["groceries", "Other", undefined],
-    ["frequent", "housing_water_utilities", undefined],
-    ["tuition", "housing_water_utilities", "yearly"],
-    ["first-day", "housing_water_utilities", undefined],
+  expect(sent.map((transaction) => [transaction.transactionId, transaction.category])).toEqual([
+    ["groceries", "Other"],
+    ["frequent", "housing_water_utilities"],
+    ["first-day", "housing_water_utilities"],
   ]);
+});
+
+it("adds payments the user said come back in certain months to the forecast of those months", async () => {
+  jest.mocked(recommendPlanCategories).mockImplementation(async (_user, _period, _available, categories) => ({ recommendation: { feasibility: "FEASIBLE", allocations: categories.map((category) => ({ category_id: category.id, amount: category.floorCentavos / 100 })) } }));
+  jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [], snapshot: { month: "2026-10", totalAmountCentavos: 120_000, categoryForecasts: [{ category: "housing_water_utilities", amountCentavos: 120_000 }], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
+  const expense = { amount_centavos: 10_000, transaction_type: "expense", category_id: null, subcategory_id: "rent" };
+  await getFinancialPlanRecommendation("user-1", client(0, null, 1, {
+    transactions: [
+      { ...expense, id: "groceries", transaction_date: "2026-09-12", anomaly_evaluations: [] },
+      { ...expense, id: "tuition", amount_centavos: 50_000, transaction_date: "2026-06-10", anomaly_evaluations: [{ transaction_id: "tuition", is_anomaly: true, recurrence: "yearly", recurrence_months: [6, 10] }] },
+      { ...expense, id: "fee", amount_centavos: 7_000, transaction_date: "2026-03-10", anomaly_evaluations: [{ transaction_id: "fee", is_anomaly: true, recurrence: "yearly", recurrence_months: [3] }] },
+    ],
+    scheduled_payment_records: [],
+  }), 200_000, ["rent"]);
+  expect(jest.mocked(getMlForecast).mock.calls[0]![1].historicalTransactions.map((transaction) => transaction.transactionId)).toEqual(["groceries"]);
+  expect(recommendPlanCategories).toHaveBeenCalledWith("user-1", expect.anything(), expect.any(Number), expect.anything(), expect.objectContaining({ categoryForecasts: [expect.objectContaining({ amountCentavos: 170_000 })] }));
 });
 
 it("counts the scheduled portion toward a Fixed category instead of reserving it twice", async () => {

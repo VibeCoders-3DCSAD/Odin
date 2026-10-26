@@ -60,21 +60,20 @@ function onMonths(values) {
 }
 
 // The spending a full year of history expects in targetMonth, before HFCE growth. monthly leaves out payments
-// the user marked yearly; yearly holds those, which come back only in the month they recur.
-function seasonalMonthSpend({ window, monthly, yearly, targetMonth }) {
+// the user said recur in certain months; recurring is what those expect in targetMonth (recurringMonthSpend).
+function seasonalMonthSpend({ window, monthly, recurring, targetMonth }) {
   const values = window.map((month) => monthly.get(month) ?? 0);
-  if (values.length === 0) return 0;
+  if (values.length === 0) return recurring;
   const { pattern, seasons } = onMonths(values);
   const priorMonth = addMonths(targetMonth, -FULL_YEAR_MONTHS);
   const priorIndex = window.indexOf(priorMonth);
-  const yearlyAmount = priorIndex >= 0 ? yearly.get(priorMonth) ?? 0 : 0;
-  if (pattern === "new_expense") return values[values.length - 1] + yearlyAmount;
+  if (pattern === "new_expense") return values[values.length - 1] + recurring;
   if (pattern === "seasonal") {
     // Last year's months it was on, at the typical month of its latest on stretch.
     const latest = seasons.reduce((left, right) => Math.max(...right) > Math.max(...left) ? right : left);
     const onCalendarMonths = new Set(seasons.flat().map((index) => window[index].slice(5, 7)));
     const start = onCalendarMonths.has(targetMonth.slice(5, 7)) ? percentile(latest.map((index) => values[index]), 0.5) : 0;
-    return start + yearlyAmount;
+    return start + recurring;
   }
   const q1 = percentile(values, 0.25);
   const q3 = percentile(values, 0.75);
@@ -85,7 +84,7 @@ function seasonalMonthSpend({ window, monthly, yearly, targetMonth }) {
   const start = !spikes[spikes.length - 1] && last > 0 ? last : base;
   // Last year's spike in the same month comes back above the typical month.
   const excess = priorIndex >= 0 && spikes[priorIndex] ? values[priorIndex] - base : 0;
-  return start + excess + yearlyAmount;
+  return start + excess + recurring;
 }
 
 module.exports = { FULL_YEAR_MONTHS, historyWindow, isFullYear, seasonalMonthSpend };

@@ -24,7 +24,7 @@ describe("saveUnusualSpending", () => {
       transactionId: "transaction-1", subcategoryId: "subcategory-1", amountCentavos: 100_000,
       subcategoryLabel: "Groceries", accountName: "Cash", transactionDate: "2026-10-30",
       usualSpendingCentavos: 12_500, lowerBoundCentavos: 7_500, upperBoundCentavos: 20_000,
-      severity: 1.2, usableHistoryCount: 6, confirmedRecurring: false, recurrence: null,
+      severity: 1.2, usableHistoryCount: 6, confirmedRecurring: false, recurrence: null, recurrenceMonths: null,
     });
 
     expect(runAsync.mock.calls[0]?.[0]).toContain("INSERT OR IGNORE INTO anomaly_evaluations");
@@ -50,9 +50,24 @@ describe("saveUnusualSpending", () => {
       subcategoryId: "subcategory-1", subcategoryLabel: "Groceries", accountName: "Cash",
       usableHistoryCount: 6, usualSpendingCentavos: 12_500,
       lowerBoundCentavos: 7_500, upperBoundCentavos: 20_000, severity: 1.2,
-      confirmedRecurring: true, recurrence: "frequent",
+      confirmedRecurring: true, recurrence: "frequent", recurrenceMonths: null,
     }]);
     expect(getAllAsync.mock.calls[0]?.[0]).toContain("FROM anomaly_evaluations");
+  });
+
+  it("reads the months a yearly answer comes back in", async () => {
+    const row = (id: string, recurrence_months: string | null) => ({
+      id, transaction_date: "2026-10-30", amount_centavos: 100_000,
+      subcategory_id: "subcategory-1", subcategory_label: "Tuition", account_name: "Cash",
+      usable_history_count: 6, usual_spending_centavos: 12_500,
+      lower_bound_centavos: 7_500, upper_bound_centavos: 20_000, severity: 1.2,
+      recurrence: "yearly", recurrence_months,
+    });
+    mockInitDatabase.mockResolvedValue({ getAllAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue([row("chosen", "[6,11]"), row("own-month", null), row("malformed", "[0]")]) });
+    const { listPersistedUnusualSpendings } = await import("../unusualSpending");
+
+    const insights = await listPersistedUnusualSpendings("user-1");
+    expect(insights.map((insight) => [insight.transactionId, insight.recurrenceMonths])).toEqual([["chosen", [6, 11]], ["own-month", null], ["malformed", null]]);
   });
 
   it("leaves out evaluations of spending below the usual amount", async () => {
@@ -108,6 +123,33 @@ describe("answerUnusualSpending", () => {
     expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       changedFields: ["recurrence"], payload: { recurrence: "yearly" },
     }));
+  });
+
+  it("records the months a yearly answer comes back in", async () => {
+    const runAsync = jest.fn<(...args: any[]) => any>();
+    unanswered(runAsync);
+    const { answerUnusualSpending } = await import("../unusualSpending");
+
+    await answerUnusualSpending("user-1", "device-1", "transaction-1", "yearly", [11, 6]);
+
+    expect(runAsync.mock.calls[0]?.[0]).toContain("recurrence_months = ?");
+    expect(runAsync.mock.calls[0]?.slice(1, 4)).toEqual(["yearly", null, "[6,11]"]);
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      changedFields: ["recurrence", "recurrence_months"], payload: { recurrence: "yearly", recurrence_months: [6, 11] },
+    }));
+  });
+
+  it.each([
+    ["one_time", [6]],
+    ["yearly", []],
+    ["yearly", [13]],
+  ] as const)("refuses %s with months %j", async (recurrence, months) => {
+    const runAsync = jest.fn<(...args: any[]) => any>();
+    unanswered(runAsync);
+    const { answerUnusualSpending } = await import("../unusualSpending");
+
+    await expect(answerUnusualSpending("user-1", "device-1", "transaction-1", recurrence, months)).rejects.toThrow("recurrence months need a yearly answer");
+    expect(runAsync).not.toHaveBeenCalled();
   });
 
   it("does not queue a second answer", async () => {

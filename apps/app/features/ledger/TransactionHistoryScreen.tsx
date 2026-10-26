@@ -22,7 +22,7 @@ import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
 import type { Transaction } from "../../local-db/repositories/ledger";
 import { answerUnusualSpending, type SpendingRecurrence, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
-import { RECURRENCE_OPTIONS } from "../alerts/recurrenceOptions";
+import RecurrenceQuestion from "../alerts/RecurrenceQuestion";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
@@ -210,8 +210,6 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
   const [deleteBlockedTarget, setDeleteBlockedTarget] = useState<Transaction | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showUnusualSpending, setShowUnusualSpending] = useState(false);
-  const [answeringRecurrence, setAnsweringRecurrence] = useState<SpendingRecurrence | null>(null);
-  const [recurringError, setRecurringError] = useState<string | null>(null);
   const requestId = useRef(0);
   const loadingMoreRef = useRef(false);
   // True while load() is querying; a page appended mid-refresh would be overwritten by the refreshed rows.
@@ -495,22 +493,15 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     else setCustomToDate(formatIsoDate(date));
   }
 
-  async function answerUnusualSpendingRecurrence(recurrence: SpendingRecurrence): Promise<void> {
+  // RecurrenceQuestion shows the error when saving fails.
+  async function answerUnusualSpendingRecurrence(recurrence: SpendingRecurrence, months?: number[]): Promise<void> {
     if (!unusualSpending) return;
-    setAnsweringRecurrence(recurrence);
-    try {
-      await answerUnusualSpending(userId, deviceId, unusualSpending.transactionId, recurrence);
-      dismissUnusualSpending();
-    } catch {
-      setRecurringError("Your answer could not be saved. Try again.");
-    } finally {
-      setAnsweringRecurrence(null);
-    }
+    await answerUnusualSpending(userId, deviceId, unusualSpending.transactionId, recurrence, months);
+    dismissUnusualSpending();
   }
 
   function dismissUnusualSpending(): void {
     setShowUnusualSpending(false);
-    setRecurringError(null);
     onUnusualSpendingDismissed();
   }
 
@@ -833,13 +824,8 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
             <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.secondary, marginTop: 10, textAlign: "center" }}>
               You spent {formatCurrency(unusualSpending?.amountCentavos ?? 0)} on {unusualSpending?.subcategoryLabel ?? "this subcategory"}, more than your usual {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. Will you be making this expense again?
             </Text>
-            {recurringError ? <Text style={{ fontFamily: "Manrope", fontSize: 13, color: P.error, marginTop: 10, textAlign: "center" }}>{recurringError}</Text> : null}
-            <View style={{ gap: 10, marginTop: 18 }}>
-              {RECURRENCE_OPTIONS.map(({ recurrence, label }) => (
-                <Pressable key={recurrence} onPress={() => void answerUnusualSpendingRecurrence(recurrence)} disabled={answeringRecurrence !== null} accessibilityRole="button" accessibilityLabel={label} style={{ minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: P.border, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 }}>
-                  <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: P.brand, textAlign: "center" }}>{answeringRecurrence === recurrence ? "Saving..." : label}</Text>
-                </Pressable>
-              ))}
+            <View style={{ marginTop: 18 }}>
+              {unusualSpending ? <RecurrenceQuestion key={unusualSpending.transactionId} transactionDate={unusualSpending.transactionDate} onAnswer={answerUnusualSpendingRecurrence} /> : null}
             </View>
           </View>
         </View>

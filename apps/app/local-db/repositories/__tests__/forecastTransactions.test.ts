@@ -2,12 +2,20 @@ import { jest } from "@jest/globals";
 
 const mockInitDatabase = jest.fn<(...args: any[]) => any>();
 const mockListUnusualSpendings = jest.fn<(...args: any[]) => any>();
-const mockListSavedRecurrences = jest.fn<(...args: any[]) => any>();
+const mockListSavedAnswers = jest.fn<(...args: any[]) => any>();
+const mockListRecurringPayments = jest.fn<(...args: any[]) => any>();
 jest.mock("../../client", () => ({ initDatabase: () => mockInitDatabase() }));
 jest.mock("../unusualSpending", () => ({
   listUnusualSpendings: (...args: unknown[]) => mockListUnusualSpendings(...args),
-  listSavedRecurrences: (...args: unknown[]) => mockListSavedRecurrences(...args),
+  listSavedAnswers: (...args: unknown[]) => mockListSavedAnswers(...args),
+  listRecurringPayments: (...args: unknown[]) => mockListRecurringPayments(...args),
 }));
+
+// Saved answers, and the payments detection lists as recurring in certain months.
+function answers(recurrences: [string, string][], recurring: { id: string; subcategoryId: string; transactionDate: string; amountCentavos: number; months: number[] | null }[] = []) {
+  mockListSavedAnswers.mockResolvedValue({ recurrences: new Map(recurrences), months: new Map() });
+  mockListRecurringPayments.mockResolvedValue(recurring);
+}
 
 describe("listForecastTransactions", () => {
   beforeEach(() => { jest.resetModules(); mockInitDatabase.mockReset(); });
@@ -44,18 +52,34 @@ describe("listForecastTransactions", () => {
     expect(getAllAsync.mock.calls[1]![0]).not.toContain("scheduled_payment_records");
   });
 
-  it("leaves out unanswered and one-time unusual spending only when asked, and tags yearly payments from saved answers", async () => {
+  it("leaves out unanswered and one-time unusual spending, and payments in certain months, only when asked", async () => {
     const row = (id: string) => ({ id, transaction_date: "2026-03-06", amount_centavos: 4_200_000, transaction_type: "expense", merchant_name: null, counterparty_name: null, notes: null, category_slug: "communication" });
     const getAllAsync = jest.fn<(...args: any[]) => any>().mockImplementation(async () => [row("tuition"), row("gift"), row("laptop"), row("phone"), row("confirmed")]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
     // The check flags the laptop and gift; the tuition is no longer flagged but keeps its saved yearly answer.
     mockListUnusualSpendings.mockResolvedValue([{ transactionId: "laptop" }, { transactionId: "gift" }, { transactionId: "confirmed" }]);
-    mockListSavedRecurrences.mockResolvedValue(new Map([["gift", "one_time"], ["confirmed", "frequent"], ["tuition", "yearly"]]));
+    answers([["gift", "one_time"], ["confirmed", "frequent"], ["tuition", "yearly"]], [{ id: "tuition", subcategoryId: "school", transactionDate: "2026-03-06", amountCentavos: 4_200_000, months: [3, 8] }]);
     const { listForecastTransactions } = await import("../forecastTransactions");
     const list = (excludeUnusualSpending: boolean) => listForecastTransactions("user-1", { excludeUnusualSpending });
     const kept = await list(true);
-    expect(kept.map((item) => [item.transactionId, item.recurrence])).toEqual([["confirmed", undefined], ["phone", undefined], ["tuition", "yearly"]]);
+    expect(kept.map((item) => item.transactionId)).toEqual(["confirmed", "phone"]);
     await expect(list(false).then((items) => items.map((item) => item.transactionId))).resolves.toEqual(["confirmed", "phone", "laptop", "gift", "tuition"]);
+  });
+
+  it("lists payments in certain months with their forecast category, newest standing for shared months", async () => {
+    mockListUnusualSpendings.mockResolvedValue([]);
+    answers([], [
+      { id: "tuition-jun", subcategoryId: "school", transactionDate: "2026-06-10", amountCentavos: 50_000, months: [6, 11] },
+      { id: "tuition-nov", subcategoryId: "school", transactionDate: "2026-11-09", amountCentavos: 52_000, months: [6, 11] },
+    ]);
+    const getAllAsync = jest.fn<(...args: any[]) => any>().mockResolvedValue([{ id: "school", category_slug: "education" }]);
+    mockInitDatabase.mockResolvedValue({ getAllAsync });
+    const { listRecurringForecastPayments } = await import("../forecastTransactions");
+
+    await expect(listRecurringForecastPayments("user-1")).resolves.toEqual([expect.objectContaining({ id: "tuition-nov", months: [6, 11], category: "education" })]);
+    // As of October, November's payment had not been made, so June's still stands for both months.
+    await expect(listRecurringForecastPayments("user-1", "2026-10-01")).resolves.toEqual([expect.objectContaining({ id: "tuition-jun", months: [6, 11], category: "education" })]);
+    expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("WHERE s.user_id = ? AND s.id IN (?)"), "user-1", "school");
   });
 
   it("lists the quarters before the current one, oldest first", async () => {
@@ -142,7 +166,7 @@ describe("listForecastTransactions", () => {
     ]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
     mockListUnusualSpendings.mockResolvedValue([{ transactionId: "one-off" }]);
-    mockListSavedRecurrences.mockResolvedValue(new Map([["fees", "yearly"]]));
+    answers([["fees", "yearly"]], [{ id: "fees", subcategoryId: "fees", transactionDate: "2025-11-02", amountCentavos: 5_000, months: null }]);
     const { listPlanRecommendations } = await import("../forecastTransactions");
 
     const december = await listPlanRecommendations("user-1", "2026-12", new Date("2026-10-18T04:00:00Z"));
@@ -150,7 +174,9 @@ describe("listForecastTransactions", () => {
     expect(december.historySubcategoryIds).toEqual(expect.arrayContaining(["internet", "gifts", "tuition", "fees"]));
     expect(december.historySubcategoryIds).not.toContain("gadgets");
     expect(Object.keys(december.expectedSpend.subcategories).sort()).toEqual(["gifts", "internet"]);
-    await expect(listPlanRecommendations("user-1", "2026-11", new Date("2026-10-18T04:00:00Z"))).resolves.toMatchObject({ subcategoryIds: ["internet", "fees"] });
+    const november = await listPlanRecommendations("user-1", "2026-11", new Date("2026-10-18T04:00:00Z"));
+    expect(november).toMatchObject({ subcategoryIds: ["internet", "fees"] });
+    expect(november.expectedSpend.subcategories.fees).toBe(5_000);
     expect(getAllAsync).toHaveBeenCalledWith(expect.stringContaining("t.transaction_type = 'expense' AND t.status = 'posted'"), "user-1", "2025-10-01");
   });
 
@@ -163,7 +189,7 @@ describe("listForecastTransactions", () => {
     ]);
     mockInitDatabase.mockResolvedValue({ getAllAsync });
     mockListUnusualSpendings.mockResolvedValue([]);
-    mockListSavedRecurrences.mockResolvedValue(new Map());
+    answers([]);
     const { listPlanRecommendations } = await import("../forecastTransactions");
 
     await expect(listPlanRecommendations("user-1", "2026-10", new Date("2026-10-18T04:00:00Z"))).resolves.toEqual({

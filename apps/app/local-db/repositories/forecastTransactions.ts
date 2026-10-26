@@ -1,10 +1,11 @@
 import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import type { ForecastTransaction } from "../../features/forecast/types";
-import { listSavedRecurrences, listUnusualSpendings, type SpendingRecurrence } from "./unusualSpending";
+import { listRecurringPayments, listSavedAnswers, listUnusualSpendings } from "./unusualSpending";
 import { SCHEDULED_PAYMENTS_CATEGORY } from "../../features/forecast/scheduledForecast";
 import { localToday } from "../../features/billers/schedule";
 import { historyWindow, isFullYear, seasonalMonthSpend } from "@odin/spending-insights/seasonalMonth";
+import { recurringMonthSpend, resolveRecurringPayments, type RecurringPayment, type ResolvedRecurringPayment } from "@odin/spending-insights/recurringMonths";
 
 // Room for a full year of history, which the seasonal forecast compares against.
 const MAX_FORECAST_TRANSACTIONS = 2_000;
@@ -36,8 +37,9 @@ type ListForecastTransactionsOptions = {
   fromDate?: string;
   // Leave out biller and remittance payments, which the quarterly forecast adds back at their scheduled amounts.
   excludeScheduledPayments?: boolean;
-  // Leave out purchases the personal IQR check flags unless the user said they will be frequent or yearly,
-  // so the forecast does not expect a one-off again. Yearly ones are tagged to recur in their month.
+  // Leave out purchases the personal IQR check flags unless the user said they will be frequent, so the
+  // forecast does not expect a one-off again. Payments that come back in certain months are left out too;
+  // listRecurringForecastPayments returns them to add back in those months.
   excludeUnusualSpending?: boolean;
 };
 
@@ -75,15 +77,36 @@ export type PlanRecommendations = {
 
 type PlanSpendRow = { id: string; transaction_date: string; amount_centavos: number; subcategory_id: string | null; category_id: string | null; scheduled: number };
 
-// Purchases the personal IQR check flags, unless the user said they will be frequent or yearly, stay out of
-// the forecast; yearly ones recur only in their month.
-async function unusualSpendingIds(userId: string): Promise<{ oneOffs: Set<string>; yearly: Set<string> }> {
-  const [detected, saved] = await Promise.all([listUnusualSpendings(userId), listSavedRecurrences(userId)]);
-  const recurs = (id: string) => saved.get(id) === "frequent" || saved.get(id) === "yearly";
+type RecurringSpend = RecurringPayment & { id: string; subcategoryId: string };
+
+type UnusualSpending = {
+  // Purchases the personal IQR check flags, unless the user said they will be frequent or recur in certain months.
+  oneOffs: Set<string>;
+  // Every payment that comes back in certain months, which spending history leaves out.
+  recurringIds: Set<string>;
+  // Those payments with the months each still stands for; a newer one replaces an older one's months.
+  recurring: ResolvedRecurringPayment<RecurringSpend>[];
+};
+
+// Saved answers decide what recurs, so a payment the check no longer flags keeps its answer.
+// through (YYYY-MM-DD) leaves out payments made after it.
+async function listUnusualSpending(userId: string, through?: string): Promise<UnusualSpending> {
+  const [detected, saved, payments] = await Promise.all([listUnusualSpendings(userId), listSavedAnswers(userId), listRecurringPayments(userId)]);
+  const recurringIds = new Set(payments.map((payment) => payment.id));
+  const recurs = (id: string) => saved.recurrences.get(id) === "frequent" || saved.recurrences.get(id) === "yearly" || recurringIds.has(id);
+  const made = payments.filter((payment) => !through || payment.transactionDate <= through);
   return {
-    oneOffs: new Set([...detected.map((insight) => insight.transactionId), ...saved.keys()].filter((id) => !recurs(id))),
-    yearly: new Set([...saved].flatMap(([id, recurrence]) => recurrence === "yearly" ? [id] : [])),
+    oneOffs: new Set([...detected.map((insight) => insight.transactionId), ...saved.recurrences.keys()].filter((id) => !recurs(id))),
+    recurringIds,
+    recurring: resolveRecurringPayments(made.map(({ id, subcategoryId, transactionDate, amountCentavos, months }) => ({ id, subcategoryId, key: subcategoryId, transactionDate, amountCentavos, months }))),
   };
+}
+
+// What the recurring payments for one plan target, a subcategory or its category, expect in targetMonth.
+function recurringTargetSpend(recurring: UnusualSpending["recurring"], categoryBySubcategory: Map<string, string | null>, targetId: string, targetMonth: string): number {
+  const [kind, id] = targetId.split(":");
+  const forTarget = recurring.filter((payment) => kind === "subcategory" ? payment.subcategoryId === id : categoryBySubcategory.get(payment.subcategoryId) === id);
+  return recurringMonthSpend(forTarget, targetMonth);
 }
 
 // The categories a plan for planMonth (YYYY-MM) starts with. Like the Spending Forecast, a full year of history
@@ -102,8 +125,10 @@ export async function listPlanRecommendations(userId: string, planMonth: string,
       LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
     userId, getForecastHistoryStartDate(now),
   );
-  const { oneOffs, yearly } = await unusualSpendingIds(userId);
-  const clean = rows.filter((row) => !oneOffs.has(row.id));
+  const unusual = await listUnusualSpending(userId);
+  const clean = rows.filter((row) => !unusual.oneOffs.has(row.id));
+  const categoryBySubcategory = new Map(rows.flatMap((row) => row.subcategory_id ? [[row.subcategory_id, row.category_id] as const] : []));
+  const recurringFor = (targetId: string) => recurringTargetSpend(unusual.recurring, categoryBySubcategory, targetId, planMonth);
   // The plan's own twelve-month history, which decides whether a category may take a one-time amount.
   const historyStart = new Date(now);
   historyStart.setUTCMonth(historyStart.getUTCMonth() - 12);
@@ -112,7 +137,7 @@ export async function listPlanRecommendations(userId: string, planMonth: string,
   const historyCategoryIds = [...new Set(recent.flatMap((row) => row.category_id ? [row.category_id] : []))];
   const today = localToday(now);
   const window = historyWindow(clean.map((row) => row.transaction_date.slice(0, 7)), today.slice(0, 7));
-  const expectedSpend = expectedPlanSpend(clean, yearly, window, planMonth, recent);
+  const expectedSpend = expectedPlanSpend(clean, unusual.recurringIds, recurringFor, window, planMonth, recent);
   if (!isFullYear(window)) {
     const recentStart = getRecentExpenseStartDate(now);
     const lastSixMonths = clean.filter((row) => row.transaction_date >= recentStart);
@@ -123,25 +148,17 @@ export async function listPlanRecommendations(userId: string, planMonth: string,
     };
   }
   const monthly = new Map<string, Map<string, number>>();
-  const yearlyByTarget = new Map<string, Map<string, number>>();
-  const add = (byTarget: Map<string, Map<string, number>>, targetId: string, row: PlanSpendRow) => {
-    const months = byTarget.get(targetId) ?? new Map<string, number>();
-    const month = row.transaction_date.slice(0, 7);
-    months.set(month, (months.get(month) ?? 0) + row.amount_centavos);
-    byTarget.set(targetId, months);
-  };
   const subcategoryIds = new Set<string>();
   const directCategoryIds = new Set<string>();
   for (const row of clean) {
-    const byTarget = yearly.has(row.id) ? yearlyByTarget : monthly;
     const targetId = row.subcategory_id ? `subcategory:${row.subcategory_id}` : row.category_id ? `category:${row.category_id}` : null;
     if (!targetId) continue;
     if (row.subcategory_id) subcategoryIds.add(row.subcategory_id);
     else directCategoryIds.add(row.category_id!);
-    add(byTarget, targetId, row);
+    if (!unusual.recurringIds.has(row.id)) addMonthSpend(monthly, targetId, row);
   }
   const noSpend = new Map<string, number>();
-  const expected = (targetId: string) => seasonalMonthSpend({ window, monthly: monthly.get(targetId) ?? noSpend, yearly: yearlyByTarget.get(targetId) ?? noSpend, targetMonth: planMonth }) > 0;
+  const expected = (targetId: string) => seasonalMonthSpend({ window, monthly: monthly.get(targetId) ?? noSpend, recurring: recurringFor(targetId), targetMonth: planMonth }) > 0;
   return {
     subcategoryIds: [...subcategoryIds].filter((id) => expected(`subcategory:${id}`)),
     categoryIds: [...directCategoryIds].filter((id) => expected(`category:${id}`)),
@@ -149,9 +166,16 @@ export async function listPlanRecommendations(userId: string, planMonth: string,
   };
 }
 
+function addMonthSpend(byTarget: Map<string, Map<string, number>>, targetId: string, row: PlanSpendRow): void {
+  const months = byTarget.get(targetId) ?? new Map<string, number>();
+  const month = row.transaction_date.slice(0, 7);
+  months.set(month, (months.get(month) ?? 0) + row.amount_centavos);
+  byTarget.set(targetId, months);
+}
+
 // Mirrors the plan's category forecast on the server: a full year follows last year's season for planMonth,
 // less history uses the average month over the past twelve.
-function expectedPlanSpend(clean: PlanSpendRow[], yearly: Set<string>, window: string[], planMonth: string, recent: PlanSpendRow[]): PlanRecommendations["expectedSpend"] {
+function expectedPlanSpend(clean: PlanSpendRow[], recurringIds: Set<string>, recurringFor: (targetId: string) => number, window: string[], planMonth: string, recent: PlanSpendRow[]): PlanRecommendations["expectedSpend"] {
   const spending = clean.filter((row) => !row.scheduled);
   const subcategories: Record<string, number> = {};
   const categories: Record<string, number> = {};
@@ -166,21 +190,17 @@ function expectedPlanSpend(clean: PlanSpendRow[], yearly: Set<string>, window: s
     return { subcategories, categories };
   }
   const monthly = new Map<string, Map<string, number>>();
-  const yearlyByTarget = new Map<string, Map<string, number>>();
-  const add = (targetId: string, row: PlanSpendRow) => {
-    const byTarget = yearly.has(row.id) ? yearlyByTarget : monthly;
-    const months = byTarget.get(targetId) ?? new Map<string, number>();
-    const month = row.transaction_date.slice(0, 7);
-    months.set(month, (months.get(month) ?? 0) + row.amount_centavos);
-    byTarget.set(targetId, months);
-  };
+  const targets = new Set<string>();
   for (const row of spending) {
-    if (row.subcategory_id) add(`subcategory:${row.subcategory_id}`, row);
-    if (row.category_id) add(`category:${row.category_id}`, row);
+    const rowTargets = [row.subcategory_id && `subcategory:${row.subcategory_id}`, row.category_id && `category:${row.category_id}`].filter((target): target is string => Boolean(target));
+    for (const targetId of rowTargets) {
+      targets.add(targetId);
+      if (!recurringIds.has(row.id)) addMonthSpend(monthly, targetId, row);
+    }
   }
   const noSpend = new Map<string, number>();
-  for (const targetId of new Set([...monthly.keys(), ...yearlyByTarget.keys()])) {
-    const amount = seasonalMonthSpend({ window, monthly: monthly.get(targetId) ?? noSpend, yearly: yearlyByTarget.get(targetId) ?? noSpend, targetMonth: planMonth });
+  for (const targetId of targets) {
+    const amount = seasonalMonthSpend({ window, monthly: monthly.get(targetId) ?? noSpend, recurring: recurringFor(targetId), targetMonth: planMonth });
     if (amount <= 0) continue;
     const [kind, id] = targetId.split(":") as ["subcategory" | "category", string];
     (kind === "subcategory" ? subcategories : categories)[id] = amount;
@@ -207,15 +227,10 @@ export async function listForecastTransactions(userId: string, { fromDate, exclu
        LIMIT ${MAX_FORECAST_TRANSACTIONS}`,
     ...(fromDate ? [userId, fromDate] : [userId]),
   );
-  // Saved answers decide what recurs, so a payment the check no longer flags keeps its answer.
-  const [detected, saved] = excludeUnusualSpending
-    ? await Promise.all([listUnusualSpendings(userId), listSavedRecurrences(userId)])
-    : [[], new Map<string, SpendingRecurrence | null>()];
-  const recurs = (id: string) => saved.get(id) === "frequent" || saved.get(id) === "yearly";
-  const oneOffs = new Set([...detected.map((insight) => insight.transactionId), ...saved.keys()].filter((id) => !recurs(id)));
-  const yearly = new Set([...saved].flatMap(([id, recurrence]) => recurrence === "yearly" ? [id] : []));
+  const unusual = excludeUnusualSpending ? await listUnusualSpending(userId) : null;
+  const excluded = (id: string) => Boolean(unusual && (unusual.oneOffs.has(id) || unusual.recurringIds.has(id)));
   return rows.reverse().flatMap((row) => {
-    if (!Number.isInteger(row.amount_centavos) || row.amount_centavos <= 0 || oneOffs.has(row.id)) return [];
+    if (!Number.isInteger(row.amount_centavos) || row.amount_centavos <= 0 || excluded(row.id)) return [];
     const conciseDescription = description(row);
     return [{
       transactionId: row.id,
@@ -224,9 +239,28 @@ export async function listForecastTransactions(userId: string, { fromDate, exclu
       category: row.category_slug?.trim() || "Other",
       transactionType: row.transaction_type,
       ...(conciseDescription ? { description: conciseDescription } : {}),
-      ...(yearly.has(row.id) ? { recurrence: "yearly" as const } : {}),
     }];
   });
+}
+
+export type RecurringForecastPayment = ResolvedRecurringPayment<RecurringSpend> & { category: string };
+
+// Payments that come back in certain months, made by through (YYYY-MM-DD) if given, with the forecast
+// category of their subcategory, so the forecast can add each back in its months.
+export async function listRecurringForecastPayments(userId: string, through?: string): Promise<RecurringForecastPayment[]> {
+  const { recurring } = await listUnusualSpending(userId, through);
+  if (recurring.length === 0) return [];
+  const db = await getDb();
+  const subcategoryIds = [...new Set(recurring.map((payment) => payment.subcategoryId))];
+  const rows = await db.getAllAsync<{ id: string; category_slug: string | null }>(
+    `SELECT s.id, c.slug AS category_slug
+       FROM subcategories s
+       LEFT JOIN categories c ON c.id = s.category_id AND c.deleted = 0
+      WHERE s.user_id = ? AND s.id IN (${subcategoryIds.map(() => "?").join(", ")})`,
+    userId, ...subcategoryIds,
+  );
+  const slugBySubcategory = new Map(rows.map((row) => [row.id, row.category_slug?.trim() || "Other"]));
+  return recurring.map((payment) => ({ ...payment, category: slugBySubcategory.get(payment.subcategoryId) ?? "Other" }));
 }
 
 export type QuarterSpending = { quarter: string; totalCentavos: number; categories: { category: string; amountCentavos: number }[] };

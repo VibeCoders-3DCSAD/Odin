@@ -1,3 +1,4 @@
+import { detectRecurringPayments } from "@odin/spending-insights";
 import { detectUnusualSpendings, unusualSpendingStartDate } from "../unusualSpending";
 
 const history = [100, 110, 120, 130, 140, 150].map((amount, index) => ({
@@ -98,6 +99,31 @@ describe("detectUnusualSpendings", () => {
 
       expect(insights.map((insight) => insight.transactionId)).toEqual(["gifts-2026", "later"]);
       expect(insights[1]).toMatchObject({ usableHistoryCount: 6 });
+    });
+  });
+
+  describe("expenses in certain months", () => {
+    // Tuition paid in April, which the user said comes back in April and August.
+    const tuition = { ...history[0]!, id: "tuition-apr", transactionDate: "2026-04-01", amountCentavos: 100_000 };
+    const answers = new Map([["tuition-apr", "yearly" as const]]);
+    const months = new Map([["tuition-apr", [4, 8]]]);
+    const later = (id: string, transactionDate: string, amountCentavos = 140_000) => ({ ...history[0]!, id, transactionDate, amountCentavos });
+
+    it("covers a payment in any chosen month of the following year without another alert", () => {
+      expect(detectUnusualSpendings([...history, tuition, later("tuition-aug", "2026-08-03")], answers, months).map((insight) => insight.transactionId)).toEqual(["tuition-apr"]);
+    });
+
+    it("still flags a payment in a month the user did not choose", () => {
+      expect(detectUnusualSpendings([...history, tuition, later("tuition-oct", "2026-10-03")], answers, months).map((insight) => insight.transactionId)).toEqual(["tuition-apr", "tuition-oct"]);
+    });
+
+    it("reports the chosen months on the insight", () => {
+      expect(detectUnusualSpendings([...history, tuition], answers, months)[0]).toMatchObject({ recurrence: "yearly", recurrenceMonths: [4, 8] });
+    });
+
+    it("lists the answered payment and those it covers as recurring, with the chosen months", () => {
+      const recurring = detectRecurringPayments([...history, tuition, later("tuition-aug", "2026-08-03"), later("tuition-apr-2027", "2027-04-05")], answers, months);
+      expect(recurring.map((payment) => [payment.id, payment.months])).toEqual([["tuition-apr", [4, 8]], ["tuition-aug", [4, 8]], ["tuition-apr-2027", [4, 8]]]);
     });
   });
 });

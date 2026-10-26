@@ -10,6 +10,7 @@ const mockListForecastTransactions = jest.fn();
 const mockRequestQuarterlyForecast = jest.fn();
 const mockRequestForecastInterpretation = jest.fn();
 const mockListScheduledPayments = jest.fn();
+const mockListRecurringForecastPayments = jest.fn();
 const mockListQuarterlySpending = jest.fn();
 const mockPastQuarters = jest.fn();
 const mockListMonthlySpending = jest.fn();
@@ -24,6 +25,7 @@ jest.mock("../../../local-db/repositories/forecastSnapshots", () => ({ saveForec
 jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
   getForecastHistoryStartDate: () => "2025-10-01",
   listForecastTransactions: (...args: unknown[]) => mockListForecastTransactions(...args),
+  listRecurringForecastPayments: (...args: unknown[]) => mockListRecurringForecastPayments(...args),
   listQuarterlySpending: (...args: unknown[]) => mockListQuarterlySpending(...args),
   pastQuarters: (...args: unknown[]) => mockPastQuarters(...args),
   listMonthlySpending: (...args: unknown[]) => mockListMonthlySpending(...args),
@@ -61,6 +63,7 @@ describe("SpendingForecastScreen", () => {
     mockRequestQuarterlyForecast.mockResolvedValue({ response: { ok: true }, body: { payload: forecast } });
     mockRequestForecastInterpretation.mockRejectedValue(new Error("offline"));
     mockListScheduledPayments.mockResolvedValue([]);
+    mockListRecurringForecastPayments.mockResolvedValue([]);
     mockListQuarterlySpending.mockResolvedValue([]);
     mockPastQuarters.mockReturnValue(["2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
     mockListMonthlySpending.mockResolvedValue([]);
@@ -210,6 +213,19 @@ describe("SpendingForecastScreen", () => {
     for (const quarter of saved.quarters) expect(quarter.categories).toContainEqual({ category: "billers_remittances", amountCentavos: 10_800_000 });
     expect(saved.quarters[0]!.totalCentavos).toBe(1_500_000 + 10_800_000);
     expect(categorySeries(saved).find((line) => line.key === "billers_remittances")?.label).toBe("Billers & Remittances");
+    view.unmount();
+  });
+
+  it("adds unusual payments back in the months the user said they recur", async () => {
+    mockListRecurringForecastPayments.mockResolvedValue([{ id: "tuition", key: "school", subcategoryId: "school", transactionDate: "2026-06-10", amountCentavos: 4_000_000, months: [1, 6], category: "education" }]);
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalled());
+    expect(mockListRecurringForecastPayments).toHaveBeenCalledWith("user-1", undefined);
+    const saved = mockUpsertSnapshot.mock.calls[0]![2] as QuarterlyForecastPayload;
+    expect(saved.quarters[0]!.categories).not.toContainEqual(expect.objectContaining({ category: "education" }));
+    expect(saved.quarters[1]!.categories).toContainEqual({ category: "education", amountCentavos: 4_000_000 });
+    expect(saved.quarters[1]!.totalCentavos).toBe(1_650_000 + 4_000_000);
     view.unmount();
   });
 

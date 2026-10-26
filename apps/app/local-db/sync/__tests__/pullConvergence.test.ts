@@ -35,7 +35,17 @@ describe("recurring spending confirmation pull convergence", () => {
       version: 2, deleted: false,
     }, "user-1");
 
-    expect(row).toMatchObject({ recurrence: "yearly", confirmed_recurring_at: null });
+    expect(row).toMatchObject({ recurrence: "yearly", confirmed_recurring_at: null, recurrence_months: null });
+  });
+
+  it("stores the months a yearly answer comes back in as JSON", () => {
+    const row = normalizePullRow("anomaly_evaluations", {
+      id: "evaluation-3", user_id: "user-1", transaction_id: "tuition-2", subcategory_id: "tuition",
+      amount_centavos: 3_000_000, recurrence: "yearly", recurrence_months: [6, 11], confirmed_recurring_at: null,
+      version: 2, deleted: false,
+    }, "user-1");
+
+    expect(row).toMatchObject({ recurrence: "yearly", recurrence_months: "[6,11]" });
   });
 });
 
