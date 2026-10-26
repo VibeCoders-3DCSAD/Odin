@@ -220,13 +220,13 @@ const CREDIT_CARD_PAYMENT_UPDATE_FIELDS = new Set([
 
 const CREDIT_CARD_DETAILS_CREATE_FIELDS = new Set([
   "account_id", "issuer", "credit_limit_centavos", "available_credit_centavos",
-  "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
+  "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent", "allows_extra_payments",
   "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
 ]);
 
 const CREDIT_CARD_DETAILS_UPDATE_FIELDS = new Set([
   "account_id", "issuer", "credit_limit_centavos", "available_credit_centavos", "cutoff_day", "statement_day",
-  "notes", "billing_cycle_days", "alert_threshold_percent", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
+  "notes", "billing_cycle_days", "alert_threshold_percent", "allows_extra_payments", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
 ]);
 const CREDIT_CARD_REPAYMENT_PREFERENCE_FIELDS = new Set([
   "account_id", "strategy", "custom_amount_centavos", "percentage_bps",
@@ -492,6 +492,7 @@ async function validateCreatePayload(
     optionalFiniteInteger(sanitized, "available_credit_centavos");
     optionalFiniteInteger(sanitized, "billing_cycle_days");
     optionalFiniteInteger(sanitized, "alert_threshold_percent");
+    if (sanitized.allows_extra_payments !== undefined && typeof sanitized.allows_extra_payments !== "boolean") throw new Error("allows_extra_payments must be a boolean");
     optionalFiniteInteger(sanitized, "reconciled_available_credit_centavos");
     optionalFiniteInteger(sanitized, "pre_reconciliation_available_credit_centavos");
     if (sanitized.available_credit_reconciled_at !== undefined && sanitized.available_credit_reconciled_at !== null) requireIsoTimestamp(sanitized, "available_credit_reconciled_at");
@@ -1104,6 +1105,7 @@ async function validateUpdatePayload(
     throw new Error("available_credit_centavos must be non-negative");
   }
   if (entity === "credit_card_details") {
+    if (sanitized.allows_extra_payments !== undefined && typeof sanitized.allows_extra_payments !== "boolean") throw new Error("allows_extra_payments must be a boolean");
     const anchorFields = ["available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at"];
     if (anchorFields.some((field) => sanitized[field] !== undefined)) {
       if (Object.keys(sanitized).length !== anchorFields.length || !anchorFields.every((field) => sanitized[field] !== undefined)) throw new Error("reconciliation anchors can only be updated together");
@@ -1559,7 +1561,7 @@ async function validateFinancialPlanPayload(
     if (!surplusRecommendation || typeof surplusRecommendation !== "object" || Array.isArray(surplusRecommendation)) throw new Error("surplusRecommendation must be an object");
     const document = surplusRecommendation as Record<string, unknown>;
     assertPlanAmount(document, "unallocatedSurplusCentavos");
-    if (!["NEGATIVE_FINANCIAL_MARGIN", "EMERGENCY_FUND_INADEQUATE", "DEBT_SIGNAL", "USER_DIRECTED", "ASSESSMENT_UNAVAILABLE", "ASSESSMENT_STALE", "ASSESSMENT_INSUFFICIENT_DATA"].includes(document.reasonCode as string)) throw new Error("surplusRecommendation reason code is invalid");
+    if (!["NEGATIVE_FINANCIAL_MARGIN", "EMERGENCY_FUND_INADEQUATE", "DEBT_SIGNAL", "CREDIT_CARD_SIGNAL", "REWARD_YOURSELF", "USER_DIRECTED", "ASSESSMENT_UNAVAILABLE", "ASSESSMENT_STALE", "ASSESSMENT_INSUFFICIENT_DATA"].includes(document.reasonCode as string)) throw new Error("surplusRecommendation reason code is invalid");
     if (!["applied", "unavailable", "stale", "insufficient_data"].includes(document.assessmentStatus as string)) throw new Error("surplusRecommendation assessment status is invalid");
     const destination = document.advisoryDestination;
     if (destination !== null) {
@@ -1571,6 +1573,9 @@ async function validateFinancialPlanPayload(
       } else if (target.type === "emergency_fund") {
         requireString(target, "savingsGoalId");
         advisorySavingsGoalId = target.savingsGoalId as string;
+      } else if (target.type === "credit_card") {
+        requireString(target, "accountId");
+        await verifyAccountOwnership(supabase, userId, target.accountId as string);
       } else throw new Error("surplusRecommendation destination is invalid");
     }
   }

@@ -184,7 +184,7 @@ describe("financial plan repository", () => {
         savingsReservations: [{ savingsGoalId: "goal-1" }],
       },
     })).resolves.toEqual({
-      categories: { "category-1": "Household" }, subcategories: { "subcategory-1": "Groceries" }, debtAccounts: { "debt-1": "Car loan" }, savingsGoals: { "goal-1": "Emergency fund" }, creditCardStatements: { "statement-1": "Visa statement" },
+      categories: { "category-1": "Household" }, subcategories: { "subcategory-1": "Groceries" }, debtAccounts: { "debt-1": "Car loan" }, savingsGoals: { "goal-1": "Emergency fund" }, creditCardStatements: { "statement-1": "Visa statement" }, creditCards: {},
     });
     expect(db.getAllAsync).toHaveBeenCalledTimes(5);
     for (const call of db.getAllAsync.mock.calls) expect(call.slice(1)).toContain("user-1");
@@ -211,7 +211,7 @@ describe("financial plan repository", () => {
         savingsReservations: [{ savingsGoalId: "goal-1" }],
       },
     }, { includeDeleted: true })).resolves.toStrictEqual({
-      categories: { "category-1": "Household" }, subcategories: { "subcategory-1": "Groceries" }, debtAccounts: { "debt-1": "Car loan" }, savingsGoals: { "goal-1": "Emergency fund" }, creditCardStatements: { "statement-1": "Visa statement" },
+      categories: { "category-1": "Household" }, subcategories: { "subcategory-1": "Groceries" }, debtAccounts: { "debt-1": "Car loan" }, savingsGoals: { "goal-1": "Emergency fund" }, creditCardStatements: { "statement-1": "Visa statement" }, creditCards: {},
       removedIds: ["category-1", "debt-1", "statement-1"],
     });
     expect(db.getAllAsync).toHaveBeenCalledTimes(5);
@@ -229,7 +229,7 @@ describe("financial plan repository", () => {
 
     const { getFinancialPlanLabels } = await import("../financialPlans");
     const labels = await getFinancialPlanLabels("user-1", { recommendation: { allocations: [{ categoryId: "category-1" }] } }, { includeDeleted: false });
-    expect(labels).toStrictEqual({ categories: { "category-1": "Household" }, subcategories: {}, debtAccounts: {}, savingsGoals: {}, creditCardStatements: {} });
+    expect(labels).toStrictEqual({ categories: { "category-1": "Household" }, subcategories: {}, debtAccounts: {}, savingsGoals: {}, creditCardStatements: {}, creditCards: {} });
     expect(db.getAllAsync).toHaveBeenCalledWith(expect.stringContaining("WHERE user_id = ? AND deleted = 0 AND id IN"), "user-1", "category-1");
   });
 

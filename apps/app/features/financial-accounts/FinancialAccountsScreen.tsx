@@ -33,7 +33,7 @@ import {
   type CreateFinancialAccountInput,
   type UpdateFinancialAccountInput,
 } from "../../local-db/repositories/financialFoundations";
-import { AmountHero } from "../../components/BudgieForm";
+import { AmountHero, Switch } from "../../components/BudgieForm";
 import { getSavingsAccountDetails, type SavingsAccountDetailsInput, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
 import SavingsGoalForm from "../savings-goals/SavingsGoalForm";
 import SavingsGoalInvitation from "./SavingsGoalInvitation";
@@ -390,6 +390,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
   const [creditLimit, setCreditLimit] = useState("");
   const [cutoffDay, setCutoffDay] = useState("");
   const [threshold, setThreshold] = useState("");
+  const [allowsExtraPayments, setAllowsExtraPayments] = useState(false);
   const [interestRate, setInterestRate] = useState("");
   const [interestReference, setInterestReference] = useState<SavingsInterestReference | null>(null);
   const [savedSavingsDetails, setSavedSavingsDetails] = useState<SavingsAccountDetailsInput | null>(null);
@@ -414,6 +415,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
       setCreditLimit(cc ? String(cc.creditLimitCentavos / 100) : "");
       setCutoffDay(cc ? String(cc.cutoffDay) : "");
       setThreshold(cc && cc.alertThresholdPercent != null ? String(cc.alertThresholdPercent) : "");
+      setAllowsExtraPayments(cc?.allowsExtraPayments ?? false);
       if (editing.kind === "savings") {
         getSavingsAccountDetails(userId, editing.id).then((details) => {
           if (cancelled) return;
@@ -428,7 +430,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
     } else {
       setName(""); setKind("bank"); setOpeningBalance(""); setInstitutionName("");
       setOpenedOn(null);
-      setCreditLimit(""); setCutoffDay(""); setThreshold("");
+      setCreditLimit(""); setCutoffDay(""); setThreshold(""); setAllowsExtraPayments(false);
       setInterestRate(""); setInterestReference(null);
     }
     setDatePicker(null);
@@ -514,6 +516,7 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
           creditLimitCentavos: limitCents!,
           cutoffDay: cutoffDayValue!,
           alertThresholdPercent: thresholdValue!,
+          allowsExtraPayments,
         };
       }
       await onSubmit(input, savingsDetails);
@@ -632,6 +635,14 @@ function AccountFormSheet({ userId, visible, editing, onClose, onSubmit }: { use
                           style={{ height: 46, borderRadius: 12, borderWidth: 1, borderColor: fieldErrors.threshold ? P.error : P.line, paddingHorizontal: 14, fontFamily: "Manrope", fontSize: 14, color: P.ink, backgroundColor: P.card }}
                         />
                       </FormField>
+
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.ink2 }}>ALLOW EXTRA PAYMENTS</Text>
+                          <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: P.muted }}>Put spare money toward this card when you have it.</Text>
+                        </View>
+                        <Switch accessibilityLabel="Allow extra payments" value={allowsExtraPayments} onToggle={() => setAllowsExtraPayments((value) => !value)} />
+                      </View>
                     </>
                   ) : null}
 

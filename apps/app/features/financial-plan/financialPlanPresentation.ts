@@ -7,6 +7,7 @@ export type FinancialPlanLabels = {
   debtAccounts: Record<string, string>;
   savingsGoals: Record<string, string>;
   creditCardStatements: Record<string, string>;
+  creditCards?: Record<string, string>;
   /** Ids of soft-deleted entities, populated when labels are loaded with includeDeleted (D8). */
   removedIds?: string[];
 };
@@ -46,7 +47,7 @@ export function applyFinancialPlanLabels<T extends { allocations: FinancialPlanA
     allocations: recommendation.allocations.map((allocation) => ({ ...allocation, label: allocation.subcategoryId ? labels.subcategories[allocation.subcategoryId] : allocation.categoryId ? labels.categories[allocation.categoryId] : undefined })),
     debtReservations: recommendation.debtReservations.map((reservation) => ({ ...reservation, label: reservation.debtAccountId ? labels.debtAccounts[reservation.debtAccountId] : reservation.creditCardStatementId ? labels.creditCardStatements[reservation.creditCardStatementId] : undefined })),
     savingsReservations: recommendation.savingsReservations.map((reservation) => ({ ...reservation, label: reservation.savingsGoalId ? labels.savingsGoals[reservation.savingsGoalId] : undefined })),
-    ...(destination ? { surplusRecommendation: { ...recommendation.surplusRecommendation, advisoryDestination: { ...destination, label: destination.type === "debt" ? labels.debtAccounts[destination.debtAccountId] : labels.savingsGoals[destination.savingsGoalId] } } } : {}),
+    ...(destination ? { surplusRecommendation: { ...recommendation.surplusRecommendation, advisoryDestination: { ...destination, label: destination.type === "debt" ? labels.debtAccounts[destination.debtAccountId] : destination.type === "credit_card" ? labels.creditCards?.[destination.accountId] : labels.savingsGoals[destination.savingsGoalId] } } } : {}),
   };
 }
 

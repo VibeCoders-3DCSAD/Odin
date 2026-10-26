@@ -73,7 +73,7 @@ const LOCAL_COLUMNS: Record<string, Set<string>> = {
   ]),
   credit_card_details: new Set([
     "account_id", "user_id", "issuer", "credit_limit_centavos", "available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at",
-    "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent",
+    "cutoff_day", "statement_day", "notes", "billing_cycle_days", "alert_threshold_percent", "allows_extra_payments",
     "version", "deleted", "created_at", "updated_at", "last_synced_at",
   ]),
   credit_card_repayment_preferences: new Set([
@@ -221,7 +221,7 @@ export function normalizePullRow(
       const isProtectedDefault = (row.is_protected_default as boolean) === true;
       const isProtected = (row.is_protected as boolean) === true;
       normalized[col] = isProtectedDefault || isProtected ? 1 : 0;
-    } else if (table === "debt_accounts" && col === "allows_extra_payments") {
+    } else if ((table === "debt_accounts" || table === "credit_card_details") && col === "allows_extra_payments") {
       normalized[col] = row[col] === true || row[col] === 1 ? 1 : 0;
     } else if (table === "financial_plans" && (col === "input_snapshot_json" || col === "recommendation_json")) {
       normalized[col] = row[col] == null ? null : typeof row[col] === "object" ? JSON.stringify(row[col]) : row[col];

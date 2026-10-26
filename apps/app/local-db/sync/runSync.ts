@@ -482,7 +482,8 @@ async function repairCreditCardDetailSyncRows(
       notes: string | null;
       billing_cycle_days: number | null;
       alert_threshold_percent: number | null;
-    }>("SELECT account_id, issuer, credit_limit_centavos, available_credit_centavos, reconciled_available_credit_centavos, pre_reconciliation_available_credit_centavos, available_credit_reconciled_at, cutoff_day, statement_day, notes, billing_cycle_days, alert_threshold_percent FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0", row.record_id, userId);
+      allows_extra_payments: number;
+    }>("SELECT account_id, issuer, credit_limit_centavos, available_credit_centavos, reconciled_available_credit_centavos, pre_reconciliation_available_credit_centavos, available_credit_reconciled_at, cutoff_day, statement_day, notes, billing_cycle_days, alert_threshold_percent, allows_extra_payments FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0", row.record_id, userId);
     if (!details) continue;
 
     const queued = await db.getFirstAsync<{ operation_id: string }>(
@@ -502,6 +503,7 @@ async function repairCreditCardDetailSyncRows(
       notes: details.notes,
       billing_cycle_days: details.billing_cycle_days,
       alert_threshold_percent: details.alert_threshold_percent,
+      allows_extra_payments: details.allows_extra_payments === 1,
     };
     await enqueueOperation(db, {
       userId,

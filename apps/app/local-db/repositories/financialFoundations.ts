@@ -40,6 +40,7 @@ type FinancialAccountRow = {
   cc_cutoff_day: number | null;
   cc_statement_day: number | null;
   cc_alert_threshold_percent: number | null;
+  cc_allows_extra_payments: number | null;
   cc_repayment_strategy: CreditCardRepaymentStrategy | null;
   cc_repayment_custom_amount_centavos: number | null;
   cc_repayment_percentage_bps: number | null;
@@ -60,6 +61,7 @@ type CreditCardDetailsSyncRow = {
   notes: string | null;
   billing_cycle_days: number | null;
   alert_threshold_percent: number | null;
+  allows_extra_payments: number;
   version: number;
   deleted: number;
   created_at: string;
@@ -131,6 +133,7 @@ export type CreditCardDetails = {
   cutoffDay: number;
   statementDay: number | null;
   alertThresholdPercent: number | null;
+  allowsExtraPayments: boolean;
   repaymentStrategy: CreditCardRepaymentStrategy | null;
   repaymentCustomAmountCentavos: number | null;
   repaymentPercentageBps: number | null;
@@ -144,6 +147,7 @@ export type CreditCardDetailsInput = {
   cutoffDay: number;
   statementDay?: number | null;
   alertThresholdPercent: number;
+  allowsExtraPayments?: boolean;
 };
 
 export type IncomeFrequency = "daily" | "weekly" | "semi_monthly" | "monthly";
@@ -254,6 +258,7 @@ function mapAccount(row: FinancialAccountRow): FinancialAccount {
             cutoffDay: row.cc_cutoff_day ?? 0,
             statementDay: row.cc_statement_day,
             alertThresholdPercent: row.cc_alert_threshold_percent,
+            allowsExtraPayments: row.cc_allows_extra_payments === 1,
             repaymentStrategy: row.cc_repayment_strategy,
             repaymentCustomAmountCentavos: row.cc_repayment_custom_amount_centavos,
             repaymentPercentageBps: row.cc_repayment_percentage_bps,
@@ -468,8 +473,8 @@ async function upsertCreditCardDetails(
     `INSERT INTO credit_card_details
       (account_id, user_id, issuer, credit_limit_centavos, available_credit_centavos,
        cutoff_day, statement_day, notes, billing_cycle_days,
-       alert_threshold_percent, version, deleted, created_at, updated_at)
-     VALUES (?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?, 1, 0, ?, ?)
+       alert_threshold_percent, allows_extra_payments, version, deleted, created_at, updated_at)
+     VALUES (?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, 1, 0, ?, ?)
       ON CONFLICT(account_id) DO UPDATE SET
         credit_limit_centavos = excluded.credit_limit_centavos,
         available_credit_centavos = excluded.available_credit_centavos,
@@ -477,6 +482,7 @@ async function upsertCreditCardDetails(
        statement_day = excluded.statement_day,
        billing_cycle_days = excluded.billing_cycle_days,
        alert_threshold_percent = excluded.alert_threshold_percent,
+       allows_extra_payments = excluded.allows_extra_payments,
        deleted = 0,
        updated_at = excluded.updated_at,
        version = credit_card_details.version + 1`,
@@ -488,6 +494,7 @@ async function upsertCreditCardDetails(
     details.statementDay ?? null,
     details.billingCycleDays ?? null,
     details.alertThresholdPercent,
+    details.allowsExtraPayments ? 1 : 0,
     ts,
     ts,
   );
@@ -524,6 +531,7 @@ async function enqueueCreditCardDetailsOperation(
         notes: row.notes,
         billing_cycle_days: row.billing_cycle_days,
         alert_threshold_percent: row.alert_threshold_percent,
+        allows_extra_payments: row.allows_extra_payments === 1,
         };
   return enqueueOperation(db, {
     userId,
@@ -572,6 +580,7 @@ export async function listFinancialAccounts(userId: string): Promise<FinancialAc
              cc.cutoff_day AS cc_cutoff_day,
              cc.statement_day AS cc_statement_day,
              cc.alert_threshold_percent AS cc_alert_threshold_percent,
+             cc.allows_extra_payments AS cc_allows_extra_payments,
               preference.strategy AS cc_repayment_strategy,
                preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
                 preference.percentage_bps AS cc_repayment_percentage_bps,
@@ -607,6 +616,7 @@ export async function getFinancialAccount(
              cc.cutoff_day AS cc_cutoff_day,
              cc.statement_day AS cc_statement_day,
              cc.alert_threshold_percent AS cc_alert_threshold_percent,
+             cc.allows_extra_payments AS cc_allows_extra_payments,
               preference.strategy AS cc_repayment_strategy,
                preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
                 preference.percentage_bps AS cc_repayment_percentage_bps,

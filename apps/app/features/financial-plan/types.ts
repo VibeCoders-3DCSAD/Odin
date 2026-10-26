@@ -25,9 +25,9 @@ export type FinancialPlanReservation = {
 
 export type FinancialPlanSurplusRecommendation = {
   unallocatedSurplusCentavos: number;
-  reasonCode: "NEGATIVE_FINANCIAL_MARGIN" | "EMERGENCY_FUND_INADEQUATE" | "DEBT_SIGNAL" | "USER_DIRECTED" | "ASSESSMENT_UNAVAILABLE" | "ASSESSMENT_STALE" | "ASSESSMENT_INSUFFICIENT_DATA";
+  reasonCode: "DEBT_SIGNAL" | "EMERGENCY_FUND_INADEQUATE" | "CREDIT_CARD_SIGNAL" | "REWARD_YOURSELF" | "NEGATIVE_FINANCIAL_MARGIN" | "USER_DIRECTED" | "ASSESSMENT_UNAVAILABLE" | "ASSESSMENT_STALE" | "ASSESSMENT_INSUFFICIENT_DATA";
   assessmentStatus: "applied" | "unavailable" | "stale" | "insufficient_data";
-  advisoryDestination: { type: "emergency_fund"; savingsGoalId: string; label?: string } | { type: "debt"; debtAccountId: string; label?: string } | null;
+  advisoryDestination: { type: "emergency_fund"; savingsGoalId: string; label?: string } | { type: "debt"; debtAccountId: string; label?: string } | { type: "credit_card"; accountId: string; label?: string } | null;
   assessmentEvidence: Record<string, unknown> | null;
 };
 

@@ -5,6 +5,7 @@ import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 import type { FinancialPlanLabels } from "../../features/financial-plan/financialPlanPresentation";
 import type { CompletedFinancialPlanSummary } from "../../features/financial-plan/pastPlanTypes";
+import type { FinancialPlanSurplusRecommendation } from "../../features/financial-plan/types";
 import { getPlanSpendingReview } from "./financialPlanSpendingReview";
 import { getPhilippineToday } from "../../features/debt-manager/debtTrendRange";
 
@@ -282,29 +283,33 @@ export async function getAcceptedFinancialPlanForPeriod(userId: string, periodSt
 }
 
 export async function getFinancialPlanLabels(userId: string, plan: Pick<AcceptedFinancialPlan, "recommendation">, options: { includeDeleted?: boolean } = {}): Promise<FinancialPlanLabels> {
-  const recommendation = plan.recommendation as { allocations?: FinancialPlanAllocation[]; debtReservations?: FinancialPlanDebtReservation[]; savingsReservations?: FinancialPlanSavingsReservation[] };
+  const recommendation = plan.recommendation as { allocations?: FinancialPlanAllocation[]; debtReservations?: FinancialPlanDebtReservation[]; savingsReservations?: FinancialPlanSavingsReservation[]; surplusRecommendation?: FinancialPlanSurplusRecommendation };
+  const destination = recommendation.surplusRecommendation?.advisoryDestination;
   const categoryIds = [...new Set((recommendation.allocations ?? []).flatMap((allocation) => allocation.categoryId ? [allocation.categoryId] : []))];
   const subcategoryIds = [...new Set((recommendation.allocations ?? []).flatMap((allocation) => allocation.subcategoryId ? [allocation.subcategoryId] : []))];
-  const debtIds = [...new Set((recommendation.debtReservations ?? []).flatMap((reservation) => reservation.debtAccountId ? [reservation.debtAccountId] : []))];
-  const goalIds = [...new Set((recommendation.savingsReservations ?? []).map((reservation) => reservation.savingsGoalId))];
+  const debtIds = [...new Set([...(recommendation.debtReservations ?? []).flatMap((reservation) => reservation.debtAccountId ? [reservation.debtAccountId] : []), ...(destination?.type === "debt" ? [destination.debtAccountId] : [])])];
+  const goalIds = [...new Set([...(recommendation.savingsReservations ?? []).map((reservation) => reservation.savingsGoalId), ...(destination?.type === "emergency_fund" ? [destination.savingsGoalId] : [])])];
+  const cardIds = destination?.type === "credit_card" ? [destination.accountId] : [];
   const statementIds = [...new Set((recommendation.debtReservations ?? []).flatMap((reservation) => reservation.creditCardStatementId ? [reservation.creditCardStatementId] : []))];
   const includeDeleted = options.includeDeleted === true;
   const live = includeDeleted ? "" : " AND deleted = 0";
   const db = await getDb();
-  const [categories, subcategories, debts, goals, statements] = await Promise.all([
+  const [categories, subcategories, debts, goals, statements, cards] = await Promise.all([
     categoryIds.length ? db.getAllAsync<{ id: string; label: string; deleted: number }>(`SELECT id, label, deleted FROM categories WHERE user_id = ?${live} AND id IN (${categoryIds.map(() => "?").join(",")})`, userId, ...categoryIds) : [],
     subcategoryIds.length ? db.getAllAsync<{ id: string; label: string; deleted: number }>(`SELECT id, label, deleted FROM subcategories WHERE user_id = ?${live} AND id IN (${subcategoryIds.map(() => "?").join(",")})`, userId, ...subcategoryIds) : [],
     debtIds.length ? db.getAllAsync<{ id: string; name: string; deleted: number }>(`SELECT id, name, deleted FROM debt_accounts WHERE user_id = ?${live} AND id IN (${debtIds.map(() => "?").join(",")})`, userId, ...debtIds) : [],
     goalIds.length ? db.getAllAsync<{ id: string; name: string; deleted: number }>(`SELECT id, name, deleted FROM savings_goals WHERE user_id = ?${live} AND id IN (${goalIds.map(() => "?").join(",")})`, userId, ...goalIds) : [],
     statementIds.length ? db.getAllAsync<{ id: string; name: string; deleted: number }>(`SELECT s.id, a.name, MAX(s.deleted, c.deleted, a.deleted) AS deleted FROM credit_card_statements s JOIN credit_card_cycles c ON c.id = s.cycle_id AND c.user_id = s.user_id JOIN financial_accounts a ON a.id = c.account_id AND a.user_id = c.user_id WHERE s.user_id = ?${includeDeleted ? "" : " AND s.deleted = 0 AND c.deleted = 0 AND a.deleted = 0"} AND s.id IN (${statementIds.map(() => "?").join(",")})`, userId, ...statementIds) : [],
+    cardIds.length ? db.getAllAsync<{ id: string; name: string; deleted: number }>(`SELECT id, name, deleted FROM financial_accounts WHERE user_id = ?${live} AND id IN (${cardIds.map(() => "?").join(",")})`, userId, ...cardIds) : [],
   ]);
-  const removedIds = includeDeleted ? [...categories, ...subcategories, ...debts, ...goals, ...statements].flatMap((row) => row.deleted ? [row.id] : []) : [];
+  const removedIds = includeDeleted ? [...categories, ...subcategories, ...debts, ...goals, ...statements, ...cards].flatMap((row) => row.deleted ? [row.id] : []) : [];
   return {
     categories: Object.fromEntries(categories.map((category) => [category.id, category.label])),
     subcategories: Object.fromEntries(subcategories.map((subcategory) => [subcategory.id, subcategory.label])),
     debtAccounts: Object.fromEntries(debts.map((debt) => [debt.id, debt.name])),
     savingsGoals: Object.fromEntries(goals.map((goal) => [goal.id, goal.name])),
     creditCardStatements: Object.fromEntries(statements.map((statement) => [statement.id, `${statement.name} statement`])),
+    creditCards: Object.fromEntries(cards.map((card) => [card.id, card.name])),
     ...(includeDeleted ? { removedIds } : {}),
   };
 }

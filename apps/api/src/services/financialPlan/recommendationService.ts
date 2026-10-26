@@ -33,7 +33,7 @@ type Timestamped = { updated_at: string };
 type Debt = Timestamped & { id: string; status: string; paid_off_at: string | null; current_balance_centavos: number; minimum_payment_centavos: number; payment_frequency: string; payment_schedule: { semiMonthlyDays?: [number, number]; customIntervalDays?: number } | null; next_due_date: string | null; annual_interest_rate_bps: number; allows_extra_payments: boolean };
 type Goal = Timestamped & { id: string; planned_contribution_amount_centavos: number | null; contribution_frequency: string | null; contribution_interval_count: number | null; contribution_day_of_month: number | null; contribution_second_day_of_month: number | null; custom_interval_days: number | null; next_contribution_date: string | null; goal_type: string; target_amount_centavos: number; current_amount_centavos: number };
 type Statement = { id: string; minimum_due_centavos: number; due_date: string };
-type FinancialAccount = Timestamped & { kind: string; current_balance_centavos: number };
+type FinancialAccount = Timestamped & { id: string; kind: string; current_balance_centavos: number };
 type Transaction = Timestamped & { id: string; amount_centavos: number; transaction_date: string; transaction_type: "income" | "expense"; category_id: string | null; subcategory_id: string | null; source_savings_goal_id?: string | null; destination_savings_goal_id?: string | null };
 type OnboardingSession = { raw_answers: Record<string, unknown> | null };
 type ManualAllocation = { target: "category" | "subcategory"; id: string; amountCentavos: number };
@@ -232,7 +232,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const [subcategoriesResult, categoriesResult, accountsResult, debtsResult, goalsResult, statementsResult, transactionsResult, classificationResult, onboardingResult, debtPaymentsResult, scheduledPaymentsResult, scheduledPaymentTransactionsResult, scheduledPaymentHistoryResult] = await Promise.all([
     supabase.from("subcategories").select("id, category_id, label, minimum_amount_centavos, fixed_amount_centavos, always_in_budget, updated_at").eq("user_id", userId).eq("kind", "expense").eq("is_active", true).eq("deleted", false).limit(200),
     supabase.from("categories").select("id, slug, label, minimum_amount_centavos, fixed_amount_centavos, updated_at").eq("user_id", userId).eq("is_active", true).eq("deleted", false).limit(200),
-    supabase.from("financial_accounts").select("kind, current_balance_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
+    supabase.from("financial_accounts").select("id, kind, current_balance_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("debt_accounts").select(DEBT_COMMITMENT_FIELDS).eq("user_id", userId).in("status", ["active", "paid_off"]).eq("deleted", false).limit(100),
     supabase.from("savings_goals").select("id, planned_contribution_amount_centavos, contribution_frequency, contribution_interval_count, contribution_day_of_month, contribution_second_day_of_month, custom_interval_days, next_contribution_date, goal_type, target_amount_centavos, current_amount_centavos, updated_at").eq("user_id", userId).eq("status", "active").eq("deleted", false).limit(100),
     supabase.from("credit_card_statements").select("id, minimum_due_centavos, due_date").eq("user_id", userId).eq("authoritative", true).eq("deleted", false).gte("due_date", period.start).lte("due_date", period.end).limit(100),
@@ -400,6 +400,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const debtPreferencesPromise = Promise.all([
     supabase.from("debt_strategy_preferences").select("strategy").eq("user_id", userId).eq("deleted", false).maybeSingle(),
     supabase.from("user_debt_priorities").select("debt_account_id, priority_rank").eq("user_id", userId).eq("deleted", false).order("priority_rank").limit(100),
+    supabase.from("credit_card_details").select("account_id, credit_limit_centavos, available_credit_centavos").eq("user_id", userId).eq("allows_extra_payments", true).eq("deleted", false).limit(100),
   ]);
   assessmentPromise.catch(() => {});
   debtPreferencesPromise.catch(() => {});
@@ -436,16 +437,23 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   const goals = (goalsResult.data ?? []) as Goal[];
   const debts = (debtsResult.data ?? []) as Debt[];
   const eligibleEmergencyGoalId = reservationSkips.skipSavingsContributions ? null : goals.find((goal) => goal.goal_type === "emergency_fund" && goal.current_amount_centavos < goal.target_amount_centavos)?.id ?? null;
-  const [strategyResult, prioritiesResult] = await debtPreferencesPromise;
+  const [strategyResult, prioritiesResult, cardsResult] = await debtPreferencesPromise;
   const strategy = strategyResult.data?.strategy === "snowball" ? "snowball" : "avalanche";
   const priorityIds = (prioritiesResult.data ?? []).map((priority) => priority.debt_account_id).filter((id): id is string => typeof id === "string");
   const eligibleDebtId = reservationSkips.skipDebtRepayments || strategyResult.error || prioritiesResult.error ? null : selectEligibleDebt(debts, strategy, priorityIds);
+  const activeCardIds = new Set(((accountsResult.data ?? []) as FinancialAccount[]).filter((account) => account.kind === "credit_card").map((account) => account.id));
+  // Cards that allow extra payments and still owe something, largest balance first.
+  const eligibleCardIds = reservationSkips.skipDebtRepayments || cardsResult.error ? [] : ((cardsResult.data ?? []) as Array<{ account_id: string; credit_limit_centavos: number; available_credit_centavos: number | null }>)
+    .map((card) => ({ id: card.account_id, owedCentavos: card.credit_limit_centavos - (card.available_credit_centavos ?? card.credit_limit_centavos) }))
+    .filter((card) => activeCardIds.has(card.id) && card.owedCentavos > 0)
+    .sort((left, right) => right.owedCentavos - left.owedCentavos || left.id.localeCompare(right.id))
+    .map((card) => card.id);
   const inputSnapshot = { plannedAmountCentavos, commitmentSelection, forecast, restrictions: { allocations: plannedCategories }, obligations: { reservations: obligations, requirements: dueObligations }, debtRequirements: { reservations: commitmentRequirements.debts }, savingsRequirements: { reservations: commitmentRequirements.savings }, classification: assessment ? { assessmentId: assessment.id, assessedAt: assessment.assessedAt, ruleSetVersion: assessment.ruleSetVersion, outputSnapshot: assessment.outputSnapshot, sourceUpdatedAt } : { status: classificationResult.error ? "unavailable" : "absent", sourceUpdatedAt } };
   // Recommendations use monthly targets; recorded spending is tracked separately.
   const ml = await recommendPlanCategories(userId, period, available, plannedCategories, forecast);
   const recommendation = ml.recommendation as { feasibility?: string; required_funds?: number; shortfall?: number; unallocated_surplus?: number; allocations?: unknown };
   const surplusCentavos = typeof recommendation.unallocated_surplus === "number" && Number.isFinite(recommendation.unallocated_surplus) && recommendation.unallocated_surplus > 0 ? recommendation.unallocated_surplus * 100 : 0;
-  const surplusRecommendation = deriveSurplusRecommendation({ unallocatedSurplusCentavos: surplusCentavos, assessment, sourceUpdatedAt, eligibleEmergencyGoalId, eligibleDebtId });
+  const surplusRecommendation = deriveSurplusRecommendation({ unallocatedSurplusCentavos: surplusCentavos, assessment, sourceUpdatedAt, eligibleEmergencyGoalId, eligibleDebtId, eligibleCardIds });
   const debtSurplusCentavos = 0;
   const savingsSurplusCentavos = 0;
   const baseDebtReservations = [...debtReservations, ...statementReservations];
