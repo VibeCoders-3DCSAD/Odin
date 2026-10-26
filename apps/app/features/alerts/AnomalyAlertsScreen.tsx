@@ -34,7 +34,8 @@ export default function AnomalyAlertsScreen({ userId, deviceId, onBack, initialT
 
   const load = useCallback(async () => {
     try {
-      const refreshed = (await listPersistedUnusualSpendings(userId)).reverse();
+      const refreshed = (await listPersistedUnusualSpendings(userId))
+        .filter((insight) => insight.recurrence !== "yearly").reverse();
       setAlerts(refreshed);
       setSelected((current) => current ? refreshed.find((alert) => alert.transactionId === current.transactionId) ?? null : null);
       setError(null);
