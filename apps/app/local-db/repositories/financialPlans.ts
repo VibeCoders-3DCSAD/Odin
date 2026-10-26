@@ -8,6 +8,7 @@ import type { CompletedFinancialPlanSummary } from "../../features/financial-pla
 import type { FinancialPlanSurplusRecommendation } from "../../features/financial-plan/types";
 import { getPlanSpendingReview } from "./financialPlanSpendingReview";
 import { getPhilippineToday } from "../../features/debt-manager/debtTrendRange";
+import { planSpendableFundsCentavos } from "../../features/financial-plan/helpers/planSpendableFunds";
 
 export type AllocationRule = "FIXED" | "MINIMUM" | "FLEXIBLE";
 
@@ -261,12 +262,12 @@ export async function getFinancialPlanSpending(userId: string, planId: string): 
   };
 }
 
-// Matches the Financial Plan screen's "Remaining Money in Plan": available funds minus spending so far.
+// Matches the Financial Plan screen, keeping regular and extra commitments reserved.
 export async function getFinancialPlanBudgetRemaining(userId: string, plan: AcceptedFinancialPlan): Promise<number | null> {
   const availableFunds = plan.recommendation.availableFundsCentavos;
   if (typeof availableFunds !== "number" || !Number.isSafeInteger(availableFunds)) return null;
   const { spentCentavos } = await getFinancialPlanSpending(userId, plan.id);
-  return availableFunds - spentCentavos;
+  return planSpendableFundsCentavos(availableFunds, optionalRecommendationCentavos(plan.recommendation, "debtSurplusCentavos"), optionalRecommendationCentavos(plan.recommendation, "savingsSurplusCentavos")) - spentCentavos;
 }
 
 export async function getAcceptedFinancialPlanForPeriod(userId: string, periodStart: string, periodEnd: string): Promise<AcceptedFinancialPlan | null> {

@@ -8,6 +8,18 @@ const food: FinancialPlanAllocation = {
 const period = { start: "2026-10-01", end: "2026-10-31" };
 
 describe("accepted plan spending insights", () => {
+  it("distinguishes remaining plan money from category balances and accounts for commitments", () => {
+    const messages = planSpendingInsights({ allocations: [food], spentCentavos: 15_000, period, today: "2026-10-15", funds: { remainingCentavos: 85_000, commitmentsCentavos: 40_000 } });
+    expect(messages[0]).toBe("₱850.00 remains in your plan. Your budgeted commitments of ₱400.00 are already accounted for.");
+    expect(messages[1]).toContain("₱450.00 remaining.");
+    expect(messages).toHaveLength(4);
+  });
+
+  it("reports a negative remaining plan balance as over budget", () => {
+    const messages = planSpendingInsights({ allocations: [food], spentCentavos: 15_000, period, today: "2026-10-15", funds: { remainingCentavos: -5_000, commitmentsCentavos: 0 } });
+    expect(messages[0]).toBe("Your plan is ₱50.00 over budget.");
+  });
+
   it("compares recorded spending with accepted category allocations", () => {
     const messages = planSpendingInsights({ allocations: [food], spentCentavos: 15_000, period, today: "2026-10-15" });
     expect(messages[0]).toBe("You've spent ₱150.00 of your ₱600.00 category budget (25% used). ₱450.00 remaining.");

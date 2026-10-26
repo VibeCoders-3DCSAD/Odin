@@ -13,6 +13,8 @@ import { hasUnderfundedReservation, manualCommitmentDraft, parseBudgetAmount, pl
 import { previewPaidCentavos, type PlanCommitmentPayments } from "./helpers/commitmentPayments";
 import { recommendPlanAmount } from "./helpers/planAmountRecommendation";
 import { planSpendingInsights } from "./helpers/planSpendingInsights";
+import { planCommitmentStatusInsights } from "./helpers/planCommitmentStatusInsights";
+import { planSpendableFundsCentavos } from "./helpers/planSpendableFunds";
 import { surplusGuidanceMessage } from "./helpers/surplusGuidance";
 import { DevPlanMonthSettings } from "./DevPlanMonthSettings";
 import { PlanAllocations } from "./PlanAllocations";
@@ -438,13 +440,8 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
   const showDebtCommitments = state === "saved" ? plan.inputSnapshot.commitmentSelection?.debtRepayments !== false : !reservationSkips.debtRepayments;
   const showSavingsCommitments = state === "saved" ? plan.inputSnapshot.commitmentSelection?.savingsContributions !== false : !reservationSkips.savingsContributions;
   const showScheduledPayments = state === "saved" ? plan.inputSnapshot.commitmentSelection?.scheduledPayments !== false : !reservationSkips.scheduledPayments;
-  const remainingUnallocated = state === "saved" ? planSpentCentavos === null ? null : recommendation.availableFundsCentavos - planSpentCentavos : remainingUnallocatedCentavos(recommendation.availableFundsCentavos, recommendation.allocations, recommendation.debtSurplusCentavos, recommendation.savingsSurplusCentavos);
+  const remainingUnallocated = state === "saved" ? planSpentCentavos === null ? null : planSpendableFundsCentavos(recommendation.availableFundsCentavos, recommendation.debtSurplusCentavos, recommendation.savingsSurplusCentavos) - planSpentCentavos : remainingUnallocatedCentavos(recommendation.availableFundsCentavos, recommendation.allocations, recommendation.debtSurplusCentavos, recommendation.savingsSurplusCentavos);
   const overAllocated = remainingUnallocated !== null && remainingUnallocated < 0;
-  const insights = state === "saved"
-    ? planSpentCentavos === null
-      ? ["Your plan is saved. Spending insights are temporarily unavailable."]
-      : planSpendingInsights({ allocations: recommendation.allocations, spentCentavos: planSpentCentavos, period: plan.period, today: getPhilippineToday() })
-    : plan.explanations;
   const surplusGuidance = recommendation.surplusRecommendation;
   const assessmentOutput = surplusGuidance?.assessmentEvidence?.outputSnapshot as Record<string, { value?: unknown }> | undefined;
   const ruleValue = (name: string) => typeof assessmentOutput?.[name]?.value === "number" ? assessmentOutput[name].value as number : null;
@@ -462,6 +459,12 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
     + (showDebtCommitments ? sumAmounts(recommendation.debtReservations) : 0)
     + (showScheduledPayments ? sumAmounts(obligationReservations) : 0);
   const commitmentsCentavos = reservedCentavos + (showSavingsCommitments ? recommendation.savingsSurplusCentavos ?? 0 : 0) + (showDebtCommitments ? recommendation.debtSurplusCentavos ?? 0 : 0);
+  const commitmentInsights = state === "saved" ? planCommitmentStatusInsights(plan, commitmentPaymentsPaid) : [];
+  const insights = state === "saved"
+    ? planSpentCentavos === null || remainingUnallocated === null
+      ? ["Your plan is saved. Spending insights are temporarily unavailable."]
+      : planSpendingInsights({ allocations: recommendation.allocations, spentCentavos: planSpentCentavos, period: plan.period, today: getPhilippineToday(), funds: { remainingCentavos: remainingUnallocated, commitmentsCentavos } })
+    : plan.explanations;
   const categoriesCentavos = sumAmounts(recommendation.allocations.map((allocation) => ({ amountCentavos: allocation.allocatedAmountCentavos })));
   const canRecalculate = state === "ready" || state === "infeasible";
   const recalculateAction = canRecalculate ? <Pressable accessibilityRole="button" accessibilityLabel="Calculate Allocations" disabled={hasInvalidCommitments} onPress={() => void loadRecommendation()} style={{ borderColor: "#013220", borderRadius: 999, borderWidth: 1, backgroundColor: commitmentsEdited ? "#013220" : "transparent", paddingHorizontal: 12, paddingVertical: 6, opacity: hasInvalidCommitments ? 0.5 : 1 }}><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 12, color: commitmentsEdited ? "#FFFFFF" : "#013220" }}>Recalculate</Text></Pressable> : null;
@@ -493,7 +496,6 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
        <View style={{ marginTop: 16, borderRadius: 16, padding: 16, backgroundColor: "#013220" }}>
          <Text style={{ fontFamily: "Manrope", fontSize: 12, color: "#D7EEE2" }}>Remaining Money in Plan</Text>
          <Text accessibilityRole={overAllocated ? "alert" : undefined} style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 25, color: overAllocated ? "#FFB4AB" : "#FFFFFF", marginTop: 2 }}>{remainingUnallocated === null ? "Unavailable" : formatPeso(remainingUnallocated)}</Text>
-         <Text style={{ fontFamily: "Manrope", fontSize: 11.5, color: "#D7EEE2", marginTop: 4 }}>{state === "saved" ? "Available plan funds minus recorded category spending. Includes money not assigned to category budgets." : "After savings, debt, billers and remittances, and category allocations."}</Text>
          <View style={{ flexDirection: "row", gap: 8, marginTop: 14, borderTopWidth: 1, borderTopColor: "#416153", paddingTop: 12 }}>
            {([["Plan total", recommendation.availableFundsCentavos + reservedCentavos], ["Commitments", commitmentsCentavos], ["Categories", categoriesCentavos]] as const).map(([label, amount]) => <View key={label} style={{ flex: 1 }}><Text style={{ fontFamily: "Manrope", fontSize: 11, color: "#9FC2B0" }}>{label}</Text><Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 13, color: "#FFFFFF", marginTop: 2 }}>{formatPeso(amount)}</Text></View>)}
          </View>
@@ -504,7 +506,10 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
            <Sparkle color="#0E6D46" size={18} weight="fill" />
            <Text style={{ color: "#0E6D46", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Plan insights</Text>
          </View>
-         {insights.map((explanation, index) => <Text key={`${explanation}-${index}`} style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 8 }}>{explanation}</Text>)}
+         {(commitmentInsights.length ? insights.slice(0, 2) : insights).map((explanation, index) => <Text key={`${explanation}-${index}`} style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 8 }}>{explanation}</Text>)}
+         {commitmentInsights.length ? <View style={{ marginTop: 10, gap: 4 }}>
+           {commitmentInsights.map((summary) => <Text key={summary} style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18 }}>{summary}</Text>)}
+         </View> : null}
         </View> : null}
          {state !== "saved" && !commitmentsEdited && surplusGuidance && surplusGuidance.unallocatedSurplusCentavos > 0 ? <View style={{ backgroundColor: "#FFF8E7", borderColor: "#F2D9A3", borderRadius: 14, borderWidth: 1, marginTop: 16, padding: 14 }}><Text style={{ color: "#6F4A00", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>{surplusGuidance.reasonCode === "REWARD_YOURSELF" ? "Reward yourself" : "Your leftover money"}</Text><Text style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 6 }}>{formatPeso(surplusGuidance.unallocatedSurplusCentavos)} is left after your planned payments and budgets. {surplusGuidanceText}</Text></View> : null}
          {state !== "saved" && (reservationSkips.debtRepayments || reservationSkips.savingsContributions || reservationSkips.scheduledPayments) ? <View accessibilityRole="alert" style={{ backgroundColor: "#FFF8E7", borderColor: "#F2D9A3", borderRadius: 14, borderWidth: 1, marginTop: 16, padding: 14 }}><Text style={{ color: "#6F4A00", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>Skipped plan commitments</Text>{reservationSkips.debtRepayments ? <Text style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 6 }}>Debt repayments excluded from this plan. Existing payments are still due.</Text> : null}{reservationSkips.savingsContributions ? <Text style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 6 }}>Savings contributions are not included in this plan. Missing a contribution may delay when your savings goals are met.</Text> : null}{reservationSkips.scheduledPayments ? <Text style={{ color: "#414942", fontFamily: "Manrope", fontSize: 11.5, lineHeight: 18, marginTop: 6 }}>Billers and remittances excluded from this plan. Existing bills are still due.</Text> : null}</View> : null}

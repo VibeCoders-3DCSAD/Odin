@@ -6,6 +6,7 @@ type SpendingInsightInput = {
   spentCentavos: number;
   period: { start: string; end: string };
   today: string;
+  funds?: { remainingCentavos: number; commitmentsCentavos: number };
 };
 
 function percentage(amount: number, total: number): string {
@@ -23,6 +24,16 @@ function summaryInsight(budget: number, spent: number): string {
     ? `You've recorded ${formatPeso(spent)} in category spending, with no category budget allocated.`
     : "No category spending recorded yet. This plan has no category budget allocated.";
   return `You've spent ${formatPeso(spent)} of your ${formatPeso(budget)} category budget (${percentage(spent, budget)} used). ${remainingDescription(budget, spent)}`;
+}
+
+function planBalanceInsight(funds: SpendingInsightInput["funds"]): string | null {
+  if (!funds) return null;
+  const balance = funds.remainingCentavos < 0
+    ? `Your plan is ${formatPeso(-funds.remainingCentavos)} over budget.`
+    : `${formatPeso(funds.remainingCentavos)} remains in your plan.`;
+  return funds.commitmentsCentavos > 0
+    ? `${balance} Your budgeted commitments of ${formatPeso(funds.commitmentsCentavos)} are already accounted for.`
+    : balance;
 }
 
 function categoryInsight(allocations: FinancialPlanAllocation[]): string | null {
@@ -55,13 +66,13 @@ function periodInsight(period: SpendingInsightInput["period"], today: string, bu
   return `Day ${elapsed} of ${days} in this plan (${percentage(elapsed, days)} through the period).${usage}`;
 }
 
-export function planSpendingInsights({ allocations, spentCentavos, period, today }: SpendingInsightInput): string[] {
+export function planSpendingInsights({ allocations, spentCentavos, period, today, funds }: SpendingInsightInput): string[] {
   const budget = allocations.reduce((sum, allocation) => sum + allocation.allocatedAmountCentavos, 0);
   const plannedCategorySpending = allocations.reduce((sum, allocation) => sum + (allocation.spentAmountCentavos ?? 0), 0);
   const unplanned = Math.max(0, spentCentavos - plannedCategorySpending);
   const outsidePlan = unplanned > 0
     ? `${formatPeso(unplanned)} of recorded spending (${percentage(unplanned, spentCentavos)}) is outside the categories in this plan.` : null;
-  return [summaryInsight(budget, spentCentavos), outsidePlan, categoryInsight(allocations), periodInsight(period, today, budget, spentCentavos)]
+  return [planBalanceInsight(funds), summaryInsight(budget, spentCentavos), outsidePlan, categoryInsight(allocations), periodInsight(period, today, budget, spentCentavos)]
     .filter((message): message is string => message !== null)
-    .slice(0, 3);
+    .slice(0, funds ? 4 : 3);
 }

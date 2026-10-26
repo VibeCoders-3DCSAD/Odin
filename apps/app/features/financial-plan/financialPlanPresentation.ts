@@ -1,4 +1,5 @@
 import type { PlanCommitmentStatus } from "./pastPlanTypes";
+import { planSpendableFundsCentavos } from "./helpers/planSpendableFunds";
 import type { FinancialPlanAllocation, FinancialPlanReservation, FinancialPlanSurplusRecommendation } from "./types";
 
 export type FinancialPlanLabels = {
@@ -22,7 +23,7 @@ export function formatForecastPeso(centavos: number): string {
 }
 
 export function remainingUnallocatedCentavos(availableFundsCentavos: number, allocations: FinancialPlanAllocation[], debtSurplusCentavos = 0, savingsSurplusCentavos = 0): number {
-  return availableFundsCentavos - allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0) - debtSurplusCentavos - savingsSurplusCentavos;
+  return planSpendableFundsCentavos(availableFundsCentavos, debtSurplusCentavos, savingsSurplusCentavos) - allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0);
 }
 
 export function applyFinancialPlanSpending(allocations: FinancialPlanAllocation[], spending: Record<string, number>): FinancialPlanAllocation[] {

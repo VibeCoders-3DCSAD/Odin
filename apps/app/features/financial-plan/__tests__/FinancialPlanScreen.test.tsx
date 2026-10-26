@@ -392,6 +392,25 @@ describe("FinancialPlanScreen", () => {
     expect(view.queryByLabelText("Accept and save Financial Plan")).toBeNull();
   });
 
+  it("keeps unpaid commitments and extra savings and debt amounts out of remaining money and insights", async () => {
+    const saved = await mockGetAcceptedFinancialPlanForPeriod();
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ ...saved,
+      inputSnapshot: { obligations: { reservations: [{ scheduledPaymentId: "bill-1", amountCentavos: 10_000, dueDate: "2026-10-20" }] } },
+      recommendation: { ...saved.recommendation,
+        availableFundsCentavos: 70_000,
+        debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-10-20" }],
+        savingsReservations: [{ savingsGoalId: "emergency-1", amountCentavos: 10_000, dueDate: "2026-10-20" }],
+        debtSurplusCentavos: 5_000, savingsSurplusCentavos: 5_000,
+      },
+    });
+    mockGetFinancialPlanSpending.mockResolvedValue({ allocationSpending: { "category:food": 15_000 }, spentCentavos: 15_000 });
+    const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
+    await waitFor(() => expect(view.getByLabelText("Reset Financial Plan")).toBeTruthy());
+    expect(view.getByText("₱450.00")).toBeTruthy();
+    expect(view.getByText("₱450.00 remains in your plan. Your budgeted commitments of ₱400.00 are already accounted for.")).toBeTruthy();
+    expect(view.queryByText(/Available plan funds minus recorded category spending/)).toBeNull();
+  });
+
   it("opens the saved Financial Plan instead of the category selector", async () => {
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
 
@@ -457,6 +476,8 @@ describe("FinancialPlanScreen", () => {
     expect(view.getByText("Paid ₱100.00 of ₱200.00")).toBeTruthy();
     expect(view.getByLabelText("Family remittance: Paid")).toBeTruthy();
     expect(view.getByText("Paid ₱10.00 of ₱50.00")).toBeTruthy();
+    expect(view.getByText("Debt repayments: 1 partial.")).toBeTruthy();
+    expect(view.getByText("Billers & remittances: 2 paid.")).toBeTruthy();
   });
 
   it("keeps the saved plan open without payment statuses when payments cannot be read", async () => {
@@ -467,6 +488,7 @@ describe("FinancialPlanScreen", () => {
 
     await waitFor(() => expect(view.getByText("Monthly rent")).toBeTruthy());
     expect(view.queryByLabelText("Monthly rent: Unpaid")).toBeNull();
+    expect(view.getByText("Billers & remittances: status unavailable.")).toBeTruthy();
   });
 
   it("shows an empty biller reservation section for a legacy saved plan", async () => {
