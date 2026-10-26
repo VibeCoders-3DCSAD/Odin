@@ -5,13 +5,13 @@ const MAX_NOTE_LENGTH = 320;
 
 export class ForecastInterpretationValidationError extends Error {}
 
-const systemPrompt = `You reword short notes about a person's estimated spending for the next 12 months in Odin, a budgeting app.
+const systemPrompt = `You reword short notes about a person's estimated spending for the coming months in Odin, a budgeting app.
 
 You are a rewording layer only. Every amount, month range, and expense name in NOTES is final. Never add facts, amounts, dates, reasons, causes, prices, inflation, holidays, events, or advice that is not already in a note. Never explain why spending changes.
 
-Write in simple, warm English for everyday Filipino readers, like a helpful friend. Use one or two short sentences per note. Avoid technical words such as forecast, projected, quarter, category, baseline, trend, model, and HFCE. Do not pressure, shame, or create urgency.
+Write in simple, warm English for everyday Filipino readers, like a helpful friend. Use one or two short sentences per note. Avoid technical words such as forecast, projected, quarter, category, baseline, trend, model, and HFCE. Do not pressure, shame, or create urgency. Never use "may" or "might"; say "will likely" instead, because readers can take "may" to mean permission.
 
-Keep every peso amount exactly as written (for example "PHP 16,500") and every month range exactly as written (for example "Jan–Mar 2027"). Keep the notes in the same order and return exactly one rewritten note for each input note.
+Keep every peso amount exactly as written (for example "PHP 16,500") and every month or month range exactly as written (for example "December 2026" or "Jan–Mar 2027"). Keep the notes in the same order and return exactly one rewritten note for each input note.
 
 Return valid JSON only in this exact shape:
 {"notes":["rewritten note 1","rewritten note 2"]}`;
@@ -24,10 +24,10 @@ export function parseForecastInterpretationRequest(value: unknown): string[] {
   return notes.map((note: string) => note.trim());
 }
 
-// Peso amounts, years, and month ranges a note states; a rewrite must state exactly the same ones.
+// Peso amounts, years, months, and month ranges a note states; a rewrite must state exactly the same ones.
 function facts(note: string): string {
   const numbers = note.match(/\d+(?:,\d{3})*(?:\.\d+)?/g) ?? [];
-  const months = note.match(/\b(?:Jan|Apr|Jul|Oct)–(?:Mar|Jun|Sep|Dec)\b/g) ?? [];
+  const months = note.match(/\b(?:(?:Jan|Apr|Jul|Oct)–(?:Mar|Jun|Sep|Dec)|January|February|March|April|May|June|July|August|September|October|November|December)\b/g) ?? [];
   return [...numbers, ...months].sort().join("|");
 }
 
@@ -35,7 +35,9 @@ function isFaithfulRewrite(original: string, rewrite: unknown): rewrite is strin
   return typeof rewrite === "string"
     && rewrite.trim().length > 0 && rewrite.length <= MAX_NOTE_LENGTH
     && facts(original) === facts(rewrite)
-    && !/\bhfce\b|household final consumption|\bforecast|\bquarter|\bQ[1-4]\b/i.test(rewrite);
+    && !/\bhfce\b|household final consumption|\bforecast|\bquarter|\bQ[1-4]\b/i.test(rewrite)
+    // Lowercase only, so the month May still passes.
+    && !/\b(?:may|might)\b/.test(rewrite);
 }
 
 // Returns Groq's friendlier wording, or the original notes when Groq is unavailable or changes a fact.

@@ -1,7 +1,7 @@
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import SpendingForecastScreen from "../SpendingForecastScreen";
-import { categorySeries, forecastInterpretation, forecastReliabilityNote } from "../QuarterlyForecastCharts";
+import { categorySeries, forecastInterpretation, forecastReliabilityNote, seasonalPreferenceNote } from "../QuarterlyForecastCharts";
 import type { QuarterlyForecastPayload } from "../types";
 
 const mockGetSnapshot = jest.fn();
@@ -11,6 +11,7 @@ const mockRequestQuarterlyForecast = jest.fn();
 const mockRequestForecastInterpretation = jest.fn();
 const mockListScheduledPayments = jest.fn();
 const mockListRecurringForecastPayments = jest.fn();
+const mockGetPreferences = jest.fn();
 const mockListQuarterlySpending = jest.fn();
 const mockPastQuarters = jest.fn();
 const mockListMonthlySpending = jest.fn();
@@ -36,6 +37,9 @@ jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
 }));
 jest.mock("../../../services/connectivity", () => ({
   useConnectivityStore: (select: (state: { online: boolean }) => unknown) => select({ online: mockOnline }),
+}));
+jest.mock("../../governance/api", () => ({
+  getPreferences: (...args: unknown[]) => mockGetPreferences(...args),
 }));
 jest.mock("../api", () => ({
   requestQuarterlyForecast: (...args: unknown[]) => mockRequestQuarterlyForecast(...args),
@@ -64,6 +68,7 @@ describe("SpendingForecastScreen", () => {
     mockRequestForecastInterpretation.mockRejectedValue(new Error("offline"));
     mockListScheduledPayments.mockResolvedValue([]);
     mockListRecurringForecastPayments.mockResolvedValue([]);
+    mockGetPreferences.mockResolvedValue({ response: { ok: true }, body: { payload: { preferences: null, submitted_at: null } } });
     mockListQuarterlySpending.mockResolvedValue([]);
     mockPastQuarters.mockReturnValue(["2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]);
     mockListMonthlySpending.mockResolvedValue([]);
@@ -118,7 +123,7 @@ describe("SpendingForecastScreen", () => {
 
     await waitFor(() => expect(view.getByText("Forecast update failed. Your last forecast is still available.")).toBeTruthy());
     expect(view.getByText("PHP 15,000")).toBeTruthy();
-    expect(view.getByText("Forecast data may be out of date.")).toBeTruthy();
+    expect(view.getByText("This forecast hasn't been updated recently.")).toBeTruthy();
     expect(view.queryByText("Updating forecast…")).toBeNull();
   });
 
@@ -238,6 +243,18 @@ describe("SpendingForecastScreen", () => {
     await waitFor(() => expect(view.getByText("Friendly note 1")).toBeTruthy());
     expect(mockRequestForecastInterpretation).toHaveBeenCalledWith("token", notes, expect.any(AbortSignal));
     expect(mockUpsertSnapshot).toHaveBeenLastCalledWith("user-1", "forecast_quarterly", { ...forecast, interpretation: rewritten });
+  });
+
+  it("adds the seasons the user said cost more while the history is short, without sending it to Groq", async () => {
+    const provisional = { ...forecast, quality: "INSUFFICIENT_DATA" as const, seasonalUncertainty: true };
+    mockRequestQuarterlyForecast.mockResolvedValue({ response: { ok: true }, body: { payload: provisional } });
+    mockGetPreferences.mockResolvedValue({ response: { ok: true }, body: { payload: { preferences: { ...noSeasons, high_expense_seasons: ["christmas_ber_months"] }, submitted_at: "2026-09-01T00:00:00.000Z" } } });
+    const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
+
+    await waitFor(() => expect(view.getByText("You said your spending goes up during Christmas and Ber Months. We'll reflect that once you have enough history.")).toBeTruthy());
+    expect(mockGetPreferences).toHaveBeenCalledWith("token");
+    await waitFor(() => expect(mockRequestForecastInterpretation).toHaveBeenCalled());
+    expect(mockRequestForecastInterpretation.mock.calls[0]![1]).not.toContainEqual(expect.stringContaining("Ber Months"));
   });
 
   it("keeps the app's own notes when Groq is unavailable", async () => {
@@ -379,8 +396,26 @@ describe("categorySeries", () => {
   });
 });
 
+const noSeasons = { high_expense_seasons: ["none"], low_expense_seasons: ["none"], saving_seasons: ["none"], custom_seasonal_events: [] };
+
+describe("seasonalPreferenceNote", () => {
+  const short = { ...forecast, seasonalUncertainty: true };
+
+  it("names preset, custom, and older seasons the user said cost more", () => {
+    const preferences = { ...noSeasons, high_expense_seasons: ["summer", "custom_fiesta", "q4"], custom_seasonal_events: [{ id: "custom_fiesta", name: "Town Fiesta", months: [5] }] };
+    expect(seasonalPreferenceNote(short, preferences)).toBe("You said your spending goes up during Summer, Town Fiesta and October–December. We'll reflect that once you have enough history.");
+  });
+
+  it("stays quiet with a full year of history, no answers, or no higher-cost seasons", () => {
+    const preferences = { ...noSeasons, high_expense_seasons: ["christmas_ber_months"] };
+    expect(seasonalPreferenceNote({ ...forecast, seasonalUncertainty: false }, preferences)).toBeNull();
+    expect(seasonalPreferenceNote(short, null)).toBeNull();
+    expect(seasonalPreferenceNote(short, noSeasons)).toBeNull();
+  });
+});
+
 describe("forecastInterpretation", () => {
-  it("describes the trend, costliest stretch, biggest expense, and what changes in everyday words", () => {
+  it("describes the costliest stretch, biggest expense, and what changes in everyday words", () => {
     expect(forecastInterpretation({
       ...forecast,
       quarters: [
@@ -388,18 +423,53 @@ describe("forecastInterpretation", () => {
         { quarter: "2027Q1", totalCentavos: 1_650_000, categories: [{ category: "food", amountCentavos: 1_200_000 }, { category: "transport", amountCentavos: 450_000 }] },
       ],
     })).toEqual([
-      "Your spending will likely go up. Every 3 months, it may go from about PHP 15,000 (Oct–Dec 2026) to PHP 16,500 (Jan–Mar 2027).",
       "Your most expensive stretch will likely be Jan–Mar 2027, at about PHP 16,500. Try to save a little extra before then.",
       "Food and groceries is your biggest expense, about 7 of every 10 pesos you spend.",
-      "By Jan–Mar 2027, you may spend about PHP 2,000 more on food and groceries every 3 months.",
-      "You may spend about PHP 500 less on transportation every 3 months by Jan–Mar 2027.",
+      "By Jan–Mar 2027, you will likely spend about PHP 2,000 more on food and groceries every 3 months.",
+      "You will likely spend about PHP 500 less on transportation every 3 months by Jan–Mar 2027.",
     ]);
   });
 
-  it("says flat spending stays about the same and skips the costliest-stretch note", () => {
+  it("reads a monthly forecast month by month, from this month on", () => {
+    const month = (key: string, food: number, transport: number) => ({ month: key, totalCentavos: food + transport, categories: [{ category: "food", amountCentavos: food }, { category: "transport", amountCentavos: transport }] });
+    expect(forecastInterpretation({
+      ...forecast,
+      baselineMethod: "same_period_last_year",
+      months: [month("2026-09", 900_000, 100_000), month("2026-10", 400_000, 100_000), month("2026-11", 450_000, 100_000), month("2026-12", 700_000, 100_000), month("2027-01", 500_000, 80_000)],
+    }, new Date("2026-10-26T04:00:00.000Z"))).toEqual([
+      "Your most expensive month will likely be December 2026, at about PHP 8,000, or PHP 2,350 more than usual. To get ready, set aside about PHP 1,175 a month from October 2026, or spend less on food and groceries that month.",
+      "Food and groceries is your biggest expense, about 8 of every 10 pesos you spend.",
+      "By January 2027, you will likely spend about PHP 1,000 more on food and groceries a month.",
+      "You will likely spend about PHP 200 less on transportation a month by January 2027.",
+    ]);
+  });
+
+  it("suggests spending less when this month is the costliest, and skips a month barely above usual", () => {
+    const month = (key: string, food: number) => ({ month: key, totalCentavos: food, categories: [{ category: "food", amountCentavos: food }] });
+    const monthly = { ...forecast, baselineMethod: "same_period_last_year" as const };
+    const now = new Date("2026-10-26T04:00:00.000Z");
+    expect(forecastInterpretation({ ...monthly, months: [month("2026-10", 800_000), month("2026-11", 500_000), month("2026-12", 500_000)] }, now)).toContain(
+      "This month, October 2026, will likely be your most expensive, at about PHP 8,000, or PHP 3,000 more than usual. Try to spend less on food and groceries this month.",
+    );
+    expect(forecastInterpretation({ ...monthly, months: [month("2026-10", 500_000), month("2026-11", 510_000), month("2026-12", 500_000)] }, now).join(" ")).not.toContain("most expensive");
+  });
+
+  it("names billers and remittances only as the biggest expense", () => {
+    const month = (key: string, bills: number, food: number) => ({ month: key, totalCentavos: bills + food, categories: [{ category: "billers_remittances", amountCentavos: bills }, { category: "food", amountCentavos: food }] });
+    const notes = forecastInterpretation({
+      ...forecast,
+      baselineMethod: "same_period_last_year",
+      months: [month("2026-10", 500_000, 200_000), month("2026-11", 500_000, 200_000), month("2026-12", 900_000, 250_000), month("2027-01", 700_000, 180_000)],
+    }, new Date("2026-10-26T04:00:00.000Z"));
+    expect(notes).toContain("Billers & Remittances is your biggest expense, about 8 of every 10 pesos you spend.");
+    expect(notes.find((note) => note.startsWith("Your most expensive month"))).toMatch(/spend less on food and groceries that month\.$/);
+    expect(notes).toContain("You will likely spend about PHP 200 less on food and groceries a month by January 2027.");
+    expect(notes.filter((note) => /billers|Billers/.test(note))).toHaveLength(1);
+  });
+
+  it("skips the costliest-stretch note when spending stays flat", () => {
     const flat = { quarter: "2026Q4", totalCentavos: 1_000_000, categories: [{ category: "food", amountCentavos: 1_000_000 }] };
     expect(forecastInterpretation({ ...forecast, quarters: [flat, { ...flat, quarter: "2027Q1" }] })).toEqual([
-      "Your spending will likely stay about the same, around PHP 10,000 every 3 months.",
       "Food and groceries is your biggest expense, almost every peso you spend.",
     ]);
   });

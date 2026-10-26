@@ -7,6 +7,7 @@ import { CalendarBlank, CaretDown, CaretUp, Check } from "phosphor-react-native"
 import { v4, v4Font } from "../../components/BudgieForm";
 import { ForecastCategoryPicker } from "./ForecastCategoryPicker";
 import { localToday } from "../billers/schedule";
+import { LEGACY_SEASON_LABELS, SEASON_PRESETS, normalizeCustomEvents, type SeasonalPreferences } from "@odin/spending-insights/seasons";
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", over: "#D9001F" };
 
@@ -158,8 +159,37 @@ function slotCategorySeries(slots: Slot[]): Series[] {
   return ranked.map((category) => ({ key: category, label: categoryLabel(category), color: P.brand, values: slots.map((slot) => amountFor(slot.forecast, category)), actual: slots.map((slot) => amountFor(slot.actual, category)) }));
 }
 
-// Below this share of change, spending is described as staying about the same.
-const FLAT_CHANGE = 0.01;
+// A month this share above the usual month is worth getting ready for.
+const PEAK_CHANGE = 0.05;
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+// The costliest forecast month against the usual one, with how to get ready: set money aside in the months
+// before it, or spend less that month on the expense that rises the most. months starts with this month.
+function peakMonthNote(months: [string, Period][]): string | null {
+  const usual = median(months.map(([, period]) => period.totalCentavos));
+  const peakIndex = months.reduce((highest, [, period], index) => period.totalCentavos > months[highest]![1].totalCentavos ? index : highest, 0);
+  const [peakMonth, peak] = months[peakIndex]!;
+  const extra = peak.totalCentavos - usual;
+  if (usual <= 0 || extra / usual < PEAK_CHANGE) return null;
+  const amountIn = (period: Period, category: string) => period.categories.find((point) => point.category === category)?.amountCentavos ?? 0;
+  // Scheduled bills and remittances are fixed, so they are never the expense to spend less on.
+  const rises = peak.categories.filter(({ category }) => category !== SCHEDULED_PAYMENTS_CATEGORY).map(({ category, amountCentavos }) => ({ category, rise: amountCentavos - median(months.map(([, period]) => amountIn(period, category))) }));
+  const driver = rises.reduce<(typeof rises)[number] | null>((best, item) => item.rise > 0 && (!best || item.rise > best.rise) ? item : best, null);
+  const name = MONTH_LABELS.dates(peakMonth);
+  if (peakIndex === 0) {
+    const cut = driver ? `Try to spend less on ${categoryName(driver.category)} this month.` : "Try to keep your spending down this month.";
+    return `This month, ${name}, will likely be your most expensive, at about ${formatPeso(peak.totalCentavos)}, or ${formatPeso(extra)} more than usual. ${cut}`;
+  }
+  // Rounded up to the peso, so the months before it cover the whole extra.
+  const perMonth = Math.ceil(extra / peakIndex / 100) * 100;
+  const cut = driver ? `, or spend less on ${categoryName(driver.category)} that month` : "";
+  return `Your most expensive month will likely be ${name}, at about ${formatPeso(peak.totalCentavos)}, or ${formatPeso(extra)} more than usual. To get ready, set aside about ${formatPeso(perMonth)} a month from ${MONTH_LABELS.dates(months[0]![0])}${cut}.`;
+}
 
 function shareOfTen(share: number): string {
   const tenths = Math.round(share * 10);
@@ -168,33 +198,49 @@ function shareOfTen(share: number): string {
   return `about ${tenths} of every 10 pesos you spend`;
 }
 
-// A plain-language reading of the forecast: where spending is headed, the costliest stretch,
-// the biggest expense, and what changes the most.
-export function forecastInterpretation(forecast: QuarterlyForecastPayload): string[] {
-  const first = forecast.quarters[0];
-  const last = forecast.quarters.at(-1);
+// How the notes name a period and how often its amount is spent.
+type NoteWording = { name: (key: string) => string; every: string };
+
+const MONTH_WORDING: NoteWording = { name: MONTH_LABELS.dates, every: "a month" };
+const QUARTER_WORDING: NoteWording = { name: monthRange, every: "every 3 months" };
+
+// A plain-language reading of the forecast: the costliest month, the biggest expense, and what changes the most.
+// Forecasts without monthly figures are read per quarter.
+export function forecastInterpretation(forecast: QuarterlyForecastPayload, now = new Date()): string[] {
+  const months = monthlyForecast(forecast, now);
+  const periods: [string, Period][] = months
+    ? months.map(({ month, ...period }) => [month, period])
+    : forecast.quarters.map(({ quarter, ...period }) => [quarter, period]);
+  const wording = months ? MONTH_WORDING : QUARTER_WORDING;
+  const first = periods[0];
+  const last = periods.at(-1);
   if (!first || !last || first === last) return [];
+  const [, firstPeriod] = first;
+  const [lastKey, lastPeriod] = last;
   const notes: string[] = [];
-  const change = first.totalCentavos > 0 ? (last.totalCentavos - first.totalCentavos) / first.totalCentavos : 0;
-  notes.push(Math.abs(change) < FLAT_CHANGE
-    ? `Your spending will likely stay about the same, around ${formatPeso(first.totalCentavos)} every 3 months.`
-    : `Your spending will likely go ${change > 0 ? "up" : "down"}. Every 3 months, it may go from about ${formatPeso(first.totalCentavos)} (${monthRange(first.quarter)}) to ${formatPeso(last.totalCentavos)} (${monthRange(last.quarter)}).`);
 
-  const peak = forecast.quarters.reduce((highest, quarter) => quarter.totalCentavos > highest.totalCentavos ? quarter : highest);
-  const low = forecast.quarters.reduce((lowest, quarter) => quarter.totalCentavos < lowest.totalCentavos ? quarter : lowest);
-  if (peak.totalCentavos > low.totalCentavos) notes.push(`Your most expensive stretch will likely be ${monthRange(peak.quarter)}, at about ${formatPeso(peak.totalCentavos)}. Try to save a little extra before then.`);
+  if (months) {
+    const peakNote = peakMonthNote(periods);
+    if (peakNote) notes.push(peakNote);
+  } else {
+    const [peakKey, peak] = periods.reduce((highest, period) => period[1].totalCentavos > highest[1].totalCentavos ? period : highest);
+    const [, low] = periods.reduce((lowest, period) => period[1].totalCentavos < lowest[1].totalCentavos ? period : lowest);
+    if (peak.totalCentavos > low.totalCentavos) notes.push(`Your most expensive stretch will likely be ${wording.name(peakKey)}, at about ${formatPeso(peak.totalCentavos)}. Try to save a little extra before then.`);
+  }
 
-  const yearTotal = forecast.quarters.reduce((sum, quarter) => sum + quarter.totalCentavos, 0);
-  const amountIn = (quarter: QuarterlyForecastPayload["quarters"][number], category: string) => quarter.categories.find((point) => point.category === category)?.amountCentavos ?? 0;
-  const categories = [...new Set(forecast.quarters.flatMap((quarter) => quarter.categories.map((point) => point.category)))];
-  const shares = categories.map((category) => ({ category, total: forecast.quarters.reduce((sum, quarter) => sum + amountIn(quarter, category), 0), change: amountIn(last, category) - amountIn(first, category) }));
+  const total = periods.reduce((sum, [, period]) => sum + period.totalCentavos, 0);
+  const amountIn = (period: Period, category: string) => period.categories.find((point) => point.category === category)?.amountCentavos ?? 0;
+  const categories = [...new Set(periods.flatMap(([, period]) => period.categories.map((point) => point.category)))];
+  const shares = categories.map((category) => ({ category, total: periods.reduce((sum, [, period]) => sum + amountIn(period, category), 0), change: amountIn(lastPeriod, category) - amountIn(firstPeriod, category) }));
   const largest = shares.reduce<(typeof shares)[number] | null>((best, item) => !best || item.total > best.total ? item : best, null);
-  if (largest && yearTotal > 0) notes.push(`${categoryLabel(largest.category)} is your biggest expense, ${shareOfTen(largest.total / yearTotal)}.`);
+  if (largest && total > 0) notes.push(`${categoryLabel(largest.category)} is your biggest expense, ${shareOfTen(largest.total / total)}.`);
 
-  const rising = shares.reduce<(typeof shares)[number] | null>((best, item) => item.change > 0 && (!best || item.change > best.change) ? item : best, null);
-  const falling = shares.reduce<(typeof shares)[number] | null>((best, item) => item.change < 0 && (!best || item.change < best.change) ? item : best, null);
-  if (rising) notes.push(`By ${monthRange(last.quarter)}, you may spend about ${formatPeso(rising.change)} more on ${categoryName(rising.category)} every 3 months.`);
-  if (falling) notes.push(`You may spend about ${formatPeso(Math.abs(falling.change))} less on ${categoryName(falling.category)} every 3 months by ${monthRange(last.quarter)}.`);
+  // Scheduled bills and remittances are only named as the biggest expense; their changes follow the schedule.
+  const changing = shares.filter((item) => item.category !== SCHEDULED_PAYMENTS_CATEGORY);
+  const rising = changing.reduce<(typeof shares)[number] | null>((best, item) => item.change > 0 && (!best || item.change > best.change) ? item : best, null);
+  const falling = changing.reduce<(typeof shares)[number] | null>((best, item) => item.change < 0 && (!best || item.change < best.change) ? item : best, null);
+  if (rising) notes.push(`By ${wording.name(lastKey)}, you will likely spend about ${formatPeso(rising.change)} more on ${categoryName(rising.category)} ${wording.every}.`);
+  if (falling) notes.push(`You will likely spend about ${formatPeso(Math.abs(falling.change))} less on ${categoryName(falling.category)} ${wording.every} by ${wording.name(lastKey)}.`);
   return notes;
 }
 
@@ -288,8 +334,21 @@ function Card({ title, subtitle, children }: { title: string; subtitle: string; 
 // How far to trust the forecast, from how much spending history it was based on.
 export function forecastReliabilityNote(forecast: QuarterlyForecastPayload): string | null {
   if (forecast.quality === "INSUFFICIENT_DATA") return "Provisional forecast. You have fewer than 6 months of recorded spending, so these are rough estimates, not yet a personal forecast.";
-  if (forecast.seasonalUncertainty) return "Seasonal changes aren't shown yet. Until you have 12 months of history, each quarter is based on your typical month, so peaks like school fees or Christmas may be missing.";
+  if (forecast.seasonalUncertainty) return "Seasonal changes aren't shown yet. Until you have 12 months of history, each quarter is based on your typical month, so peaks like school fees or Christmas aren't included yet.";
   return null;
+}
+
+// The seasons the user said cost them more, while the forecast still has too little history to show them.
+export function seasonalPreferenceNote(forecast: QuarterlyForecastPayload, preferences: SeasonalPreferences | null | undefined): string | null {
+  if (!preferences || !(forecast.seasonalUncertainty || forecast.quality === "INSUFFICIENT_DATA")) return null;
+  const custom = normalizeCustomEvents(preferences.custom_seasonal_events);
+  const names = [...new Set(preferences.high_expense_seasons.flatMap((key) => {
+    const name = SEASON_PRESETS.find((preset) => preset.key === key)?.label ?? custom.find((event) => event.id === key)?.name ?? LEGACY_SEASON_LABELS[key];
+    return key === "none" || !name ? [] : [name];
+  }))];
+  if (!names.length) return null;
+  const seasons = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `You said your spending goes up during ${seasons}. We'll reflect that once you have enough history.`;
 }
 
 // The selected point's amount: its forecast, or its actual spending before the forecast starts.
@@ -340,7 +399,7 @@ function combinePeriods(periods: Period[]): Period {
 
 // history holds actual spending for the quarters before the forecast, oldest first; monthHistory holds the
 // months before a monthly forecast, ending with the current month so far.
-export function QuarterlyForecastCharts({ forecast, history = [], monthHistory = [], now = new Date() }: { forecast: QuarterlyForecastPayload; history?: QuarterlyForecastPayload["quarters"]; monthHistory?: NonNullable<QuarterlyForecastPayload["months"]>; now?: Date }) {
+export function QuarterlyForecastCharts({ forecast, history = [], monthHistory = [], preferences, now = new Date() }: { forecast: QuarterlyForecastPayload; history?: QuarterlyForecastPayload["quarters"]; monthHistory?: NonNullable<QuarterlyForecastPayload["months"]>; preferences?: SeasonalPreferences | null; now?: Date }) {
   const [chosenScale, setScale] = useState<ForecastScale>("monthly");
   const [range, setRange] = useState<ForecastRange>("around");
   const [chosen, setSelected] = useState<number | null>(null);
@@ -386,7 +445,9 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
   const total: Series = { key: TOTAL_KEY, label: "Total", color: P.brand, values: slots.map((slot) => slot.forecast?.totalCentavos ?? null), actual: slots.map((slot) => slot.actual?.totalCentavos ?? null) };
   const categories = slotCategorySeries(slots);
   const line = categories.find((series) => series.key === selectedCategory) ?? total;
-  const interpretation = forecast.interpretation ?? forecastInterpretation(forecast);
+  // The seasons note follows the user's current answers, so it is never saved or reworded with the forecast notes.
+  const seasonsNote = seasonalPreferenceNote(forecast, preferences);
+  const interpretation = [...forecast.interpretation ?? forecastInterpretation(forecast, now), ...seasonsNote ? [seasonsNote] : []];
   const reliability = forecastReliabilityNote(forecast);
   const actualCount = slots.filter((slot) => slot.actual).length;
   const forecastCount = slots.filter((slot) => slot.forecast).length;
@@ -409,12 +470,12 @@ export function QuarterlyForecastCharts({ forecast, history = [], monthHistory =
       {thisPeriod.forecast ? <ForecastVsActual period={thisPeriod.name} unit={thisPeriod.unit} label={line.label} forecast={line === total ? thisPeriod.forecast.totalCentavos : amountIn(thisPeriod.forecast, line.key)} actual={line === total ? thisPeriod.actual?.totalCentavos ?? 0 : amountIn(thisPeriod.actual, line.key)} /> : null}
       {line.key === SCHEDULED_PAYMENTS_CATEGORY ? <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 8 }}>Based on your scheduled bills and remittances.</Text> : null}
     </Card>
-    {interpretation.length ? <Card title="What this means for you" subtitle="How your spending may change">
+    {interpretation.length ? <Card title="What this means for you" subtitle="How your spending will likely change">
       <View style={{ gap: 8, marginTop: 12 }}>{interpretation.map((note) => <View key={note} style={{ flexDirection: "row", gap: 8 }}>
         <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>•</Text>
         <Text style={{ color: P.ink, flex: 1, fontFamily: "Manrope", fontSize: 13, lineHeight: 20 }}>{note}</Text>
       </View>)}</View>
-      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 12 }}>Estimates use your expense history and Philippine household spending trends, plus scheduled bills and remittances. Actual spending may differ.</Text>
+      <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 12 }}>Estimates use your expense history and Philippine household spending trends, plus scheduled bills and remittances. These are estimates, not exact amounts.</Text>
     </Card> : null}
   </View>;
 }

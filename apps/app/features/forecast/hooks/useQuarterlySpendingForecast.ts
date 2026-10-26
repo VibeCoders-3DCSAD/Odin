@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import type { SeasonalPreferences } from "@odin/spending-insights/seasons";
 import { getSnapshot, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
 import { saveForecastSnapshot } from "../../../local-db/repositories/forecastSnapshots";
 import { listMonthlySpending, listQuarterlySpending, pastQuarters, recentMonths, type MonthSpending, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
 import { useConnectivityStore } from "../../../services/connectivity";
 import { getQuarterlyForecastContent } from "../../dashboard/dashboardSnapshotContent";
+import { getPreferences } from "../../governance/api";
 import { requestForecastInterpretation } from "../api";
 import { localToday } from "../../billers/schedule";
 import { forecastInterpretation } from "../QuarterlyForecastCharts";
@@ -22,6 +24,7 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<SeasonalPreferences | null>(null);
   const hasForecast = useRef(false);
   const online = useConnectivityStore((state) => state.online);
 
@@ -43,6 +46,12 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
       const firstRecorded = actual.findIndex((month) => month.totalCentavos > 0);
       setMonthHistory(firstRecorded === -1 ? [] : actual.slice(firstRecorded));
     }).catch(() => {});
+    // The seasons the user picked in onboarding; without them the forecast simply leaves out the seasons note.
+    if (online) {
+      void getPreferences(accessToken).then(({ response, body }) => {
+        if (!signal.aborted && response.ok) setPreferences(body.payload?.preferences ?? null);
+      }).catch(() => {});
+    }
 
     async function revalidate() {
       try {
@@ -108,5 +117,5 @@ export function useQuarterlySpendingForecast(userId: string, accessToken: string
     return () => controller.abort();
   }, [userId, accessToken, refreshKey, online]);
 
-  return { forecast, history, monthHistory, refreshing, stale, error, notice };
+  return { forecast, history, monthHistory, preferences, refreshing, stale, error, notice };
 }
