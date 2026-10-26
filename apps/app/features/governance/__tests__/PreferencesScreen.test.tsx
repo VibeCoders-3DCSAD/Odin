@@ -8,7 +8,7 @@ const mockGetPreferences = jest.fn();
 const mockSavePreferences = jest.fn();
 let mockOnline = true;
 jest.mock("../api", () => ({ getPreferences: (...args: unknown[]) => mockGetPreferences(...args), savePreferences: (...args: unknown[]) => mockSavePreferences(...args) }));
-jest.mock("../../../local-db/repositories/unusualSpending", () => ({ listPersistedUnusualSpendings: async () => [], changeRecurrenceMonths: jest.fn(), stopRecurrence: jest.fn() }));
+jest.mock("../../../local-db/repositories/unusualSpending", () => ({ listPersistedUnusualSpendings: async () => [], reviseRecurringPaymentGroup: jest.fn() }));
 jest.mock("../../../services/connectivity", () => ({ useConnectivityStore: (select: (state: { online: boolean }) => unknown) => select({ online: mockOnline }) }));
 
 const preferences: SeasonalPreferences = {
@@ -18,6 +18,25 @@ const preferences: SeasonalPreferences = {
 const result = { response: { ok: true }, body: { payload: { display_name: "Juan", preferences, submitted_at: "2026-10-22T00:00:00Z" } } };
 
 beforeEach(() => { mockOnline = true; mockGetPreferences.mockReset(); mockSavePreferences.mockReset(); });
+
+it("keeps the preferences and payments sections distinct across navigation", async () => {
+  mockGetPreferences.mockResolvedValue(result);
+  const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
+    await view.findByLabelText("Higher-Expense Seasons");
+    for (let visit = 0; visit < 3; visit += 1) {
+      expect(view.getAllByText("Payments in certain months")).toHaveLength(1);
+      fireEvent.press(view.getByLabelText("Higher-Expense Seasons"));
+      expect(view.queryByText("Payments in certain months")).toBeNull();
+      await act(async () => { fireEvent.press(view.getByLabelText("Back to preferences")); });
+    }
+    expect(view.getAllByText("Payments in certain months")).toHaveLength(1);
+    expect(errors.mock.calls.filter((args) => String(args[0]).includes("same key"))).toEqual([]);
+  } finally {
+    errors.mockRestore();
+  }
+});
 
 it("displays saved seasonal answers and custom months without classification answers", async () => {
   mockGetPreferences.mockResolvedValue(result);

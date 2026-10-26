@@ -49,8 +49,8 @@ export default function PreferencesScreen({ accessToken, userId, deviceId, onBac
             <Pressable accessibilityRole="button" onPress={() => setAttempt((value) => value + 1)} style={{ paddingVertical: 12 }}><Text style={{ color: "#0B8A55", fontWeight: "700" }}>Retry</Text></Pressable>
           </View>
         ) : !preferences ? <Text>No submitted questionnaire yet. Your seasonal answers will appear here after you submit it.</Text>
-        : <PreferencesContent key={userId} preferences={preferences} accessToken={accessToken} online={online} selectedGroup={selectedGroup} onSelectGroup={setSelectedGroup} onSavingChange={setSaving} />}
-      {selectedGroup ? null : <RecurringPaymentsSection key={userId} userId={userId} deviceId={deviceId} />}
+        : <PreferencesContent key={`preferences:${userId}`} preferences={preferences} accessToken={accessToken} online={online} selectedGroup={selectedGroup} onSelectGroup={setSelectedGroup} onSavingChange={setSaving} />}
+      {selectedGroup ? null : <RecurringPaymentsSection key={`recurring-payments:${userId}`} userId={userId} deviceId={deviceId} />}
     </View>
   );
 }
