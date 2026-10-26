@@ -20,6 +20,7 @@ import type { ProfileAssignment } from "../onboarding/types";
 type PrivacySettingsScreenProps = {
   accessToken: string;
   userId: string;
+  deviceId: string;
   onBackToLogin?: () => void;
   onRequestReassessment?: () => void;
   onDeleted?: (scheduledDate: string) => void;
@@ -169,7 +170,7 @@ function NavRow({
   );
 }
 
-export default function PrivacySettingsScreen({ accessToken, userId, onBackToLogin, onDeleted, onRequestReassessment, onSubPageChange, beforeDangerZone }: PrivacySettingsScreenProps) {
+export default function PrivacySettingsScreen({ accessToken, userId, deviceId, onBackToLogin, onDeleted, onRequestReassessment, onSubPageChange, beforeDangerZone }: PrivacySettingsScreenProps) {
   const [subPage, setSubPage] = useState<string | null>(null);
   const [exported, setExported] = useState(false);
   const [profile, setProfile] = useState<ProfileAssignment | null>(null);
@@ -187,7 +188,7 @@ export default function PrivacySettingsScreen({ accessToken, userId, onBackToLog
   }, [subPage, onSubPageChange]);
 
   if (subPage === "preferences") {
-    return <PreferencesScreen accessToken={accessToken} userId={userId} onBack={() => setSubPage(null)} />;
+    return <PreferencesScreen accessToken={accessToken} userId={userId} deviceId={deviceId} onBack={() => setSubPage(null)} />;
   }
 
   if (subPage === "export") {

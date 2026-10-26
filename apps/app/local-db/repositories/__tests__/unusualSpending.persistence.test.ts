@@ -152,6 +152,52 @@ describe("answerUnusualSpending", () => {
     expect(runAsync).not.toHaveBeenCalled();
   });
 
+  function answered(runAsync: jest.Mock<(...args: any[]) => any>, recurrence: string) {
+    mockInitDatabase.mockResolvedValue({
+      withTransactionAsync: async (callback: () => Promise<void>) => callback(),
+      runAsync,
+      getFirstAsync: jest.fn<(...args: any[]) => any>().mockResolvedValue({ id: "evaluation-1", version: 3, recurrence }),
+    });
+  }
+
+  it("changes the months of an answer in certain months", async () => {
+    const runAsync = jest.fn<(...args: any[]) => any>();
+    answered(runAsync, "yearly");
+    const { changeRecurrenceMonths } = await import("../unusualSpending");
+
+    await changeRecurrenceMonths("user-1", "device-1", "transaction-1", [8, 6]);
+
+    expect(runAsync.mock.calls[0]?.slice(1, 4)).toEqual(["yearly", null, "[6,8]"]);
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      baseVersion: 3, changedFields: ["recurrence", "recurrence_months"], payload: { recurrence: "yearly", recurrence_months: [6, 8] },
+    }));
+  });
+
+  it("removes an answer in certain months, which makes the payment one-time", async () => {
+    const runAsync = jest.fn<(...args: any[]) => any>();
+    answered(runAsync, "yearly");
+    const { stopRecurrence } = await import("../unusualSpending");
+
+    await stopRecurrence("user-1", "device-1", "transaction-1");
+
+    expect(runAsync.mock.calls[0]?.slice(1, 4)).toEqual(["one_time", null, null]);
+    expect(mockEnqueueOperation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      changedFields: ["recurrence", "recurrence_months"], payload: { recurrence: "one_time", recurrence_months: null },
+    }));
+  });
+
+  it.each(["one_time", "frequent"])("leaves a %s answer final", async (recurrence) => {
+    const runAsync = jest.fn<(...args: any[]) => any>();
+    answered(runAsync, recurrence);
+    const { changeRecurrenceMonths, stopRecurrence } = await import("../unusualSpending");
+
+    await changeRecurrenceMonths("user-1", "device-1", "transaction-1", [6]);
+    await stopRecurrence("user-1", "device-1", "transaction-1");
+
+    expect(runAsync).not.toHaveBeenCalled();
+    expect(mockEnqueueOperation).not.toHaveBeenCalled();
+  });
+
   it("does not queue a second answer", async () => {
     const runAsync = jest.fn<(...args: any[]) => any>();
     mockInitDatabase.mockResolvedValue({

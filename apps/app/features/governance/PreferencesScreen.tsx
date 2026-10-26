@@ -5,11 +5,12 @@ import { useConnectivityStore } from "../../services/connectivity";
 import { getPreferences } from "./api";
 import { PREFERENCE_GROUPS, type SeasonalPreferenceKey } from "./helpers/preferenceDraft";
 import { PreferencesContent } from "./components/PreferencesContent";
+import { RecurringPaymentsSection } from "./components/RecurringPaymentsSection";
 
-type Props = { accessToken: string; userId: string; onBack: () => void };
+type Props = { accessToken: string; userId: string; deviceId: string; onBack: () => void };
 type LoadState = { userId: string; status: "loading" | "loaded" | "error"; preferences: SeasonalPreferences | null };
 
-export default function PreferencesScreen({ accessToken, userId, onBack }: Props) {
+export default function PreferencesScreen({ accessToken, userId, deviceId, onBack }: Props) {
   const online = useConnectivityStore((state) => state.online);
   const [selectedGroup, setSelectedGroup] = useState<SeasonalPreferenceKey | null>(null);
   const [saving, setSaving] = useState(false);
@@ -39,7 +40,7 @@ export default function PreferencesScreen({ accessToken, userId, onBack }: Props
     <View style={{ gap: 16 }}>
       <Pressable accessibilityRole="button" accessibilityLabel={selectedGroup ? "Back to preferences" : "Back to settings"} disabled={saving} onPress={() => selectedGroup ? setSelectedGroup(null) : onBack()} style={{ paddingVertical: 12 }}><Text style={{ color: "#0B8A55", fontWeight: "700" }}>{selectedGroup ? "Back to preferences" : "Back to settings"}</Text></Pressable>
       <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: "#1B1C1A" }}>{PREFERENCE_GROUPS.find((group) => group.key === selectedGroup)?.label ?? "Preferences"}</Text>
-      <Text style={{ fontFamily: "Manrope", fontSize: 14, color: "#6B7A6F" }}>{selectedGroup ? "Choose the seasons that apply, or add a custom event." : "Manage your seasonal preferences and custom events."}</Text>
+      <Text style={{ fontFamily: "Manrope", fontSize: 14, color: "#6B7A6F" }}>{selectedGroup ? "Choose the seasons that apply, or add a custom event." : "Manage your seasonal preferences, custom events, and payments in certain months."}</Text>
       {!online && !preferences ? <Text>Connect to the internet to view your saved preferences.</Text>
         : state.userId !== userId || state.status === "loading" ? <ActivityIndicator accessibilityLabel="Loading saved preferences" color="#08B16A" />
         : state.status === "error" ? (
@@ -49,6 +50,7 @@ export default function PreferencesScreen({ accessToken, userId, onBack }: Props
           </View>
         ) : !preferences ? <Text>No submitted questionnaire yet. Your seasonal answers will appear here after you submit it.</Text>
         : <PreferencesContent key={userId} preferences={preferences} accessToken={accessToken} online={online} selectedGroup={selectedGroup} onSelectGroup={setSelectedGroup} onSavingChange={setSaving} />}
+      {selectedGroup ? null : <RecurringPaymentsSection key={userId} userId={userId} deviceId={deviceId} />}
     </View>
   );
 }

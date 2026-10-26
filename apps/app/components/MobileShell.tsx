@@ -855,7 +855,7 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
       return (
         <View>
-          <PrivacySettingsScreen accessToken={accessToken} userId={userId} onBackToLogin={confirmLogout} onRequestReassessment={onRequestReassessment} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} beforeDangerZone={syncSection} />
+          <PrivacySettingsScreen accessToken={accessToken} userId={userId} deviceId={deviceId} onBackToLogin={confirmLogout} onRequestReassessment={onRequestReassessment} onSubPageChange={setSettingsSubPage} onDeleted={setDeletionSuccessDate} beforeDangerZone={syncSection} />
           {!settingsSubPage ? (
             <View style={{ marginTop: 20 }}>
               {onLock && <Pressable accessibilityRole="button" accessibilityLabel="Lock app" onPress={onLock}

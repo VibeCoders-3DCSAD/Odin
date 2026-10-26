@@ -8,6 +8,7 @@ const mockGetPreferences = jest.fn();
 const mockSavePreferences = jest.fn();
 let mockOnline = true;
 jest.mock("../api", () => ({ getPreferences: (...args: unknown[]) => mockGetPreferences(...args), savePreferences: (...args: unknown[]) => mockSavePreferences(...args) }));
+jest.mock("../../../local-db/repositories/unusualSpending", () => ({ listPersistedUnusualSpendings: async () => [], changeRecurrenceMonths: jest.fn(), stopRecurrence: jest.fn() }));
 jest.mock("../../../services/connectivity", () => ({ useConnectivityStore: (select: (state: { online: boolean }) => unknown) => select({ online: mockOnline }) }));
 
 const preferences: SeasonalPreferences = {
@@ -21,7 +22,7 @@ beforeEach(() => { mockOnline = true; mockGetPreferences.mockReset(); mockSavePr
 it("displays saved seasonal answers and custom months without classification answers", async () => {
   mockGetPreferences.mockResolvedValue(result);
   const onBack = jest.fn();
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={onBack} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={onBack} />);
   expect(await view.findByLabelText("Higher-Expense Seasons")).toBeTruthy();
   expect(view.queryByText("Juan")).toBeNull();
   expect(view.queryByText("Name")).toBeNull();
@@ -43,7 +44,7 @@ it("displays saved seasonal answers and custom months without classification ans
 it("distinguishes loading from an unsubmitted questionnaire", async () => {
   let resolve!: (value: unknown) => void;
   mockGetPreferences.mockReturnValue(new Promise((done) => { resolve = done; }));
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   expect(view.getByLabelText("Loading saved preferences")).toBeTruthy();
   expect(view.queryByText(/No submitted questionnaire/)).toBeNull();
   await act(async () => resolve({ response: { ok: true }, body: { payload: { preferences: null, submitted_at: null } } }));
@@ -52,7 +53,7 @@ it("distinguishes loading from an unsubmitted questionnaire", async () => {
 
 it("offers retry after a failed read", async () => {
   mockGetPreferences.mockRejectedValueOnce(new Error("network error")).mockResolvedValueOnce(result);
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   expect(await view.findByText("Unable to load your saved preferences.")).toBeTruthy();
   fireEvent.press(view.getByText("Retry"));
   expect(await view.findByLabelText("Higher-Expense Seasons")).toBeTruthy();
@@ -60,7 +61,7 @@ it("offers retry after a failed read", async () => {
 
 it("shows an offline state without treating answers as empty", () => {
   mockOnline = false;
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   expect(view.getByText("Connect to the internet to view your saved preferences.")).toBeTruthy();
   expect(view.queryByText(/No submitted questionnaire/)).toBeNull();
   expect(mockGetPreferences).not.toHaveBeenCalled();
@@ -70,8 +71,8 @@ it("hides a previous user's answers and ignores requests completed after switchi
   let resolveOld!: (value: unknown) => void;
   mockGetPreferences.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }))
     .mockResolvedValueOnce({ response: { ok: true }, body: { payload: { preferences: null, submitted_at: null } } });
-  const view = render(<PreferencesScreen accessToken="old-token" userId="old-user" onBack={jest.fn()} />);
-  view.rerender(<PreferencesScreen accessToken="new-token" userId="new-user" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="old-token" userId="old-user" deviceId="device-1" onBack={jest.fn()} />);
+  view.rerender(<PreferencesScreen accessToken="new-token" userId="new-user" deviceId="device-1" onBack={jest.fn()} />);
   await view.findByText(/No submitted questionnaire yet/);
   await act(async () => resolveOld(result));
   expect(view.queryByText("Tuition payment · January, August")).toBeNull();
@@ -82,7 +83,7 @@ it("saves one category and preserves the other seasonal answers", async () => {
   mockGetPreferences.mockResolvedValue(result);
   let resolve!: (value: unknown) => void;
   mockSavePreferences.mockReturnValue(new Promise((done) => { resolve = done; }));
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Savings Seasons"));
   expect(view.queryByLabelText("Lower-Expense Seasons: Summer")).toBeNull();
   fireEvent.press(view.getByLabelText("Savings Seasons: Rainy Season"));
@@ -98,7 +99,7 @@ it("saves one category and preserves the other seasonal answers", async () => {
 
 it("cancels edits without sending a save or changing the saved display", async () => {
   mockGetPreferences.mockResolvedValue(result);
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Savings Seasons"));
   fireEvent.press(view.getByLabelText("Savings Seasons: Rainy Season"));
   fireEvent.press(view.getByText("Cancel changes"));
@@ -109,7 +110,7 @@ it("cancels edits without sending a save or changing the saved display", async (
 it("preserves the draft after a failed save so the user can retry", async () => {
   mockGetPreferences.mockResolvedValue(result);
   mockSavePreferences.mockRejectedValueOnce(new Error("network"));
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Savings Seasons"));
   fireEvent.press(view.getByLabelText("Savings Seasons: Rainy Season"));
   fireEvent.press(view.getByLabelText("Save preferences"));
@@ -123,7 +124,7 @@ it("preserves the draft after a failed save so the user can retry", async () => 
 
 it("updates a custom event's name and months without losing its selected ID", async () => {
   mockGetPreferences.mockResolvedValue(result);
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Higher-Expense Seasons"));
   fireEvent.press(view.getByLabelText("Edit event Tuition payment"));
   fireEvent.changeText(view.getByLabelText("Event name"), "Enrollment fees");
@@ -140,22 +141,22 @@ it("updates a custom event's name and months without losing its selected ID", as
 
 it("keeps edits when connectivity is lost and enables saving after reconnecting", async () => {
   mockGetPreferences.mockResolvedValue(result);
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Savings Seasons"));
   fireEvent.press(view.getByLabelText("Savings Seasons: Rainy Season"));
   mockOnline = false;
-  view.rerender(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  view.rerender(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   expect(view.getByLabelText("Save preferences").props.accessibilityState.disabled).toBe(true);
   expect(view.getByLabelText("Savings Seasons: Rainy Season").props.accessibilityState.checked).toBe(true);
   mockOnline = true;
-  view.rerender(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  view.rerender(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   expect(view.getByLabelText("Save preferences").props.accessibilityState.disabled).toBe(false);
   expect(mockGetPreferences).toHaveBeenCalledTimes(1);
 });
 
 it("adds custom events with months and includes them in saved preferences", async () => {
   mockGetPreferences.mockResolvedValue(result);
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Higher-Expense Seasons"));
   fireEvent.press(view.getByText("Add event"));
   expect(view.getByLabelText("Save preferences").props.accessibilityState.disabled).toBe(true);
@@ -174,7 +175,7 @@ it("adds custom events with months and includes them in saved preferences", asyn
 it("requires confirmation to remove a custom event and clears its selected references", async () => {
   mockGetPreferences.mockResolvedValue(result);
   const confirm = jest.spyOn(Alert, "alert").mockImplementation(() => {});
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Higher-Expense Seasons"));
   fireEvent.press(view.getByLabelText("Remove event Tuition payment"));
   expect(view.getByLabelText("Higher-Expense Seasons: Tuition payment")).toBeTruthy();
@@ -192,7 +193,7 @@ it("requires confirmation to remove a custom event and clears its selected refer
 
 it("validates incomplete choices before attempting to save", async () => {
   mockGetPreferences.mockResolvedValue(result);
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Lower-Expense Seasons"));
   fireEvent.press(view.getByLabelText("Lower-Expense Seasons: Summer"));
   fireEvent.press(view.getByLabelText("Save preferences"));
@@ -203,7 +204,7 @@ it("validates incomplete choices before attempting to save", async () => {
 
 it.each(["Higher-Expense Seasons", "Lower-Expense Seasons", "Savings Seasons"])("opens %s with its own choices and event form", async (label) => {
   mockGetPreferences.mockResolvedValue(result);
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText(label));
   expect(view.getByLabelText(`${label}: No particular season`)).toBeTruthy();
   expect(view.getByText("Add event")).toBeTruthy();
@@ -215,7 +216,7 @@ it.each(["Higher-Expense Seasons", "Lower-Expense Seasons", "Savings Seasons"])(
 it("keeps a valid lower-expense answer when moving its last season to higher expenses", async () => {
   mockGetPreferences.mockResolvedValue(result);
   mockSavePreferences.mockImplementation(async (_token: string, draft: SeasonalPreferences) => ({ response: { ok: true }, body: { payload: { preferences: draft } } }));
-  const view = render(<PreferencesScreen accessToken="token" userId="user-1" onBack={jest.fn()} />);
+  const view = render(<PreferencesScreen accessToken="token" userId="user-1" deviceId="device-1" onBack={jest.fn()} />);
   fireEvent.press(await view.findByLabelText("Higher-Expense Seasons"));
   fireEvent.press(view.getByLabelText("Higher-Expense Seasons: Summer"));
   fireEvent.press(view.getByLabelText("Save preferences"));

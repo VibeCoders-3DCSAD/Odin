@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { SpendingRecurrence } from "../../local-db/repositories/unusualSpending";
-import { MONTH_NAMES, RECURRENCE_OPTIONS } from "./recurrenceOptions";
+import MonthPicker from "./MonthPicker";
+import { RECURRENCE_OPTIONS } from "./recurrenceOptions";
 
-const C = { brand: "#013220", border: "#D8D8D2", muted: "#6B7A6F", warning: "#C25E00", selected: "#E6EFE9" };
+const C = { brand: "#013220", border: "#D8D8D2", muted: "#6B7A6F", warning: "#C25E00" };
 
 type Props = {
   // The expense's date (YYYY-MM-DD); its month starts out chosen.
@@ -30,24 +31,12 @@ export default function RecurrenceQuestion({ transactionDate, onAnswer }: Props)
     }
   }
 
-  function toggle(month: number) {
-    setMonths((current) => current.includes(month) ? current.filter((item) => item !== month) : [...current, month].sort((left, right) => left - right));
-  }
-
   const errorText = error ? <Text style={{ color: C.warning, marginTop: 4, textAlign: "center" }}>{error}</Text> : null;
 
   if (choosingMonths) {
     return <View style={{ gap: 10 }}>
       <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: C.brand }}>Which months do you pay this?</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {MONTH_NAMES.map((name, index) => {
-          const month = index + 1;
-          const selected = months.includes(month);
-          return <Pressable key={name} accessibilityRole="checkbox" accessibilityLabel={name} accessibilityState={{ checked: selected }} onPress={() => toggle(month)} disabled={saving !== null} style={{ width: "22%", flexGrow: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: selected ? C.brand : C.border, backgroundColor: selected ? C.selected : "transparent", alignItems: "center" }}>
-            <Text style={{ fontFamily: "Manrope", fontWeight: selected ? "800" : "600", color: C.brand }}>{name.slice(0, 3)}</Text>
-          </Pressable>;
-        })}
-      </View>
+      <MonthPicker months={months} onChange={setMonths} disabled={saving !== null} />
       {errorText}
       <Pressable accessibilityRole="button" accessibilityLabel="Save months" onPress={() => void save("yearly", months)} disabled={saving !== null || months.length === 0} style={{ minHeight: 48, borderRadius: 12, backgroundColor: months.length === 0 ? C.border : C.brand, alignItems: "center", justifyContent: "center" }}>
         <Text style={{ fontFamily: "Manrope", fontWeight: "700", color: "#FFFFFF" }}>{saving ? "Saving..." : months.length === 0 ? "Choose at least one month" : "Save months"}</Text>

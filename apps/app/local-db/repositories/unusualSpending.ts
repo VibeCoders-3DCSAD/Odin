@@ -182,25 +182,26 @@ export async function saveUnusualSpending(userId: string, deviceId: string, insi
   });
 }
 
-/**
- * Records the user's answer to an unusual expense. A frequent expense joins its baseline; a yearly one
- * stays out of it and recurs in the forecast in the months chosen (its own month without them);
- * a one-time expense is left out of both. The first answer is final.
- */
-export async function answerUnusualSpending(userId: string, deviceId: string, transactionId: string, recurrence: SpendingRecurrence, recurrenceMonths?: readonly number[]): Promise<void> {
-  const months = recurrenceMonths === undefined ? null : normalizeRecurrenceMonths(recurrenceMonths);
-  if (recurrenceMonths !== undefined && (recurrence !== "yearly" || !months)) throw new Error("recurrence months need a yearly answer and distinct months from 1 to 12");
+type AnswerRow = { id: string; version: number; recurrence: SpendingRecurrence | null };
+
+// Saves an answer to the user's evaluation of transactionId and queues its sync, when canAnswer allows it.
+async function writeAnswer(
+  userId: string, deviceId: string, transactionId: string, recurrence: SpendingRecurrence, months: number[] | null,
+  canAnswer: (current: SpendingRecurrence | null) => boolean,
+): Promise<void> {
   const db = await getDb();
   const timestamp = new Date().toISOString();
   await db.withTransactionAsync(async () => {
-    const row = await db.getFirstAsync<{ id: string; version: number; recurrence: SpendingRecurrence | null }>(
+    const row = await db.getFirstAsync<AnswerRow>(
       "SELECT id, version, recurrence FROM anomaly_evaluations WHERE user_id = ? AND transaction_id = ? AND deleted = 0",
       userId, transactionId,
     );
     if (!row) throw new Error("unusual spending insight not found");
-    if (row.recurrence !== null) return;
+    if (!canAnswer(row.recurrence)) return;
     // confirmed_recurring_at still marks frequent spending for app versions that predate the answer.
     const confirmedAt = recurrence === "frequent" ? timestamp : null;
+    // A revised answer always sends its months, so removing an answer clears them.
+    const revising = row.recurrence !== null;
     await db.runAsync(
       "UPDATE anomaly_evaluations SET recurrence = ?, confirmed_recurring_at = ?, recurrence_months = ?, version = version + 1, updated_at = ? WHERE id = ? AND user_id = ?",
       recurrence, confirmedAt, months ? JSON.stringify(months) : null, timestamp, row.id, userId,
@@ -208,9 +209,36 @@ export async function answerUnusualSpending(userId: string, deviceId: string, tr
     await enqueueOperation(db, {
       userId, deviceId, entity: "anomaly_evaluations", recordId: row.id, operationType: "update",
       baseVersion: row.version,
-      changedFields: ["recurrence", ...(confirmedAt ? ["confirmed_recurring_at"] : []), ...(months ? ["recurrence_months"] : [])],
-      payload: { recurrence, ...(confirmedAt ? { confirmed_recurring_at: confirmedAt } : {}), ...(months ? { recurrence_months: months } : {}) },
+      changedFields: ["recurrence", ...(confirmedAt ? ["confirmed_recurring_at"] : []), ...(months || revising ? ["recurrence_months"] : [])],
+      payload: { recurrence, ...(confirmedAt ? { confirmed_recurring_at: confirmedAt } : {}), ...(months || revising ? { recurrence_months: months } : {}) },
       failureMessage: "Your unusual spending answer could not be synchronized.",
     });
   });
+}
+
+function requireMonths(recurrenceMonths: readonly number[]): number[] {
+  const months = normalizeRecurrenceMonths(recurrenceMonths);
+  if (!months) throw new Error("recurrence months need a yearly answer and distinct months from 1 to 12");
+  return months;
+}
+
+/**
+ * Records the user's answer to an unusual expense. A frequent expense joins its baseline; a yearly one
+ * stays out of it and recurs in the forecast in the months chosen (its own month without them);
+ * a one-time expense is left out of both. The first answer is final, apart from the edits below.
+ */
+export async function answerUnusualSpending(userId: string, deviceId: string, transactionId: string, recurrence: SpendingRecurrence, recurrenceMonths?: readonly number[]): Promise<void> {
+  if (recurrenceMonths !== undefined && recurrence !== "yearly") throw new Error("recurrence months need a yearly answer and distinct months from 1 to 12");
+  const months = recurrenceMonths === undefined ? null : requireMonths(recurrenceMonths);
+  await writeAnswer(userId, deviceId, transactionId, recurrence, months, (current) => current === null);
+}
+
+/** Changes the months a payment answered "in certain months" comes back in. */
+export async function changeRecurrenceMonths(userId: string, deviceId: string, transactionId: string, recurrenceMonths: readonly number[]): Promise<void> {
+  await writeAnswer(userId, deviceId, transactionId, "yearly", requireMonths(recurrenceMonths), (current) => current === "yearly");
+}
+
+/** Stops expecting a payment answered "in certain months"; it becomes a one-time expense. */
+export async function stopRecurrence(userId: string, deviceId: string, transactionId: string): Promise<void> {
+  await writeAnswer(userId, deviceId, transactionId, "one_time", null, (current) => current === "yearly");
 }
