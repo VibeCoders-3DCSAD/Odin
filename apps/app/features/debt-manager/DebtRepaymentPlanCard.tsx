@@ -9,7 +9,7 @@ export type DebtPlanRow = { id: string; label: string; amountCentavos: number; d
 type Props = {
   strategy: DebtStrategy;
   hasPlan: boolean;
-  budgetRemainingCentavos: number | null;
+  debtBudgetCentavos: number;
   creditCardRequirementCentavos: number;
   requiredPaymentCentavos: number;
   shortfallCentavos: number;
@@ -18,15 +18,14 @@ type Props = {
   surplusRecommendations: DebtPlanRow[];
 };
 
-export default function DebtRepaymentPlanCard({ strategy, hasPlan, budgetRemainingCentavos, creditCardRequirementCentavos, requiredPaymentCentavos, shortfallCentavos, surplusCentavos, repayments, surplusRecommendations }: Props) {
-  const overBudget = budgetRemainingCentavos !== null && budgetRemainingCentavos < 0;
+export default function DebtRepaymentPlanCard({ strategy, hasPlan, debtBudgetCentavos, creditCardRequirementCentavos, requiredPaymentCentavos, shortfallCentavos, surplusCentavos, repayments, surplusRecommendations }: Props) {
   const hasShortfall = shortfallCentavos > 0;
   return <FormCard title={`${strategy === "snowball" ? "Snowball" : "Avalanche"} repayment plan`}>
     {hasPlan ? <>
       <View>
-        <Text style={{ color: v4.ink2, fontFamily: v4Font, fontSize: 12 }}>Budget remaining this month</Text>
-        <Text accessibilityRole={overBudget ? "alert" : undefined} style={{ color: overBudget ? v4.error : v4.ink, fontFamily: v4Font, fontSize: 22, fontWeight: "800", marginTop: 2, fontVariant: ["tabular-nums"] }}>{budgetRemainingCentavos === null ? "Unavailable" : php(budgetRemainingCentavos)}</Text>
-        <Note>From your Financial Plan, after recorded spending.</Note>
+        <Text style={{ color: v4.ink2, fontFamily: v4Font, fontSize: 12 }}>Debt budget this month</Text>
+        <Text style={{ color: v4.ink, fontFamily: v4Font, fontSize: 22, fontWeight: "800", marginTop: 2, fontVariant: ["tabular-nums"] }}>{php(debtBudgetCentavos)}</Text>
+        <Note>From your Financial Plan: debt repayments plus debt surplus.</Note>
       </View>
       <Divider />
       <InfoRow label="Card statement targets" value={php(creditCardRequirementCentavos)} />

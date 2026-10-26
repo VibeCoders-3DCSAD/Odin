@@ -1,13 +1,11 @@
-import { getCurrentPlanBudgetRemaining, getCurrentSavingsEnvelopeAllocation } from "../savingsEnvelopeAllocationQueries";
+import { getCurrentSavingsEnvelopeAllocation } from "../savingsEnvelopeAllocationQueries";
 
 const mockGetAcceptedFinancialPlanForPeriod = jest.fn();
-const mockGetFinancialPlanBudgetRemaining = jest.fn();
 const mockGetSavingsAllocationStrategy = jest.fn();
 const mockListSavingsGoals = jest.fn();
 
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   getAcceptedFinancialPlanForPeriod: (...args: unknown[]) => mockGetAcceptedFinancialPlanForPeriod(...args),
-  getFinancialPlanBudgetRemaining: (...args: unknown[]) => mockGetFinancialPlanBudgetRemaining(...args),
   getCurrentFinancialPlanPeriod: (asOfDate: string) => asOfDate.startsWith("2026-10") ? { start: "2026-10-01", end: "2026-10-31" } : null,
 }));
 jest.mock("../../../local-db/repositories/savingsAllocationPreferences", () => ({
@@ -70,27 +68,5 @@ describe("getCurrentSavingsEnvelopeAllocation", () => {
 
     expect(allocation?.proposals.find((proposal) => proposal.id === "goal-2")).toMatchObject({ proposedTotalCentavos: 3_200_000 });
     expect(allocation?.proposals.find((proposal) => proposal.id === "goal-1")).toMatchObject({ proposedTotalCentavos: 800_000 });
-  });
-});
-
-describe("getCurrentPlanBudgetRemaining", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetFinancialPlanBudgetRemaining.mockResolvedValue(3_750_000);
-  });
-
-  it("reads the budget remaining from this month's accepted plan", async () => {
-    const plan = { id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31", recommendation: { availableFundsCentavos: 5_000_000 } };
-    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(plan);
-
-    await expect(getCurrentPlanBudgetRemaining("user-1", "2026-10-15")).resolves.toBe(3_750_000);
-    expect(mockGetFinancialPlanBudgetRemaining).toHaveBeenCalledWith("user-1", plan);
-  });
-
-  it("returns null without an accepted plan for the month", async () => {
-    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-
-    await expect(getCurrentPlanBudgetRemaining("user-1", "2026-10-15")).resolves.toBeNull();
-    expect(mockGetFinancialPlanBudgetRemaining).not.toHaveBeenCalled();
   });
 });

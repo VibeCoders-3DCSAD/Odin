@@ -12,7 +12,6 @@ const mockListCreditCardPayments = jest.fn();
 const mockListCreditCardInstallments = jest.fn();
 const mockListCreditCardStrategies = jest.fn();
 const mockGetAcceptedFinancialPlanForPeriod = jest.fn();
-const mockGetFinancialPlanBudgetRemaining = jest.fn();
 const mockGetDebtStrategy = jest.fn();
 const mockListDebtPriorities = jest.fn();
 
@@ -44,7 +43,6 @@ jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
 jest.mock("../../../local-db/repositories/financialPlans", () => ({
   getAcceptedFinancialPlanForPeriod: (...args: unknown[]) => mockGetAcceptedFinancialPlanForPeriod(...args),
   getCurrentFinancialPlanPeriod: () => ({ start: "2026-10-01", end: "2026-10-31" }),
-  getFinancialPlanBudgetRemaining: (...args: unknown[]) => mockGetFinancialPlanBudgetRemaining(...args),
 }));
 jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({
   getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args),
@@ -72,7 +70,6 @@ beforeEach(() => {
   mockListCreditCardInstallments.mockResolvedValue([]);
   mockListCreditCardStrategies.mockResolvedValue([]);
   mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-  mockGetFinancialPlanBudgetRemaining.mockResolvedValue(null);
   mockGetDebtStrategy.mockResolvedValue("avalanche");
   mockListDebtPriorities.mockResolvedValue([]);
 });
@@ -165,24 +162,16 @@ beforeEach(() => {
     });
   });
 
-  it("shows this month's budget remaining from the accepted Financial Plan", async () => {
-    const plan = { id: "plan-1", recommendation: { debtReservations: [], availableFundsCentavos: 50_000 } };
-    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(plan);
-    mockGetFinancialPlanBudgetRemaining.mockResolvedValue(12_500);
+  it("shows this month's whole debt budget from the accepted Financial Plan", async () => {
+    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ id: "plan-1", recommendation: {
+      debtReservations: [{ debtAccountId: "loan-1", amountCentavos: 4_000 }, { creditCardStatementId: "statement-1", amountCentavos: 6_000 }],
+      debtSurplusCentavos: 2_500,
+      availableFundsCentavos: 50_000,
+    } });
 
     const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
 
-    await waitFor(() => expect(view.getByText("PHP 125.00")).toBeTruthy());
-    expect(view.getByText("Budget remaining this month")).toBeTruthy();
-    expect(mockGetFinancialPlanBudgetRemaining).toHaveBeenCalledWith("user-1", plan);
-  });
-
-  it("keeps the repayment plan when the budget remaining lookup fails", async () => {
-    mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({ id: "plan-1", recommendation: { debtReservations: [] } });
-    mockGetFinancialPlanBudgetRemaining.mockRejectedValue(new Error("spending unavailable"));
-
-    const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
-
-    await waitFor(() => expect(view.getByText("Unavailable")).toBeTruthy());
-    expect(view.getByText("Card statement targets")).toBeTruthy();
+    await waitFor(() => expect(view.getByText("Debt budget this month")).toBeTruthy());
+    expect(view.getByText("PHP 125.00")).toBeTruthy();
+    expect(view.queryByText("Budget remaining this month")).toBeNull();
   });
