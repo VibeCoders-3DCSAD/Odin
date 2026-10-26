@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import { DeviceEventEmitter, KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import IncomeSourceFormScreen from "../IncomeSourceFormScreen";
 
 const mockCreate = jest.fn();
@@ -25,6 +26,40 @@ const props = { userId: "user-1", deviceId: "device-1", onClose: jest.fn(), onSa
 
 describe("IncomeSourceFormScreen", () => {
   beforeEach(() => { mockCreate.mockReset(); mockUpdate.mockReset(); mockGet.mockReset(); props.onSaved.mockReset(); });
+
+  it.each([undefined, "income-1"])("shrinks the Android form above the amount keyboard (source: %s)", async (incomeSourceId) => {
+    mockGet.mockResolvedValue({
+      id: "income-1", name: "Salary", frequency: "monthly", destinationAccountId: "acct-bpi", subcategoryId: "sub-salary",
+      expectedAmountCentavos: 1_000_000, paydayDayOfMonth: 15, paydaySecondDayOfMonth: null, paydayDayOfWeek: null, notes: null,
+    });
+    const platform = jest.replaceProperty(Platform, "OS", "android");
+    const view = render(<IncomeSourceFormScreen {...props} incomeSourceId={incomeSourceId} />);
+    try {
+      const amount = await view.findByLabelText("Expected amount");
+      const form = view.UNSAFE_getByType(KeyboardAvoidingView).findAllByType(View)[0];
+      await act(async () => {
+        fireEvent(form, "layout", {
+          persist: jest.fn(),
+          nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 800 } },
+        });
+      });
+      fireEvent(amount, "focus");
+      await act(async () => {
+        DeviceEventEmitter.emit("keyboardDidShow", {
+          duration: 0,
+          endCoordinates: { screenX: 0, screenY: 500, width: 375, height: 300 },
+        });
+      });
+      expect(StyleSheet.flatten(form.props.style).height).toBe(500);
+      fireEvent.changeText(amount, "12000");
+      expect(view.getByLabelText("Expected amount").props.value).toBe("12000");
+      await act(async () => { DeviceEventEmitter.emit("keyboardDidHide", {}); });
+      expect(StyleSheet.flatten(form.props.style).height).toBeUndefined();
+    } finally {
+      view.unmount();
+      platform.restore();
+    }
+  });
 
   it("offers only the four income frequencies", async () => {
     const view = render(<IncomeSourceFormScreen {...props} />);
