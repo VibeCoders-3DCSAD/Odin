@@ -100,7 +100,7 @@ function SavingsGoalsOverview({ userId, deviceId, syncVersion, goals, proposals,
 
 function GoalList({ goals, proposalsByGoalId, onOpenGoal }: { goals: SavingsGoal[]; proposalsByGoalId?: Map<string, SavingsAllocationProposal>; onOpenGoal: (id: string) => void }) {
   return <View style={{ backgroundColor: P.white, borderColor: P.line, borderRadius: 14, borderWidth: 1, paddingHorizontal: 12 }}>
-    {goals.map((goal, index) => <GoalRow key={goal.id} goal={goal} plannedCentavos={proposalsByGoalId?.get(goal.id)?.proposedTotalCentavos ?? 0} divider={index > 0} onPress={() => onOpenGoal(goal.id)} />)}
+    {goals.map((goal, index) => <GoalRow key={goal.id} goal={goal} plannedCentavos={proposalsByGoalId?.get(goal.id)?.plannedTotalCentavos ?? proposalsByGoalId?.get(goal.id)?.proposedTotalCentavos ?? 0} divider={index > 0} onPress={() => onOpenGoal(goal.id)} />)}
   </View>;
 }
 

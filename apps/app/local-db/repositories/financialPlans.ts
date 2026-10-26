@@ -38,6 +38,7 @@ export type FinancialPlanSavingsReservation = {
 
 export type AcceptedFinancialPlan = {
   id: string;
+  createdAt: string;
   periodStart: string;
   periodEnd: string;
   inputSnapshot: Record<string, unknown>;
@@ -63,6 +64,7 @@ export type CreateFinancialPlanInput = {
 };
 
 type FinancialPlanRow = {
+  created_at: string;
   input_snapshot_json?: string | null;
   recommendation_json?: string | null;
   id: string;
@@ -203,7 +205,7 @@ export async function createFinancialPlan(userId: string, deviceId: string, inpu
 
 async function mapPlan(db: SQLite.SQLiteDatabase, row: FinancialPlanRow): Promise<AcceptedFinancialPlan> {
   if (row.input_snapshot_json && row.recommendation_json) {
-    return { id: row.id, periodStart: row.period_start, periodEnd: row.period_end, inputSnapshot: JSON.parse(row.input_snapshot_json), recommendation: JSON.parse(row.recommendation_json) };
+    return { id: row.id, createdAt: row.created_at, periodStart: row.period_start, periodEnd: row.period_end, inputSnapshot: JSON.parse(row.input_snapshot_json), recommendation: JSON.parse(row.recommendation_json) };
   }
   const [points, allocations, debtReservations, savingsReservations] = await Promise.all([
     db.getAllAsync<Record<string, unknown>>("SELECT category_key, amount_centavos FROM financial_plan_forecast_points WHERE plan_id = ?", row.id),
@@ -214,7 +216,7 @@ async function mapPlan(db: SQLite.SQLiteDatabase, row: FinancialPlanRow): Promis
   const mappedAllocations = allocations.map((allocation) => ({ categoryId: allocation.category_id, subcategoryId: allocation.subcategory_id, allocationRule: allocation.allocation_rule, allocatedAmountCentavos: allocation.allocated_amount_centavos, floorAmountCentavos: allocation.floor_amount_centavos, ceilingAmountCentavos: allocation.ceiling_amount_centavos, forecastAmountCentavos: allocation.forecast_amount_centavos, subcategoryWeightBps: allocation.subcategory_weight_bps }));
   const mappedDebtReservations = debtReservations.map((reservation) => ({ debtAccountId: reservation.debt_account_id, creditCardStatementId: reservation.credit_card_statement_id, amountCentavos: reservation.amount_centavos, dueDate: reservation.due_date }));
   const mappedSavingsReservations = savingsReservations.map((reservation) => ({ savingsGoalId: reservation.savings_goal_id, amountCentavos: reservation.amount_centavos, dueDate: reservation.due_date }));
-  return { id: row.id, periodStart: row.period_start, periodEnd: row.period_end, inputSnapshot: { forecast: { month: row.forecast_month, totalAmountCentavos: row.forecast_total_centavos, modelVersion: row.forecast_model_version, generatedAt: row.forecast_generated_at, quality: row.forecast_quality, categoryForecasts: points.map((point) => ({ category: point.category_key, amountCentavos: point.amount_centavos })) }, restrictions: { allocations: mappedAllocations }, obligations: { reservations: [] }, debtRequirements: { reservations: mappedDebtReservations, surplusCentavos: row.debt_surplus_centavos }, savingsRequirements: { reservations: mappedSavingsReservations, surplusCentavos: row.savings_surplus_centavos }, classification: { status: row.classification_status, rule_set_version: row.classification_rule_set_version, assessed_at: row.classification_assessed_at } }, recommendation: { availableFundsCentavos: row.available_funds_centavos, requiredFundsCentavos: row.required_funds_centavos, shortfallCentavos: row.shortfall_centavos, allocations: mappedAllocations, debtReservations: mappedDebtReservations, debtSurplusCentavos: row.debt_surplus_centavos, savingsReservations: mappedSavingsReservations, savingsSurplusCentavos: row.savings_surplus_centavos } };
+  return { id: row.id, createdAt: row.created_at, periodStart: row.period_start, periodEnd: row.period_end, inputSnapshot: { forecast: { month: row.forecast_month, totalAmountCentavos: row.forecast_total_centavos, modelVersion: row.forecast_model_version, generatedAt: row.forecast_generated_at, quality: row.forecast_quality, categoryForecasts: points.map((point) => ({ category: point.category_key, amountCentavos: point.amount_centavos })) }, restrictions: { allocations: mappedAllocations }, obligations: { reservations: [] }, debtRequirements: { reservations: mappedDebtReservations, surplusCentavos: row.debt_surplus_centavos }, savingsRequirements: { reservations: mappedSavingsReservations, surplusCentavos: row.savings_surplus_centavos }, classification: { status: row.classification_status, rule_set_version: row.classification_rule_set_version, assessed_at: row.classification_assessed_at } }, recommendation: { availableFundsCentavos: row.available_funds_centavos, requiredFundsCentavos: row.required_funds_centavos, shortfallCentavos: row.shortfall_centavos, allocations: mappedAllocations, debtReservations: mappedDebtReservations, debtSurplusCentavos: row.debt_surplus_centavos, savingsReservations: mappedSavingsReservations, savingsSurplusCentavos: row.savings_surplus_centavos } };
 }
 
 export async function getFinancialPlan(userId: string, id: string): Promise<AcceptedFinancialPlan | null> {

@@ -11,6 +11,7 @@ export type AllocatableSavingsGoal = {
 };
 
 export type SavingsAllocationProposal = AllocatableSavingsGoal & {
+  plannedTotalCentavos?: number;
   proposedRequiredCentavos: number;
   proposedSurplusCentavos: number;
   proposedTotalCentavos: number;
@@ -26,6 +27,19 @@ export type SavingsEnvelopeAllocation = {
   shortfallCentavos: number;
   unallocatedCentavos: number;
   proposals: SavingsAllocationProposal[];
+};
+
+export type SavingsCycleContribution = {
+  id: string;
+  name: string;
+  dueDate: string | null;
+  plannedCentavos: number;
+  recordedCentavos: number;
+};
+
+export type SavingsCycleAllocation = SavingsEnvelopeAllocation & {
+  contributions: SavingsCycleContribution[];
+  remainingToContributeCentavos: number;
 };
 
 function byStrategy(strategy: SavingsAllocationStrategy, left: AllocatableSavingsGoal, right: AllocatableSavingsGoal) {

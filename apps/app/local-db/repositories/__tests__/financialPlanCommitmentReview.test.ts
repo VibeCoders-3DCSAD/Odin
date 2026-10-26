@@ -75,11 +75,21 @@ async function setup() {
   await db.execAsync(ACTUALS_SCHEMA);
   mockInitDatabase.mockResolvedValue(db);
   const { getPlanCommitmentPayments, getPlanCommitmentReview } = await import("../financialPlanCommitmentReview");
-  return { run, review: (planId = "plan-1", userId = USER) => getPlanCommitmentReview(userId, planId), payments: () => getPlanCommitmentPayments(USER, { start: "2026-09-01", end: "2026-09-30" }) };
+  return { run, review: (planId = "plan-1", userId = USER) => getPlanCommitmentReview(userId, planId), payments: (options?: { savingsRecordedSince?: string }) => getPlanCommitmentPayments(USER, { start: "2026-09-01", end: "2026-09-30" }, options) };
 }
 
 describe("getPlanCommitmentReview", () => {
   beforeEach(() => { jest.resetModules(); mockInitDatabase.mockReset(); });
+
+  it("counts only savings recorded since the current plan when a cutoff is supplied", async () => {
+    const { run, payments } = await setup();
+    activity(run, "emergency", 5_000_000, "2026-09-17");
+    activity(run, "emergency", 602_041, "2026-09-27");
+    run("UPDATE savings_goal_activities SET created_at = '2026-09-26T16:25:56.604Z' WHERE amount_centavos = 602041");
+
+    expect((await payments({ savingsRecordedSince: "2026-09-26T16:24:18.677Z" })).paidCentavos["savings:emergency"]).toBe(602_041);
+    expect((await payments()).paidCentavos["savings:emergency"]).toBe(5_602_041);
+  });
 
   it("returns null when the plan is missing, not accepted, deleted or owned by another user", async () => {
     const { run, review } = await setup();

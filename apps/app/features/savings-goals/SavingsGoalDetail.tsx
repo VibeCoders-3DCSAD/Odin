@@ -74,7 +74,7 @@ export default function SavingsGoalDetail({ goal, activities, plannedContributio
     </View> : null}
 
     {active && plannedContributionCentavos > 0 ? <View style={{ backgroundColor: P.soft, borderRadius: 12, padding: 12 }}>
-      <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Your Financial Plan sets aside {money(plannedContributionCentavos)} for this goal this cycle.</Text>
+      <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Remaining to contribute this cycle: {money(plannedContributionCentavos)}.</Text>
     </View> : null}
 
     <Section title="Details">
