@@ -242,3 +242,34 @@ export async function changeRecurrenceMonths(userId: string, deviceId: string, t
 export async function stopRecurrence(userId: string, deviceId: string, transactionId: string): Promise<void> {
   await writeAnswer(userId, deviceId, transactionId, "one_time", null, (current) => current === "yearly");
 }
+
+/** Revises a consolidated payment's answers atomically, queuing each evaluation for sync. */
+export async function reviseRecurringPaymentGroup(userId: string, deviceId: string, transactionIds: readonly string[], recurrenceMonths: readonly number[] | null): Promise<void> {
+  const ids = [...new Set(transactionIds)];
+  if (!ids.length) throw new Error("recurring payment group is empty");
+  const months = recurrenceMonths === null ? null : requireMonths(recurrenceMonths);
+  const recurrence = months ? "yearly" : "one_time";
+  const placeholders = ids.map(() => "?").join(", ");
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    const rows = await db.getAllAsync<AnswerRow>(
+      `SELECT id, version, recurrence FROM anomaly_evaluations WHERE user_id = ? AND transaction_id IN (${placeholders}) AND deleted = 0`,
+      userId, ...ids,
+    );
+    if (rows.length !== ids.length || rows.some((row) => row.recurrence !== "yearly")) {
+      throw new Error("recurring payment group has changed; reload before editing");
+    }
+    await db.runAsync(
+      `UPDATE anomaly_evaluations SET recurrence = ?, confirmed_recurring_at = NULL, recurrence_months = ?, version = version + 1, updated_at = ? WHERE user_id = ? AND transaction_id IN (${placeholders}) AND deleted = 0`,
+      recurrence, months ? JSON.stringify(months) : null, new Date().toISOString(), userId, ...ids,
+    );
+    for (const row of rows) {
+      await enqueueOperation(db, {
+        userId, deviceId, entity: "anomaly_evaluations", recordId: row.id, operationType: "update",
+        baseVersion: row.version, changedFields: ["recurrence", "recurrence_months"],
+        payload: { recurrence, recurrence_months: months },
+        failureMessage: "Your unusual spending answer could not be synchronized.",
+      });
+    }
+  });
+}
