@@ -149,14 +149,14 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
 
   // Billers and remittances. Auto-post payments use the server's derived ids; manual ones leave recent dues unpaid.
   const yearlyDueMonth = Number(months[4].slice(5, 7));
-  const billerSpecs: { name: string; slug: string; amount: number; spread: number; frequency: "monthly" | "quarterly" | "yearly"; day: number; autoPost: boolean; familySupport?: boolean; dependentSupport?: boolean; lastMonthIndex?: number; notes?: string }[] = [
+  const billerSpecs: { name: string; slug: string; amount: number; spread: number; frequency: "monthly" | "yearly"; day: number; autoPost: boolean; familySupport?: boolean; dependentSupport?: boolean; lastMonthIndex?: number; notes?: string }[] = [
     { name: "Apartment Rent", slug: "housing_rent", amount: 13_500, spread: 0, frequency: "monthly", day: 2, autoPost: false },
     { name: "Meralco", slug: "housing_electricity", amount: 2_800, spread: 0.2, frequency: "monthly", day: 6, autoPost: false },
     { name: "Maynilad", slug: "housing_water", amount: 550, spread: 0.15, frequency: "monthly", day: 8, autoPost: false },
     { name: "PLDT Home Fiber", slug: "housing_internet", amount: 1_699, spread: 0, frequency: "monthly", day: 10, autoPost: true },
     { name: "Netflix", slug: "recreation_streaming", amount: 549, spread: 0, frequency: "monthly", day: 12, autoPost: true },
     { name: "Globe Postpaid", slug: "communication_mobile_postpaid", amount: 999, spread: 0, frequency: "monthly", day: 18, autoPost: true },
-    { name: "Maxicare HMO", slug: "health_insurance", amount: 3_600, spread: 0, frequency: "quarterly", day: 20, autoPost: false },
+    { name: "Maxicare HMO", slug: "health_insurance", amount: 2_000, spread: 0, frequency: "monthly", day: 20, autoPost: true },
     { name: "LTO Motorcycle Registration", slug: "transport_vehicle_registration", amount: 1_850, spread: 0, frequency: "yearly", day: 14, autoPost: false },
     { name: "Anytime Fitness", slug: "recreation_sports", amount: 1_500, spread: 0, frequency: "monthly", day: 3, autoPost: true, lastMonthIndex: 5, notes: "Cancelled membership." },
     { name: "Padala kay Nanay", slug: "misc_other", amount: 5_000, spread: 0, frequency: "monthly", day: 25, autoPost: false, familySupport: true, notes: "Monthly remittance to Mom in Iloilo." },
@@ -175,8 +175,7 @@ export function buildSeedData({ userId, today, seed, subcategoryIds }: { userId:
       auto_post: autoPost, auto_post_from: autoPost ? start : null, is_family_support: spec.familySupport ?? false, is_dependent_support: spec.dependentSupport ?? false,
       protected_by_default: true, notes: spec.notes ?? null, status: active ? "active" : "archived", version: 1, deleted: false,
     });
-    for (const [index, month] of months.entries()) {
-      if (spec.frequency === "quarterly" && index % 3 !== 0) continue;
+    for (const month of months) {
       if (spec.frequency === "yearly" && Number(month.slice(5, 7)) !== yearlyDueMonth) continue;
       const dueDate = monthDate(month, spec.day);
       if (!inWindow(dueDate) || (endsOn && dueDate > endsOn)) continue;

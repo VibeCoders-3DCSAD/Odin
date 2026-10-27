@@ -21,9 +21,9 @@ it("keeps seeded medicine purchases in the forecast after frequent-spending conf
     subcategoryId: row.subcategory_id!, subcategoryLabel: "Medicines", accountName: null,
   })), recurrences).filter((insight) => !insight.confirmedRecurring);
   expect(remainingOneOffs).toEqual([]);
-  expect(confirmations.some((row) => row.amount_centavos === 78666)).toBe(true);
-  expect(confirmations.some((row) => row.amount_centavos === 90520)).toBe(true);
-  expect(confirmations.some((row) => row.amount_centavos === 50997)).toBe(true);
+  expect(confirmations.some((row) => row.amount_centavos === 84644)).toBe(true);
+  expect(confirmations.some((row) => row.amount_centavos === 86412)).toBe(true);
+  expect(confirmations.some((row) => row.amount_centavos === 49733)).toBe(true);
 });
 
 it("does not confirm another user's purchases or other subcategories", () => {
