@@ -316,6 +316,8 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
   const contentHeight = useRef(0);
   const viewportHeight = useRef(0);
   const [showScrollToEnd, setShowScrollToEnd] = useState(false);
+  // The content ScrollView remounts per page, so it always starts at the top.
+  useEffect(() => { contentScrollY.current = 0; }, [currentPage]);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -1085,6 +1087,9 @@ export default function MobileShell({ accessToken, userId, deviceId, onLoggedOut
 
         {/* Content */}
         <ScrollView
+          // A fresh ScrollView per page: reusing one lets a short loading state clamp the scroll offset
+          // without a scroll event, leaving the hub's sticky segment row stuck at the old offset.
+          key={currentPage}
           className="flex-1"
           contentContainerClassName={activeTab && !hideChrome ? "pb-24" : "pb-8"}
           contentContainerStyle={{ paddingHorizontal: CONTENT_GUTTER }}
