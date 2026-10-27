@@ -12,7 +12,7 @@ import { deterministicFinancialPlanExplanations, type FinancialPlanExplanationRe
 import { deriveSurplusRecommendation } from "./classificationPolicy.js";
 import { createFinancialConditionAssessment } from "../financialConditionAssessmentService.js";
 import { getServiceRoleClient } from "../../lib/supabase.js";
-import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledRequirements } from "./helpers/scheduledCategoryAmounts.js";
+import { scheduledCategoryAmounts, subtractScheduledRequirements } from "./helpers/scheduledCategoryAmounts.js";
 import { scheduledPaymentReservations, type ScheduledPaymentRow } from "./scheduledPaymentDates.js";
 import { normalizeCustomEvents, eventMonthLabel } from "@odin/spending-insights/seasons.js";
 import { historyWindow, isFullYear, seasonalMonthSpend } from "@odin/spending-insights/seasonalMonth.js";
@@ -325,8 +325,11 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
     months.set(month, (months.get(month) ?? 0) + transaction.amount_centavos);
     monthlyByTarget.set(targetId, months);
   };
+  // Billers and remittances are reserved at their set amounts, so their payments never make a category budget.
+  const scheduledTransactionIds = new Set(((scheduledPaymentHistoryResult.data ?? []) as Array<{ transaction_id: string }>).map((record) => record.transaction_id));
   for (const transaction of cleanTransactions) {
     if (transaction.transaction_type === "expense" && transaction.transaction_date >= trailingTwelveMonthsStart) spendMonths.add(transaction.transaction_date.slice(0, 7));
+    if (scheduledTransactionIds.has(transaction.id)) continue;
     if (transaction.transaction_type === "expense" && transaction.subcategory_id && transaction.transaction_date >= trailingTwelveMonthsStart) {
       spendBySubcategory.set(transaction.subcategory_id, (spendBySubcategory.get(transaction.subcategory_id) ?? 0) + transaction.amount_centavos);
     }
@@ -382,7 +385,7 @@ export async function getFinancialPlanRecommendation(userId: string, supabase: S
   ];
   const scheduledByTarget = scheduledCategoryAmounts(scheduledPayments, grossCategories, parentBySubcategory, period);
   const categories = subtractScheduledRequirements(grossCategories, scheduledByTarget);
-  const categoryBaselines = subtractScheduledAmounts(new Map(grossCategories.map((category) => [category.id, category.forecastCentavos])), scheduledByTarget);
+  const categoryBaselines = new Map(grossCategories.map((category) => [category.id, category.forecastCentavos]));
   if (!categories.length) throw new FinancialPlanInputError("Choose at least one expense category");
   const minimumRequired = categories.reduce((sum, category) => sum + category.floorCentavos, 0);
   if (isFinancialPlanInfeasible(available, minimumRequired)) {

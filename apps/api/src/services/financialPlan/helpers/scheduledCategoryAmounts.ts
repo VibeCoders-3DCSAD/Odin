@@ -23,13 +23,10 @@ export function scheduledCategoryAmounts(
   return amounts;
 }
 
-export function subtractScheduledAmounts(amounts: Map<string, number>, scheduled: Map<string, number>): Map<string, number> {
-  return new Map([...amounts].map(([id, amount]) => [id, Math.max(0, amount - (scheduled.get(id) ?? 0))]));
-}
-
 export function subtractScheduledRequirements(categories: MlPlanCategory[], scheduled: Map<string, number>): MlPlanCategory[] {
   return categories.map((category) => {
     const amount = scheduled.get(category.id) ?? 0;
-    return { ...category, floorCentavos: Math.max(0, category.floorCentavos - amount), ceilingCentavos: Math.max(0, category.ceilingCentavos - amount), forecastCentavos: Math.max(0, category.forecastCentavos - amount) };
+    // The estimate already leaves scheduled payments out of its history; only the requirements include them.
+    return { ...category, floorCentavos: Math.max(0, category.floorCentavos - amount), ceilingCentavos: Math.max(0, category.ceilingCentavos - amount) };
   });
 }

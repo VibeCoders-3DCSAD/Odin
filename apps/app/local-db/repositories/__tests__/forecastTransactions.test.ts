@@ -193,9 +193,10 @@ describe("listForecastTransactions", () => {
     const { listPlanRecommendations } = await import("../forecastTransactions");
 
     await expect(listPlanRecommendations("user-1", "2026-10", new Date("2026-10-18T04:00:00Z"))).resolves.toEqual({
-      seasonal: false, subcategoryIds: ["groceries", "internet"], categoryIds: ["transport"],
-      historySubcategoryIds: ["tuition", "groceries", "internet"], historyCategoryIds: ["education", "food", "transport", "utilities"],
-      // Two months of spending averaged; the biller payment is reserved by the plan, so it is not expected spending.
+      // The biller payment is reserved by the plan, so it neither starts a category budget nor counts as its history.
+      seasonal: false, subcategoryIds: ["groceries"], categoryIds: ["transport"],
+      historySubcategoryIds: ["tuition", "groceries"], historyCategoryIds: ["education", "food", "transport"],
+      // Two months of spending averaged.
       expectedSpend: { subcategories: { tuition: 5_000, groceries: 5_000 }, categories: { education: 5_000, food: 5_000, transport: 5_000 } },
     });
   });

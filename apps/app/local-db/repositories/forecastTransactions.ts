@@ -127,20 +127,23 @@ export async function listPlanRecommendations(userId: string, planMonth: string,
   );
   const unusual = await listUnusualSpending(userId);
   const clean = rows.filter((row) => !unusual.oneOffs.has(row.id));
+  // Billers and remittances are reserved at their set amounts, so their payments never make a category budget.
+  const spending = clean.filter((row) => !row.scheduled);
   const categoryBySubcategory = new Map(rows.flatMap((row) => row.subcategory_id ? [[row.subcategory_id, row.category_id] as const] : []));
   const recurringFor = (targetId: string) => recurringTargetSpend(unusual.recurring, categoryBySubcategory, targetId, planMonth);
   // The plan's own twelve-month history, which decides whether a category may take a one-time amount.
   const historyStart = new Date(now);
   historyStart.setUTCMonth(historyStart.getUTCMonth() - 12);
   const recent = clean.filter((row) => row.transaction_date >= historyStart.toISOString().slice(0, 10));
-  const historySubcategoryIds = [...new Set(recent.flatMap((row) => row.subcategory_id ? [row.subcategory_id] : []))];
-  const historyCategoryIds = [...new Set(recent.flatMap((row) => row.category_id ? [row.category_id] : []))];
+  const recentSpending = recent.filter((row) => !row.scheduled);
+  const historySubcategoryIds = [...new Set(recentSpending.flatMap((row) => row.subcategory_id ? [row.subcategory_id] : []))];
+  const historyCategoryIds = [...new Set(recentSpending.flatMap((row) => row.category_id ? [row.category_id] : []))];
   const today = localToday(now);
   const window = historyWindow(clean.map((row) => row.transaction_date.slice(0, 7)), today.slice(0, 7));
-  const expectedSpend = expectedPlanSpend(clean, unusual.recurringIds, recurringFor, window, planMonth, recent);
+  const expectedSpend = expectedPlanSpend(spending, unusual.recurringIds, recurringFor, window, planMonth, recent);
   if (!isFullYear(window)) {
     const recentStart = getRecentExpenseStartDate(now);
-    const lastSixMonths = clean.filter((row) => row.transaction_date >= recentStart);
+    const lastSixMonths = spending.filter((row) => row.transaction_date >= recentStart);
     return {
       subcategoryIds: [...new Set(lastSixMonths.flatMap((row) => row.subcategory_id ? [row.subcategory_id] : []))],
       categoryIds: [...new Set(lastSixMonths.flatMap((row) => !row.subcategory_id && row.category_id ? [row.category_id] : []))],
@@ -150,7 +153,7 @@ export async function listPlanRecommendations(userId: string, planMonth: string,
   const monthly = new Map<string, Map<string, number>>();
   const subcategoryIds = new Set<string>();
   const directCategoryIds = new Set<string>();
-  for (const row of clean) {
+  for (const row of spending) {
     const targetId = row.subcategory_id ? `subcategory:${row.subcategory_id}` : row.category_id ? `category:${row.category_id}` : null;
     if (!targetId) continue;
     if (row.subcategory_id) subcategoryIds.add(row.subcategory_id);
@@ -175,8 +178,7 @@ function addMonthSpend(byTarget: Map<string, Map<string, number>>, targetId: str
 
 // Mirrors the plan's category forecast on the server: a full year follows last year's season for planMonth,
 // less history uses the average month over the past twelve.
-function expectedPlanSpend(clean: PlanSpendRow[], recurringIds: Set<string>, recurringFor: (targetId: string) => number, window: string[], planMonth: string, recent: PlanSpendRow[]): PlanRecommendations["expectedSpend"] {
-  const spending = clean.filter((row) => !row.scheduled);
+function expectedPlanSpend(spending: PlanSpendRow[], recurringIds: Set<string>, recurringFor: (targetId: string) => number, window: string[], planMonth: string, recent: PlanSpendRow[]): PlanRecommendations["expectedSpend"] {
   const subcategories: Record<string, number> = {};
   const categories: Record<string, number> = {};
   if (!isFullYear(window)) {

@@ -42,11 +42,11 @@ beforeEach(() => {
 });
 afterEach(() => jest.useRealTimers());
 
-it.each([0, 10_000, 30_000])("deducts the full scheduled baseline once and reserves the full amount after %i paid", async (paid) => {
+it.each([0, 10_000, 30_000])("reserves the full amount after %i paid without deducting it from spending that is not a biller payment", async (paid) => {
   const plan = await getFinancialPlanRecommendation("user-1", client(paid), 200_000, ["rent"]);
   expect(recommendPlanCategories).toHaveBeenCalledWith("user-1", { start: "2026-10-01", end: "2026-10-31" }, 170_000,
-    [expect.objectContaining({ id: "rent", forecastCentavos: 70_000 })], expect.objectContaining({ totalAmountCentavos: 70_000 }));
-  expect(plan.recommendation.allocations[0]?.allocatedAmountCentavos).toBe(70_000);
+    [expect.objectContaining({ id: "rent", forecastCentavos: 100_000 })], expect.objectContaining({ totalAmountCentavos: 100_000 }));
+  expect(plan.recommendation.allocations[0]?.allocatedAmountCentavos).toBe(100_000);
   expect(plan.inputSnapshot.obligations.reservations).toEqual([{ scheduledPaymentId: "monthly-rent", subcategoryId: "rent", label: "Monthly rent", amountCentavos: 30_000, dueDate: "2026-10-20" }]);
 });
 
@@ -117,9 +117,34 @@ it("reports a shortfall using only the residual Fixed requirement plus the sched
   expect(plan.recommendation).toMatchObject({ requiredFundsCentavos: 50_000, shortfallCentavos: 35_000 });
 });
 
-it("deducts monthly scheduled amounts after averaging a multi-month fallback baseline", async () => {
-  const plan = await getFinancialPlanRecommendation("user-1", client(0, null, 2), 200_000, ["rent"]);
-  expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(70_000);
+it("averages a multi-month fallback baseline without biller payments", async () => {
+  const plan = await getFinancialPlanRecommendation("user-1", client(0, null, 2, {
+    scheduled_payment_records: [{ scheduled_payment_id: "monthly-rent", transaction_id: "older-rent", occurrence_date: "2026-08-20", amount_centavos: 100_000 }],
+  }), 200_000, ["rent"]);
+  expect(plan.recommendation.allocations[0]?.forecastAmountCentavos).toBe(50_000);
+});
+
+it("keeps a quarterly biller's past payments out of its category budget in a month it is not due", async () => {
+  jest.mocked(getMlForecast).mockResolvedValue({ status: "SUCCESS", modelVersion: "v1", forecasts: [], snapshot: { month: "2026-10", totalAmountCentavos: 50_000, categoryForecasts: [{ category: "health", amountCentavos: 50_000 }], modelVersion: "v1", generatedAt: "2026-10-15T03:00:00Z", quality: "PERSONALIZED" } });
+  const expense = { transaction_type: "expense", category_id: null, anomaly_evaluations: [] };
+  await getFinancialPlanRecommendation("user-1", client(0, null, 1, {
+    subcategories: [
+      { id: "insurance", category_id: "health", label: "Health Insurance", minimum_amount_centavos: null, fixed_amount_centavos: null },
+      { id: "medicine", category_id: "health", label: "Medicine", minimum_amount_centavos: null, fixed_amount_centavos: null },
+    ],
+    categories: [{ id: "health", slug: "health", label: "Health", minimum_amount_centavos: null, fixed_amount_centavos: null }],
+    transactions: [
+      { ...expense, id: "hmo-sep", amount_centavos: 360_000, transaction_date: "2026-09-20", subcategory_id: "insurance" },
+      { ...expense, id: "hmo-jun", amount_centavos: 360_000, transaction_date: "2026-06-20", subcategory_id: "insurance" },
+      { ...expense, id: "pills", amount_centavos: 50_000, transaction_date: "2026-09-12", subcategory_id: "medicine" },
+    ],
+    scheduled_payments: [{ id: "hmo", name: "Maxicare HMO", subcategory_id: "insurance", amount_centavos: 360_000, frequency: "quarterly", due_day_of_month: 20, due_second_day_of_month: null, due_day_of_week: null, due_month: null, starts_on: "2025-09-01", ends_on: null }],
+    scheduled_payment_records: [{ transaction_id: "hmo-sep" }, { transaction_id: "hmo-jun" }],
+  }), 200_000, ["insurance", "medicine"]);
+  expect(recommendPlanCategories).toHaveBeenCalledWith("user-1", expect.anything(), 200_000, [
+    expect.objectContaining({ id: "insurance", forecastCentavos: 0, priorityWeight: 0 }),
+    expect.objectContaining({ id: "medicine", forecastCentavos: 50_000, priorityWeight: 1 }),
+  ], expect.anything());
 });
 
 it("reserves the user's budget for a biller while keeping its full amount due as the requirement", async () => {

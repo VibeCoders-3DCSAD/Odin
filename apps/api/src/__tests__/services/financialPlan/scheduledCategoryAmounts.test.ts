@@ -1,4 +1,4 @@
-import { scheduledCategoryAmounts, subtractScheduledAmounts, subtractScheduledRequirements } from "../../../services/financialPlan/helpers/scheduledCategoryAmounts.js";
+import { scheduledCategoryAmounts, subtractScheduledRequirements } from "../../../services/financialPlan/helpers/scheduledCategoryAmounts.js";
 import { scheduledPaymentReservations, type ScheduledPaymentRow } from "../../../services/financialPlan/scheduledPaymentDates.js";
 import type { MlPlanCategory } from "../../../services/financialPlan/mlAdapter.js";
 
@@ -11,7 +11,6 @@ it("rolls multiple scheduled payments and occurrences into a selected parent, wi
   const weekly = { ...payment, id: "power", subcategory_id: "power-sub", amount_centavos: 1_000, frequency: "weekly" as const, due_day_of_week: 5 };
   const amounts = scheduledCategoryAmounts([payment, weekly], [category, { id: "food", target: "category" }], parentBySubcategory, period);
   expect(Object.fromEntries(amounts)).toEqual({ housing: 35_000 });
-  expect(Object.fromEntries(subtractScheduledAmounts(new Map([["housing", 100_000], ["food", 40_000]]), amounts))).toEqual({ housing: 65_000, food: 40_000 });
 });
 
 it("matches the selected subcategory once and leaves its siblings alone", () => {
@@ -20,16 +19,15 @@ it("matches the selected subcategory once and leaves its siblings alone", () => 
   expect(scheduledCategoryAmounts([payment], [{ id: "food", target: "category" }], parentBySubcategory, period).size).toBe(0);
 });
 
-it("reserves and deducts the full scheduled amount", () => {
+it("reserves the full scheduled amount and deducts it from requirements, not the estimate", () => {
   const reservations = scheduledPaymentReservations([payment], period);
   expect(reservations.reduce((sum, row) => sum + row.amountCentavos, 0)).toBe(30_000);
-  expect(subtractScheduledRequirements([category], scheduledCategoryAmounts([payment], [category], parentBySubcategory, period))[0]).toMatchObject({ forecastCentavos: 70_000, floorCentavos: 20_000 });
+  expect(subtractScheduledRequirements([category], scheduledCategoryAmounts([payment], [category], parentBySubcategory, period))[0]).toMatchObject({ forecastCentavos: 100_000, floorCentavos: 20_000 });
 });
 
-it("counts the scheduled part toward Fixed requirements and clamps estimates and requirements to zero", () => {
+it("counts the scheduled part toward Fixed requirements and clamps requirements to zero", () => {
   const deductions = new Map([["housing", 120_000]]);
-  expect(subtractScheduledRequirements([{ ...category, rule: "FIXED", ceilingCentavos: 50_000 }], deductions)[0]).toMatchObject({ floorCentavos: 0, ceilingCentavos: 0, forecastCentavos: 0 });
-  expect(subtractScheduledAmounts(new Map([["housing", 100_000]]), deductions).get("housing")).toBe(0);
+  expect(subtractScheduledRequirements([{ ...category, rule: "FIXED", ceilingCentavos: 50_000 }], deductions)[0]).toMatchObject({ floorCentavos: 0, ceilingCentavos: 0, forecastCentavos: 100_000 });
 });
 
 it("does not subtract schedules outside the plan period", () => {
