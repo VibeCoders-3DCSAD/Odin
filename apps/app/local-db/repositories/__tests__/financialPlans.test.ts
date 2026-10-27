@@ -154,7 +154,7 @@ describe("financial plan repository", () => {
     mockGetPlanSpendingReview.mockResolvedValue({ rows: [], actualTotalCentavos: 1_250_000 });
 
     const { getFinancialPlanBudgetRemaining } = await import("../financialPlans");
-    const plan = { id: "plan-1", createdAt: "2026-10-01T00:00:00Z", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: { availableFundsCentavos: 5_000_000 } };
+    const plan = { id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: { availableFundsCentavos: 5_000_000 } };
     await expect(getFinancialPlanBudgetRemaining("user-1", plan)).resolves.toBe(3_750_000);
     expect(mockGetPlanSpendingReview).toHaveBeenCalledWith("user-1", "plan-1");
   });
@@ -162,13 +162,13 @@ describe("financial plan repository", () => {
   it("keeps extra debt and savings commitments reserved in the remaining budget", async () => {
     mockGetPlanSpendingReview.mockResolvedValue({ rows: [], actualTotalCentavos: 15_000 });
     const { getFinancialPlanBudgetRemaining } = await import("../financialPlans");
-    const plan = { id: "plan-1", createdAt: "2026-10-01T00:00:00Z", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: { availableFundsCentavos: 70_000, debtSurplusCentavos: 5_000, savingsSurplusCentavos: 5_000 } };
+    const plan = { id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: { availableFundsCentavos: 70_000, debtSurplusCentavos: 5_000, savingsSurplusCentavos: 5_000 } };
     await expect(getFinancialPlanBudgetRemaining("user-1", plan)).resolves.toBe(45_000);
   });
 
   it("reports no budget remaining when the plan has no available funds", async () => {
     const { getFinancialPlanBudgetRemaining } = await import("../financialPlans");
-    await expect(getFinancialPlanBudgetRemaining("user-1", { id: "plan-1", createdAt: "2026-10-01T00:00:00Z", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: {} })).resolves.toBeNull();
+    await expect(getFinancialPlanBudgetRemaining("user-1", { id: "plan-1", periodStart: "2026-10-01", periodEnd: "2026-10-31", inputSnapshot: {}, recommendation: {} })).resolves.toBeNull();
     expect(mockGetPlanSpendingReview).not.toHaveBeenCalled();
   });
 

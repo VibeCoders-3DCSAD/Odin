@@ -42,7 +42,6 @@ describe("getCurrentSavingsEnvelopeAllocation", () => {
       nextContributionDate: "2026-10-20",
     }]);
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({
-      createdAt: "2026-10-26T16:24:18.677Z",
       periodStart: "2026-10-01",
       periodEnd: "2026-10-31",
       recommendation: {
@@ -66,7 +65,6 @@ describe("getCurrentSavingsEnvelopeAllocation", () => {
       { id: "goal-2", name: "Short-term", goalCategory: "custom", status: "active", isAchieved: false, targetDate: null, remainingAmountCentavos: 5_000_000, contributionFrequency: "monthly", nextContributionDate: "2026-10-20" },
     ]);
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue({
-      createdAt: "2026-10-26T16:24:18.677Z",
       periodStart: "2026-10-01",
       periodEnd: "2026-10-31",
       recommendation: { savingsReservations: [], savingsSurplusCentavos: 4_000_000 },
@@ -117,7 +115,7 @@ describe("getCurrentSavingsEnvelopeAllocation", () => {
     const allocation = await getCurrentSavingsEnvelopeAllocation("user-1", "2026-10-15");
 
     expect(allocation).toMatchObject({ remainingToContributeCentavos: 0, contributions: [{ id: "goal-1", plannedCentavos: 4_800_000, recordedCentavos: 4_800_000 }], proposals: [expect.objectContaining({ proposedTotalCentavos: 0 })] });
-    expect(mockGetPayments).toHaveBeenCalledWith("user-1", { start: "2026-10-01", end: "2026-10-31" }, { savingsRecordedSince: "2026-10-26T16:24:18.677Z" });
+    expect(mockGetPayments).toHaveBeenCalledWith("user-1", { start: "2026-10-01", end: "2026-10-31" });
   });
 
   it("refreshes totals from a replacement accepted plan", async () => {

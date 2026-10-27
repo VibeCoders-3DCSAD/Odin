@@ -13,8 +13,8 @@ export async function getCurrentSavingsEnvelopeAllocation(userId: string, asOfDa
     getRequiredSavingsContributionsForPeriod(userId, plan.periodStart, plan.periodEnd),
     getSavingsAllocationStrategy(userId),
     listSavingsGoals(userId),
-    // Deposits already recorded before acceptance are part of the plan's starting position.
-    getPlanCommitmentPayments(userId, { start: plan.periodStart, end: plan.periodEnd }, { savingsRecordedSince: plan.createdAt }),
+    // Any deposit dated inside the plan month counts, even one recorded before acceptance.
+    getPlanCommitmentPayments(userId, { start: plan.periodStart, end: plan.periodEnd }),
   ]);
   const requirementsByGoalId = new Map(requirements.contributions.filter((contribution) => contribution.source === "goal").map((contribution) => [contribution.savingsId, contribution]));
   const recordedForGoal = (id: string) => payments.paidCentavos[`savings:${id}`] ?? 0;

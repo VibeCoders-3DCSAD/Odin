@@ -156,7 +156,6 @@ const PERIOD_PAYMENTS_SQL = `
   SELECT 'savings:' || savings_goal_id AS payment_key, SUM(amount_centavos) AS paid_centavos, 0 AS settled
   FROM savings_goal_activities
   WHERE user_id = ? AND deleted = 0 AND activity_kind = 'contribution' AND activity_date >= ? AND activity_date <= ?
-    AND (? IS NULL OR julianday(created_at) >= julianday(?))
   GROUP BY savings_goal_id
   UNION ALL
   SELECT 'debt:' || debt_account_id, SUM(amount_centavos), 0
@@ -174,12 +173,12 @@ const PERIOD_PAYMENTS_SQL = `
   WHERE user_id = ? AND deleted = 0 AND occurrence_date >= ? AND occurrence_date <= ?
   GROUP BY scheduled_payment_id, occurrence_date`;
 
-/** Period payments keyed like commitments. Savings can exclude deposits recorded before plan acceptance. */
-export async function getPlanCommitmentPayments(userId: string, period: { start: string; end: string }, options: { savingsRecordedSince?: string } = {}): Promise<PlanCommitmentPayments> {
+/** Paid amounts and settled biller occurrences for an accepted plan's period, keyed like plan commitments (biller keys include the occurrence date). */
+export async function getPlanCommitmentPayments(userId: string, period: { start: string; end: string }): Promise<PlanCommitmentPayments> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ payment_key: string; paid_centavos: number; settled: number }>(
     PERIOD_PAYMENTS_SQL,
-    userId, period.start, period.end, options.savingsRecordedSince ?? null, options.savingsRecordedSince ?? null, userId, period.start, period.end, userId, userId, period.start, period.end,
+    userId, period.start, period.end, userId, period.start, period.end, userId, userId, period.start, period.end,
   );
   return {
     paidCentavos: Object.fromEntries(rows.map((row) => [row.payment_key, Number(row.paid_centavos)])),
