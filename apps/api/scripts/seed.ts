@@ -9,7 +9,6 @@ import { summarizePersonaSpending } from "./helpers/persona-spending.js";
 import { buildSeedRecurringSpending, buildSeedTuitionMonths } from "./helpers/seed-recurring-spending.js";
 import {
   buildSeedData,
-  incomeSubcategories,
   legacySeedMarker,
   manilaToday,
   requiredSubcategorySlugs,
@@ -105,12 +104,6 @@ async function ensureUser(supabase: SupabaseClient, email: string, password: str
 async function provisionTaxonomy(supabase: SupabaseClient, userId: string) {
   const { error: taxonomyError } = await supabase.rpc("seed_hfce_taxonomy_for_user", { p_user_id: userId });
   if (taxonomyError) throw new Error(`Could not provision the user's financial taxonomy: ${taxonomyError.message}`);
-  const existing = new Set(await selectIds(supabase.from("subcategories").select("slug").eq("user_id", userId).eq("deleted", false).in("slug", incomeSubcategories.map((subcategory) => subcategory.slug)), "slug"));
-  const missing = incomeSubcategories.filter((subcategory) => !existing.has(subcategory.slug));
-  await insertRows(supabase, "subcategories", missing.map((subcategory) => ({
-    user_id: userId, category_id: null, slug: subcategory.slug, kind: "income", label: subcategory.label, short_label: subcategory.label,
-    description: subcategory.description, is_system: false, sort_order: subcategory.sortOrder,
-  })));
 }
 
 async function loadSubcategoryIds(supabase: SupabaseClient, userId: string, dryRun: boolean) {

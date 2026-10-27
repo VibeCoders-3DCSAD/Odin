@@ -14,13 +14,8 @@ const SCHEDULED_PAYMENT_POST_NAMESPACE = "7f4fa802-4c64-4370-aed4-ca25c703928f";
 const HISTORY_MONTHS = 14;
 const CARD_CYCLES = 13;
 
-export const incomeSubcategories = [
-  { slug: "income_salary", label: "Salary", description: "Regular employment income.", sortOrder: 10 },
-  { slug: "income_freelance", label: "Freelance & Side Income", description: "Project, tutoring, and other side income.", sortOrder: 20 },
-] as const;
-
 export const requiredSubcategorySlugs = [
-  ...incomeSubcategories.map((subcategory) => subcategory.slug),
+  "income_salary", "income_freelance",
   "housing_rent", "housing_electricity", "housing_water", "housing_internet", "communication_mobile_postpaid",
   "recreation_streaming", "recreation_sports", "recreation_cinema", "health_insurance", "health_medicines",
   "transport_vehicle_registration", "transport_public", "transport_ride_hailing", "transport_fuel", "misc_other",
