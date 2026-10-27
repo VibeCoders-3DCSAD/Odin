@@ -180,9 +180,9 @@ const hubs: Record<"money" | "plan", { title: string; segments: HubSegment[] }> 
   plan: {
     title: "Plan",
     segments: [
-      { page: "financial-plan", label: "Budget" },
       { page: "debt-manager", label: "Debts" },
       { page: "savings-goals", label: "Savings Goals" },
+      { page: "financial-plan", label: "Budget" },
     ],
   },
 };
@@ -191,7 +191,7 @@ const tabs: { tab: Tab; page: Page; label: string; Icon: React.ComponentType<Ico
   { tab: "home", page: "dashboard", label: "Home", Icon: House },
   { tab: "money", page: "financial-accounts", label: "Money", Icon: Wallet },
   { tab: "activity", page: "transactions", label: "Activity", Icon: ListBullets },
-  { tab: "plan", page: "financial-plan", label: "Plan", Icon: Target },
+  { tab: "plan", page: "debt-manager", label: "Plan", Icon: Target },
 ];
 
 function tabForPage(page: Page): Tab | null {
