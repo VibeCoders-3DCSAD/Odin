@@ -168,6 +168,43 @@ function SubcategoryRow({
   );
 }
 
+// Income categories are flat and read-only here: no subcategories, no actions.
+function IncomeCategoryRow({ category }: { category: Subcategory }) {
+  return (
+    <View
+      accessibilityLabel={category.label}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingVertical: 11,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.line2,
+      }}
+    >
+      <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: category.color_hex ?? DEFAULT_TAXONOMY_COLOR, alignItems: "center", justifyContent: "center" }}>
+        <TaxonomyIcon iconKey={category.icon_key} size={19} color="#fff" weight="fill" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13.5, color: palette.ink }}>
+          {category.label}
+        </Text>
+        <Text style={{ fontFamily: "Manrope", fontSize: 11, color: palette.mut, marginTop: 2 }}>
+          {category.description}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 11, letterSpacing: 0.6, color: palette.mut }}>
+      {children}
+    </Text>
+  );
+}
+
 function assembleNested(
   localCategories: RepoCategory[],
   localSubcategories: RepoSubcategory[],
@@ -185,6 +222,7 @@ function assembleNested(
 
 export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBack, onBackInterceptChange }: TaxonomyScreenProps) {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [incomeCategories, setIncomeCategories] = useState<Subcategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,6 +244,7 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
       const localCats = await listCategories(userId);
       const localSubs = await listSubcategories(userId);
       setCategories(assembleNested(localCats, localSubs));
+      setIncomeCategories(localSubs.filter((sub) => sub.kind === "income" && !sub.category_id));
     } catch (error) {
       console.error("[taxonomy] failed to load categories", {
         userId,
@@ -458,20 +497,37 @@ export default function TaxonomyScreen({ userId, deviceId, syncVersion = 0, onBa
               <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 13, color: "#fff" }}>Retry</Text>
             </Pressable>
           </View>
-        ) : categories.length === 0 ? (
+        ) : categories.length === 0 && incomeCategories.length === 0 ? (
           <View style={{ alignItems: "center", marginTop: 40 }}>
             <Text style={{ fontFamily: "Manrope", color: palette.mut }}>No categories yet</Text>
           </View>
         ) : (
-          <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", paddingHorizontal: 14 }}>
-            {categories.map((category) => (
-              <CategoryRow
-                key={category.id}
-                category={category}
-                onNavigate={navigateToSubcategories}
-              />
-            ))}
-          </View>
+          <>
+            {categories.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <SectionLabel>EXPENSE</SectionLabel>
+                <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", paddingHorizontal: 14 }}>
+                  {categories.map((category) => (
+                    <CategoryRow
+                      key={category.id}
+                      category={category}
+                      onNavigate={navigateToSubcategories}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+            {incomeCategories.length > 0 && (
+              <View style={{ gap: 8, marginTop: 8 }}>
+                <SectionLabel>INCOME</SectionLabel>
+                <View style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, overflow: "hidden", paddingHorizontal: 14 }}>
+                  {incomeCategories.map((category) => (
+                    <IncomeCategoryRow key={category.id} category={category} />
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
         )}
       </View>
 
