@@ -1,6 +1,6 @@
 import { detectUnusualSpendings } from "@odin/spending-insights";
 import { buildSeedData, requiredSubcategorySlugs } from "../seed-history.js";
-import { buildSeedRecurringSpending, buildSeedTuitionMonths } from "../helpers/seed-recurring-spending.js";
+import { buildSeedHolidayPurchases, buildSeedRecurringSpending, buildSeedTuitionMonths } from "../helpers/seed-recurring-spending.js";
 import { buildPersonaSeedData } from "../seed-personas.js";
 import { recurringMonthSpend, resolveRecurringPayments } from "@odin/spending-insights/recurringMonths.js";
 
@@ -51,4 +51,17 @@ it("finds no tuition to flag for a persona without school fees", () => {
   const today = "2026-10-21";
   const data = buildPersonaSeedData({ userId, today, seed: 42, subcategoryIds, persona: "healthy-worker" });
   expect(buildSeedTuitionMonths(userId, data.transactions, subcategoryIds, today)).toEqual([]);
+});
+
+it("expects the holiday clothes purchase again in the month it was bought", () => {
+  const today = "2026-10-27";
+  const data = buildSeedData({ userId, today, seed: 42, subcategoryIds });
+  const answers = buildSeedHolidayPurchases(userId, data.transactions, subcategoryIds, today);
+  // The November 2025 SM Department Store purchase, from the billing cycle that closes in December.
+  expect(answers).toHaveLength(1);
+  expect(answers[0]).toMatchObject({ recurrence: "yearly", recurrence_months: [11], amount_centavos: 677_179, should_alert_user: false });
+  const byId = new Map(data.transactions.map((row) => [row.id, row]));
+  const resolved = resolveRecurringPayments(answers.map((row) => ({ key: row.subcategory_id, transactionDate: byId.get(row.transaction_id)!.transaction_date, amountCentavos: row.amount_centavos, months: row.recurrence_months })));
+  expect(recurringMonthSpend(resolved, "2026-11")).toBe(677_179);
+  expect(recurringMonthSpend(resolved, "2026-12")).toBe(0);
 });

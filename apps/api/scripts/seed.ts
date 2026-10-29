@@ -6,7 +6,7 @@ import { provisionPersonaProfile } from "./seed-persona-profile.js";
 import { buildPersonaSeedData, demoPersonas, parseDemoPersona, type DemoPersona } from "./seed-personas.js";
 import { assertSeedConfirmation } from "./resolve-seed-user.js";
 import { summarizePersonaSpending } from "./helpers/persona-spending.js";
-import { buildSeedRecurringSpending, buildSeedTuitionMonths } from "./helpers/seed-recurring-spending.js";
+import { buildSeedHolidayPurchases, buildSeedRecurringSpending, buildSeedTuitionMonths } from "./helpers/seed-recurring-spending.js";
 import {
   buildSeedData,
   legacySeedMarker,
@@ -226,7 +226,8 @@ async function main() {
   const data = persona ? buildPersonaSeedData({ ...options, persona }) : buildSeedData(options);
   const medicines = buildSeedRecurringSpending(userId, data.transactions, subcategoryIds, options.today);
   const tuition = persona === "seasonal-mom" ? buildSeedTuitionMonths(userId, data.transactions, subcategoryIds, options.today) : [];
-  const recurringSpending = [...medicines, ...tuition];
+  const holiday = persona ? [] : buildSeedHolidayPurchases(userId, data.transactions, subcategoryIds, options.today);
+  const recurringSpending = [...medicines, ...tuition, ...holiday];
   const peso = (amountCentavos: number) => `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
   console.log(`Prepared ${data.transactions.length} transactions from ${data.summary.start} through ${data.summary.end}:`);
   console.log(`  ${data.accounts.length} accounts, ${data.incomeSources.length} income sources, ${data.scheduledPayments.length} billers and remittances (${data.scheduledPaymentRecords.length} payments)`);
@@ -235,6 +236,7 @@ async function main() {
   console.log(`  ${data.creditCardCycles.length} card cycles, ${data.creditCardStatements.length} statements, ${data.creditCardPayments.length} card payments, ${data.financialPlans.length} financial plans`);
   console.log(`  ${medicines.length} unusual medicine purchases confirmed as frequent spending`);
   if (tuition.length) console.log(`  ${tuition.length} tuition payments expected again January through June`);
+  if (holiday.length) console.log(`  ${holiday.length} holiday clothes purchases expected again in the month they were bought`);
   for (const [name, balance] of Object.entries(data.summary.endingBalances)) console.log(`  ${name}: ${peso(balance)}`);
   if (persona) {
     console.log("2025 NCR FIES annual category anchors, disaggregated with within-year current-price HFCE weights.");

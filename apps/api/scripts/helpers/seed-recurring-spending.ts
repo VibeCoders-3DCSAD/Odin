@@ -62,3 +62,30 @@ export function buildSeedTuitionMonths(userId: string, transactions: Transaction
     baseline_snapshot: { scope: "seasonal_tuition" }, version: 1, deleted: false, updated_at: timestamp,
   }));
 }
+
+// The generated history's holiday clothes purchase on the Rewards Visa is answered "in certain months" for the
+// month it was bought, November or December by its billing cycle, so the forecast expects it then next year
+// instead of reading it as ordinary spending, and Preferences lists it for editing.
+export function buildSeedHolidayPurchases(userId: string, transactions: Transaction[], subcategoryIds: Map<string, string>, today: string) {
+  const childrensClothingId = subcategoryIds.get("clothing_childrens");
+  if (!childrensClothingId) return [];
+  // Thirteen months, the same window the app reads unusual spending from.
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCMonth(start.getUTCMonth() - 13);
+  const fromDate = start.toISOString().slice(0, 10);
+  const timestamp = `${today}T12:00:00+08:00`;
+  return transactions.filter((transaction) => transaction.user_id === userId
+    && transaction.transaction_type === "expense" && transaction.subcategory_id === childrensClothingId
+    && transaction.transaction_date >= fromDate && transaction.transaction_date <= today
+    && transaction.amount_centavos > 0).map((transaction) => ({
+    id: randomUUID(), user_id: userId, transaction_id: transaction.id,
+    subcategory_id: childrensClothingId, amount_centavos: transaction.amount_centavos,
+    evaluated_at: timestamp, confirmed_recurring_at: null, recurrence: "yearly", recurrence_months: [Number(transaction.transaction_date.slice(5, 7))],
+    model_version: UNUSUAL_SPENDING_MODEL_VERSION, profile_label: null,
+    history_days: 0, raw_anomaly_score: 0,
+    is_anomaly: true, should_alert_user: false, review_status: "not_alerted",
+    // Children's clothes are bought only for the holidays, so there is no usual range.
+    feature_vector: { usual_spending_centavos: 0, lower_bound_centavos: 0, upper_bound_centavos: 0 },
+    baseline_snapshot: { scope: "seasonal_holiday" }, version: 1, deleted: false, updated_at: timestamp,
+  }));
+}
