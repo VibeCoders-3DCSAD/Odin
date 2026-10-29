@@ -331,10 +331,14 @@ describe("SpendingForecastScreen", () => {
     expect(view.getByText("PHP 5,500")).toBeTruthy();
     expect(view.queryByText("PHP 11,000")).toBeNull();
     expect(view.getByLabelText("Choose spending category: Transportation").props.accessibilityState.expanded).toBe(false);
+    // The category sheet unmounts once its 220ms closing slide finishes.
+    const sheetClosed = () => act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    await sheetClosed();
     expect(view.queryByRole("radio", { name: "Food and groceries" })).toBeNull();
     fireEvent.press(view.getByLabelText("Choose spending category: Transportation"));
     expect(view.getByRole("radio", { name: "Food and groceries" })).toBeTruthy();
-    fireEvent.press(view.getByLabelText("Choose spending category: Transportation"));
+    fireEvent.press(view.getByLabelText("Close"));
+    await sheetClosed();
     expect(view.queryByRole("radio", { name: "Food and groceries" })).toBeNull();
   });
 
