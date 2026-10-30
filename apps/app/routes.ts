@@ -16,6 +16,9 @@ export const ROUTES = {
   moneyAccounts: "/money/accounts",
   moneyIncome: "/money/income",
   moneyBillers: "/money/billers-remittances",
+  // Build the [id] links with the helpers in features/money/moneyRoutes.
+  incomeSourceNew: "/money/income/new",
+  incomeSource: "/money/income/[id]",
   activity: "/activity",
   // Build /activity/new links with transactionFormHref() from features/ledger/transactionFormRoute.
   transactionForm: "/activity/new",
