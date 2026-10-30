@@ -22,7 +22,6 @@ import { clearLocalitiesCache } from "../../lib/locality-cache.js";
 import type { MockQueryResult } from "../helpers/supabase.js";
 import {
   validUserId,
-  validProfileId,
   authHeader,
   validEligibilityPayload,
   tooYoungDateOfBirth,
@@ -175,7 +174,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
     let upsertData: Record<string, unknown> | undefined;
     let upsertCalled = false;
     const mockSingle = jest.fn().mockReturnValue({
-      data: { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" },
+      data: { user_id: validUserId, updated_at: "2026-06-12T12:00:00Z" },
       error: null,
     });
     const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
@@ -210,7 +209,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
 
     let upsertData: Record<string, unknown> | undefined;
     const mockSingle = jest.fn().mockReturnValue({
-      data: { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" },
+      data: { user_id: validUserId, updated_at: "2026-06-12T12:00:00Z" },
       error: null,
     });
     const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
@@ -236,7 +235,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
 
     let upsertData: Record<string, unknown> | undefined;
     const mockSingle = jest.fn().mockReturnValue({
-      data: { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" },
+      data: { user_id: validUserId, updated_at: "2026-06-12T12:00:00Z" },
       error: null,
     });
     const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
@@ -278,7 +277,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
 
     let upsertData: Record<string, unknown> | undefined;
     const mockSingle = jest.fn().mockReturnValue({
-      data: { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" },
+      data: { user_id: validUserId, updated_at: "2026-06-12T12:00:00Z" },
       error: null,
     });
     const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
@@ -327,7 +326,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
 
     let upsertData: Record<string, unknown> | undefined;
     const mockSingle = jest.fn().mockReturnValue({
-      data: { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" },
+      data: { user_id: validUserId, updated_at: "2026-06-12T12:00:00Z" },
       error: null,
     });
     const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
@@ -413,7 +412,7 @@ describe("PATCH /odin/api/eligibility-profile", () => {
 
     let upsertData: Record<string, unknown> | undefined;
     const mockSingle = jest.fn().mockReturnValue({
-      data: { id: validProfileId, updated_at: "2026-06-12T12:00:00Z" },
+      data: { user_id: validUserId, updated_at: "2026-06-12T12:00:00Z" },
       error: null,
     });
     const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });

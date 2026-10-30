@@ -21,7 +21,6 @@ import { createMockQuery } from "../helpers/supabase.js";
 import type { MockQueryResult } from "../helpers/supabase.js";
 import {
   validAccessToken,
-  validProfileId,
   validRefreshToken,
   validUserId,
   validLoginPayload,
@@ -33,7 +32,7 @@ const mockFrom = supabase.from as jest.Mock;
 describe("POST /odin/api/auth/login", () => {
   function mockSuccessfulBootstrap() {
     const profileResult: MockQueryResult = {
-      data: { id: validProfileId },
+      data: { user_id: validUserId },
       error: null,
     };
     const privacyResult: MockQueryResult = {
@@ -89,7 +88,6 @@ describe("POST /odin/api/auth/login", () => {
           refresh_token: validRefreshToken,
         },
         user: { id: validUserId },
-        profile: { id: validProfileId },
         onboarding: { status: "in_progress" },
         privacy_settings: { personalization_enabled: true },
       },
@@ -205,7 +203,7 @@ describe("POST /odin/api/auth/login", () => {
   it("returns 500 when onboarding query fails", async () => {
     mockSuccessfulPasswordSignIn();
     mockFrom
-      .mockReturnValueOnce(createMockQuery({ data: { id: validProfileId }, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: { user_id: validUserId }, error: null }))
       .mockReturnValueOnce(
         createMockQuery({ data: { personalization_enabled: true }, error: null }),
       )

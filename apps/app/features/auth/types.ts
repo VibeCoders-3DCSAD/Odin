@@ -5,13 +5,11 @@ export type AuthenticatedState = {
   refreshToken?: string;
   provider: AuthProvider;
   userId?: string;
-  profileId?: string;
   onboardingStatus?: string;
 };
 
 export type AccountSession = AuthenticatedState & {
   userId: string;
-  profileId: string;
   onboardingStatus: string;
   refreshToken: string;
 };

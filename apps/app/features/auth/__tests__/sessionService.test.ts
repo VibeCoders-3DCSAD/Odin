@@ -35,7 +35,7 @@ describe("online verification", () => {
   function verifiedResponse(verifiedAt: number) {
     const session = accountFixture(now).session;
     return { ok: true, status: 200, json: async () => ({ payload: { user: { id: session.userId },
-      profile: { id: session.profileId }, onboarding: { status: "submitted" },
+      onboarding: { status: "submitted" },
       verified_at: new Date(verifiedAt).toISOString(),
       offline_access_expires_at: new Date(verifiedAt + OFFLINE_ACCESS_MS).toISOString() } }) };
   }
@@ -44,7 +44,7 @@ describe("online verification", () => {
     await clearRememberedAccount();
     const session = accountFixture(now).session;
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ payload: {
-      user: { id: session.userId }, profile: { id: session.profileId },
+      user: { id: session.userId },
       onboarding: { status: "submitted" },
     } }) });
     await expect(acceptOnlineLogin(session)).rejects.toThrow(

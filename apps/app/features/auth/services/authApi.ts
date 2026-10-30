@@ -6,7 +6,6 @@ const requestTimeoutMs = 10_000;
 export type AuthPayload = {
   session?: { access_token?: string; refresh_token?: string };
   user?: { id?: string };
-  profile?: { id?: string };
   onboarding?: { status?: string };
 };
 
@@ -78,7 +77,6 @@ export function buildAuthState(accessToken: string, provider: AuthProvider, payl
     refreshToken: refreshToken ?? payload?.session?.refresh_token,
     provider,
     userId: payload?.user?.id,
-    profileId: payload?.profile?.id,
     onboardingStatus: payload?.onboarding?.status,
   };
 }

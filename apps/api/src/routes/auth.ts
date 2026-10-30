@@ -14,18 +14,16 @@ const router = Router();
 async function ensureProfile(
   userId: string,
   authenticatedSupabase = supabase,
-): Promise<{ id: string }> {
+): Promise<void> {
   const { data: profile, error: profileError } = await authenticatedSupabase
     .from("profiles")
     .upsert({ user_id: userId }, { onConflict: "user_id" })
-    .select("id")
+    .select("user_id")
     .single();
 
   if (profileError || !profile) {
     throw new Error("Failed to create profile");
   }
-
-  return profile;
 }
 
 async function ensurePrivacySettings(
@@ -77,12 +75,11 @@ async function bootstrapAuthenticatedUser(
   accessToken: string,
 ): Promise<{
   user: { id: string };
-  profile: { id: string };
   onboarding: { status: string };
   privacy_settings: { personalization_enabled: boolean };
 }> {
   const authenticatedSupabase = createAuthenticatedSupabaseClient(accessToken);
-  const profile = await ensureProfile(userId, authenticatedSupabase);
+  await ensureProfile(userId, authenticatedSupabase);
   const privacy = await ensurePrivacySettings(userId, authenticatedSupabase);
 
   await cancelActiveDeletionRequests(userId);
@@ -101,9 +98,6 @@ async function bootstrapAuthenticatedUser(
 
   return {
     user: { id: userId },
-    profile: {
-      id: profile.id,
-    },
     onboarding: {
       status: onboarding?.status ?? "in_progress",
     },

@@ -25,7 +25,7 @@ export function parseAccount(raw: string): OfflineAccount {
     throw new AccessError("Saved account needs online recovery.");
   }
   const { session, attempts } = value;
-  if (!isUserId(session.userId) || !isUserId(session.profileId)
+  if (!isUserId(session.userId)
     || !["password", "google"].includes(String(session.provider))
     || typeof session.accessToken !== "string" || !session.accessToken
     || typeof session.refreshToken !== "string" || !session.refreshToken

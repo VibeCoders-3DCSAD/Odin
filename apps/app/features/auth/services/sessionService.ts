@@ -44,7 +44,7 @@ async function bootstrapSession(state: AuthenticatedState): Promise<OfflineAccou
     }
     const verifiedAt = Date.parse(payload?.verified_at);
     const expiresAt = Date.parse(payload?.offline_access_expires_at);
-    if (!isUserId(payload?.user?.id) || !isUserId(payload?.profile?.id)
+    if (!isUserId(payload?.user?.id)
       || typeof payload?.onboarding?.status !== "string" || !state.refreshToken
       || !Number.isSafeInteger(verifiedAt) || expiresAt !== verifiedAt + OFFLINE_ACCESS_MS) {
       throw new AccessError("The server returned invalid account verification details. Please try again.");
@@ -59,7 +59,7 @@ async function bootstrapSession(state: AuthenticatedState): Promise<OfflineAccou
     const attempts = previous ? { ...previous.attempts, lastObservedAt: verifiedAt,
       lockedUntil: remaining ? verifiedAt + remaining : previous.attempts.lockedUntil === null ? null : verifiedAt } : resetAttempts(verifiedAt);
     const session: AccountSession = { ...state, refreshToken: state.refreshToken,
-      userId: payload.user.id, profileId: payload.profile.id, onboardingStatus: payload.onboarding.status };
+      userId: payload.user.id, onboardingStatus: payload.onboarding.status };
     resetAccessClock();
     return { version: 1, session, verifiedAt, expiresAt, attempts, clockOffsetMs: verifiedAt - Date.now(), verificationRequired: false };
   } finally { clearTimeout(timeout); }

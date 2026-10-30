@@ -2,7 +2,6 @@ export const validEmail = "user@example.com";
 export const validPassword = "StrongP@ss1";
 export const validDisplayName = "Juan Dela Cruz";
 export const validUserId = "00000000-0000-0000-0000-000000000001";
-export const validProfileId = "00000000-0000-0000-0000-000000000010";
 export const validAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.valid-token";
 export const validRefreshToken = "refresh-token-abc-123";
 

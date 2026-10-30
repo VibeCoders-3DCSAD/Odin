@@ -21,7 +21,6 @@ import { createMockQuery } from "../helpers/supabase.js";
 import type { MockQueryResult } from "../helpers/supabase.js";
 import {
   validUserId,
-  validProfileId,
   validRefreshToken,
   authHeader,
 } from "../helpers/fixtures.js";
@@ -37,7 +36,7 @@ describe("POST /odin/api/auth/session", () => {
     });
 
     const profileResult: MockQueryResult = {
-      data: { id: validProfileId },
+      data: { user_id: validUserId },
       error: null,
     };
     const privacyResult: MockQueryResult = {
@@ -72,7 +71,6 @@ describe("POST /odin/api/auth/session", () => {
     expect(response.body).toEqual({
       payload: {
         user: { id: validUserId },
-        profile: { id: validProfileId },
         onboarding: { status: "in_progress" },
         privacy_settings: { personalization_enabled: true },
         verified_at: expect.any(String),
@@ -89,7 +87,7 @@ describe("POST /odin/api/auth/session", () => {
       error: null,
     });
 
-    const newProfileResult = { id: validProfileId };
+    const newProfileResult = { user_id: validUserId };
     const privacyResult = { personalization_enabled: true };
     const onboardingResult = { status: "in_progress" };
 
@@ -105,7 +103,7 @@ describe("POST /odin/api/auth/session", () => {
       .send({ payload: { refresh_token: validRefreshToken } });
 
     expect(response.status).toBe(200);
-    expect(response.body.payload.profile.id).toBe(validProfileId);
+    expect(response.body.payload.profile).toBeUndefined();
     expect(mockFrom).toHaveBeenNthCalledWith(1, "profiles");
   });
 
@@ -115,7 +113,7 @@ describe("POST /odin/api/auth/session", () => {
       error: null,
     });
 
-    const profileResult = { id: validProfileId };
+    const profileResult = { user_id: validUserId };
     const newPrivacyResult = { personalization_enabled: true };
     const onboardingResult = { status: "in_progress" };
 
@@ -141,7 +139,7 @@ describe("POST /odin/api/auth/session", () => {
     });
 
     mockFrom
-      .mockReturnValueOnce(createMockQuery({ data: { id: validProfileId }, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: { user_id: validUserId }, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: { personalization_enabled: true }, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: null, error: null }));
@@ -162,7 +160,7 @@ describe("POST /odin/api/auth/session", () => {
     });
 
     mockFrom
-      .mockReturnValueOnce(createMockQuery({ data: { id: validProfileId }, error: null }))
+      .mockReturnValueOnce(createMockQuery({ data: { user_id: validUserId }, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: { personalization_enabled: true }, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: null, error: null }))
       .mockReturnValueOnce(createMockQuery({ data: null, error: { message: "DB error" } }));
