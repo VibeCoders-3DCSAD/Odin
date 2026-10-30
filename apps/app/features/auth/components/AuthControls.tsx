@@ -110,7 +110,7 @@ export function PasswordField({ label, placeholder, icon = "lock-outline", value
     onFocus={() => { setFocused(true); onEdit?.(); }}
     placeholder={placeholder} secureTextEntry={!visible} tone={tone} value={value}
     trailing={
-      <Pressable accessibilityLabel={visible ? "Hide password" : "Show password"} accessibilityState={{ selected: visible }}
+      <Pressable accessibilityRole="button" accessibilityLabel={visible ? "Hide password" : "Show password"} accessibilityState={{ selected: visible }}
         onPress={() => setVisible((current) => !current)}>
         <MaterialCommunityIcons color={authPalette.subtle} name={visible ? "eye-off-outline" : "eye-outline"} size={18} />
       </Pressable>
@@ -152,7 +152,7 @@ export function AuthButton({ label, onPress, disabled, loading, tone = "primary"
 }
 
 export function TextLink({ label, onPress, align = "center" }: { label: string; onPress: () => void; align?: "center" | "right" }) {
-  return <Pressable onPress={onPress}>
+  return <Pressable accessibilityRole="link" onPress={onPress}>
     <Text className={`text-brand text-xs font-bold ${align === "right" ? "text-right" : "text-center"}`}>{label}</Text>
   </Pressable>;
 }
