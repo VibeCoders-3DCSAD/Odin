@@ -22,7 +22,7 @@ if (requiresIosGoogleConfig && !googleIosUrlScheme) {
 const plugins: (string | [string, Record<string, unknown>])[] = googleIosUrlScheme
   ? [["@react-native-google-signin/google-signin", { iosUrlScheme: googleIosUrlScheme }], "expo-secure-store"]
   : ["expo-secure-store"];
-plugins.push(["expo-sqlite", { useSQLCipher: true }], "./plugins/withOfflineDataProtection");
+plugins.push(["expo-sqlite", { useSQLCipher: true }], "./plugins/withOfflineDataProtection", "expo-router");
 
 const config = {
   name: "Budgie",
