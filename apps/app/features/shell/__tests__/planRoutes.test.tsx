@@ -20,6 +20,7 @@ jest.mock("../../sync/SyncProvider", () => ({
 }));
 jest.mock("../../../local-db/repositories/financialAccounts", () => ({ getFinancialAccount: jest.fn() }));
 jest.mock("../../../local-db/repositories/debtAccounts", () => ({ listDebtAccounts: jest.fn() }));
+jest.mock("../../../local-db/repositories/financialPlans", () => ({ getFinancialPlan: jest.fn() }));
 // Screens are stubs that render their name; tests drive them through the props the route passes.
 function mockScreen(name: string) {
   const { Text } = require("react-native");
@@ -29,22 +30,32 @@ jest.mock("../../debt-manager/DebtManagerOverview", () => mockScreen("DebtManage
 jest.mock("../../debt-manager/DebtManagerScreen", () => mockScreen("DebtManagerScreen"));
 jest.mock("../../debt-manager/NonCreditDebtListScreen", () => mockScreen("NonCreditDebtListScreen"));
 jest.mock("../../debt-manager/NonCreditDebtDetailScreen", () => mockScreen("NonCreditDebtDetailScreen"));
+jest.mock("../../financial-plan/FinancialPlanScreen", () => mockScreen("FinancialPlanScreen"));
+jest.mock("../../financial-plan/PastFinancialPlansScreen", () => mockScreen("PastFinancialPlansScreen"));
+jest.mock("../../financial-plan/PastFinancialPlanDetailScreen", () => mockScreen("PastFinancialPlanDetailScreen"));
 
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import DebtsRoute from "../../../app/(app)/(shell)/(tabs)/plan/debts";
+import BudgetsRoute from "../../../app/(app)/(shell)/(tabs)/plan/budgets";
 import CreditCardsRoute from "../../../app/(app)/(shell)/plan/debts/credit-cards/index";
 import CreditCardRoute from "../../../app/(app)/(shell)/plan/debts/credit-cards/[id]";
 import OtherDebtsRoute from "../../../app/(app)/(shell)/plan/debts/other/index";
 import OtherDebtRoute from "../../../app/(app)/(shell)/plan/debts/other/[id]";
+import PastPlansRoute from "../../../app/(app)/(shell)/plan/budgets/history/index";
+import PastPlanRoute from "../../../app/(app)/(shell)/plan/budgets/history/[id]";
 import DebtManagerOverview from "../../debt-manager/DebtManagerOverview";
 import DebtManagerScreen from "../../debt-manager/DebtManagerScreen";
 import NonCreditDebtListScreen from "../../debt-manager/NonCreditDebtListScreen";
 import NonCreditDebtDetailScreen from "../../debt-manager/NonCreditDebtDetailScreen";
+import FinancialPlanScreen from "../../financial-plan/FinancialPlanScreen";
+import PastFinancialPlansScreen from "../../financial-plan/PastFinancialPlansScreen";
+import PastFinancialPlanDetailScreen from "../../financial-plan/PastFinancialPlanDetailScreen";
 import { transactionFormHref } from "../../ledger/transactionFormRoute";
 import { getFinancialAccount } from "../../../local-db/repositories/financialAccounts";
 import { listDebtAccounts } from "../../../local-db/repositories/debtAccounts";
+import { getFinancialPlan } from "../../../local-db/repositories/financialPlans";
 import { ROUTES } from "../../../routes";
 
 // The props the route last rendered a stubbed screen with.
@@ -77,6 +88,12 @@ describe("Plan tab pages", () => {
     expect(router.push).toHaveBeenLastCalledWith({ pathname: ROUTES.planOtherDebt, params: { id: "debt-1" } });
   });
 
+  it("opens past plans from the Budget page", () => {
+    render(<BudgetsRoute />);
+    propsOf(FinancialPlanScreen).onOpenPastPlans!();
+    expect(router.push).toHaveBeenLastCalledWith(ROUTES.planPastPlans);
+  });
+
 });
 
 describe("list pages", () => {
@@ -100,6 +117,14 @@ describe("list pages", () => {
     expect(router.replace).toHaveBeenLastCalledWith(ROUTES.planDebts);
   });
 
+  it("opens a past plan and falls back to Budget without history", () => {
+    const screen = render(<PastPlansRoute />);
+    propsOf(PastFinancialPlansScreen).onOpenPlan("plan-1");
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: ROUTES.planPastPlan, params: { id: "plan-1" } });
+    jest.mocked(router.canGoBack).mockReturnValue(false);
+    fireEvent.press(screen.getByLabelText("Back"));
+    expect(router.replace).toHaveBeenLastCalledWith(ROUTES.planBudgets);
+  });
 });
 
 describe("credit card detail", () => {
@@ -180,3 +205,24 @@ describe("non-credit debt detail", () => {
   });
 });
 
+describe("past plan detail", () => {
+  it("shows not found for a plan this user does not have", async () => {
+    withId("plan-1");
+    jest.mocked(getFinancialPlan).mockResolvedValue(null);
+    const screen = render(<PastPlanRoute />);
+    expect(await screen.findByText("This plan can't be opened")).toBeTruthy();
+    expect(getFinancialPlan).toHaveBeenCalledWith("user-1", "plan-1");
+    expect(PastFinancialPlanDetailScreen).not.toHaveBeenCalled();
+  });
+
+  it("opens the user's plan and goes back to past plans", async () => {
+    withId("plan-1");
+    jest.mocked(getFinancialPlan).mockResolvedValue({ id: "plan-1" } as never);
+    const screen = render(<PastPlanRoute />);
+    await waitFor(() => expect(screen.getByText("PastFinancialPlanDetailScreen")).toBeTruthy());
+    expect(propsOf(PastFinancialPlanDetailScreen).planId).toBe("plan-1");
+    jest.mocked(router.canGoBack).mockReturnValue(false);
+    act(() => propsOf(PastFinancialPlanDetailScreen).onBack());
+    expect(router.replace).toHaveBeenLastCalledWith(ROUTES.planPastPlans);
+  });
+});

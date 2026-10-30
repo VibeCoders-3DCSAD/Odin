@@ -35,6 +35,8 @@ export const ROUTES = {
   planCreditCard: "/plan/debts/credit-cards/[id]",
   planOtherDebts: "/plan/debts/other",
   planOtherDebt: "/plan/debts/other/[id]",
+  planPastPlans: "/plan/budgets/history",
+  planPastPlan: "/plan/budgets/history/[id]",
   settings: "/settings",
   categories: "/settings/categories",
   financialReports: "/financial-reports",
