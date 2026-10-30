@@ -8,6 +8,7 @@ type DeepLinkState = {
   recoveryToken: string | null;
   recoveryRefreshToken: string | null;
   verificationToken: string | null;
+  clearAuthLinks: () => void;
 };
 
 function isAuthUrl(url: string, path: string): boolean {
@@ -103,7 +104,17 @@ export function useDeepLink(): DeepLinkState {
     return () => sub.remove();
   }, [parseLink]);
 
+  // Auth screens remount as the user moves between routes, so a link's tokens are dropped
+  // once used; otherwise a used reset session or verification would replay.
+  const clearAuthLinks = useCallback(() => {
+    setIsPasswordRecovery(false);
+    setRecoveryToken(null);
+    setRecoveryRefreshToken(null);
+    setVerificationToken(null);
+  }, []);
+
   return {
+    clearAuthLinks,
     isPasswordRecovery,
     isResolvingRecoveryToken,
     recoveryToken,

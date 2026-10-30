@@ -12,7 +12,7 @@ jest.mock("react-native-safe-area-context", () => ({ SafeAreaProvider: require("
 jest.mock("expo-status-bar", () => ({ StatusBar: () => null }));
 jest.mock("../hooks/useAccessLifecycle", () => ({ useAccessLifecycle: jest.fn(() => "device-1") }));
 jest.mock("../../../hooks/useDeepLink", () => ({ useDeepLink: () => ({ isPasswordRecovery: false,
-  isResolvingRecoveryToken: false, recoveryToken: null, recoveryRefreshToken: null, verificationToken: null }) }));
+  isResolvingRecoveryToken: false, recoveryToken: null, recoveryRefreshToken: null, verificationToken: null, clearAuthLinks: jest.fn() }) }));
 jest.mock("../../../local-db/databaseAccess", () => ({ enableDatabaseProtection: jest.fn() }));
 jest.mock("../components/PinAccessScreen", () => require("./routeStubs").PinAccessScreen);
 jest.mock("../../onboarding/OnboardingFlow", () => require("./routeStubs").OnboardingFlow);
@@ -28,14 +28,15 @@ import { AccessProvider } from "../components/AccessProvider";
 import { useAccessLifecycle } from "../hooks/useAccessLifecycle";
 import { useAuthStore } from "../stores/useAuthStore";
 
-const links = { isPasswordRecovery: false, isResolvingRecoveryToken: false, recoveryToken: null, recoveryRefreshToken: null, verificationToken: null };
+const links = { isPasswordRecovery: false, isResolvingRecoveryToken: false, recoveryToken: null, recoveryRefreshToken: null,
+  verificationToken: null, clearAuthLinks: jest.fn() };
 
 function unlock(onboardingStatus: string) {
   useAuthStore.setState({ phase: "unlocked", account: { session: { accessToken: "token", userId: "user-1", onboardingStatus } } } as never);
 }
 
-function renderUnlocked(element: React.ReactElement) {
-  return render(<AccessProvider value={{ deviceId: "device-1", links }}>{element}</AccessProvider>);
+function renderUnlocked(element: React.ReactElement, linkState: Partial<typeof links> = {}) {
+  return render(<AccessProvider value={{ deviceId: "device-1", links: { ...links, ...linkState } }}>{element}</AccessProvider>);
 }
 
 describe("root access gate", () => {
@@ -44,11 +45,11 @@ describe("root access gate", () => {
     jest.mocked(useAccessLifecycle).mockReturnValue("device-1");
   });
 
-  it("offers only the login route while signed out or recovering", () => {
+  it("offers only the signed-out routes while signed out or recovering", () => {
     for (const phase of ["signed-out", "recovery"]) {
       useAuthStore.setState({ phase } as never);
       const screen = render(<RootLayout />);
-      expect(screen.getByText("screen:login")).toBeTruthy();
+      for (const route of ["login", "registration", "forgot-password"]) expect(screen.getByText(`screen:${route}`)).toBeTruthy();
       expect(screen.queryByText("screen:(app)")).toBeNull();
       screen.unmount();
     }
@@ -58,7 +59,7 @@ describe("root access gate", () => {
     unlock("submitted");
     const screen = render(<RootLayout />);
     expect(screen.getByText("screen:(app)")).toBeTruthy();
-    expect(screen.queryByText("screen:login")).toBeNull();
+    for (const route of ["login", "registration", "forgot-password"]) expect(screen.queryByText(`screen:${route}`)).toBeNull();
   });
 
   it("holds the navigator back while the device id resolves", () => {
@@ -83,15 +84,18 @@ describe("root access gate", () => {
 describe("app routes", () => {
   beforeEach(() => jest.mocked(useLocalSearchParams).mockReturnValue({}));
 
-  it("sends the index to the dashboard or onboarding by onboarding status", () => {
-    const cases: [() => void, string][] = [
+  it("sends the index to where the access state belongs", () => {
+    const cases: [() => void, string, Partial<typeof links>?][] = [
       [() => unlock("submitted"), "redirect:/dashboard"],
       [() => unlock("in_progress"), "redirect:/user-onboarding"],
       [() => useAuthStore.setState({ phase: "signed-out", account: null }), "redirect:/login"],
+      // Forgot PIN also uses the recovery phase but must land on sign-in.
+      [() => useAuthStore.setState({ phase: "recovery", account: null }), "redirect:/login"],
+      [() => useAuthStore.setState({ phase: "recovery", account: null }), "redirect:/forgot-password", { isPasswordRecovery: true }],
     ];
-    for (const [arrange, expected] of cases) {
+    for (const [arrange, expected, linkState] of cases) {
       arrange();
-      const screen = render(<Index />);
+      const screen = renderUnlocked(<Index />, linkState);
       expect(screen.getByText(expected)).toBeTruthy();
       screen.unmount();
     }

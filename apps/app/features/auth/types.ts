@@ -1,4 +1,13 @@
-import type { AuthenticatedState } from "../../components/AuthExperience";
+export type AuthProvider = "password" | "google";
+
+export type AuthenticatedState = {
+  accessToken: string;
+  refreshToken?: string;
+  provider: AuthProvider;
+  userId?: string;
+  profileId?: string;
+  onboardingStatus?: string;
+};
 
 export type AccountSession = AuthenticatedState & {
   userId: string;

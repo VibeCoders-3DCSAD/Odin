@@ -17,3 +17,5 @@ export function OnboardingFlow({ onComplete, restart }: { onComplete: () => void
 }
 
 export function SafeAreaProvider({ children }: { children: ReactNode }) { return <>{children}</>; }
+
+export function Icon() { return null; }

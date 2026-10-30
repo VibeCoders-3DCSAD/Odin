@@ -4,8 +4,7 @@ import { OFFLINE_ACCESS_MS, remainingLockout, resetAttempts } from "../helpers/p
 import { isUserId, readAccount, readRememberedOwner, removeLegacySession, writeAccount } from "./authStorage";
 import { resetAccessClock } from "../helpers/accessClock";
 import { withAuthLock } from "./authMutex";
-import type { AuthenticatedState } from "../../../components/AuthExperience";
-import type { AccountSession, OfflineAccount } from "../types";
+import type { AccountSession, AuthenticatedState, OfflineAccount } from "../types";
 import { AccessError } from "../../../lib/helpers/accessErrors";
 
 export class OnlineVerificationError extends AccessError {

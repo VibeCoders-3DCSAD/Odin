@@ -9,8 +9,7 @@ import { acceptOnlineLogin, accessTokenExpiring, OnlineVerificationError, refres
 import { enrollPin, lockVault, unlockWithPin } from "../services/pinVault";
 import { withAuthLock } from "../services/authMutex";
 import { tracePinStep } from "../../../lib/helpers/pinSetupTrace";
-import type { AuthenticatedState } from "../../../components/AuthExperience";
-import type { AccessPhase, LocalAccount, OfflineAccount } from "../types";
+import type { AccessPhase, AuthenticatedState, LocalAccount, OfflineAccount } from "../types";
 
 interface AuthState {
   phase: AccessPhase;

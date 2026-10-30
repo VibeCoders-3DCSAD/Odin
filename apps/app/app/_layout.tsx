@@ -25,6 +25,8 @@ function AccessGate({ phase, deviceId }: { phase: AccessPhase; deviceId: string 
     return <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={signedOut}>
         <Stack.Screen name="login" />
+        <Stack.Screen name="registration" />
+        <Stack.Screen name="forgot-password" />
       </Stack.Protected>
       <Stack.Protected guard={unlocked}>
         <Stack.Screen name="(app)" />
