@@ -1,0 +1,28 @@
+import { useState } from "react";
+import { View } from "react-native";
+import PrivacySettingsScreen from "../governance/PrivacySettingsScreen";
+import { useLogout } from "../sync/SyncProvider";
+import { AccountActions } from "./components/AccountActions";
+import { SettingsShellSection } from "./components/SettingsShellSection";
+
+type Props = {
+  accessToken: string;
+  userId: string;
+  deviceId: string;
+  onLock: () => void;
+  onRequestReassessment: () => void;
+};
+
+// Privacy and account settings plus the shell's own rows; sub-pages of the privacy screen hide the extras.
+export default function SettingsScreen({ accessToken, userId, deviceId, onLock, onRequestReassessment }: Props) {
+  const { confirmLogout, showDeletionSuccess } = useLogout();
+  const [subPage, setSubPage] = useState(false);
+  return (
+    <View>
+      <PrivacySettingsScreen accessToken={accessToken} userId={userId} deviceId={deviceId} onBackToLogin={confirmLogout}
+        onRequestReassessment={onRequestReassessment} onSubPageChange={setSubPage} onDeleted={showDeletionSuccess}
+        beforeDangerZone={subPage ? null : <SettingsShellSection />} />
+      {subPage ? null : <AccountActions onLock={onLock} />}
+    </View>
+  );
+}

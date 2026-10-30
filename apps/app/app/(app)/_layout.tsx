@@ -7,7 +7,7 @@ export default function AppLayout() {
   const { onboardingStatus } = useSession();
   return <Stack screenOptions={{ headerShown: false }}>
     <Stack.Protected guard={onboardingStatus === "submitted"}>
-      <Stack.Screen name="dashboard" />
+      <Stack.Screen name="(shell)" />
     </Stack.Protected>
     <Stack.Screen name="user-onboarding" />
   </Stack>;

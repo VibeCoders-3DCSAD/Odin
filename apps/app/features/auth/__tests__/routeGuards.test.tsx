@@ -102,13 +102,13 @@ describe("app routes", () => {
     }
   });
 
-  it("guards the dashboard until onboarding is submitted", () => {
+  it("guards the app shell until onboarding is submitted", () => {
     unlock("in_progress");
     const screen = renderUnlocked(<AppLayout />);
-    expect(screen.queryByText("screen:dashboard")).toBeNull();
+    expect(screen.queryByText("screen:(shell)")).toBeNull();
     expect(screen.getByText("screen:user-onboarding")).toBeTruthy();
     act(() => unlock("submitted"));
-    expect(screen.getByText("screen:dashboard")).toBeTruthy();
+    expect(screen.getByText("screen:(shell)")).toBeTruthy();
   });
 
   it("redirects to the dashboard only after the submitted status is stored", async () => {
