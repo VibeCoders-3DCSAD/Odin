@@ -30,6 +30,11 @@ export const ROUTES = {
   planDebts: "/plan/debts",
   planSavings: "/plan/savings",
   planBudgets: "/plan/budgets",
+  // [id] routes: link with { pathname, params: { id } }.
+  planCreditCards: "/plan/debts/credit-cards",
+  planCreditCard: "/plan/debts/credit-cards/[id]",
+  planOtherDebts: "/plan/debts/other",
+  planOtherDebt: "/plan/debts/other/[id]",
   settings: "/settings",
   categories: "/settings/categories",
   financialReports: "/financial-reports",

@@ -1,11 +1,13 @@
+import { router } from "expo-router";
 import { useSession } from "../../../../../features/auth/components/AccessProvider";
 import DebtManagerOverview from "../../../../../features/debt-manager/DebtManagerOverview";
-
-// TODO(plan routes): open the credit-card and non-credit-debt lists and details once they have routes.
-const notRoutedYet = () => {};
+import { ROUTES } from "../../../../../routes";
 
 export default function DebtsRoute() {
   const { userId } = useSession();
-  return <DebtManagerOverview userId={userId} onOpenCreditCards={notRoutedYet} onOpenNonCreditDebts={notRoutedYet}
-    onOpenCard={notRoutedYet} onOpenDebt={notRoutedYet} />;
+  return <DebtManagerOverview userId={userId}
+    onOpenCreditCards={() => router.push(ROUTES.planCreditCards)}
+    onOpenNonCreditDebts={() => router.push(ROUTES.planOtherDebts)}
+    onOpenCard={(id) => router.push({ pathname: ROUTES.planCreditCard, params: { id } })}
+    onOpenDebt={(id) => router.push({ pathname: ROUTES.planOtherDebt, params: { id } })} />;
 }
