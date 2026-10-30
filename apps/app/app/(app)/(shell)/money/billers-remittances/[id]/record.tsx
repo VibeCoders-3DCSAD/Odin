@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useToast } from "../../../../../../components/Toast";
 import { useSession } from "../../../../../../features/auth/components/AccessProvider";
 import RecordBillerPaymentScreen from "../../../../../../features/billers/RecordBillerPaymentScreen";
-import { OwnedRecord } from "../../../../../../features/money/components/OwnedRecord";
+import { OwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { billerHref } from "../../../../../../features/money/moneyRoutes";
 import { FullScreenPage } from "../../../../../../features/shell/components/FullScreenPage";
 import { goBackOr } from "../../../../../../features/shell/helpers/shellNavigation";

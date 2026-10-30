@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
 import { BillerFormPage, closeBillerForm } from "../../../../../../features/money/components/BillerFormPage";
-import { OwnedRecord } from "../../../../../../features/money/components/OwnedRecord";
+import { OwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { FullScreenPage } from "../../../../../../features/shell/components/FullScreenPage";
 import { getScheduledPayment } from "../../../../../../local-db/repositories/scheduledPayments";
 

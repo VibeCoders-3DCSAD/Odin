@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
 import { closeIncomeSourceForm, IncomeSourceFormPage } from "../../../../../features/money/components/IncomeSourceFormPage";
-import { OwnedRecord } from "../../../../../features/money/components/OwnedRecord";
+import { OwnedRecord } from "../../../../../features/shell/components/OwnedRecord";
 import { FullScreenPage } from "../../../../../features/shell/components/FullScreenPage";
 import { getIncomeSource } from "../../../../../local-db/repositories/financialFoundations";
 

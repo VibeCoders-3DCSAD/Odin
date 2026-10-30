@@ -1,22 +1,29 @@
+import type { Href } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { parseRouteId } from "../../../lib/routeParams";
 import { useSession } from "../../auth/components/AccessProvider";
-import { shellPalette as palette } from "../../shell/theme";
+import { shellPalette as palette } from "../theme";
+import { InnerPage } from "./InnerPage";
+import { useShellPage } from "./PageScroll";
+
+// A userId-scoped read: anything falsy means the record is gone or belongs to someone else.
+// Keep it stable (module scope or a repository function): it is an effect dependency.
+export type LoadOwnedRecord = (userId: string, id: string) => Promise<unknown>;
 
 type Status = "loading" | "found" | "missing";
 
 type Props = {
   // The raw [id] route param: untrusted until it is id-shaped and loads for this user.
   id: string | string[] | undefined;
-  // A userId-scoped repository read; null means the record is gone or belongs to someone else.
-  load: (userId: string, id: string) => Promise<unknown>;
+  load: LoadOwnedRecord;
+  // Completes "This … can't be opened".
   noun: string;
   onClose: () => void;
   children: (id: string) => ReactNode;
 };
 
-// Renders the page only for a record this user owns; anything else gets a not-found state with a way back.
+// Renders children only for a record this user owns; anything else gets a not-found state with a way back.
 export function OwnedRecord({ id: rawId, load, noun, onClose, children }: Props) {
   const { userId } = useSession();
   const id = parseRouteId(rawId);
@@ -50,4 +57,14 @@ export function OwnedRecord({ id: rawId, load, noun, onClose, children }: Props)
       </Pressable>
     </View>
   );
+}
+
+function OwnedRecordWithBack(props: Omit<Props, "onClose">) {
+  const { goBack } = useShellPage();
+  return <OwnedRecord {...props} onClose={goBack} />;
+}
+
+// Inner page for an [id] route whose not-found button goes Back like the header does.
+export function OwnedRecordPage({ title, fallbackHref, ...record }: Omit<Props, "onClose"> & { title: string; fallbackHref: Href }) {
+  return <InnerPage title={title} fallbackHref={fallbackHref}><OwnedRecordWithBack {...record} /></InnerPage>;
 }

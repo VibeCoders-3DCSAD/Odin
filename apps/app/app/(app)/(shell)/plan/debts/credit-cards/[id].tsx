@@ -2,12 +2,12 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSession } from "../../../../../../features/auth/components/AccessProvider";
 import DebtManagerScreen from "../../../../../../features/debt-manager/DebtManagerScreen";
 import { transactionFormHref } from "../../../../../../features/ledger/transactionFormRoute";
-import { OwnedRecordPage, type OwnsRecord } from "../../../../../../features/shell/components/OwnedRecordPage";
+import { OwnedRecordPage, type LoadOwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { useShellPage } from "../../../../../../features/shell/components/PageScroll";
 import { getFinancialAccount } from "../../../../../../local-db/repositories/financialAccounts";
 import { ROUTES } from "../../../../../../routes";
 
-const ownsCreditCard: OwnsRecord = async (userId, id) => (await getFinancialAccount(userId, id))?.kind === "credit_card";
+const ownsCreditCard: LoadOwnedRecord = async (userId, id) => (await getFinancialAccount(userId, id))?.kind === "credit_card";
 
 function CreditCard({ accountId }: { accountId: string }) {
   const { userId, deviceId } = useSession();
@@ -21,8 +21,8 @@ function CreditCard({ accountId }: { accountId: string }) {
 
 export default function CreditCardRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  return <OwnedRecordPage title="Credit Card" fallbackHref={ROUTES.planCreditCards} id={id} owns={ownsCreditCard}
-    notFoundMessage="This credit card can't be opened">
+  return <OwnedRecordPage title="Credit Card" fallbackHref={ROUTES.planCreditCards} id={id} load={ownsCreditCard}
+    noun="credit card">
     {(accountId) => <CreditCard accountId={accountId} />}
   </OwnedRecordPage>;
 }

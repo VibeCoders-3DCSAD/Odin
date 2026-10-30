@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useSession } from "../../../../../../features/auth/components/AccessProvider";
 import BillerDetailScreen from "../../../../../../features/billers/BillerDetailScreen";
-import { OwnedRecord } from "../../../../../../features/money/components/OwnedRecord";
+import { OwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { billerEditHref, billerRecordHref } from "../../../../../../features/money/moneyRoutes";
 import { InnerPage } from "../../../../../../features/shell/components/InnerPage";
 import { useShellPage } from "../../../../../../features/shell/components/PageScroll";
