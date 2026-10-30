@@ -33,12 +33,14 @@ jest.mock("../../debt-manager/NonCreditDebtDetailScreen", () => mockScreen("NonC
 jest.mock("../../financial-plan/FinancialPlanScreen", () => mockScreen("FinancialPlanScreen"));
 jest.mock("../../financial-plan/PastFinancialPlansScreen", () => mockScreen("PastFinancialPlansScreen"));
 jest.mock("../../financial-plan/PastFinancialPlanDetailScreen", () => mockScreen("PastFinancialPlanDetailScreen"));
+jest.mock("../../savings-goals/SavingsGoalsScreen", () => mockScreen("SavingsGoalsScreen"));
 
 import React from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import DebtsRoute from "../../../app/(app)/(shell)/(tabs)/plan/debts";
 import BudgetsRoute from "../../../app/(app)/(shell)/(tabs)/plan/budgets";
+import SavingsRoute from "../../../app/(app)/(shell)/(tabs)/plan/savings";
 import CreditCardsRoute from "../../../app/(app)/(shell)/plan/debts/credit-cards/index";
 import CreditCardRoute from "../../../app/(app)/(shell)/plan/debts/credit-cards/[id]";
 import OtherDebtsRoute from "../../../app/(app)/(shell)/plan/debts/other/index";
@@ -52,6 +54,7 @@ import NonCreditDebtDetailScreen from "../../debt-manager/NonCreditDebtDetailScr
 import FinancialPlanScreen from "../../financial-plan/FinancialPlanScreen";
 import PastFinancialPlansScreen from "../../financial-plan/PastFinancialPlansScreen";
 import PastFinancialPlanDetailScreen from "../../financial-plan/PastFinancialPlanDetailScreen";
+import SavingsGoalsScreen from "../../savings-goals/SavingsGoalsScreen";
 import { transactionFormHref } from "../../ledger/transactionFormRoute";
 import { getFinancialAccount } from "../../../local-db/repositories/financialAccounts";
 import { listDebtAccounts } from "../../../local-db/repositories/debtAccounts";
@@ -94,6 +97,17 @@ describe("Plan tab pages", () => {
     expect(router.push).toHaveBeenLastCalledWith(ROUTES.planPastPlans);
   });
 
+  it("opens savings activity and a goal's transaction in the transaction form", () => {
+    render(<SavingsRoute />);
+    const props = propsOf(SavingsGoalsScreen);
+    props.onRecordActivity!("goal-1", "contribution", 50000);
+    expect(router.push).toHaveBeenLastCalledWith(transactionFormHref({ kind: "savings-activity", savingsGoalId: "goal-1", activity: "contribution", amountCentavos: 50000 }));
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: ROUTES.transactionForm, params: { savingsGoalId: "goal-1", kind: "contribution", amountCentavos: "50000" } });
+    props.onRecordActivity!("goal-1", "withdrawal");
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: ROUTES.transactionForm, params: { savingsGoalId: "goal-1", kind: "withdrawal" } });
+    props.onOpenTransaction!("tx-1");
+    expect(router.push).toHaveBeenLastCalledWith(transactionFormHref({ kind: "edit", transactionId: "tx-1" }));
+  });
 });
 
 describe("list pages", () => {
