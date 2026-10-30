@@ -19,6 +19,8 @@ describe("dashboard links", () => {
   it("opens routed reminder targets and leaves the rest for later", () => {
     expect(reminderTargetHref({ kind: "observation", id: "tx-1" })).toEqual({ pathname: ROUTES.spendingAlerts, params: { transactionId: "tx-1" } });
     expect(reminderTargetHref({ kind: "savings", id: "goal-1" })).toEqual({ pathname: ROUTES.planSavings, params: { goalId: "goal-1" } });
-    for (const kind of ["biller", "income", "debt", "credit_card"] as const) expect(reminderTargetHref({ kind, id: "x" })).toBeNull();
+    expect(reminderTargetHref({ kind: "biller", id: "biller-1" })).toEqual({ pathname: ROUTES.biller, params: { id: "biller-1" } });
+    expect(reminderTargetHref({ kind: "income", id: "income-1" })).toEqual({ pathname: ROUTES.incomeSource, params: { id: "income-1" } });
+    for (const kind of ["debt", "credit_card"] as const) expect(reminderTargetHref({ kind, id: "x" })).toBeNull();
   });
 });
