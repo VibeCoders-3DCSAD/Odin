@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "start": "expo start",
+    "start": "NODE_OPTIONS=--max-old-space-size=3072 expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.cjs"
