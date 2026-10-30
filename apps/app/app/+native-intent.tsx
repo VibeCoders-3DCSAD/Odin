@@ -1,4 +1,4 @@
-import { ROUTES } from "../Routes";
+import { ROUTES } from "../routes";
 
 // Supabase emails link to odin://auth/reset and odin://auth/verify. useDeepLink reads
 // their tokens itself, so the router only needs the screen that handles each one.

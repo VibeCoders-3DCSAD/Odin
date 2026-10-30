@@ -59,6 +59,8 @@ const config = {
     favicon: "./assets/favicon.png",
   },
   plugins,
+  // Generates Href types from app/, so ROUTES and router calls are checked against real screens.
+  experiments: { typedRoutes: true },
 };
 
 export default config;

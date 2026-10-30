@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { ROUTES } from "../../Routes";
+import { ROUTES } from "../../routes";
 import { useAccess } from "./components/AccessProvider";
 import { AuthButton, EmailField, InfoCard, PasswordField, SwitchPrompt, TextLink, type NoticeProps } from "./components/AuthControls";
 import { AuthScreenLayout } from "./components/AuthScreenLayout";

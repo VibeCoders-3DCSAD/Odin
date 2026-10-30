@@ -24,6 +24,7 @@ import RegistrationScreen from "../RegistrationScreen";
 import { AccessProvider } from "../components/AccessProvider";
 import * as authApi from "../services/authApi";
 import { useAuthStore } from "../stores/useAuthStore";
+import { ROUTES } from "../../../routes";
 import type { useDeepLink } from "../../../hooks/useDeepLink";
 
 const api = jest.mocked(authApi);
@@ -76,8 +77,8 @@ describe("sign-in route", () => {
     const screen = renderWithLinks(<LoginScreen />);
     fireEvent.press(screen.getByText("Forgot password?"));
     fireEvent.press(screen.getByText("Create account"));
-    expect(router.push).toHaveBeenNthCalledWith(1, "/forgot-password");
-    expect(router.push).toHaveBeenNthCalledWith(2, "/registration");
+    expect(router.push).toHaveBeenNthCalledWith(1, ROUTES.forgotPassword);
+    expect(router.push).toHaveBeenNthCalledWith(2, ROUTES.registration);
   });
 });
 
@@ -96,7 +97,7 @@ describe("registration route", () => {
     expect(screen.getByText("Verify your email")).toBeTruthy();
 
     fireEvent.press(screen.getByText("Back to sign in"));
-    expect(router.dismissTo).toHaveBeenCalledWith("/login");
+    expect(router.dismissTo).toHaveBeenCalledWith(ROUTES.login);
   });
 });
 
@@ -126,7 +127,7 @@ describe("forgot-password route", () => {
     await act(async () => { fireEvent.press(screen.getByText("Update password")); });
     expect(api.updatePassword).toHaveBeenCalledWith("Str0ng!pass", "recovery", "refresh");
     expect(noLinks.clearAuthLinks).toHaveBeenCalled();
-    expect(router.dismissTo).toHaveBeenCalledWith({ pathname: "/login", params: { notice: "password-updated" } });
+    expect(router.dismissTo).toHaveBeenCalledWith({ pathname: ROUTES.login, params: { notice: "password-updated" } });
   });
 
   it("shows the expired-session step without the misleading 401 copy", async () => {

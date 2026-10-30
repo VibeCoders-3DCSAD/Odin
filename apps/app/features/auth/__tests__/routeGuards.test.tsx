@@ -27,6 +27,7 @@ import UserOnboarding from "../../../app/(app)/user-onboarding";
 import { AccessProvider } from "../components/AccessProvider";
 import { useAccessLifecycle } from "../hooks/useAccessLifecycle";
 import { useAuthStore } from "../stores/useAuthStore";
+import { ROUTES } from "../../../routes";
 
 const links = { isPasswordRecovery: false, isResolvingRecoveryToken: false, recoveryToken: null, recoveryRefreshToken: null,
   verificationToken: null, clearAuthLinks: jest.fn() };
@@ -86,12 +87,12 @@ describe("app routes", () => {
 
   it("sends the index to where the access state belongs", () => {
     const cases: [() => void, string, Partial<typeof links>?][] = [
-      [() => unlock("submitted"), "redirect:/dashboard"],
-      [() => unlock("in_progress"), "redirect:/user-onboarding"],
-      [() => useAuthStore.setState({ phase: "signed-out", account: null }), "redirect:/login"],
+      [() => unlock("submitted"), `redirect:${ROUTES.dashboard}`],
+      [() => unlock("in_progress"), `redirect:${ROUTES.userOnboarding}`],
+      [() => useAuthStore.setState({ phase: "signed-out", account: null }), `redirect:${ROUTES.login}`],
       // Forgot PIN also uses the recovery phase but must land on sign-in.
-      [() => useAuthStore.setState({ phase: "recovery", account: null }), "redirect:/login"],
-      [() => useAuthStore.setState({ phase: "recovery", account: null }), "redirect:/forgot-password", { isPasswordRecovery: true }],
+      [() => useAuthStore.setState({ phase: "recovery", account: null }), `redirect:${ROUTES.login}`],
+      [() => useAuthStore.setState({ phase: "recovery", account: null }), `redirect:${ROUTES.forgotPassword}`, { isPasswordRecovery: true }],
     ];
     for (const [arrange, expected, linkState] of cases) {
       arrange();
@@ -118,9 +119,9 @@ describe("app routes", () => {
     }));
     const screen = renderUnlocked(<UserOnboarding />);
     fireEvent.press(screen.getByText("onboarding"));
-    expect(screen.queryByText("redirect:/dashboard")).toBeNull();
+    expect(screen.queryByText(`redirect:${ROUTES.dashboard}`)).toBeNull();
     await act(async () => finish());
-    expect(screen.getByText("redirect:/dashboard")).toBeTruthy();
+    expect(screen.getByText(`redirect:${ROUTES.dashboard}`)).toBeTruthy();
   });
 
   it("restarts onboarding for reassessment without redirecting a submitted user away", () => {

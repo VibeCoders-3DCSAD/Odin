@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
-import { ROUTES } from "../../Routes";
+import { ROUTES } from "../../routes";
 import { AuthButton, EmailField, PasswordField, PasswordRules, SwitchPrompt, TextField } from "./components/AuthControls";
 import { AuthScreenLayout } from "./components/AuthScreenLayout";
 import { GoogleSignInSection } from "./components/GoogleSignInSection";

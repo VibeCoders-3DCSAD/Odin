@@ -3,7 +3,7 @@ import { Redirect, useLocalSearchParams } from "expo-router";
 import OnboardingFlow from "../../features/onboarding/OnboardingFlow";
 import { useSession } from "../../features/auth/components/AccessProvider";
 import { useAuthStore } from "../../features/auth/stores/useAuthStore";
-import { ROUTES } from "../../Routes";
+import { ROUTES } from "../../routes";
 
 // ?restart=1 reopens a submitted profile for reassessment from Settings.
 export default function UserOnboarding() {

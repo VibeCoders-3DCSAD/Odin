@@ -4,7 +4,7 @@ import { InitialSyncGate } from "../../features/sync/InitialSyncGate";
 import { useSession } from "../../features/auth/components/AccessProvider";
 import { signOutGoogle } from "../../features/auth/services/googleSignIn";
 import { useAuthStore } from "../../features/auth/stores/useAuthStore";
-import { ROUTES } from "../../Routes";
+import { ROUTES } from "../../routes";
 
 export default function Dashboard() {
   const { accessToken, userId, deviceId } = useSession();

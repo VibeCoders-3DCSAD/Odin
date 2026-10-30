@@ -1,5 +1,5 @@
 import { Redirect } from "expo-router";
-import { ROUTES } from "../Routes";
+import { ROUTES } from "../routes";
 import { useAccess } from "../features/auth/components/AccessProvider";
 import { useAuthStore } from "../features/auth/stores/useAuthStore";
 
