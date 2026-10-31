@@ -1,5 +1,5 @@
 import { CACHED_ROW_LIMIT, clearTransactionCache, readTransactionCache, reuseUnchangedRows, transactionCacheKey, writeTransactionCache } from "../transactionCache";
-import type { TransactionListItem } from "../../../local-db/repositories/ledger";
+import type { TransactionListItem } from "../../../local-db/repositories/ledger/ledger";
 
 function row(index: number, overrides: Partial<TransactionListItem> = {}): TransactionListItem {
   return {

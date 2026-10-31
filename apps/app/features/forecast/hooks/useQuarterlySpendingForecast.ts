@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { SeasonalPreferences } from "@odin/spending-insights/seasons";
-import { getSnapshot, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
-import { saveForecastSnapshot } from "../../../local-db/repositories/forecastSnapshots";
-import { listMonthlySpending, listQuarterlySpending, pastQuarters, recentMonths, type MonthSpending, type QuarterSpending } from "../../../local-db/repositories/forecastTransactions";
+import { getSnapshot, upsertSnapshot } from "../../../local-db/repositories/dashboard/dashboardSnapshots";
+import { saveForecastSnapshot } from "../../../local-db/repositories/forecast/forecastSnapshots";
+import { listMonthlySpending, listQuarterlySpending, pastQuarters, recentMonths, type MonthSpending, type QuarterSpending } from "../../../local-db/repositories/forecast/forecastTransactions";
 import { useConnectivityStore } from "../../../services/connectivity";
 import { getQuarterlyForecastContent } from "../../dashboard/dashboardSnapshotContent";
 import { getPreferences } from "../../governance/api";

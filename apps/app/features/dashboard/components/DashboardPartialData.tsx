@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import { dashboardColors as P, dashboardStyles } from "../dashboardAppearance";
-import type { DailyTrend } from "../../../local-db/repositories/dashboardSummary";
-import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboardSnapshots";
+import type { DailyTrend } from "../../../local-db/repositories/dashboard/dashboardSummary";
+import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboard/dashboardSnapshots";
 import { getSnapshotCount, getSnapshotText } from "../dashboardSnapshotContent";
 import { SnapshotCard } from "./SnapshotCard";
 import { TrendChart } from "./DashboardCharts";

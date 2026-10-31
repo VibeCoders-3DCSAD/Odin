@@ -2,26 +2,26 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ActivityIndicator, Platform, Text, View } from "react-native";
 import { Banner, FormCard, Note, PickerField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
-import { ensureCurrentCreditCardCycles, createCreditCardCycle, listCreditCardCycles, listCreditCardCycleTransactions, updateCreditCardCycle, type CreditCardCycle, type CreditCardCycleTransaction } from "../../local-db/repositories/creditCardCycles";
-import { calculateCurrentCreditCardCycle } from "../../local-db/repositories/creditCardCycleDates";
+import { ensureCurrentCreditCardCycles, createCreditCardCycle, listCreditCardCycles, listCreditCardCycleTransactions, updateCreditCardCycle, type CreditCardCycle, type CreditCardCycleTransaction } from "../../local-db/repositories/credit-cards/creditCardCycles";
+import { calculateCurrentCreditCardCycle } from "../../local-db/repositories/credit-cards/creditCardCycleDates";
 import {
   listFinancialAccounts,
   type FinancialAccount,
-} from "../../local-db/repositories/financialFoundations";
+} from "../../local-db/repositories/foundations/financialFoundations";
 import { LocalDbError } from "../../local-db/helpers";
-import { listCreditCardStatements, type CreditCardStatement } from "../../local-db/repositories/creditCardStatements";
-import { listCreditCardInstallments, type CreditCardInstallment } from "../../local-db/repositories/creditCardInstallments";
-import { listCreditCardPayments, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
-import { CreditCardCycleList, CreditCardInstallmentList } from "./CreditCardCollections";
+import { listCreditCardStatements, type CreditCardStatement } from "../../local-db/repositories/credit-cards/creditCardStatements";
+import { listCreditCardInstallments, type CreditCardInstallment } from "../../local-db/repositories/credit-cards/creditCardInstallments";
+import { listCreditCardPayments, type CreditCardPayment, type StatementPaymentContext } from "../../local-db/repositories/credit-cards/creditCardPayments";
+import { CreditCardCycleList, CreditCardInstallmentList } from "./credit-cards/components/CreditCardCollections";
 import CreditCardListScreen from "./CreditCardListScreen";
-import CreditCardForecastSection from "./CreditCardForecastSection";
-import { listCreditCardStrategies, type CreditCardStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
-import { listCreditCardSettlements, type CreditCardSettlement } from "../../local-db/repositories/creditCardSettlements";
-import CreditCardRepaymentStrategy from "./CreditCardRepaymentStrategy";
-import CreditCardAvailableCreditReconciliation from "./CreditCardAvailableCreditReconciliation";
-import { getPhilippineToday } from "./debtTrendRange";
-import { useCreditCardForecast } from "./hooks/useCreditCardForecast";
-import { Button, CARD_TINT, CardIcon, InfoRow, LinkButton, ProgressBar, SectionHeader, formatPeso } from "./debtUi";
+import CreditCardForecastSection from "./credit-cards/components/CreditCardForecastSection";
+import { listCreditCardStrategies, type CreditCardStrategy } from "../../local-db/repositories/credit-cards/creditCardRepaymentPlans";
+import { listCreditCardSettlements, type CreditCardSettlement } from "../../local-db/repositories/credit-cards/creditCardSettlements";
+import CreditCardRepaymentStrategy from "./credit-cards/components/CreditCardRepaymentStrategy";
+import CreditCardAvailableCreditReconciliation from "./credit-cards/components/CreditCardAvailableCreditReconciliation";
+import { getPhilippineToday } from "./forecast/helpers/debtTrendRange";
+import { useCreditCardForecast } from "./credit-cards/hooks/useCreditCardForecast";
+import { Button, CARD_TINT, CardIcon, InfoRow, LinkButton, ProgressBar, SectionHeader, formatPeso } from "./components/debtUi";
 
 type Props = { userId: string; deviceId: string; accountId?: string; onBack?: () => void; onOpenCard?: (accountId: string) => void; onPayStatement?: (context: StatementPaymentContext) => void; onEditPayment?: (payment: CreditCardPayment) => void };
 

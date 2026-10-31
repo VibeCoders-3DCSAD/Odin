@@ -1,5 +1,5 @@
-import type { Category, Subcategory } from "../../../local-db/repositories/taxonomy";
-import type { PlanRecommendations } from "../../../local-db/repositories/forecastTransactions";
+import type { Category, Subcategory } from "../../../local-db/repositories/ledger/taxonomy";
+import type { PlanRecommendations } from "../../../local-db/repositories/forecast/forecastTransactions";
 import type { ManualPlanAllocation } from "../api";
 import type { CommitmentPreview } from "./commitmentBudget";
 

@@ -20,8 +20,8 @@ jest.mock("../../../lib/network", () => ({ isOnline: jest.fn(async () => true) }
 jest.mock("../../../local-db/client", () => ({ initDatabase: jest.fn(async () => ({})) }));
 jest.mock("../../../local-db/helpers", () => ({ cleanupDiscardedSyncRows: jest.fn(async () => {}) }));
 jest.mock("../../../local-db/sync/runSync", () => ({ runSync: jest.fn(async () => ({ pulled: 0, pushed: 1, errors: 0, hasMore: false })) }));
-jest.mock("../../../local-db/repositories/scheduledPayments", () => ({ postDueScheduledPayments: jest.fn(async () => {}) }));
-jest.mock("../../../local-db/repositories/recurringIncome", () => ({ postDueRecurringIncome: jest.fn(async () => {}) }));
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPayments", () => ({ postDueScheduledPayments: jest.fn(async () => {}) }));
+jest.mock("../../../local-db/repositories/foundations/recurringIncome", () => ({ postDueRecurringIncome: jest.fn(async () => {}) }));
 jest.mock("../../ledger/transactionCache", () => ({ clearTransactionCache: jest.fn() }));
 jest.mock("../services/devTools", () => ({ installSyncDevTools: jest.fn() }));
 jest.mock("../services/syncQueue", () => ({
@@ -37,8 +37,8 @@ jest.mock("../services/syncQueue", () => ({
 import React from "react";
 import { Pressable, Text } from "react-native";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import { postDueRecurringIncome } from "../../../local-db/repositories/recurringIncome";
-import { postDueScheduledPayments } from "../../../local-db/repositories/scheduledPayments";
+import { postDueRecurringIncome } from "../../../local-db/repositories/foundations/recurringIncome";
+import { postDueScheduledPayments } from "../../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { runSync } from "../../../local-db/sync/runSync";
 import { countExhaustedSyncRows, loadSyncIssuesPage } from "../services/syncQueue";
 import { SyncProvider, useSync } from "../SyncProvider";

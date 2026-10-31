@@ -1,6 +1,6 @@
 import { Modal, Pressable, Text, View } from "react-native";
 import { BottomSheet, FieldLabel, Note, Switch, styles as ui, v4, v4Font } from "../../../components/BudgieForm";
-import type { ScheduledPaymentSummary } from "../../../local-db/repositories/scheduledPayments";
+import type { ScheduledPaymentSummary } from "../../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { formatDueDate, formatPhp } from "../presentation";
 import { localToday, nextDueDate } from "../schedule";
 

@@ -1,4 +1,4 @@
-import { deriveGoalContributionDate, getTargetDateContributionAmount, type SavingsContributionSchedule } from "../contributionSchedule";
+import { deriveGoalContributionDate, getTargetDateContributionAmount, type SavingsContributionSchedule } from "./contributionSchedule";
 
 export function recommendGoalContribution(
   schedule: SavingsContributionSchedule & { contributionMonth?: number | null },

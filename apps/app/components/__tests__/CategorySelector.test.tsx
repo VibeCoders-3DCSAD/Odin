@@ -2,9 +2,9 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { fireEvent, render, within } from "@testing-library/react-native";
 import { CategorySelectorTree } from "../CategorySelector";
-import type { Category, Subcategory } from "../../local-db/repositories/taxonomy";
+import type { Category, Subcategory } from "../../local-db/repositories/ledger/taxonomy";
 
-jest.mock("../../local-db/repositories/taxonomy", () => ({ listCategories: jest.fn(), listSubcategories: jest.fn() }));
+jest.mock("../../local-db/repositories/ledger/taxonomy", () => ({ listCategories: jest.fn(), listSubcategories: jest.fn() }));
 jest.mock("../../features/taxonomy/taxonomyVisuals", () => ({
   DEFAULT_TAXONOMY_COLOR: "#0F766E",
   TaxonomyIcon: ({ iconKey }: { iconKey?: string }) => {

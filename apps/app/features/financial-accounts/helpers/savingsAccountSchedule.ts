@@ -1,4 +1,4 @@
-import type { SavingsAccountDetailsInput } from "../../../local-db/repositories/savingsAccountDetails";
+import type { SavingsAccountDetailsInput } from "../../../local-db/repositories/savings/savingsAccountDetails";
 
 export function preservedSavingsAccountSchedule(details: SavingsAccountDetailsInput | null) {
   return {

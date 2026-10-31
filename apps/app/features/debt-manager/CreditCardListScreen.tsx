@@ -1,9 +1,9 @@
 import React from "react";
 import { View } from "react-native";
 import { Note } from "../../components/BudgieForm";
-import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
-import type { CreditCardCycle } from "../../local-db/repositories/creditCardCycles";
-import { CARD_TINT, CardIcon, List, ListRow, SectionHeader, formatPeso, formatShortDate } from "./debtUi";
+import type { FinancialAccount } from "../../local-db/repositories/foundations/financialFoundations";
+import type { CreditCardCycle } from "../../local-db/repositories/credit-cards/creditCardCycles";
+import { CARD_TINT, CardIcon, List, ListRow, SectionHeader, formatPeso, formatShortDate } from "./components/debtUi";
 
 type Props = {
   accounts: FinancialAccount[];

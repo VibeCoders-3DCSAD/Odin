@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { getSafeToSpend, type SafeToSpend } from "../../../local-db/repositories/safeToSpend";
+import { getSafeToSpend, type SafeToSpend } from "../../../local-db/repositories/dashboard/safeToSpend";
 import { formatPeso, formatPesoCompact } from "../dashboardFormatting";
 
 import { dashboardColors as P, dashboardStyles } from "../dashboardAppearance";

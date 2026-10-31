@@ -7,7 +7,7 @@ import { billerHref } from "../../../../../../features/money/moneyRoutes";
 import { FullScreenPage } from "../../../../../../features/shell/components/FullScreenPage";
 import { goBackOr } from "../../../../../../features/shell/helpers/shellNavigation";
 import { useSync } from "../../../../../../features/sync/SyncProvider";
-import { getScheduledPayment } from "../../../../../../local-db/repositories/scheduledPayments";
+import { getScheduledPayment } from "../../../../../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { ROUTES } from "../../../../../../routes";
 
 // Pay a biller or remittance, then return to its detail. Link here only with billerRecordHref() from features/money/moneyRoutes.

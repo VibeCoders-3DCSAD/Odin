@@ -1,0 +1,700 @@
+import * as SQLite from "expo-sqlite";
+import { enqueueOperation, LocalDbError } from "../../helpers";
+import { randomUUID } from "../../uuid";
+import type { SyncOperation } from "../../types";
+import { TAXONOMY_ICON_KEYS as taxonomyIconKeys } from "../../../lib/taxonomyIconOptions";
+import { getDb, now, boolToInt } from "../helpers/db";
+
+type CategoryRow = {
+  id: string;
+  user_id: string;
+  slug: string;
+  label: string;
+  short_label: string | null;
+  description: string;
+  classification: "essential" | "non_essential";
+  icon_key: string;
+  color_hex: string;
+  is_system: number;
+  is_filipino_context: number;
+  minimum_amount_centavos: number | null;
+  always_in_budget: number;
+  fixed_amount_centavos: number | null;
+  sort_order: number;
+  is_active: number;
+  metadata: string;
+  version: number;
+  deleted: number;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+};
+
+type SubcategoryRow = {
+  id: string;
+  user_id: string;
+  category_id: string | null;
+  slug: string;
+  kind: "income" | "expense" | "transfer_adjustment";
+  label: string;
+  short_label: string | null;
+  description: string;
+  icon_key: string;
+  color_hex: string;
+  is_system: number;
+  is_filipino_context: number;
+  is_protected: number;
+  minimum_amount_centavos: number | null;
+  always_in_budget: number;
+  fixed_amount_centavos: number | null;
+  sort_order: number;
+  is_active: number;
+  metadata: string;
+  version: number;
+  deleted: number;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+};
+
+export type Category = {
+  id: string;
+  slug: string;
+  label: string;
+  short_label: string | null;
+  description: string;
+  classification: "essential" | "non_essential";
+  icon_key?: string;
+  color_hex?: string;
+  is_system: boolean;
+  is_filipino_context: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type Subcategory = {
+  id: string;
+  category_id: string | null;
+  slug: string;
+  kind: "income" | "expense" | "transfer_adjustment";
+  label: string;
+  short_label: string | null;
+  description: string;
+  icon_key?: string;
+  color_hex?: string;
+  is_system: boolean;
+  is_filipino_context: boolean;
+  is_protected: boolean;
+  minimum_amount_centavos: number | null;
+  always_in_budget: boolean;
+  fixed_amount_centavos: number | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type CreateCategoryInput = {
+  slug: string;
+  label: string;
+  description: string;
+  icon_key?: string;
+  color_hex?: string;
+  short_label?: string | null;
+  is_filipino_context?: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
+  sort_order?: number;
+};
+
+export type UpdateCategoryInput = {
+  label?: string;
+  short_label?: string | null;
+  description?: string;
+  icon_key?: string;
+  color_hex?: string;
+  is_filipino_context?: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
+  sort_order?: number;
+  is_active?: boolean;
+};
+
+export type CreateSubcategoryInput = {
+  kind: "income" | "expense" | "transfer_adjustment";
+  slug: string;
+  label: string;
+  description: string;
+  icon_key?: string;
+  color_hex?: string;
+  category_id?: string | null;
+  short_label?: string | null;
+  is_filipino_context?: boolean;
+  is_protected?: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
+  sort_order?: number;
+};
+
+export type UpdateSubcategoryInput = {
+  label?: string;
+  slug?: string;
+  short_label?: string | null;
+  description?: string;
+  icon_key?: string;
+  color_hex?: string;
+  is_filipino_context?: boolean;
+  is_protected?: boolean;
+  minimum_amount_centavos?: number | null;
+  always_in_budget?: boolean;
+  fixed_amount_centavos?: number | null;
+  is_active?: boolean;
+};
+
+function mapCategory(row: CategoryRow): Category {
+  return {
+    id: row.id,
+    slug: row.slug,
+    label: row.label,
+    short_label: row.short_label,
+    description: row.description,
+    classification: row.classification,
+    icon_key: row.icon_key,
+    color_hex: row.color_hex,
+    is_system: row.is_system === 1,
+    is_filipino_context: row.is_filipino_context === 1,
+    minimum_amount_centavos: row.minimum_amount_centavos,
+    always_in_budget: row.always_in_budget === 1,
+    fixed_amount_centavos: row.fixed_amount_centavos,
+    sort_order: row.sort_order,
+    is_active: row.is_active === 1,
+  };
+}
+
+function mapSubcategory(row: SubcategoryRow): Subcategory {
+  return {
+    id: row.id,
+    category_id: row.category_id,
+    slug: row.slug,
+    kind: row.kind,
+    label: row.label,
+    short_label: row.short_label,
+    description: row.description,
+    icon_key: row.icon_key,
+    color_hex: row.color_hex,
+    is_system: row.is_system === 1,
+    is_filipino_context: row.is_filipino_context === 1,
+    is_protected: row.is_protected === 1,
+    minimum_amount_centavos: row.minimum_amount_centavos,
+    always_in_budget: row.always_in_budget === 1,
+    fixed_amount_centavos: row.fixed_amount_centavos,
+    sort_order: row.sort_order,
+    is_active: row.is_active === 1,
+  };
+}
+
+const DATABASE_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
+const TAXONOMY_ICON_KEYS: ReadonlySet<string> = new Set(taxonomyIconKeys);
+const COLOR_HEX_PATTERN = /^#[0-9A-Fa-f]{6}$/;
+
+async function retryDatabaseRead<T>(read: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      const retryDelay = DATABASE_LOCK_RETRY_DELAYS_MS[attempt];
+      if (!(error instanceof Error && /database is locked/i.test(error.message)) || retryDelay === undefined) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
+  }
+}
+
+function validateBudgetAmounts(minimumAmountCentavos: number | null | undefined, fixedAmountCentavos: number | null | undefined): void {
+  for (const [field, value] of [["minimum_amount_centavos", minimumAmountCentavos], ["fixed_amount_centavos", fixedAmountCentavos]] as const) {
+    if (value !== null && value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new LocalDbError("VALIDATION_ERROR", `${field} must be a non-negative integer or null`);
+    }
+  }
+  if (minimumAmountCentavos !== null && minimumAmountCentavos !== undefined && fixedAmountCentavos !== null && fixedAmountCentavos !== undefined && fixedAmountCentavos < minimumAmountCentavos) {
+    throw new LocalDbError("VALIDATION_ERROR", "fixed_amount_centavos must be greater than or equal to minimum_amount_centavos");
+  }
+}
+
+function validateTaxonomyVisuals(iconKey: string | undefined, colorHex: string | undefined): void {
+  if (iconKey !== undefined && !TAXONOMY_ICON_KEYS.has(iconKey)) {
+    throw new LocalDbError("VALIDATION_ERROR", "icon_key is invalid");
+  }
+  if (colorHex !== undefined && !COLOR_HEX_PATTERN.test(colorHex)) {
+    throw new LocalDbError("VALIDATION_ERROR", "color_hex must be a six-digit hex color");
+  }
+}
+
+function categoryFailureMessage(action: "created" | "updated" | "deleted", label: string): string {
+  return `This category "${label}" could not be ${action}.`;
+}
+
+function subcategoryFailureMessage(action: "created" | "updated" | "deleted", label: string): string {
+  return `This subcategory "${label}" could not be ${action}.`;
+}
+
+export async function listCategories(
+  userId: string,
+): Promise<Category[]> {
+  const db = await getDb();
+  const rows = await retryDatabaseRead(() => db.getAllAsync<CategoryRow>(
+    "SELECT * FROM categories WHERE user_id = ? AND deleted = 0 AND is_active = 1 ORDER BY sort_order",
+    userId,
+  ));
+  return rows.map(mapCategory);
+}
+
+export async function getCategory(userId: string, id: string): Promise<Category | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<CategoryRow>(
+    "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+    userId,
+    id,
+  );
+  return row ? mapCategory(row) : null;
+}
+
+export async function listSubcategories(
+  userId: string,
+  categoryId?: string,
+  kind?: "income" | "expense" | "transfer_adjustment",
+): Promise<Subcategory[]> {
+  const db = await getDb();
+  let sql = "SELECT * FROM subcategories WHERE user_id = ? AND deleted = 0 AND is_active = 1";
+  const params: SQLite.SQLiteBindValue[] = [userId];
+
+  if (categoryId) {
+    sql += " AND category_id = ?";
+    params.push(categoryId);
+  }
+  if (kind) {
+    sql += " AND kind = ?";
+    params.push(kind);
+  }
+  sql += " ORDER BY sort_order";
+
+  const rows = await retryDatabaseRead(() => db.getAllAsync<SubcategoryRow>(sql, ...params));
+  return rows.map(mapSubcategory);
+}
+
+export async function getSubcategory(userId: string, id: string): Promise<Subcategory | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<SubcategoryRow>(
+    "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
+    userId,
+    id,
+  );
+  return row ? mapSubcategory(row) : null;
+}
+
+export async function createCategory(
+  userId: string,
+  deviceId: string,
+  input: CreateCategoryInput,
+): Promise<{ category: Category; operation: SyncOperation }> {
+  if (!input.slug || !input.label || !input.description) {
+    throw new LocalDbError("VALIDATION_ERROR", "slug, label, and description are required");
+  }
+  validateBudgetAmounts(input.minimum_amount_centavos, input.fixed_amount_centavos);
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
+
+  const db = await getDb();
+  const id = randomUUID();
+  const ts = now();
+  const metadata = "{}";
+
+  let result: { category: Category; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO categories
+        (id, user_id, slug, label, short_label, description, icon_key, color_hex,
+         is_system, is_filipino_context, minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order, is_active, metadata,
+          version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+      id,
+      userId,
+      input.slug,
+      input.label,
+      input.short_label ?? null,
+       input.description,
+       input.icon_key ?? "tag",
+       input.color_hex ?? "#0F766E",
+       boolToInt(input.is_filipino_context),
+       input.minimum_amount_centavos ?? null,
+       boolToInt(input.always_in_budget),
+       input.fixed_amount_centavos ?? null,
+      input.sort_order ?? 0,
+      metadata,
+      ts,
+      ts,
+    );
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "categories",
+      recordId: id,
+      operationType: "create",
+      baseVersion: null,
+      changedFields: [],
+      payload: { ...input, is_system: false },
+      failureMessage: categoryFailureMessage("created", input.label),
+    });
+
+    const row = await db.getFirstAsync<CategoryRow>(
+      "SELECT * FROM categories WHERE user_id = ? AND id = ?",
+      userId,
+      id,
+    );
+
+    result = { category: mapCategory(row!), operation };
+  });
+
+  return result!;
+}
+
+export async function updateCategory(
+  userId: string,
+  deviceId: string,
+  id: string,
+  input: UpdateCategoryInput,
+): Promise<{ category: Category; operation: SyncOperation }> {
+  const db = await getDb();
+  const ts = now();
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
+
+  let result: { category: Category; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const current = await db.getFirstAsync<CategoryRow>(
+      "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
+    validateBudgetAmounts(
+      input.minimum_amount_centavos === undefined ? current.minimum_amount_centavos : input.minimum_amount_centavos,
+      input.fixed_amount_centavos === undefined ? current.fixed_amount_centavos : input.fixed_amount_centavos,
+    );
+
+    const updates: string[] = [];
+    const params: SQLite.SQLiteBindValue[] = [];
+    const changedFields: string[] = [];
+
+    for (const [key, value] of Object.entries(input)) {
+      if (value === undefined) continue;
+      changedFields.push(key);
+
+      if (key === "is_filipino_context" || key === "always_in_budget" || key === "is_active") {
+        updates.push(`${key} = ?`);
+        params.push(boolToInt(value as boolean));
+      } else {
+        updates.push(`${key} = ?`);
+        params.push(value as SQLite.SQLiteBindValue);
+      }
+    }
+
+    if (updates.length > 0) {
+      updates.push("updated_at = ?");
+      params.push(ts);
+      updates.push("version = version + 1");
+
+      const sql = `UPDATE categories SET ${updates.join(", ")} WHERE user_id = ? AND id = ?`;
+      params.push(userId);
+      params.push(id);
+      await db.runAsync(sql, ...params);
+    }
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "categories",
+      recordId: id,
+      operationType: "update",
+      baseVersion: current.version,
+      changedFields,
+      payload: { ...input },
+      failureMessage: categoryFailureMessage("updated", input.label ?? current.label),
+    });
+
+    const row = await db.getFirstAsync<CategoryRow>(
+      "SELECT * FROM categories WHERE user_id = ? AND id = ?",
+      userId,
+      id,
+    );
+
+    result = { category: mapCategory(row!), operation };
+  });
+
+  return result!;
+}
+
+export async function deleteCategory(
+  userId: string,
+  deviceId: string,
+  id: string,
+): Promise<{ category: Category; operation: SyncOperation }> {
+  const db = await getDb();
+  const ts = now();
+
+  let result: { category: Category; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const current = await db.getFirstAsync<CategoryRow>(
+      "SELECT * FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!current) throw new LocalDbError("NOT_FOUND", "Category not found");
+
+    await db.runAsync(
+      "UPDATE categories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE user_id = ? AND id = ?",
+      ts,
+      userId,
+      id,
+    );
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "categories",
+      recordId: id,
+      operationType: "delete",
+      baseVersion: current.version,
+      changedFields: [],
+      payload: { id },
+      failureMessage: categoryFailureMessage("deleted", current.label),
+    });
+
+    const row = await db.getFirstAsync<CategoryRow>(
+      "SELECT * FROM categories WHERE user_id = ? AND id = ?",
+      userId,
+      id,
+    );
+
+    result = { category: mapCategory(row!), operation };
+  });
+
+  return result!;
+}
+
+export async function createSubcategory(
+  userId: string,
+  deviceId: string,
+  input: CreateSubcategoryInput,
+): Promise<{ subcategory: Subcategory; operation: SyncOperation }> {
+  const VALID_KINDS = ["income", "expense", "transfer_adjustment"];
+  if (!input.slug || !input.label || !input.description || !input.kind) {
+    throw new LocalDbError("VALIDATION_ERROR", "slug, label, description, and kind are required");
+  }
+  if (!VALID_KINDS.includes(input.kind)) {
+    throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_KINDS.join(", ")}`);
+  }
+  validateBudgetAmounts(input.minimum_amount_centavos, input.fixed_amount_centavos);
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
+
+  const db = await getDb();
+  const id = randomUUID();
+  const ts = now();
+  const metadata = "{}";
+
+  let result: { subcategory: Subcategory; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    if (input.category_id) {
+      const catRow = await db.getFirstAsync<CategoryRow>(
+        "SELECT id FROM categories WHERE user_id = ? AND id = ? AND deleted = 0",
+        userId,
+        input.category_id,
+      );
+      if (!catRow) {
+        throw new LocalDbError("VALIDATION_ERROR", "category_id does not exist");
+      }
+    }
+
+    await db.runAsync(
+      `INSERT INTO subcategories
+        (id, user_id, category_id, slug, kind, label, short_label, description, icon_key, color_hex,
+          is_system, is_filipino_context, is_protected, minimum_amount_centavos, always_in_budget, fixed_amount_centavos, sort_order, is_active,
+          metadata, version, deleted, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 1, ?, 1, 0, ?, ?)`,
+      id,
+      userId,
+      input.category_id ?? null,
+      input.slug,
+      input.kind,
+      input.label,
+      input.short_label ?? null,
+      input.description,
+      input.icon_key ?? "tag",
+      input.color_hex ?? "#0F766E",
+      boolToInt(input.is_filipino_context),
+      boolToInt(input.is_protected),
+      input.minimum_amount_centavos ?? null,
+      boolToInt(input.always_in_budget),
+      input.fixed_amount_centavos ?? null,
+      input.sort_order ?? 0,
+      metadata,
+      ts,
+      ts,
+    );
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "subcategories",
+      recordId: id,
+      operationType: "create",
+      baseVersion: null,
+      changedFields: [],
+      payload: { ...input, is_system: false },
+      failureMessage: subcategoryFailureMessage("created", input.label),
+    });
+
+    const row = await db.getFirstAsync<SubcategoryRow>(
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ?",
+      userId,
+      id,
+    );
+
+    result = { subcategory: mapSubcategory(row!), operation };
+  });
+
+  return result!;
+}
+
+export async function updateSubcategory(
+  userId: string,
+  deviceId: string,
+  id: string,
+  input: UpdateSubcategoryInput,
+): Promise<{ subcategory: Subcategory; operation: SyncOperation }> {
+  const db = await getDb();
+  const ts = now();
+  validateTaxonomyVisuals(input.icon_key, input.color_hex);
+
+  let result: { subcategory: Subcategory; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const current = await db.getFirstAsync<SubcategoryRow>(
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
+    validateBudgetAmounts(
+      input.minimum_amount_centavos === undefined ? current.minimum_amount_centavos : input.minimum_amount_centavos,
+      input.fixed_amount_centavos === undefined ? current.fixed_amount_centavos : input.fixed_amount_centavos,
+    );
+
+    const updates: string[] = [];
+    const params: SQLite.SQLiteBindValue[] = [];
+    const changedFields: string[] = [];
+
+    for (const [key, value] of Object.entries(input)) {
+      if (value === undefined) continue;
+      changedFields.push(key);
+
+      if (key === "is_filipino_context" || key === "is_protected" || key === "always_in_budget" || key === "is_active") {
+        updates.push(`${key} = ?`);
+        params.push(boolToInt(value as boolean));
+      } else {
+        updates.push(`${key} = ?`);
+        params.push(value as SQLite.SQLiteBindValue);
+      }
+    }
+
+    if (updates.length > 0) {
+      updates.push("updated_at = ?");
+      params.push(ts);
+      updates.push("version = version + 1");
+
+      const sql = `UPDATE subcategories SET ${updates.join(", ")} WHERE user_id = ? AND id = ?`;
+      params.push(userId);
+      params.push(id);
+      await db.runAsync(sql, ...params);
+    }
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "subcategories",
+      recordId: id,
+      operationType: "update",
+      baseVersion: current.version,
+      changedFields,
+      payload: { ...input },
+      failureMessage: subcategoryFailureMessage("updated", input.label ?? current.label),
+    });
+
+    const row = await db.getFirstAsync<SubcategoryRow>(
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ?",
+      userId,
+      id,
+    );
+
+    result = { subcategory: mapSubcategory(row!), operation };
+  });
+
+  return result!;
+}
+
+export async function deleteSubcategory(
+  userId: string,
+  deviceId: string,
+  id: string,
+): Promise<{ subcategory: Subcategory; operation: SyncOperation }> {
+  const db = await getDb();
+  const ts = now();
+
+  let result: { subcategory: Subcategory; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const current = await db.getFirstAsync<SubcategoryRow>(
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!current) throw new LocalDbError("NOT_FOUND", "Subcategory not found");
+
+    await db.runAsync(
+      "UPDATE subcategories SET is_active = 0, deleted = 1, version = version + 1, updated_at = ? WHERE user_id = ? AND id = ?",
+      ts,
+      userId,
+      id,
+    );
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "subcategories",
+      recordId: id,
+      operationType: "delete",
+      baseVersion: current.version,
+      changedFields: [],
+      payload: { id },
+      failureMessage: subcategoryFailureMessage("deleted", current.label),
+    });
+
+    const row = await db.getFirstAsync<SubcategoryRow>(
+      "SELECT * FROM subcategories WHERE user_id = ? AND id = ?",
+      userId,
+      id,
+    );
+
+    result = { subcategory: mapSubcategory(row!), operation };
+  });
+
+  return result!;
+}

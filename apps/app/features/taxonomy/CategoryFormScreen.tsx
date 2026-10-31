@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { createCategory, updateCategory } from "../../local-db/repositories/taxonomy";
+import { createCategory, updateCategory } from "../../local-db/repositories/ledger/taxonomy";
 import { ArrowLeft, Info } from "phosphor-react-native";
 import { DEFAULT_TAXONOMY_COLOR, TAXONOMY_COLORS, TAXONOMY_ICON_KEYS, TaxonomyIcon, taxonomyIconKey, type TaxonomyIconKey } from "./taxonomyVisuals";
 import { generateSlug } from "./helpers/slug";

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { CaretRight, CheckCircle, ShieldCheck, Target } from "phosphor-react-native";
-import { archiveSavingsGoal, deleteSavingsGoal, getSavingsGoal, listSavingsGoals, restoreSavingsGoal, type SavingsGoal } from "../../local-db/repositories/savingsGoals";
-import SavingsGoalForm from "./SavingsGoalForm";
-import SavingsGoalDetail, { ProgressBar } from "./SavingsGoalDetail";
-import { listSavingsGoalActivities } from "../../local-db/repositories/savingsGoalActivities";
+import { archiveSavingsGoal, deleteSavingsGoal, getSavingsGoal, listSavingsGoals, restoreSavingsGoal, type SavingsGoal } from "../../local-db/repositories/savings/savingsGoals";
+import SavingsGoalForm from "./components/SavingsGoalForm";
+import SavingsGoalDetail, { ProgressBar } from "./components/SavingsGoalDetail";
+import { listSavingsGoalActivities } from "../../local-db/repositories/savings/savingsGoalActivities";
 import type { SavingsActivity } from "./types";
-import SavingsAllocationReview from "./SavingsAllocationReview";
-import type { SavingsAllocationProposal } from "./savingsEnvelopeAllocation";
+import SavingsAllocationReview from "./components/SavingsAllocationReview";
+import type { SavingsAllocationProposal } from "./helpers/savingsEnvelopeAllocation";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF", soft: "#E8F3EC", warn: "#8A4B00" } as const;
 type Props = { userId: string; deviceId: string; syncVersion?: number; initialGoalId?: string; onRecordActivity?: (goalId: string, kind: "contribution" | "withdrawal", amountCentavos?: number) => void; onOpenTransaction?: (transactionId: string) => void };

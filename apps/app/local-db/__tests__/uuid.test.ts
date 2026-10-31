@@ -1,6 +1,6 @@
 import { uuidV5 } from "../uuid";
-import { scheduledPaymentPostIds } from "../repositories/scheduledPayments";
-import { recurringIncomePostIds } from "../repositories/recurringIncome";
+import { scheduledPaymentPostIds } from "../repositories/scheduled-payments/scheduledPayments";
+import { recurringIncomePostIds } from "../repositories/foundations/recurringIncome";
 
 jest.mock("../client", () => ({ initDatabase: jest.fn() }));
 

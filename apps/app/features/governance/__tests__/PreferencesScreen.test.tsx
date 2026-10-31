@@ -8,7 +8,7 @@ const mockGetPreferences = jest.fn();
 const mockSavePreferences = jest.fn();
 let mockOnline = true;
 jest.mock("../api", () => ({ getPreferences: (...args: unknown[]) => mockGetPreferences(...args), savePreferences: (...args: unknown[]) => mockSavePreferences(...args) }));
-jest.mock("../../../local-db/repositories/unusualSpending", () => ({ listPersistedUnusualSpendings: async () => [], reviseRecurringPaymentGroup: jest.fn() }));
+jest.mock("../../../local-db/repositories/alerts/unusualSpending", () => ({ listPersistedUnusualSpendings: async () => [], reviseRecurringPaymentGroup: jest.fn() }));
 jest.mock("../../../services/connectivity", () => ({ useConnectivityStore: (select: (state: { online: boolean }) => unknown) => select({ online: mockOnline }) }));
 
 const preferences: SeasonalPreferences = {

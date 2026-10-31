@@ -1,14 +1,14 @@
-jest.mock("../../../local-db/repositories/ledger", () => ({ getTransaction: jest.fn() }));
-jest.mock("../../../local-db/repositories/creditCardPayments", () => ({ getCreditCardPaymentByStatement: jest.fn() }));
-jest.mock("../../../local-db/repositories/debtAccounts", () => ({ getDebtAccount: jest.fn() }));
-jest.mock("../../../local-db/repositories/debtPayments", () => ({ listDebtPayments: jest.fn() }));
-jest.mock("../../../local-db/repositories/savingsGoals", () => ({ getSavingsGoal: jest.fn() }));
+jest.mock("../../../local-db/repositories/ledger/ledger", () => ({ getTransaction: jest.fn() }));
+jest.mock("../../../local-db/repositories/credit-cards/creditCardPayments", () => ({ getCreditCardPaymentByStatement: jest.fn() }));
+jest.mock("../../../local-db/repositories/debts/debtAccounts", () => ({ getDebtAccount: jest.fn() }));
+jest.mock("../../../local-db/repositories/debts/debtPayments", () => ({ listDebtPayments: jest.fn() }));
+jest.mock("../../../local-db/repositories/savings/savingsGoals", () => ({ getSavingsGoal: jest.fn() }));
 
-import { getCreditCardPaymentByStatement } from "../../../local-db/repositories/creditCardPayments";
-import { getDebtAccount } from "../../../local-db/repositories/debtAccounts";
-import { listDebtPayments } from "../../../local-db/repositories/debtPayments";
-import { getTransaction } from "../../../local-db/repositories/ledger";
-import { getSavingsGoal } from "../../../local-db/repositories/savingsGoals";
+import { getCreditCardPaymentByStatement } from "../../../local-db/repositories/credit-cards/creditCardPayments";
+import { getDebtAccount } from "../../../local-db/repositories/debts/debtAccounts";
+import { listDebtPayments } from "../../../local-db/repositories/debts/debtPayments";
+import { getTransaction } from "../../../local-db/repositories/ledger/ledger";
+import { getSavingsGoal } from "../../../local-db/repositories/savings/savingsGoals";
 import { loadTransactionForm } from "../services/loadTransactionForm";
 
 const transaction = { id: "tx-1" } as never;

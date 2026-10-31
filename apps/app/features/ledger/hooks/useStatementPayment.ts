@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { getCreditCardPaymentByStatement, type CreditCardPayment, type StatementPaymentContext } from "../../../local-db/repositories/creditCardPayments";
-import { getCreditCardStatementByCycle, type CreditCardStatement } from "../../../local-db/repositories/creditCardStatements";
+import { getCreditCardPaymentByStatement, type CreditCardPayment, type StatementPaymentContext } from "../../../local-db/repositories/credit-cards/creditCardPayments";
+import { getCreditCardStatementByCycle, type CreditCardStatement } from "../../../local-db/repositories/credit-cards/creditCardStatements";
 
 // Loads the statement a payment is for, and the payment already recorded against it. Only the user's
 // current authoritative statement for that cycle is accepted.

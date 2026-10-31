@@ -1,0 +1,209 @@
+import type { SavingsActivity } from "../types";
+import { addDays, addMonths, dateAtDay, isIsoDate } from "../../../lib/dates";
+
+export const GOAL_CONTRIBUTION_FREQUENCIES = [
+  "weekly",
+  "biweekly",
+  "semi_monthly",
+  "monthly",
+  "quarterly",
+  "yearly",
+  "custom",
+] as const;
+
+// Legacy frequencies remain readable; the goal form exposes the current product choices.
+export type GoalContributionFrequency = typeof GOAL_CONTRIBUTION_FREQUENCIES[number] | "daily";
+
+export type SavingsContributionSchedule = {
+  plannedContributionAmountCentavos: number;
+  contributionFrequency: GoalContributionFrequency | null;
+  contributionIntervalCount: number | null;
+  contributionDayOfMonth: number | null;
+  contributionSecondDayOfMonth: number | null;
+  contributionDayOfWeek: number | null;
+  customIntervalDays: number | null;
+  nextContributionDate: string | null;
+};
+
+export type ScheduledSavingsGoal = SavingsContributionSchedule & {
+  id: string;
+  status: "active" | "archived" | "deleted";
+  remainingAmountCentavos: number;
+  isAchieved: boolean;
+  targetDate: string | null;
+};
+
+export type RequiredSavingsContribution = {
+  savingsId: string;
+  source: "goal" | "savings_account";
+  scheduledDates: string[];
+  minimumPerOccurrenceCentavos: number;
+  configuredMinimumCentavos: number;
+  recordedContributionCentavos: number;
+  remainingRequiredCentavos: number;
+};
+
+export type RequiredSavingsContributionTotal = {
+  totalRequiredCentavos: number;
+  contributions: RequiredSavingsContribution[];
+};
+
+export type ScheduledSavingsAccount = SavingsContributionSchedule & {
+  id: string;
+};
+
+function validDay(value: number | null): value is number {
+  return value !== null && Number.isInteger(value) && value >= 1 && value <= 31;
+}
+
+// The month only picks a yearly schedule's first date; later dates follow from it.
+type ContributionTiming = Pick<SavingsContributionSchedule, "contributionFrequency" | "contributionDayOfWeek" | "contributionDayOfMonth" | "contributionSecondDayOfMonth"> & { contributionMonth?: number | null };
+
+export function deriveGoalContributionDate(timing: ContributionTiming, asOfDate: string): string | null {
+  if (!isIsoDate(asOfDate)) throw new Error("Invalid schedule reference date.");
+  const { contributionFrequency: frequency, contributionDayOfWeek: weekday, contributionDayOfMonth: first, contributionSecondDayOfMonth: second } = timing;
+  if (frequency === null) return null;
+  if (frequency === "daily") return asOfDate;
+  const current = new Date(`${asOfDate}T00:00:00Z`);
+  if (frequency === "weekly") {
+    if (weekday === null || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) throw new Error("Select a contribution day from Sunday to Saturday.");
+    return addDays(asOfDate, (weekday - current.getUTCDay() + 7) % 7);
+  }
+  if (frequency !== "monthly" && frequency !== "semi_monthly" && frequency !== "yearly") throw new Error("Choose a contribution frequency.");
+  if (!validDay(first)) throw new Error("Enter a contribution date number from 1 to 31.");
+  if (frequency === "yearly") {
+    const month = timing.contributionMonth;
+    if (month == null || !Number.isInteger(month) || month < 1 || month > 12) throw new Error("Select the contribution month.");
+    const thisYear = dateAtDay(current.getUTCFullYear(), month - 1, first);
+    return thisYear >= asOfDate ? thisYear : dateAtDay(current.getUTCFullYear() + 1, month - 1, first);
+  }
+  if (frequency === "semi_monthly" && (!validDay(second) || first >= second)) throw new Error("Enter two date numbers from 1 to 31, with the first before the second.");
+  const days = frequency === "semi_monthly" ? [first, second!] : [first];
+  const dates = days.map((day) => dateAtDay(current.getUTCFullYear(), current.getUTCMonth(), day));
+  return dates.find((date) => date >= asOfDate) ?? dateAtDay(current.getUTCFullYear(), current.getUTCMonth() + 1, first);
+}
+
+export function validateContributionSchedule(schedule: SavingsContributionSchedule): string | null {
+  if (!Number.isSafeInteger(schedule.plannedContributionAmountCentavos) || schedule.plannedContributionAmountCentavos < 0) return "planned contribution amount must be a non-negative whole number";
+  if (schedule.contributionFrequency === null || !(schedule.contributionFrequency === "daily" || GOAL_CONTRIBUTION_FREQUENCIES.some((frequency) => frequency === schedule.contributionFrequency))) return "contribution frequency is invalid";
+  if (!schedule.nextContributionDate || !isIsoDate(schedule.nextContributionDate)) return "next contribution date must use YYYY-MM-DD format";
+  const interval = schedule.contributionIntervalCount ?? 1;
+  if (!Number.isSafeInteger(interval) || interval <= 0) return "contribution interval must be a positive whole number";
+  if (schedule.contributionFrequency === "semi_monthly") {
+    if (!validDay(schedule.contributionDayOfMonth) || !validDay(schedule.contributionSecondDayOfMonth) || schedule.contributionDayOfMonth >= schedule.contributionSecondDayOfMonth) return "semi-monthly contributions require two ascending days from 1 to 31";
+  }
+  if ((schedule.contributionFrequency === "monthly" || schedule.contributionFrequency === "quarterly" || schedule.contributionFrequency === "yearly") && schedule.contributionDayOfMonth !== null && !validDay(schedule.contributionDayOfMonth)) return "contribution day of month must be from 1 to 31";
+  if ((schedule.contributionFrequency === "weekly" || schedule.contributionFrequency === "biweekly") && schedule.contributionDayOfWeek !== null && (!Number.isInteger(schedule.contributionDayOfWeek) || schedule.contributionDayOfWeek < 0 || schedule.contributionDayOfWeek > 6)) return "contribution day of week must be from 0 to 6";
+  if (schedule.contributionFrequency === "custom" && (!Number.isSafeInteger(schedule.customIntervalDays) || (schedule.customIntervalDays ?? 0) <= 0)) return "custom contribution schedules require a positive interval in days";
+  return null;
+}
+
+export function advanceContributionSchedule(date: string, schedule: SavingsContributionSchedule): string | null {
+  const frequency = schedule.contributionFrequency;
+  const interval = schedule.contributionIntervalCount ?? 1;
+  if (frequency === "daily") return addDays(date, interval);
+  if (frequency === "weekly") return addDays(date, 7 * interval);
+  if (frequency === "biweekly") return addDays(date, 14 * interval);
+  // Monthly, quarterly and yearly dates return to the chosen day, so a 31st clamped to the 30th is the 31st again next time.
+  if (frequency === "monthly" || frequency === "quarterly" || frequency === "yearly") {
+    const next = addMonths(date, (frequency === "yearly" ? 12 : frequency === "quarterly" ? 3 : 1) * interval);
+    if (!validDay(schedule.contributionDayOfMonth)) return next;
+    const month = new Date(`${next}T00:00:00Z`);
+    return dateAtDay(month.getUTCFullYear(), month.getUTCMonth(), schedule.contributionDayOfMonth);
+  }
+  if (frequency === "custom") return addDays(date, schedule.customIntervalDays!);
+  if (frequency !== "semi_monthly") return null;
+
+  const current = new Date(`${date}T00:00:00Z`);
+  const first = dateAtDay(current.getUTCFullYear(), current.getUTCMonth(), schedule.contributionDayOfMonth!);
+  const second = dateAtDay(current.getUTCFullYear(), current.getUTCMonth(), schedule.contributionSecondDayOfMonth!);
+  if (date < first) return first;
+  if (date < second) return second;
+  return dateAtDay(current.getUTCFullYear(), current.getUTCMonth() + interval, schedule.contributionDayOfMonth!);
+}
+
+export function getScheduledContributionDates(schedule: SavingsContributionSchedule, from: string, through: string): string[] {
+  const error = validateContributionSchedule(schedule);
+  if (error || !schedule.nextContributionDate || from > through) return [];
+  const dates: string[] = [];
+  let date = schedule.nextContributionDate;
+  for (let index = 0; date <= through && index < 10_000; index += 1) {
+    if (date >= from) dates.push(date);
+    const next = advanceContributionSchedule(date, schedule);
+    if (!next || next <= date) break;
+    date = next;
+  }
+  return dates;
+}
+
+function validatePeriod(periodStart: string, periodEnd: string): void {
+  if (!isIsoDate(periodStart) || !isIsoDate(periodEnd)) throw new Error("periodStart and periodEnd must use valid YYYY-MM-DD dates");
+  if (periodStart > periodEnd) throw new Error("periodStart must be on or before periodEnd");
+}
+
+export function getMinimumContributionPerOccurrence(goal: ScheduledSavingsGoal, asOfDate: string): number | null {
+  if (!isIsoDate(asOfDate) || goal.status !== "active" || goal.isAchieved || goal.remainingAmountCentavos <= 0 || !goal.targetDate) return null;
+  const targetDateMinimumCentavos = getTargetDateContributionAmount(goal, goal.remainingAmountCentavos, goal.targetDate, asOfDate);
+  if (targetDateMinimumCentavos === null) return null;
+  return Math.max(goal.plannedContributionAmountCentavos, targetDateMinimumCentavos);
+}
+
+export function getTargetDateContributionAmount(
+  schedule: SavingsContributionSchedule,
+  remainingAmountCentavos: number,
+  targetDate: string,
+  asOfDate: string,
+): number | null {
+  if (!isIsoDate(targetDate) || !isIsoDate(asOfDate) || !Number.isSafeInteger(remainingAmountCentavos) || remainingAmountCentavos <= 0) return null;
+  const dates = getScheduledContributionDates(schedule, asOfDate, targetDate);
+  return dates.length ? Math.ceil(remainingAmountCentavos / dates.length) : null;
+}
+
+export function getRequiredSavingsContributions(
+  periodStart: string,
+  periodEnd: string,
+  goals: ScheduledSavingsGoal[],
+  activitiesByGoal: Map<string, SavingsActivity[]>,
+): RequiredSavingsContributionTotal {
+  validatePeriod(periodStart, periodEnd);
+  const contributions = goals.flatMap((goal) => {
+    if (goal.status !== "active" || goal.isAchieved || goal.remainingAmountCentavos <= 0 || !goal.nextContributionDate) return [];
+    const minimumPerOccurrenceCentavos = getMinimumContributionPerOccurrence(goal, periodStart);
+    if (minimumPerOccurrenceCentavos === null || !goal.targetDate) return [];
+    const allDates = getScheduledContributionDates(goal, periodStart, goal.targetDate);
+    const scheduledDatesInPeriod = allDates.filter((date) => date >= periodStart && date <= periodEnd);
+    if (!scheduledDatesInPeriod.length) return [];
+    const configuredMinimumCentavos = Math.min(goal.remainingAmountCentavos, minimumPerOccurrenceCentavos * scheduledDatesInPeriod.length);
+    const recordedContributionCentavos = (activitiesByGoal.get(goal.id) ?? [])
+      .filter((activity) => activity.kind === "contribution" && activity.activityDate >= periodStart && activity.activityDate <= periodEnd)
+      .reduce((total, activity) => total + activity.amountCentavos, 0);
+    const remainingRequiredCentavos = Math.max(0, configuredMinimumCentavos - recordedContributionCentavos);
+    return [{ savingsId: goal.id, source: "goal" as const, scheduledDates: scheduledDatesInPeriod, minimumPerOccurrenceCentavos, configuredMinimumCentavos, recordedContributionCentavos, remainingRequiredCentavos }];
+  });
+  return { totalRequiredCentavos: contributions.reduce((total, contribution) => total + contribution.remainingRequiredCentavos, 0), contributions };
+}
+
+export function getRequiredSavingsAccountContributions(
+  periodStart: string,
+  periodEnd: string,
+  accounts: ScheduledSavingsAccount[],
+): RequiredSavingsContributionTotal {
+  validatePeriod(periodStart, periodEnd);
+  const contributions = accounts.flatMap((account) => {
+    const scheduleError = validateContributionSchedule(account);
+    if (scheduleError || account.plannedContributionAmountCentavos <= 0) return [];
+    const scheduledDatesInPeriod = getScheduledContributionDates(account, periodStart, periodEnd);
+    if (!scheduledDatesInPeriod.length) return [];
+    const configuredMinimumCentavos = account.plannedContributionAmountCentavos * scheduledDatesInPeriod.length;
+    return [{
+      savingsId: account.id,
+      source: "savings_account" as const,
+      scheduledDates: scheduledDatesInPeriod,
+      minimumPerOccurrenceCentavos: account.plannedContributionAmountCentavos,
+      configuredMinimumCentavos,
+      recordedContributionCentavos: 0,
+      remainingRequiredCentavos: configuredMinimumCentavos,
+    }];
+  });
+  return { totalRequiredCentavos: contributions.reduce((total, contribution) => total + contribution.remainingRequiredCentavos, 0), contributions };
+}

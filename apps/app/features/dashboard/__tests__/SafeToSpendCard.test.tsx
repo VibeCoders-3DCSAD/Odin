@@ -3,7 +3,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import { SafeToSpendCard } from "../components/SafeToSpendCard";
 
 const mockGetSafeToSpend = jest.fn();
-jest.mock("../../../local-db/repositories/safeToSpend", () => ({
+jest.mock("../../../local-db/repositories/dashboard/safeToSpend", () => ({
   getSafeToSpend: (...args: unknown[]) => mockGetSafeToSpend(...args),
 }));
 

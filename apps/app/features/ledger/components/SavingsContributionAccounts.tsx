@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import AccountSelectionSheet from "../../../components/AccountSelectionSheet";
 import { Banner, FieldLabel, Note, PickerField, styles as ui, v4Font, v4 } from "../../../components/BudgieForm";
-import { getSavingsGoal } from "../../../local-db/repositories/savingsGoals";
-import { getSavingsExpenseFunding } from "../../../local-db/repositories/savingsExpenseFunding";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
+import { getSavingsGoal } from "../../../local-db/repositories/savings/savingsGoals";
+import { getSavingsExpenseFunding } from "../../../local-db/repositories/savings/savingsExpenseFunding";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
 
 type Props = { userId: string; goalId: string; accounts: FinancialAccount[]; sourceAccountId: string; onSourceChange: (id: string) => void; transactionId?: string };
 type LinkedAccount = { id: string; name: string; unallocatedCentavos: number };

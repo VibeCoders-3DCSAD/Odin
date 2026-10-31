@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { CaretDown, CaretRight } from "phosphor-react-native";
 import MonthPicker from "../../alerts/MonthPicker";
 import { monthList } from "../../alerts/recurrenceOptions";
-import { listPersistedUnusualSpendings, reviseRecurringPaymentGroup } from "../../../local-db/repositories/unusualSpending";
+import { listPersistedUnusualSpendings, reviseRecurringPaymentGroup } from "../../../local-db/repositories/alerts/unusualSpending";
 import { groupRecurringPayments, type RecurringPaymentGroup } from "../helpers/recurringPaymentGroups";
 import { formatPhp } from "../../../lib/format/money";
 

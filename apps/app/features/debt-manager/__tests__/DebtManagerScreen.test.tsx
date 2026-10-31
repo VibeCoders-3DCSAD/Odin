@@ -22,33 +22,33 @@ type ForecastSectionProps = {
 const mockCreditCardForecastSection = jest.fn((_props: ForecastSectionProps) => null);
 const mockDatePickerRef: { props: { onChange: (event: { type: string }, date?: Date) => void; minimumDate?: Date } | null } = { props: null };
 
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
   reconcileCreditCardAvailableCredit: (...args: unknown[]) => mockReconcileCreditCardAvailableCredit(...args),
 }));
 
-jest.mock("../../../local-db/repositories/creditCardCycles", () => ({
+jest.mock("../../../local-db/repositories/credit-cards/creditCardCycles", () => ({
   ensureCurrentCreditCardCycles: (...args: unknown[]) => mockEnsureCurrentCreditCardCycles(...args),
   listCreditCardCycles: (...args: unknown[]) => mockListCreditCardCycles(...args),
   listCreditCardCycleTransactions: (...args: unknown[]) => mockListCreditCardCycleTransactions(...args),
 }));
 
-jest.mock("../../../local-db/repositories/creditCardStatements", () => ({
+jest.mock("../../../local-db/repositories/credit-cards/creditCardStatements", () => ({
   listCreditCardStatements: (...args: unknown[]) => mockListCreditCardStatements(...args),
   createCreditCardStatement: (...args: unknown[]) => mockCreateCreditCardStatement(...args),
 }));
 
-jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({
+jest.mock("../../../local-db/repositories/credit-cards/creditCardInstallments", () => ({
   listCreditCardInstallments: (...args: unknown[]) => mockListCreditCardInstallments(...args),
 }));
 
-jest.mock("../../../local-db/repositories/creditCardPayments", () => ({
+jest.mock("../../../local-db/repositories/credit-cards/creditCardPayments", () => ({
   listCreditCardPayments: (...args: unknown[]) => mockListCreditCardPayments(...args),
   calculateCreditCardPaymentStatus: (amount: number, balance: number, minimum: number) => amount >= balance ? "fully_paid" : amount >= minimum ? "minimum_satisfied" : "partially_paid",
   creditBalanceCentavos: (amount: number, balance: number) => Math.max(0, amount - balance),
 }));
 
-jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
+jest.mock("../../../local-db/repositories/credit-cards/creditCardRepaymentPlans", () => ({
   listCreditCardStrategies: (...args: unknown[]) => mockListCreditCardStrategies(...args),
   saveCreditCardStrategy: jest.fn().mockResolvedValue(undefined),
   statementPaymentTargetCentavos: (statement: { statement_balance_centavos: number; minimum_due_centavos: number }, strategy: { strategy: string; customAmountCentavos: number | null; percentageBps: number | null }) => {
@@ -59,11 +59,11 @@ jest.mock("../../../local-db/repositories/creditCardRepaymentPlans", () => ({
   },
 }));
 
-jest.mock("../CreditCardForecastSection", () => {
+jest.mock("../credit-cards/components/CreditCardForecastSection", () => {
   return (props: ForecastSectionProps) => mockCreditCardForecastSection(props);
 });
 
-jest.mock("../../../local-db/repositories/creditCardSettlements", () => ({
+jest.mock("../../../local-db/repositories/credit-cards/creditCardSettlements", () => ({
   listCreditCardSettlements: jest.fn().mockResolvedValue([]),
   requestCreditCardSettlement: (...args: unknown[]) => mockRequestCreditCardSettlement(...args),
   recognizeCreditCardSettlement: (...args: unknown[]) => mockRecognizeCreditCardSettlement(...args),

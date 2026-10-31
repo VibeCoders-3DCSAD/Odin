@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { Chip, FormCard, Note, Segment, styles as ui, v4 } from "../../components/BudgieForm";
-import { listDebtAccounts, type DebtAccount, type DebtListVisibility } from "../../local-db/repositories/debtAccounts";
-import { getDebtStrategy, listDebtPriorities, saveDebtPriorities, saveDebtStrategy, type DebtPriority, type DebtStrategy } from "../../local-db/repositories/debtRepaymentPlans";
-import NonCreditDebtForm from "./NonCreditDebtForm";
+import { listDebtAccounts, type DebtAccount, type DebtListVisibility } from "../../local-db/repositories/debts/debtAccounts";
+import { getDebtStrategy, listDebtPriorities, saveDebtPriorities, saveDebtStrategy, type DebtPriority, type DebtStrategy } from "../../local-db/repositories/debts/debtRepaymentPlans";
+import NonCreditDebtForm from "./non-credit/components/NonCreditDebtForm";
 import { getDebtTypeLabel } from "./debtTypes";
-import { DebtTypeIcon, LinkButton, List, ListRow, Pill, SectionHeader, debtTypeTint, formatPeso } from "./debtUi";
+import { DebtTypeIcon, LinkButton, List, ListRow, Pill, SectionHeader, debtTypeTint, formatPeso } from "./components/debtUi";
 
 type Props = { userId: string; deviceId: string; onBack: () => void; onOpenDebt: (debtId: string) => void };
 

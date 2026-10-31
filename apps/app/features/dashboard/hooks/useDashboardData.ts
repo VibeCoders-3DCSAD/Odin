@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getDashboardSummary, getDailyTrends } from "../../../local-db/repositories/dashboardSummary";
-import type { DashboardSummary, DailyTrend } from "../../../local-db/repositories/dashboardSummary";
-import { getAllSnapshots, upsertSnapshot } from "../../../local-db/repositories/dashboardSnapshots";
-import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboardSnapshots";
+import { getDashboardSummary, getDailyTrends } from "../../../local-db/repositories/dashboard/dashboardSummary";
+import type { DashboardSummary, DailyTrend } from "../../../local-db/repositories/dashboard/dashboardSummary";
+import { getAllSnapshots, upsertSnapshot } from "../../../local-db/repositories/dashboard/dashboardSnapshots";
+import type { DashboardSnapshotWithMeta } from "../../../local-db/repositories/dashboard/dashboardSnapshots";
 import { requestForecast } from "../../forecast/api";
-import { getForecastHistoryStartDate, listForecastTransactions } from "../../../local-db/repositories/forecastTransactions";
+import { getForecastHistoryStartDate, listForecastTransactions } from "../../../local-db/repositories/forecast/forecastTransactions";
 import { runSync } from "../../../local-db/sync/runSync";
 
 const EMPTY_SUMMARY: DashboardSummary = {

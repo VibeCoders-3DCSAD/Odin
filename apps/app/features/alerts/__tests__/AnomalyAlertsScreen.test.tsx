@@ -4,7 +4,7 @@ import AnomalyAlertsScreen from "../AnomalyAlertsScreen";
 const mockListPersistedUnusualSpendings = jest.fn();
 const mockAnswerUnusualSpending = jest.fn();
 
-jest.mock("../../../local-db/repositories/unusualSpending", () => ({
+jest.mock("../../../local-db/repositories/alerts/unusualSpending", () => ({
   answerUnusualSpending: (...args: unknown[]) => mockAnswerUnusualSpending(...args),
   listPersistedUnusualSpendings: (...args: unknown[]) => mockListPersistedUnusualSpendings(...args),
 }));

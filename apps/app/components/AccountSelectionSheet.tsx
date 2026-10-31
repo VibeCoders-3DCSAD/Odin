@@ -1,7 +1,7 @@
 import { ActivityIndicator, Dimensions, KeyboardAvoidingView, Pressable, ScrollView, Text, View } from "react-native";
 import { Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
 import type { ReactNode } from "react";
-import type { FinancialAccountKind } from "../local-db/repositories/financialFoundations";
+import type { FinancialAccountKind } from "../local-db/repositories/foundations/financialFoundations";
 import { BottomSheetSurface } from "./BottomSheetSurface";
 import { ActionSheet } from "./ActionSheet";
 import { styles as ui, tileTints, v4, v4Font } from "./BudgieForm";

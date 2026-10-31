@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { getPhilippineToday } from "../debt-manager/debtTrendRange";
-import { listCompletedFinancialPlans } from "../../local-db/repositories/financialPlans";
-import { formatPeso, formatPlanMonthLabel } from "./financialPlanPresentation";
-import type { CompletedFinancialPlanSummary } from "./pastPlanTypes";
+import { getPhilippineToday } from "../debt-manager/forecast/helpers/debtTrendRange";
+import { listCompletedFinancialPlans } from "../../local-db/repositories/financial-plans/financialPlans";
+import { formatPeso, formatPlanMonthLabel } from "./helpers/financialPlanPresentation";
+import type { CompletedFinancialPlanSummary } from "./past-plans/pastPlanTypes";
 
 export type PastFinancialPlansScreenProps = {
   userId: string;

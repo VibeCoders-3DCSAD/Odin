@@ -4,7 +4,7 @@ import { RecurringPaymentsSection } from "../components/RecurringPaymentsSection
 
 const mockListPersistedUnusualSpendings = jest.fn();
 const mockReviseRecurringPaymentGroup = jest.fn();
-jest.mock("../../../local-db/repositories/unusualSpending", () => ({
+jest.mock("../../../local-db/repositories/alerts/unusualSpending", () => ({
   listPersistedUnusualSpendings: (...args: unknown[]) => mockListPersistedUnusualSpendings(...args),
   reviseRecurringPaymentGroup: (...args: unknown[]) => mockReviseRecurringPaymentGroup(...args),
 }));

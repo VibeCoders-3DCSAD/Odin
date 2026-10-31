@@ -1,5 +1,5 @@
 import type { CategorySelection } from "../../../components/CategorySelector";
-import type { Category, Subcategory } from "../../../local-db/repositories/taxonomy";
+import type { Category, Subcategory } from "../../../local-db/repositories/ledger/taxonomy";
 
 export function emptyCategorySelection(): CategorySelection {
   return { tier: null, categoryId: null, subcategoryId: null };

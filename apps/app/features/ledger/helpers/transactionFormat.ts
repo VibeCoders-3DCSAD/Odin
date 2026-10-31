@@ -1,4 +1,4 @@
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
 import { formatMoney, formatPhp } from "../../../lib/format/money";
 import { formatDeviceDate } from "../../../lib/dates";
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { listDebtAccounts, type DebtAccount } from "../../../local-db/repositories/debtAccounts";
-import type { DebtPaymentContext } from "../../../local-db/repositories/debtPayments";
+import { listDebtAccounts, type DebtAccount } from "../../../local-db/repositories/debts/debtAccounts";
+import type { DebtPaymentContext } from "../../../local-db/repositories/debts/debtPayments";
 
 type Options = {
   userId: string;
@@ -29,7 +29,7 @@ export function useDebtPaymentFields({ userId, debtPaymentDebtId, debtPaymentCon
 
   useEffect(() => {
     if (!debtPaymentContext) return;
-    import("../../../local-db/repositories/debtPayments").then(({ listAllDebtPayments }) => listAllDebtPayments(userId)).then((payments) => {
+    import("../../../local-db/repositories/debts/debtPayments").then(({ listAllDebtPayments }) => listAllDebtPayments(userId)).then((payments) => {
       const payment = payments.find((item) => item.id === debtPaymentContext.paymentId);
       if (payment) { setDebtPrincipal(String(payment.principal_centavos / 100)); setDebtInterestOrFees(String(payment.interest_centavos / 100)); }
     }).catch(() => {});

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { UnusualSpendingInsight } from "../../../local-db/repositories/unusualSpending";
+import type { UnusualSpendingInsight } from "../../../local-db/repositories/alerts/unusualSpending";
 
 type TransactionFormState = {
   // Bumped when /activity/new saves a new transaction or closes an edit (the form does not say whether an

@@ -1,6 +1,6 @@
-import type { SavingsGoal } from "../../../local-db/repositories/savingsGoals";
+import type { SavingsGoal } from "../../../local-db/repositories/savings/savingsGoals";
 import type { SavingsActivity } from "../../savings-goals/types";
-import { getScheduledContributionDates, validateContributionSchedule } from "../../savings-goals/contributionSchedule";
+import { getScheduledContributionDates, validateContributionSchedule } from "../../savings-goals/helpers/contributionSchedule";
 import type { DashboardReminder } from "../types";
 
 export function buildSavingsReminders(goals: SavingsGoal[], activities: Map<string, SavingsActivity[]>, today: string, through: string): DashboardReminder[] {

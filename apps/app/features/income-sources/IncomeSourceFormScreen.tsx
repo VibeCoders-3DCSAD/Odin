@@ -10,8 +10,8 @@ import {
   updateIncomeSource,
   type FinancialAccount,
   type IncomeFrequency,
-} from "../../local-db/repositories/financialFoundations";
-import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
+} from "../../local-db/repositories/foundations/financialFoundations";
+import { listSubcategories, type Subcategory } from "../../local-db/repositories/ledger/taxonomy";
 import { FREQUENCIES, FREQUENCY_LABELS } from "./presentation";
 import { formatPhp, parseLenientCentavos } from "../../lib/format/money";
 

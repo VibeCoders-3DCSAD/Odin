@@ -4,7 +4,7 @@ import NonCreditDebtDetailScreen from "../../../../../../features/debt-manager/N
 import { transactionFormHref } from "../../../../../../features/ledger/transactionFormRoute";
 import { OwnedRecordPage, type LoadOwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { useShellPage } from "../../../../../../features/shell/components/PageScroll";
-import { listDebtAccounts } from "../../../../../../local-db/repositories/debtAccounts";
+import { listDebtAccounts } from "../../../../../../local-db/repositories/debts/debtAccounts";
 import { ROUTES } from "../../../../../../routes";
 
 // "all" is what the detail screen itself looks the debt up in, so archived and deleted debts still open.

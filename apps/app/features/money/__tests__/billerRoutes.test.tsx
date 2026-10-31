@@ -21,7 +21,7 @@ jest.mock("../../sync/SyncProvider", () => ({
 }));
 const mockShowToast = jest.fn();
 jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: mockShowToast }) }));
-jest.mock("../../../local-db/repositories/scheduledPayments", () => ({ getScheduledPayment: jest.fn() }));
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPayments", () => ({ getScheduledPayment: jest.fn() }));
 
 // Screens are stubs exposing their navigation callbacks as buttons; the routes are what is under test.
 function mockScreen(name: string, callbacks: string[]) {
@@ -45,7 +45,7 @@ import NewBillerRoute from "../../../app/(app)/(shell)/money/billers-remittances
 import BillerDetailRoute from "../../../app/(app)/(shell)/money/billers-remittances/[id]/index";
 import EditBillerRoute from "../../../app/(app)/(shell)/money/billers-remittances/[id]/edit";
 import RecordBillerPaymentRoute from "../../../app/(app)/(shell)/money/billers-remittances/[id]/record";
-import { getScheduledPayment } from "../../../local-db/repositories/scheduledPayments";
+import { getScheduledPayment } from "../../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { ROUTES } from "../../../routes";
 import { billerEditHref, billerHref, billerRecordHref } from "../moneyRoutes";
 

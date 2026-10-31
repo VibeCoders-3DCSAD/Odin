@@ -18,15 +18,15 @@ jest.mock("../../auth/components/AccessProvider", () => ({ useSession: () => ({ 
 jest.mock("../../sync/SyncProvider", () => ({
   useSync: () => ({ syncing: false, queueCount: 0, syncVersion: 0, syncMessage: null, handleSync: jest.fn() }),
 }));
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({ getFinancialAccount: jest.fn() }));
-jest.mock("../../../local-db/repositories/debtAccounts", () => ({ listDebtAccounts: jest.fn() }));
-jest.mock("../../../local-db/repositories/financialPlans", () => ({ getFinancialPlan: jest.fn() }));
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({ getFinancialAccount: jest.fn() }));
+jest.mock("../../../local-db/repositories/debts/debtAccounts", () => ({ listDebtAccounts: jest.fn() }));
+jest.mock("../../../local-db/repositories/financial-plans/financialPlans", () => ({ getFinancialPlan: jest.fn() }));
 // Screens are stubs that render their name; tests drive them through the props the route passes.
 function mockScreen(name: string) {
   const { Text } = require("react-native");
   return { __esModule: true, default: jest.fn(() => <Text>{name}</Text>) };
 }
-jest.mock("../../debt-manager/DebtManagerOverview", () => mockScreen("DebtManagerOverview"));
+jest.mock("../../debt-manager/components/DebtManagerOverview", () => mockScreen("DebtManagerOverview"));
 jest.mock("../../debt-manager/DebtManagerScreen", () => mockScreen("DebtManagerScreen"));
 jest.mock("../../debt-manager/NonCreditDebtListScreen", () => mockScreen("NonCreditDebtListScreen"));
 jest.mock("../../debt-manager/NonCreditDebtDetailScreen", () => mockScreen("NonCreditDebtDetailScreen"));
@@ -47,7 +47,7 @@ import OtherDebtsRoute from "../../../app/(app)/(shell)/plan/debts/other/index";
 import OtherDebtRoute from "../../../app/(app)/(shell)/plan/debts/other/[id]";
 import PastPlansRoute from "../../../app/(app)/(shell)/plan/budgets/history/index";
 import PastPlanRoute from "../../../app/(app)/(shell)/plan/budgets/history/[id]";
-import DebtManagerOverview from "../../debt-manager/DebtManagerOverview";
+import DebtManagerOverview from "../../debt-manager/components/DebtManagerOverview";
 import DebtManagerScreen from "../../debt-manager/DebtManagerScreen";
 import NonCreditDebtListScreen from "../../debt-manager/NonCreditDebtListScreen";
 import NonCreditDebtDetailScreen from "../../debt-manager/NonCreditDebtDetailScreen";
@@ -56,9 +56,9 @@ import PastFinancialPlansScreen from "../../financial-plan/PastFinancialPlansScr
 import PastFinancialPlanDetailScreen from "../../financial-plan/PastFinancialPlanDetailScreen";
 import SavingsGoalsScreen from "../../savings-goals/SavingsGoalsScreen";
 import { transactionFormHref } from "../../ledger/transactionFormRoute";
-import { getFinancialAccount } from "../../../local-db/repositories/financialFoundations";
-import { listDebtAccounts } from "../../../local-db/repositories/debtAccounts";
-import { getFinancialPlan } from "../../../local-db/repositories/financialPlans";
+import { getFinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
+import { listDebtAccounts } from "../../../local-db/repositories/debts/debtAccounts";
+import { getFinancialPlan } from "../../../local-db/repositories/financial-plans/financialPlans";
 import { ROUTES } from "../../../routes";
 
 // The props the route last rendered a stubbed screen with.

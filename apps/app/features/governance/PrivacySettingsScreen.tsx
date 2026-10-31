@@ -13,7 +13,7 @@ import { useToast } from "../../components/Toast";
 import UserProfileScreen from "./UserProfileScreen";
 import PreferencesScreen from "./PreferencesScreen";
 import AccountOffboardingScreen from "./AccountOffboardingScreen";
-import { cacheProfileAssignment } from "../../local-db/repositories/privacySettings";
+import { cacheProfileAssignment } from "../../local-db/repositories/settings/privacySettings";
 import { confirmProfileAssignment, getProfileAssignment, requestProfileReassessment, selectProfileAssignment } from "../onboarding/api";
 import type { ProfileAssignment } from "../onboarding/types";
 

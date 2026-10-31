@@ -7,15 +7,15 @@ const mockSummaries = jest.fn();
 const mockRecord = jest.fn();
 const mockPostDue = jest.fn();
 const mockShowToast = jest.fn();
-jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPayments", () => ({
   listScheduledPaymentSummaries: (...args: unknown[]) => mockSummaries(...args),
   postDueScheduledPayments: (...args: unknown[]) => mockPostDue(...args),
   recordScheduledPayment: (...args: unknown[]) => mockRecord(...args),
   deleteScheduledPayment: jest.fn(),
   setScheduledPaymentAutoPost: jest.fn(),
 }));
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({ listFinancialAccounts: async () => [{ id: "acct-bpi", name: "BPI Savings" }] }));
-jest.mock("../../../local-db/repositories/taxonomy", () => ({
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({ listFinancialAccounts: async () => [{ id: "acct-bpi", name: "BPI Savings" }] }));
+jest.mock("../../../local-db/repositories/ledger/taxonomy", () => ({
   listCategories: async () => [{ id: "cat-housing", label: "Housing", slug: "housing" }, { id: "cat-gov", label: "Government", slug: "government" }],
   listSubcategories: async () => [{ id: "sub-rent", label: "Rent", slug: "rent", category_id: "cat-housing" }, { id: "sub-sss", label: "SSS", slug: "sss", category_id: "cat-gov" }],
 }));

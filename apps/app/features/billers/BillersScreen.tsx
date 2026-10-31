@@ -4,12 +4,12 @@ import { CaretRight, House, Receipt, Users } from "phosphor-react-native";
 import { AmountHero, Banner, Chip, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import { useToast } from "../../components/Toast";
 import { LocalDbError } from "../../local-db/helpers";
-import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialFoundations";
+import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/foundations/financialFoundations";
 import {
   deleteScheduledPayment, listScheduledPaymentSummaries, postDueScheduledPayments, recordScheduledPayment, setScheduledPaymentAutoPost,
   type ScheduledPaymentSummary,
-} from "../../local-db/repositories/scheduledPayments";
-import { listCategories, listSubcategories } from "../../local-db/repositories/taxonomy";
+} from "../../local-db/repositories/scheduled-payments/scheduledPayments";
+import { listCategories, listSubcategories } from "../../local-db/repositories/ledger/taxonomy";
 import { AutoPostSheet, DeleteConfirmDialog, RowMenuSheet } from "./components/ScheduledPaymentActions";
 import { dueThisMonthCentavos, formatPhp, isDueSoon, rowSubtitle } from "./presentation";
 import { localToday } from "./schedule";

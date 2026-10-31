@@ -1,4 +1,4 @@
-import type { CreateCreditCardInstallmentInput, CreditCardPurchaseMetadata } from "../../../local-db/repositories/creditCardInstallments";
+import type { CreateCreditCardInstallmentInput, CreditCardPurchaseMetadata } from "../../../local-db/repositories/credit-cards/creditCardInstallments";
 import type { InstallmentFieldErrors, InstallmentFormValue } from "../components/CreditCardInstallmentFields";
 import { formatCentavosForInput, parseMoney } from "./transactionFormat";
 

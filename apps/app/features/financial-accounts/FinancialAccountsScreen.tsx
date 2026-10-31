@@ -32,10 +32,10 @@ import {
   type FinancialAccountKind,
   type CreateFinancialAccountInput,
   type UpdateFinancialAccountInput,
-} from "../../local-db/repositories/financialFoundations";
+} from "../../local-db/repositories/foundations/financialFoundations";
 import { AmountHero, Switch } from "../../components/BudgieForm";
-import { getSavingsAccountDetails, type SavingsAccountDetailsInput, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
-import SavingsGoalForm from "../savings-goals/SavingsGoalForm";
+import { getSavingsAccountDetails, type SavingsAccountDetailsInput, upsertSavingsAccountDetails, validateSavingsAccountDetails } from "../../local-db/repositories/savings/savingsAccountDetails";
+import SavingsGoalForm from "../savings-goals/components/SavingsGoalForm";
 import SavingsGoalInvitation from "./SavingsGoalInvitation";
 import { buildSavingsInterestDetails } from "./helpers/savingsAccountInterest";
 import SavingsInterestFields from "./SavingsInterestFields";

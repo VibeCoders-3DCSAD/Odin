@@ -12,16 +12,16 @@ import {
   View,
 } from "react-native";
 import { ArrowDownLeft, ArrowsLeftRight, ArrowUpRight, CalendarCheck, Funnel, MagnifyingGlass } from "phosphor-react-native";
-import { listTransactions, getTransaction, getTransactionTotals, deleteTransaction, type TransactionFilters, type TransactionListItem, type TransactionTotals } from "../../local-db/repositories/ledger";
+import { listTransactions, getTransaction, getTransactionTotals, deleteTransaction, type TransactionFilters, type TransactionListItem, type TransactionTotals } from "../../local-db/repositories/ledger/ledger";
 import { readTransactionCache, reuseUnchangedRows, transactionCacheKey, writeTransactionCache } from "./transactionCache";
-import { getCreditCardPurchaseMetadataForTransaction } from "../../local-db/repositories/creditCardInstallments";
-import { listCategories, type Category } from "../../local-db/repositories/taxonomy";
+import { getCreditCardPurchaseMetadataForTransaction } from "../../local-db/repositories/credit-cards/creditCardInstallments";
+import { listCategories, type Category } from "../../local-db/repositories/ledger/taxonomy";
 import { runSync } from "../../local-db/sync/runSync";
 import { useToast } from "../../components/Toast";
 import KebabTooltip from "../../components/KebabTooltip";
 import NewTransactionScreen from "./NewTransactionScreen";
-import type { Transaction } from "../../local-db/repositories/ledger";
-import { answerUnusualSpending, type SpendingRecurrence, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import type { Transaction } from "../../local-db/repositories/ledger/ledger";
+import { answerUnusualSpending, type SpendingRecurrence, type UnusualSpendingInsight } from "../../local-db/repositories/alerts/unusualSpending";
 import RecurrenceQuestion from "../alerts/RecurrenceQuestion";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";

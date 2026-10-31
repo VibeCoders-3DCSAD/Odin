@@ -21,7 +21,7 @@ import {
   deleteSubcategory,
   type Category as RepoCategory,
   type Subcategory as RepoSubcategory,
-} from "../../local-db/repositories/taxonomy";
+} from "../../local-db/repositories/ledger/taxonomy";
 import CategoryFormScreen from "./CategoryFormScreen";
 import SubcategoryFormScreen from "./SubcategoryFormScreen";
 import KebabTooltip from "../../components/KebabTooltip";

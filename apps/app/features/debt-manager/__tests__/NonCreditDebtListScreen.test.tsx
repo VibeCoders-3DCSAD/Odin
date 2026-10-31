@@ -8,8 +8,8 @@ const mockSaveDebtStrategy = jest.fn();
 const mockListDebtPriorities = jest.fn();
 const mockSaveDebtPriorities = jest.fn();
 
-jest.mock("../../../local-db/repositories/debtAccounts", () => ({ listDebtAccounts: (...args: unknown[]) => mockListDebtAccounts(...args) }));
-jest.mock("../../../local-db/repositories/debtRepaymentPlans", () => ({ getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args), saveDebtStrategy: (...args: unknown[]) => mockSaveDebtStrategy(...args), listDebtPriorities: (...args: unknown[]) => mockListDebtPriorities(...args), saveDebtPriorities: (...args: unknown[]) => mockSaveDebtPriorities(...args) }));
+jest.mock("../../../local-db/repositories/debts/debtAccounts", () => ({ listDebtAccounts: (...args: unknown[]) => mockListDebtAccounts(...args) }));
+jest.mock("../../../local-db/repositories/debts/debtRepaymentPlans", () => ({ getDebtStrategy: (...args: unknown[]) => mockGetDebtStrategy(...args), saveDebtStrategy: (...args: unknown[]) => mockSaveDebtStrategy(...args), listDebtPriorities: (...args: unknown[]) => mockListDebtPriorities(...args), saveDebtPriorities: (...args: unknown[]) => mockSaveDebtPriorities(...args) }));
 
 const debt = { id: "debt-1", name: "Car loan", lenderName: "Bank A", type: "auto_loan", status: "active", progress: "no_payments", originalBalanceCentavos: 500000, currentBalanceCentavos: 450000, annualInterestRateBps: 650, minimumPaymentCentavos: 15000, paymentFrequency: "monthly", nextDueDate: "2026-10-01", maturityDate: null, targetPayoffDate: null, interestPeriod: "annual", interestMethod: "diminishing_balance", notes: null, typeSpecific: { startDate: "2026-01-01", feesCentavos: 0, penaltyInfo: null, termMonths: null }, hasPaymentHistory: false, archivedAt: null, paidOffAt: null, version: 1 };
 

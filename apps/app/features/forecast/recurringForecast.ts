@@ -1,5 +1,5 @@
 import { recurringMonthSpend } from "@odin/spending-insights/recurringMonths";
-import type { RecurringForecastPayment } from "../../local-db/repositories/forecastTransactions";
+import type { RecurringForecastPayment } from "../../local-db/repositories/forecast/forecastTransactions";
 import type { QuarterlyForecastPayload } from "./types";
 
 type CategoryAmount = { category: string; amountCentavos: number };

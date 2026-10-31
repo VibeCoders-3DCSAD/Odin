@@ -1,5 +1,5 @@
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
-import type { Transaction } from "../../../local-db/repositories/ledger";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
+import type { Transaction } from "../../../local-db/repositories/ledger/ledger";
 
 export type BalanceWarning = {
   accountName: string;

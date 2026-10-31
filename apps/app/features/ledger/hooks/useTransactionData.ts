@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
-import type { Category, Subcategory } from "../../../local-db/repositories/taxonomy";
-import { listFinancialAccounts } from "../../../local-db/repositories/financialFoundations";
-import { listCategories, listSubcategories } from "../../../local-db/repositories/taxonomy";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
+import type { Category, Subcategory } from "../../../local-db/repositories/ledger/taxonomy";
+import { listFinancialAccounts } from "../../../local-db/repositories/foundations/financialFoundations";
+import { listCategories, listSubcategories } from "../../../local-db/repositories/ledger/taxonomy";
 
 type TransactionKind = "expense" | "income" | "transfer";
 

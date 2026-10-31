@@ -1,4 +1,4 @@
-import type { ReportRange } from "../../local-db/repositories/financialReports";
+import type { ReportRange } from "../../local-db/repositories/reports/financialReports";
 
 export type ReportPeriod = "this_month" | "last_month" | "this_year" | "this_week";
 

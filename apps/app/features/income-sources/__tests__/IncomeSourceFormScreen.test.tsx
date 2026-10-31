@@ -6,8 +6,8 @@ import IncomeSourceFormScreen from "../IncomeSourceFormScreen";
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
 const mockGet = jest.fn();
-jest.mock("../../../local-db/repositories/financialFoundations", () => {
-  const actual = jest.requireActual("../../../local-db/repositories/financialFoundations");
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => {
+  const actual = jest.requireActual("../../../local-db/repositories/foundations/financialFoundations");
   return {
     incomeScheduleError: actual.incomeScheduleError,
     createIncomeSource: (...args: unknown[]) => mockCreate(...args),
@@ -19,7 +19,7 @@ jest.mock("../../../local-db/repositories/financialFoundations", () => {
     ],
   };
 });
-jest.mock("../../../local-db/repositories/taxonomy", () => ({
+jest.mock("../../../local-db/repositories/ledger/taxonomy", () => ({
   listSubcategories: async () => [{ id: "sub-salary", label: "Salary and Wages" }, { id: "sub-business", label: "Business Income" }],
 }));
 

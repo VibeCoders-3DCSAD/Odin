@@ -1,4 +1,4 @@
-import type { DebtTypePreset, InterestMethod, InterestRatePeriod, PaymentFrequency } from "../../local-db/repositories/debtAccounts";
+import type { DebtTypePreset, InterestMethod, InterestRatePeriod, PaymentFrequency } from "../../local-db/repositories/debts/debtAccounts";
 
 export const DEBT_TYPE_OPTIONS: Array<{ value: DebtTypePreset; label: string }> = [
   { value: "personal_loan", label: "Personal Loan" }, { value: "salary_loan", label: "Salary Loan" },

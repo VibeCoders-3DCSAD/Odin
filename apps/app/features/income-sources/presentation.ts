@@ -1,4 +1,4 @@
-import type { IncomeFrequency, IncomeSource } from "../../local-db/repositories/financialFoundations";
+import type { IncomeFrequency, IncomeSource } from "../../local-db/repositories/foundations/financialFoundations";
 import { formatMoney } from "../../lib/format/money";
 
 export const FREQUENCIES: readonly IncomeFrequency[] = ["monthly", "semi_monthly", "weekly", "daily"];

@@ -1,4 +1,4 @@
-import { allocationLabel, formatPeso } from "../financialPlanPresentation";
+import { allocationLabel, formatPeso } from "./financialPlanPresentation";
 import type { FinancialPlanAllocation } from "../types";
 
 type SpendingInsightInput = {

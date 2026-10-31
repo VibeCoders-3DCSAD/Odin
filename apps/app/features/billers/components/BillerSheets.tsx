@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import { Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
 import { BottomSheet, styles as ui, tileTints, v4, v4Font } from "../../../components/BudgieForm";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
 import { formatPhp } from "../presentation";
 
 function AccountIcon({ kind, color }: { kind: FinancialAccount["kind"]; color: string }) {

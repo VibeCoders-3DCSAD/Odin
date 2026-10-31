@@ -15,10 +15,10 @@ import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisual
 import { AmountHero, Banner, Chip, FieldError, FormCard, Note, PickerField, Switch, TextField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import TransactionTypeSelector from "./components/TransactionTypeSelector";
 import { useTransactionData } from "./hooks/useTransactionData";
-import type { Transaction } from "../../local-db/repositories/ledger";
-import type { StatementPaymentContext } from "../../local-db/repositories/creditCardPayments";
-import type { DebtPaymentContext } from "../../local-db/repositories/debtPayments";
-import type { UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import type { Transaction } from "../../local-db/repositories/ledger/ledger";
+import type { StatementPaymentContext } from "../../local-db/repositories/credit-cards/creditCardPayments";
+import type { DebtPaymentContext } from "../../local-db/repositories/debts/debtPayments";
+import type { UnusualSpendingInsight } from "../../local-db/repositories/alerts/unusualSpending";
 import { useConnectivityStore } from "../../services/connectivity";
 import AccountSelectionSheet from "../../components/AccountSelectionSheet";
 import BalanceWarningModal from "./components/BalanceWarningModal";

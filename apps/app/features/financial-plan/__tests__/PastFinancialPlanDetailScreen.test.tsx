@@ -1,23 +1,23 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import PastFinancialPlanDetailScreen from "../PastFinancialPlanDetailScreen";
-import type { PlanCommitmentReview, PlanSpendingReview } from "../pastPlanTypes";
+import type { PlanCommitmentReview, PlanSpendingReview } from "../past-plans/pastPlanTypes";
 
 const mockGetFinancialPlan = jest.fn();
 const mockGetFinancialPlanLabels = jest.fn();
 const mockGetPlanSpendingReview = jest.fn();
 const mockGetPlanCommitmentReview = jest.fn();
 
-jest.mock("../../../local-db/repositories/financialPlans", () => ({
+jest.mock("../../../local-db/repositories/financial-plans/financialPlans", () => ({
   getFinancialPlan: (...args: unknown[]) => mockGetFinancialPlan(...args),
   getFinancialPlanLabels: (...args: unknown[]) => mockGetFinancialPlanLabels(...args),
 }));
 
-jest.mock("../../../local-db/repositories/financialPlanSpendingReview", () => ({
+jest.mock("../../../local-db/repositories/financial-plans/financialPlanSpendingReview", () => ({
   getPlanSpendingReview: (...args: unknown[]) => mockGetPlanSpendingReview(...args),
 }));
 
-jest.mock("../../../local-db/repositories/financialPlanCommitmentReview", () => ({
+jest.mock("../../../local-db/repositories/financial-plans/financialPlanCommitmentReview", () => ({
   getPlanCommitmentReview: (...args: unknown[]) => mockGetPlanCommitmentReview(...args),
 }));
 

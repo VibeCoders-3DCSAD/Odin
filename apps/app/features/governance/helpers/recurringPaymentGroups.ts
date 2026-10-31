@@ -1,4 +1,4 @@
-import type { UnusualSpendingInsight } from "../../../local-db/repositories/unusualSpending";
+import type { UnusualSpendingInsight } from "../../../local-db/repositories/alerts/unusualSpending";
 
 export type RecurringPaymentGroup = {
   key: string;

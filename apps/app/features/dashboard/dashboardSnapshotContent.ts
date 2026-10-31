@@ -1,4 +1,4 @@
-import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboardSnapshots";
+import type { DashboardSnapshotWithMeta } from "../../local-db/repositories/dashboard/dashboardSnapshots";
 import type { ForecastPayload, QuarterlyForecastPayload } from "../forecast/types";
 
 

@@ -9,20 +9,20 @@ const mockRecords = jest.fn();
 const mockArchive = jest.fn();
 const mockRecord = jest.fn();
 const mockGetSavingsExpenseFunding = jest.fn();
-jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPayments", () => ({
   getScheduledPayment: (...args: unknown[]) => mockGet(...args),
   setScheduledPaymentArchived: (...args: unknown[]) => mockArchive(...args),
   recordScheduledPayment: (...args: unknown[]) => mockRecord(...args),
   deleteScheduledPayment: jest.fn(),
   deleteScheduledPaymentRecord: jest.fn(),
 }));
-jest.mock("../../../local-db/repositories/scheduledPaymentRecords", () => ({
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPaymentRecords", () => ({
   listScheduledPaymentRecords: (...args: unknown[]) => mockRecords(...args),
   listPaidByOccurrence: async () => new Map(),
 }));
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({ listFinancialAccounts: async () => [{ id: "acct-bpi", name: "BPI Debit", status: "active", currentBalanceCentavos: 0 }] }));
-jest.mock("../../../local-db/repositories/taxonomy", () => ({ listSubcategories: async () => [{ id: "sub-electricity", label: "Electricity" }] }));
-jest.mock("../../../local-db/repositories/savingsExpenseFunding", () => ({ getSavingsExpenseFunding: (...args: unknown[]) => mockGetSavingsExpenseFunding(...args) }));
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({ listFinancialAccounts: async () => [{ id: "acct-bpi", name: "BPI Debit", status: "active", currentBalanceCentavos: 0 }] }));
+jest.mock("../../../local-db/repositories/ledger/taxonomy", () => ({ listSubcategories: async () => [{ id: "sub-electricity", label: "Electricity" }] }));
+jest.mock("../../../local-db/repositories/savings/savingsExpenseFunding", () => ({ getSavingsExpenseFunding: (...args: unknown[]) => mockGetSavingsExpenseFunding(...args) }));
 jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: jest.fn() }) }));
 
 const today = localToday();

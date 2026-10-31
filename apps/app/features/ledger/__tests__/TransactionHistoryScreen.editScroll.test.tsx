@@ -7,16 +7,16 @@ const mockListTransactions = jest.fn();
 const mockGetTransaction = jest.fn();
 const mockShowToast = jest.fn();
 
-jest.mock("../../../local-db/repositories/ledger", () => ({
+jest.mock("../../../local-db/repositories/ledger/ledger", () => ({
   listTransactions: (...args: unknown[]) => mockListTransactions(...args),
   getTransactionTotals: () => Promise.resolve({ income_centavos: 0, expense_centavos: 1_000 }),
   getTransaction: (...args: unknown[]) => mockGetTransaction(...args),
   deleteTransaction: jest.fn(),
 }));
-jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({ getCreditCardPurchaseMetadataForTransaction: jest.fn() }));
+jest.mock("../../../local-db/repositories/credit-cards/creditCardInstallments", () => ({ getCreditCardPurchaseMetadataForTransaction: jest.fn() }));
 // Never resolves, so the category list does not update state after a test ends.
-jest.mock("../../../local-db/repositories/taxonomy", () => ({ listCategories: () => new Promise(() => {}) }));
-jest.mock("../../../local-db/repositories/unusualSpending", () => ({ confirmRecurringSpending: jest.fn() }));
+jest.mock("../../../local-db/repositories/ledger/taxonomy", () => ({ listCategories: () => new Promise(() => {}) }));
+jest.mock("../../../local-db/repositories/alerts/unusualSpending", () => ({ confirmRecurringSpending: jest.fn() }));
 jest.mock("../../../local-db/sync/runSync", () => ({ runSync: jest.fn() }));
 jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: mockShowToast }) }));
 jest.mock("../../../components/KebabTooltip", () => ({ onEdit }: { onEdit: () => void }) => {

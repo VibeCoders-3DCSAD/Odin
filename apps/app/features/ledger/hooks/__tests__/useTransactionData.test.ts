@@ -1,10 +1,10 @@
 import { renderHook, waitFor } from "@testing-library/react-native";
-import { listFinancialAccounts } from "../../../../local-db/repositories/financialFoundations";
-import { listCategories, listSubcategories } from "../../../../local-db/repositories/taxonomy";
+import { listFinancialAccounts } from "../../../../local-db/repositories/foundations/financialFoundations";
+import { listCategories, listSubcategories } from "../../../../local-db/repositories/ledger/taxonomy";
 import { useTransactionData } from "../useTransactionData";
 
-jest.mock("../../../../local-db/repositories/financialFoundations", () => ({ listFinancialAccounts: jest.fn() }));
-jest.mock("../../../../local-db/repositories/taxonomy", () => ({ listCategories: jest.fn(), listSubcategories: jest.fn() }));
+jest.mock("../../../../local-db/repositories/foundations/financialFoundations", () => ({ listFinancialAccounts: jest.fn() }));
+jest.mock("../../../../local-db/repositories/ledger/taxonomy", () => ({ listCategories: jest.fn(), listSubcategories: jest.fn() }));
 
 const expenseSub = { id: "s-exp", kind: "expense" };
 const incomeSub = { id: "s-inc", kind: "income" };

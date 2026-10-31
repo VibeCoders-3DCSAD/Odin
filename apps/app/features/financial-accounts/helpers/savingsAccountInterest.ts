@@ -1,5 +1,5 @@
 import { interestToday } from "./savingsInterestConfiguration";
-import type { SavingsAccountDetailsInput } from "../../../local-db/repositories/savingsAccountDetails";
+import type { SavingsAccountDetailsInput } from "../../../local-db/repositories/savings/savingsAccountDetails";
 import { normalizeSavingsInterestReference, validateScheduledInterest, type SavingsInterestReference } from "@odin/savings-interest";
 import { preservedSavingsAccountSchedule } from "./savingsAccountSchedule";
 

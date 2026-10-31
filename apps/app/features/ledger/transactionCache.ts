@@ -1,4 +1,4 @@
-import type { TransactionFilters, TransactionListItem, TransactionTotals } from "../../local-db/repositories/ledger";
+import type { TransactionFilters, TransactionListItem, TransactionTotals } from "../../local-db/repositories/ledger/ledger";
 
 // Stale-while-revalidate cache for the transaction list. The page unmounts whenever the user leaves it, and
 // rendering rows is the slow part, so every visit and filter change paints the last result for that filter

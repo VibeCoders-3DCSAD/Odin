@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
-import { getDashboardReminders } from "../../../local-db/repositories/dashboardReminders";
+import { getDashboardReminders } from "../../../local-db/repositories/dashboard/dashboardReminders";
 import { localToday } from "../../billers/schedule";
 import type { DashboardReminders } from "../types";
 

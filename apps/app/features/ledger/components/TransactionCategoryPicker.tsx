@@ -3,7 +3,7 @@ import { Check } from "phosphor-react-native";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../../taxonomy/taxonomyVisuals";
 import { Note, styles as ui, v4, v4Font } from "../../../components/BudgieForm";
 import { CategorySelectorTree, type CategorySelection } from "../../../components/CategorySelector";
-import type { Category, Subcategory } from "../../../local-db/repositories/taxonomy";
+import type { Category, Subcategory } from "../../../local-db/repositories/ledger/taxonomy";
 import type { TransactionType } from "./TransactionTypeSelector";
 
 type Props = {

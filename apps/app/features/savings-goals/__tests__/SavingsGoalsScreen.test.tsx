@@ -7,18 +7,18 @@ const mockListSavingsGoals = jest.fn();
 const mockGetSavingsGoal = jest.fn();
 const mockListSavingsGoalActivities = jest.fn();
 
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
 }));
-jest.mock("../../../local-db/repositories/savingsGoals", () => ({
+jest.mock("../../../local-db/repositories/savings/savingsGoals", () => ({
   archiveSavingsGoal: jest.fn(),
   deleteSavingsGoal: jest.fn(),
   getSavingsGoal: (...args: unknown[]) => mockGetSavingsGoal(...args),
   listSavingsGoals: (...args: unknown[]) => mockListSavingsGoals(...args),
   restoreSavingsGoal: jest.fn(),
 }));
-jest.mock("../../../local-db/repositories/savingsGoalActivities", () => ({ listSavingsGoalActivities: (...args: unknown[]) => mockListSavingsGoalActivities(...args) }));
-jest.mock("../../../local-db/repositories/savingsAccountDetails", () => ({
+jest.mock("../../../local-db/repositories/savings/savingsGoalActivities", () => ({ listSavingsGoalActivities: (...args: unknown[]) => mockListSavingsGoalActivities(...args) }));
+jest.mock("../../../local-db/repositories/savings/savingsAccountDetails", () => ({
   getSavingsAccountDetails: jest.fn(),
   listScheduledSavingsAccounts: jest.fn().mockResolvedValue([{
     accountId: "savings-1",
@@ -33,9 +33,9 @@ jest.mock("../../../local-db/repositories/savingsAccountDetails", () => ({
     nextContributionDate: "2026-10-14",
   }]),
 }));
-jest.mock("../../../local-db/repositories/ledger", () => ({ listSavingsAccountMovements: jest.fn() }));
-jest.mock("../../savings-forecast/SavingsForecastSection", () => ({ SavingsForecastSection: () => null }));
-jest.mock("../SavingsAllocationReview", () => () => null);
+jest.mock("../../../local-db/repositories/ledger/ledger", () => ({ listSavingsAccountMovements: jest.fn() }));
+jest.mock("../forecast/components/SavingsForecastSection", () => ({ SavingsForecastSection: () => null }));
+jest.mock("../components/SavingsAllocationReview", () => () => null);
 
 const goal = {
   id: "goal-1",

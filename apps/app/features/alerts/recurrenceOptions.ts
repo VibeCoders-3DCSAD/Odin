@@ -1,4 +1,4 @@
-import type { SpendingRecurrence } from "../../local-db/repositories/unusualSpending";
+import type { SpendingRecurrence } from "../../local-db/repositories/alerts/unusualSpending";
 
 // The answers an unusual expense can get, in the order the alert shows them. Certain months is saved as a
 // yearly answer with the months chosen.

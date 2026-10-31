@@ -1,13 +1,13 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import IncomeSourcesScreen from "../IncomeSourcesScreen";
-import { deleteIncomeSource, listIncomeSources } from "../../../local-db/repositories/financialFoundations";
+import { deleteIncomeSource, listIncomeSources } from "../../../local-db/repositories/foundations/financialFoundations";
 
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({
   listIncomeSources: jest.fn(),
   deleteIncomeSource: jest.fn(),
 }));
-jest.mock("../../../local-db/repositories/debtAccounts", () => ({ listDebtAccounts: async () => [] }));
+jest.mock("../../../local-db/repositories/debts/debtAccounts", () => ({ listDebtAccounts: async () => [] }));
 
 const source = {
   id: "income-1", name: "Salary", frequency: "semi_monthly", expectedAmountCentavos: 2_000_000,

@@ -1,4 +1,4 @@
-import type { CategorySpending } from "../../../local-db/repositories/dashboardSummary";
+import type { CategorySpending } from "../../../local-db/repositories/dashboard/dashboardSummary";
 import { dashboardColors } from "../dashboardAppearance";
 
 export function groupSpendingCategories(categories: CategorySpending[]): CategorySpending[] {

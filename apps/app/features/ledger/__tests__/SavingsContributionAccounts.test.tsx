@@ -1,10 +1,10 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import SavingsContributionAccounts from "../components/SavingsContributionAccounts";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
 const mockGoal = jest.fn(); const mockFunding = jest.fn();
-jest.mock("../../../local-db/repositories/savingsGoals", () => ({ getSavingsGoal: (...args: unknown[]) => mockGoal(...args) }));
-jest.mock("../../../local-db/repositories/savingsExpenseFunding", () => ({ getSavingsExpenseFunding: (...args: unknown[]) => mockFunding(...args) }));
+jest.mock("../../../local-db/repositories/savings/savingsGoals", () => ({ getSavingsGoal: (...args: unknown[]) => mockGoal(...args) }));
+jest.mock("../../../local-db/repositories/savings/savingsExpenseFunding", () => ({ getSavingsExpenseFunding: (...args: unknown[]) => mockFunding(...args) }));
 const account = (id: string, name: string, kind: FinancialAccount["kind"] = "bank"): FinancialAccount => ({ id, name, kind, status: "active", openingBalanceCentavos: 100000, currentBalanceCentavos: 100000, includeInDashboardBalance: true, institutionName: null, openedOn: null, archivedAt: null, sortOrder: 0, creditCardDetails: null });
 const accounts = [account("linked", "Savings bank"), account("other", "Payroll"), account("card", "Visa", "credit_card")];
 describe("contribution account fields", () => {

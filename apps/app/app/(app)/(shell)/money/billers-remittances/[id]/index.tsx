@@ -6,7 +6,7 @@ import { billerEditHref, billerRecordHref } from "../../../../../../features/mon
 import { InnerPage } from "../../../../../../features/shell/components/InnerPage";
 import { useShellPage } from "../../../../../../features/shell/components/PageScroll";
 import { useSync } from "../../../../../../features/sync/SyncProvider";
-import { getScheduledPayment } from "../../../../../../local-db/repositories/scheduledPayments";
+import { getScheduledPayment } from "../../../../../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { ROUTES } from "../../../../../../routes";
 
 function Detail({ id }: { id: string | string[] | undefined }) {

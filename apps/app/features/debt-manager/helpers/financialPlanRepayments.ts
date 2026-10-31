@@ -1,10 +1,10 @@
-import type { DebtAccount } from "../../../local-db/repositories/debtAccounts";
-import type { DebtPayment } from "../../../local-db/repositories/debtPayments";
-import type { CreditCardPayment } from "../../../local-db/repositories/creditCardPayments";
-import type { CreditCardStatement } from "../../../local-db/repositories/creditCardStatements";
-import type { CreditCardCycle } from "../../../local-db/repositories/creditCardCycles";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
-import type { AcceptedFinancialPlan } from "../../../local-db/repositories/financialPlans";
+import type { DebtAccount } from "../../../local-db/repositories/debts/debtAccounts";
+import type { DebtPayment } from "../../../local-db/repositories/debts/debtPayments";
+import type { CreditCardPayment } from "../../../local-db/repositories/credit-cards/creditCardPayments";
+import type { CreditCardStatement } from "../../../local-db/repositories/credit-cards/creditCardStatements";
+import type { CreditCardCycle } from "../../../local-db/repositories/credit-cards/creditCardCycles";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
+import type { AcceptedFinancialPlan } from "../../../local-db/repositories/financial-plans/financialPlans";
 import type { FinancialPlanReservation } from "../../financial-plan/types";
 import { commitmentKey, requirementReservations } from "../../financial-plan/helpers/commitmentBudget";
 import { commitmentPayments, type CommitmentPayment } from "../../financial-plan/helpers/commitmentPayments";

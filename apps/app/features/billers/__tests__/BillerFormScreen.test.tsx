@@ -5,16 +5,16 @@ import BillerFormScreen from "../BillerFormScreen";
 const mockCreate = jest.fn();
 const mockUpdate = jest.fn();
 const mockGet = jest.fn();
-jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPayments", () => ({
   createScheduledPayment: (...args: unknown[]) => mockCreate(...args),
   updateScheduledPayment: (...args: unknown[]) => mockUpdate(...args),
   getScheduledPayment: (...args: unknown[]) => mockGet(...args),
 }));
-jest.mock("../../../local-db/repositories/scheduledPaymentRecords", () => ({ listScheduledPaymentRecords: async () => [] }));
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPaymentRecords", () => ({ listScheduledPaymentRecords: async () => [] }));
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({
   listFinancialAccounts: async () => [{ id: "acct-bpi", name: "BPI Savings", kind: "bank", status: "active", currentBalanceCentavos: 100_000 }],
 }));
-jest.mock("../../../local-db/repositories/taxonomy", () => ({
+jest.mock("../../../local-db/repositories/ledger/taxonomy", () => ({
   listSubcategories: async () => [{ id: "sub-electricity", label: "Electricity", category_id: "cat-bills" }],
   listCategories: async () => [],
 }));

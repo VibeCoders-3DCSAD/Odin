@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import AccountSelectionSheet from "../../../components/AccountSelectionSheet";
 import { Banner, Note, PickerField } from "../../../components/BudgieForm";
-import { listSavingsContributionGoals, type SavingsContributionGoalOption } from "../../../local-db/repositories/savingsGoalContributions";
+import { listSavingsContributionGoals, type SavingsContributionGoalOption } from "../../../local-db/repositories/savings/savingsGoalContributions";
 
 type Props = {
   userId: string;

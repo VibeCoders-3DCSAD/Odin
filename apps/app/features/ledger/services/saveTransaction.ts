@@ -1,10 +1,10 @@
-import { createExpense, createIncome, createSavingsGoalTransfer, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../../local-db/repositories/ledger";
-import { createStatementPayment, updateStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../../local-db/repositories/creditCardPayments";
-import type { CreditCardStatement } from "../../../local-db/repositories/creditCardStatements";
-import { createTransactionDebtPayment, updateTransactionDebtPayment, type DebtPaymentContext } from "../../../local-db/repositories/debtPayments";
-import type { CreateCreditCardInstallmentInput } from "../../../local-db/repositories/creditCardInstallments";
-import type { SavingsExpenseWithdrawal } from "../../../local-db/repositories/savingsExpenseFunding";
-import { getUnusualSpending, saveUnusualSpending, type UnusualSpendingInsight } from "../../../local-db/repositories/unusualSpending";
+import { createExpense, createIncome, createSavingsGoalTransfer, createTransfer, updateTransaction, type Transaction, type UpdateTransactionInput } from "../../../local-db/repositories/ledger/ledger";
+import { createStatementPayment, updateStatementPayment, type CreditCardPayment, type StatementPaymentContext } from "../../../local-db/repositories/credit-cards/creditCardPayments";
+import type { CreditCardStatement } from "../../../local-db/repositories/credit-cards/creditCardStatements";
+import { createTransactionDebtPayment, updateTransactionDebtPayment, type DebtPaymentContext } from "../../../local-db/repositories/debts/debtPayments";
+import type { CreateCreditCardInstallmentInput } from "../../../local-db/repositories/credit-cards/creditCardInstallments";
+import type { SavingsExpenseWithdrawal } from "../../../local-db/repositories/savings/savingsExpenseFunding";
+import { getUnusualSpending, saveUnusualSpending, type UnusualSpendingInsight } from "../../../local-db/repositories/alerts/unusualSpending";
 import type { TransactionType } from "../components/TransactionTypeSelector";
 import type { TransactionFormProps } from "./loadTransactionForm";
 

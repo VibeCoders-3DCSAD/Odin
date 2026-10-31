@@ -1,8 +1,8 @@
-import { getCreditCardPaymentByStatement, type StatementPaymentContext } from "../../../local-db/repositories/creditCardPayments";
-import { getDebtAccount } from "../../../local-db/repositories/debtAccounts";
-import { listDebtPayments, type DebtPaymentContext } from "../../../local-db/repositories/debtPayments";
-import { getTransaction, type Transaction } from "../../../local-db/repositories/ledger";
-import { getSavingsGoal } from "../../../local-db/repositories/savingsGoals";
+import { getCreditCardPaymentByStatement, type StatementPaymentContext } from "../../../local-db/repositories/credit-cards/creditCardPayments";
+import { getDebtAccount } from "../../../local-db/repositories/debts/debtAccounts";
+import { listDebtPayments, type DebtPaymentContext } from "../../../local-db/repositories/debts/debtPayments";
+import { getTransaction, type Transaction } from "../../../local-db/repositories/ledger/ledger";
+import { getSavingsGoal } from "../../../local-db/repositories/savings/savingsGoals";
 import type { SavingsActivityKind, TransactionFormTarget } from "../transactionFormRoute";
 
 export type TransactionFormProps = {

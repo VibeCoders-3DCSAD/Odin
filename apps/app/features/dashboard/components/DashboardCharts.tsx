@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 import Svg, { Circle, Polyline } from "react-native-svg";
-import type { DailyTrend } from "../../../local-db/repositories/dashboardSummary";
+import type { DailyTrend } from "../../../local-db/repositories/dashboard/dashboardSummary";
 
 type TrendColors = { line: string; income: string; expense: string; muted: string };
 

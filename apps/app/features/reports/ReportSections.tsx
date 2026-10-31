@@ -9,9 +9,9 @@ import {
   getSavingsSummary,
   listCategoryBreakdown,
   type ReportRange,
-} from "../../local-db/repositories/financialReports";
-import { getLatestForecastSnapshot } from "../../local-db/repositories/forecastSnapshots";
-import { listMonthlySpending, recentMonths } from "../../local-db/repositories/forecastTransactions";
+} from "../../local-db/repositories/reports/financialReports";
+import { getLatestForecastSnapshot } from "../../local-db/repositories/forecast/forecastSnapshots";
+import { listMonthlySpending, recentMonths } from "../../local-db/repositories/forecast/forecastTransactions";
 import { fetchSpendingForecast } from "../forecast/fetchSpendingForecast";
 import { categoryLabel } from "../forecast/QuarterlyForecastCharts";
 

@@ -8,20 +8,20 @@ const mockListMonthlySpending = jest.fn();
 const mockRequestQuarterlyForecast = jest.fn();
 const mockGetLatestForecastSnapshot = jest.fn();
 
-jest.mock("../../../local-db/repositories/financialReports", () => ({
+jest.mock("../../../local-db/repositories/reports/financialReports", () => ({
   getCashOutflowDistribution: (...args: unknown[]) => mockGetCashOutflowDistribution(...args),
 }));
-jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
-  getForecastHistoryStartDate: jest.requireActual("../../../local-db/repositories/forecastTransactions").getForecastHistoryStartDate,
+jest.mock("../../../local-db/repositories/forecast/forecastTransactions", () => ({
+  getForecastHistoryStartDate: jest.requireActual("../../../local-db/repositories/forecast/forecastTransactions").getForecastHistoryStartDate,
   listForecastTransactions: (...args: unknown[]) => mockListForecastTransactions(...args),
   listRecurringForecastPayments: async () => [],
   listMonthlySpending: (...args: unknown[]) => mockListMonthlySpending(...args),
   recentMonths: () => ["2026-09", "2026-10"],
 }));
-jest.mock("../../../local-db/repositories/forecastSnapshots", () => ({
+jest.mock("../../../local-db/repositories/forecast/forecastSnapshots", () => ({
   getLatestForecastSnapshot: (...args: unknown[]) => mockGetLatestForecastSnapshot(...args),
 }));
-jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPayments", () => ({
   listScheduledPayments: async () => [{ frequency: "monthly", dueDayOfMonth: 15, dueSecondDayOfMonth: null, dueDayOfWeek: null, dueMonth: null, startsOn: "2026-01-15", endsOn: null, amountCentavos: 50_000 }],
 }));
 jest.mock("../../forecast/api", () => ({

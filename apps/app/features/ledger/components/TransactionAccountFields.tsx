@@ -1,5 +1,5 @@
 import { PickerField } from "../../../components/BudgieForm";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
 import type { TransactionFormFields } from "../hooks/useTransactionFormFields";
 import SavingsContributionAccounts from "./SavingsContributionAccounts";
 

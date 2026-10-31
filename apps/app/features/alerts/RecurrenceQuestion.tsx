@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import type { SpendingRecurrence } from "../../local-db/repositories/unusualSpending";
+import type { SpendingRecurrence } from "../../local-db/repositories/alerts/unusualSpending";
 import MonthPicker from "./MonthPicker";
 import { RECURRENCE_OPTIONS } from "./recurrenceOptions";
 

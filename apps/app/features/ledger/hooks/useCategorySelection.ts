@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { CategorySelection } from "../../../components/CategorySelector";
-import type { Transaction } from "../../../local-db/repositories/ledger";
-import type { Category, Subcategory } from "../../../local-db/repositories/taxonomy";
+import type { Transaction } from "../../../local-db/repositories/ledger/ledger";
+import type { Category, Subcategory } from "../../../local-db/repositories/ledger/taxonomy";
 import type { TransactionType } from "../components/TransactionTypeSelector";
 import {
   emptyCategorySelection,

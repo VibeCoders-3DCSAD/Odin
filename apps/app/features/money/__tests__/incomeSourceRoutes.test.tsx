@@ -21,7 +21,7 @@ jest.mock("../../sync/SyncProvider", () => ({
 }));
 const mockShowToast = jest.fn();
 jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: mockShowToast }) }));
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({ getIncomeSource: jest.fn() }));
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({ getIncomeSource: jest.fn() }));
 
 // Screens are stubs exposing their navigation callbacks as buttons; the routes are what is under test.
 function mockScreen(name: string, callbacks: string[]) {
@@ -41,7 +41,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import IncomeRoute from "../../../app/(app)/(shell)/(tabs)/money/income";
 import NewIncomeSourceRoute from "../../../app/(app)/(shell)/money/income/new";
 import EditIncomeSourceRoute from "../../../app/(app)/(shell)/money/income/[id]";
-import { getIncomeSource } from "../../../local-db/repositories/financialFoundations";
+import { getIncomeSource } from "../../../local-db/repositories/foundations/financialFoundations";
 import { ROUTES } from "../../../routes";
 import { incomeSourceHref } from "../moneyRoutes";
 

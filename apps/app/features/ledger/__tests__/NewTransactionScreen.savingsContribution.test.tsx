@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import NewTransactionScreen from "../NewTransactionScreen";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
 
 const mockContribution = jest.fn();
 const mockTransfer = jest.fn();
@@ -12,16 +12,16 @@ const mockAccounts = [account("linked", "Savings bank"), account("payroll", "Pay
 const mockGoal = { id: "goal", name: "Emergency fund", status: "active", linkedAccountId: "linked", linkedAccountName: "Savings bank" };
 
 jest.mock("../hooks/useTransactionData", () => ({ useTransactionData: () => ({ accounts: mockAccounts, categories: [], subcategories: [], loading: false, error: null }) }));
-jest.mock("../../../local-db/repositories/ledger", () => ({ createSavingsGoalTransfer: (...args: unknown[]) => mockContribution(...args), createTransfer: (...args: unknown[]) => mockTransfer(...args) }));
-jest.mock("../../../local-db/repositories/savingsGoals", () => ({ getSavingsGoal: (_userId: string, id: string) => Promise.resolve(id === "second-goal" ? { ...mockGoal, id, linkedAccountId: "payroll", linkedAccountName: "Payroll" } : mockGoal) }));
-jest.mock("../../../local-db/repositories/savingsGoalContributions", () => ({ listSavingsContributionGoals: (...args: unknown[]) => mockGoals(...args) }));
-jest.mock("../../../local-db/repositories/savingsExpenseFunding", () => ({ getSavingsExpenseFunding: () => Promise.resolve({ unallocatedCentavos: 50000 }) }));
-jest.mock("../../../local-db/repositories/debtAccounts", () => ({ listDebtAccounts: () => Promise.resolve([]) }));
-jest.mock("../../../local-db/repositories/debtPayments", () => ({}));
-jest.mock("../../../local-db/repositories/creditCardPayments", () => ({}));
-jest.mock("../../../local-db/repositories/creditCardStatements", () => ({}));
-jest.mock("../../../local-db/repositories/creditCardInstallments", () => ({}));
-jest.mock("../../../local-db/repositories/unusualSpending", () => ({}));
+jest.mock("../../../local-db/repositories/ledger/ledger", () => ({ createSavingsGoalTransfer: (...args: unknown[]) => mockContribution(...args), createTransfer: (...args: unknown[]) => mockTransfer(...args) }));
+jest.mock("../../../local-db/repositories/savings/savingsGoals", () => ({ getSavingsGoal: (_userId: string, id: string) => Promise.resolve(id === "second-goal" ? { ...mockGoal, id, linkedAccountId: "payroll", linkedAccountName: "Payroll" } : mockGoal) }));
+jest.mock("../../../local-db/repositories/savings/savingsGoalContributions", () => ({ listSavingsContributionGoals: (...args: unknown[]) => mockGoals(...args) }));
+jest.mock("../../../local-db/repositories/savings/savingsExpenseFunding", () => ({ getSavingsExpenseFunding: () => Promise.resolve({ unallocatedCentavos: 50000 }) }));
+jest.mock("../../../local-db/repositories/debts/debtAccounts", () => ({ listDebtAccounts: () => Promise.resolve([]) }));
+jest.mock("../../../local-db/repositories/debts/debtPayments", () => ({}));
+jest.mock("../../../local-db/repositories/credit-cards/creditCardPayments", () => ({}));
+jest.mock("../../../local-db/repositories/credit-cards/creditCardStatements", () => ({}));
+jest.mock("../../../local-db/repositories/credit-cards/creditCardInstallments", () => ({}));
+jest.mock("../../../local-db/repositories/alerts/unusualSpending", () => ({}));
 jest.mock("../../../local-db/sync/runSync", () => ({ runSync: () => Promise.resolve() }));
 jest.mock("../../../components/Toast", () => ({ useToast: () => ({ showToast: jest.fn() }) }));
 jest.mock("../../../services/connectivity", () => ({ useConnectivityStore: () => false }));

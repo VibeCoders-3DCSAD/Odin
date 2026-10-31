@@ -1,5 +1,5 @@
 import { Pressable, Text, TextInput, View } from "react-native";
-import type { CreditCardInstallmentInterestType } from "../../../local-db/repositories/creditCardInstallments";
+import type { CreditCardInstallmentInterestType } from "../../../local-db/repositories/credit-cards/creditCardInstallments";
 
 const palette = { ink: "#1B1C1A", muted: "#6B7A6F", line: "#e8deca", card: "#f7eed9", brand: "#013220", selected: "#effff6" } as const;
 const fieldLabelStyle = { fontFamily: "Manrope", fontWeight: "600" as const, fontSize: 11, lineHeight: 13, minHeight: 28, color: palette.muted, letterSpacing: 0.4, marginBottom: 8, textAlignVertical: "bottom" as const };

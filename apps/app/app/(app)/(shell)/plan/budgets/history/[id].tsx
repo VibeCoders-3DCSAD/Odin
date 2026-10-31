@@ -3,7 +3,7 @@ import { useSession } from "../../../../../../features/auth/components/AccessPro
 import PastFinancialPlanDetailScreen from "../../../../../../features/financial-plan/PastFinancialPlanDetailScreen";
 import { OwnedRecordPage, type LoadOwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { useShellPage } from "../../../../../../features/shell/components/PageScroll";
-import { getFinancialPlan } from "../../../../../../local-db/repositories/financialPlans";
+import { getFinancialPlan } from "../../../../../../local-db/repositories/financial-plans/financialPlans";
 import { ROUTES } from "../../../../../../routes";
 
 const ownsPlan: LoadOwnedRecord = async (userId, id) => (await getFinancialPlan(userId, id)) !== null;

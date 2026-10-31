@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft } from "phosphor-react-native";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { getFinancialPlan, getFinancialPlanLabels, type AcceptedFinancialPlan } from "../../local-db/repositories/financialPlans";
-import { getPlanCommitmentReview } from "../../local-db/repositories/financialPlanCommitmentReview";
-import { getPlanSpendingReview } from "../../local-db/repositories/financialPlanSpendingReview";
-import { PastPlanCommitmentsSection, type PastPlanCommitmentItem } from "./PastPlanCommitmentsSection";
-import { PlanScheduledPayments } from "./PlanScheduledPayments";
-import { PastPlanSpendingSection } from "./PastPlanSpendingSection";
-import { formatPeso, formatPlanMonthLabel, labelWithRemovedSuffix, type FinancialPlanLabels } from "./financialPlanPresentation";
-import type { PlanCommitmentReview, PlanSpendingReview } from "./pastPlanTypes";
+import { getFinancialPlan, getFinancialPlanLabels, type AcceptedFinancialPlan } from "../../local-db/repositories/financial-plans/financialPlans";
+import { getPlanCommitmentReview } from "../../local-db/repositories/financial-plans/financialPlanCommitmentReview";
+import { getPlanSpendingReview } from "../../local-db/repositories/financial-plans/financialPlanSpendingReview";
+import { PastPlanCommitmentsSection, type PastPlanCommitmentItem } from "./past-plans/components/PastPlanCommitmentsSection";
+import { PlanScheduledPayments } from "./components/PlanScheduledPayments";
+import { PastPlanSpendingSection } from "./past-plans/components/PastPlanSpendingSection";
+import { formatPeso, formatPlanMonthLabel, labelWithRemovedSuffix, type FinancialPlanLabels } from "./helpers/financialPlanPresentation";
+import type { PlanCommitmentReview, PlanSpendingReview } from "./past-plans/pastPlanTypes";
 
 export type PastFinancialPlanDetailScreenProps = {
   userId: string;

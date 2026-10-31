@@ -1,9 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
-import { getDashboardReminders } from "../../../../local-db/repositories/dashboardReminders";
+import { getDashboardReminders } from "../../../../local-db/repositories/dashboard/dashboardReminders";
 import { useDashboardReminders } from "../useDashboardReminders";
 import type { DashboardReminders } from "../../types";
 
-jest.mock("../../../../local-db/repositories/dashboardReminders", () => ({ getDashboardReminders: jest.fn() }));
+jest.mock("../../../../local-db/repositories/dashboard/dashboardReminders", () => ({ getDashboardReminders: jest.fn() }));
 const mockLoad = jest.mocked(getDashboardReminders);
 const empty: DashboardReminders = { attention: { items: [], unavailable: false }, upcoming: { items: [], unavailable: false } };
 

@@ -4,7 +4,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { BottomSheetSurface } from "../../../components/BottomSheetSurface";
 import { ActionSheet } from "../../../components/ActionSheet";
 import { Banner, Note, v4, v4Font } from "../../../components/BudgieForm";
-import { newSavingsExpenseWithdrawal, type SavingsExpenseFunding, type SavingsExpenseWithdrawal } from "../../../local-db/repositories/savingsExpenseFunding";
+import { newSavingsExpenseWithdrawal, type SavingsExpenseFunding, type SavingsExpenseWithdrawal } from "../../../local-db/repositories/savings/savingsExpenseFunding";
 
 function money(value: number) { return `₱${(value / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`; }
 

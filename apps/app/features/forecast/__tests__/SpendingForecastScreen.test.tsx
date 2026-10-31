@@ -18,12 +18,12 @@ const mockListMonthlySpending = jest.fn();
 const mockRecentMonths = jest.fn();
 let mockOnline = true;
 
-jest.mock("../../../local-db/repositories/dashboardSnapshots", () => ({
+jest.mock("../../../local-db/repositories/dashboard/dashboardSnapshots", () => ({
   getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
   upsertSnapshot: (...args: unknown[]) => mockUpsertSnapshot(...args),
 }));
-jest.mock("../../../local-db/repositories/forecastSnapshots", () => ({ saveForecastSnapshot: async () => undefined }));
-jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
+jest.mock("../../../local-db/repositories/forecast/forecastSnapshots", () => ({ saveForecastSnapshot: async () => undefined }));
+jest.mock("../../../local-db/repositories/forecast/forecastTransactions", () => ({
   getForecastHistoryStartDate: () => "2025-10-01",
   listForecastTransactions: (...args: unknown[]) => mockListForecastTransactions(...args),
   listRecurringForecastPayments: (...args: unknown[]) => mockListRecurringForecastPayments(...args),
@@ -32,7 +32,7 @@ jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
   listMonthlySpending: (...args: unknown[]) => mockListMonthlySpending(...args),
   recentMonths: (...args: unknown[]) => mockRecentMonths(...args),
 }));
-jest.mock("../../../local-db/repositories/scheduledPayments", () => ({
+jest.mock("../../../local-db/repositories/scheduled-payments/scheduledPayments", () => ({
   listScheduledPayments: (...args: unknown[]) => mockListScheduledPayments(...args),
 }));
 jest.mock("../../../services/connectivity", () => ({

@@ -18,11 +18,11 @@ const mockRequestFinancialPlanCommitments = jest.fn();
 const mockRunSync = jest.fn();
 const mockGetPlanCommitmentPayments = jest.fn();
 
-jest.mock("../../../local-db/repositories/financialPlanCommitmentReview", () => ({
+jest.mock("../../../local-db/repositories/financial-plans/financialPlanCommitmentReview", () => ({
   getPlanCommitmentPayments: (...args: unknown[]) => mockGetPlanCommitmentPayments(...args),
 }));
 
-jest.mock("../../../local-db/repositories/financialPlans", () => ({
+jest.mock("../../../local-db/repositories/financial-plans/financialPlans", () => ({
   createFinancialPlan: (...args: unknown[]) => mockCreateFinancialPlan(...args),
   deleteFinancialPlan: (...args: unknown[]) => mockDeleteFinancialPlan(...args),
   getAcceptedFinancialPlanForPeriod: (...args: unknown[]) => mockGetAcceptedFinancialPlanForPeriod(...args),
@@ -31,18 +31,18 @@ jest.mock("../../../local-db/repositories/financialPlans", () => ({
   getFinancialPlanSpending: (...args: unknown[]) => mockGetFinancialPlanSpending(...args),
 }));
 
-jest.mock("../../../local-db/repositories/forecastTransactions", () => ({
+jest.mock("../../../local-db/repositories/forecast/forecastTransactions", () => ({
   listPlanRecommendations: (...args: unknown[]) => mockListPlanRecommendations(...args),
 }));
 
-jest.mock("../../../local-db/repositories/taxonomy", () => ({
+jest.mock("../../../local-db/repositories/ledger/taxonomy", () => ({
   listCategories: (...args: unknown[]) => mockListCategories(...args),
   listSubcategories: (...args: unknown[]) => mockListSubcategories(...args),
   updateCategory: jest.fn(),
   updateSubcategory: jest.fn(),
 }));
 
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
 }));
 
@@ -50,7 +50,7 @@ jest.mock("../../../local-db/sync/runSync", () => ({
   runSync: (...args: unknown[]) => mockRunSync(...args),
 }));
 
-jest.mock("../../debt-manager/debtTrendRange", () => ({ getPhilippineToday: () => "2026-10-15" }));
+jest.mock("../../debt-manager/forecast/helpers/debtTrendRange", () => ({ getPhilippineToday: () => "2026-10-15" }));
 
 const mockRequestFinancialPlanExplanations = jest.fn();
 jest.mock("../api", () => ({

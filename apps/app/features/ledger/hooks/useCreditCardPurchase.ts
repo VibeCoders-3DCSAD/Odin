@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getCreditCardPurchaseMetadataForTransaction } from "../../../local-db/repositories/creditCardInstallments";
-import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
-import type { Transaction } from "../../../local-db/repositories/ledger";
+import { getCreditCardPurchaseMetadataForTransaction } from "../../../local-db/repositories/credit-cards/creditCardInstallments";
+import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
+import type { Transaction } from "../../../local-db/repositories/ledger/ledger";
 import type { InstallmentFieldErrors, InstallmentFormValue } from "../components/CreditCardInstallmentFields";
 import type { TransactionType } from "../components/TransactionTypeSelector";
 import { emptyInstallment, installmentFromMetadata } from "../helpers/installmentForm";

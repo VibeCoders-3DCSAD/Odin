@@ -1,6 +1,6 @@
 /**
  * Evaluates the Unusual Expense Detection (IQR) method in
- * apps/app/local-db/repositories/unusualSpending.ts on a held-out `anomaly_test` corpus,
+ * apps/app/local-db/repositories/alerts/unusualSpending.ts on a held-out `anomaly_test` corpus,
  * following "Evaluation and Dataset Separation" in odin-ml docs/services/iqr/v2/methodology.md
  * (mirrors odin-ml training/scripts/modeling/evaluate_personal_iqr.py).
  *
@@ -32,7 +32,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { detectUnusualSpendings } from "../apps/app/local-db/repositories/unusualSpending";
+import { detectUnusualSpendings } from "../apps/app/local-db/repositories/alerts/unusualSpending";
 
 type DecisionState = "ANOMALOUS" | "NORMAL" | "INSUFFICIENT_HISTORY" | "INSUFFICIENT_VARIABILITY";
 

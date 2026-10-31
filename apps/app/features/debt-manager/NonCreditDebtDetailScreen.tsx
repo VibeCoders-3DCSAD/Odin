@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { Banner, styles as ui, v4, v4Font } from "../../components/BudgieForm";
-import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debtAccounts";
-import { listDebtPayments, type DebtPayment } from "../../local-db/repositories/debtPayments";
-import { getLatestFinancialPlan } from "../../local-db/repositories/financialPlans";
-import NonCreditDebtCard from "./NonCreditDebtCard";
-import NonCreditDebtForecastSection from "./NonCreditDebtForecastSection";
-import NonCreditDebtForm from "./NonCreditDebtForm";
+import { listDebtAccounts, type DebtAccount } from "../../local-db/repositories/debts/debtAccounts";
+import { listDebtPayments, type DebtPayment } from "../../local-db/repositories/debts/debtPayments";
+import { getLatestFinancialPlan } from "../../local-db/repositories/financial-plans/financialPlans";
+import NonCreditDebtCard from "./non-credit/components/NonCreditDebtCard";
+import NonCreditDebtForecastSection from "./non-credit/components/NonCreditDebtForecastSection";
+import NonCreditDebtForm from "./non-credit/components/NonCreditDebtForm";
 import { getDebtTypeLabel } from "./debtTypes";
-import { Button, DebtTypeIcon, debtTypeTint } from "./debtUi";
+import { Button, DebtTypeIcon, debtTypeTint } from "./components/debtUi";
 
 type Props = { userId: string; deviceId: string; debtId: string; onBack: () => void; onRecordPayment: (debtId: string) => void; onEditPayment: (payment: DebtPayment) => void };
 

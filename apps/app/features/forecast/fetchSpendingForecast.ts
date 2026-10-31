@@ -1,5 +1,5 @@
-import { getForecastHistoryStartDate, listForecastTransactions, listRecurringForecastPayments } from "../../local-db/repositories/forecastTransactions";
-import { listScheduledPayments } from "../../local-db/repositories/scheduledPayments";
+import { getForecastHistoryStartDate, listForecastTransactions, listRecurringForecastPayments } from "../../local-db/repositories/forecast/forecastTransactions";
+import { listScheduledPayments } from "../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { requestQuarterlyForecast } from "./api";
 import { addRecurringPayments } from "./recurringForecast";
 import { addScheduledPayments } from "./scheduledForecast";

@@ -1,0 +1,1276 @@
+import * as SQLite from "expo-sqlite";
+import { enqueueOperation, LocalDbError } from "../../helpers";
+import { randomUUID } from "../../uuid";
+import { localToday } from "../../../features/billers/schedule";
+import type { SyncOperation } from "../../types";
+import { getDb, now, boolToInt } from "../helpers/db";
+
+// ---------------------------------------------------------------------------
+// Row types — raw SQLite columns
+// ---------------------------------------------------------------------------
+
+type FinancialAccountRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  kind: string;
+  status: string;
+  opening_balance_centavos: number;
+  current_balance_centavos: number;
+  include_in_dashboard_balance: number;
+  institution_name: string | null;
+  opened_on: string | null;
+  archived_at: string | null;
+  deleted_at: string | null;
+  sort_order: number;
+  metadata: string;
+  version: number;
+  deleted: number;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+  cc_credit_limit_centavos: number | null;
+  cc_available_credit_centavos: number | null;
+  cc_reconciled_available_credit_centavos: number | null;
+  cc_pre_reconciliation_available_credit_centavos: number | null;
+  cc_available_credit_reconciled_at: string | null;
+  cc_issuer: string | null;
+  cc_notes: string | null;
+  cc_billing_cycle_days: number | null;
+  cc_cutoff_day: number | null;
+  cc_statement_day: number | null;
+  cc_alert_threshold_percent: number | null;
+  cc_allows_extra_payments: number | null;
+  cc_repayment_strategy: CreditCardRepaymentStrategy | null;
+  cc_repayment_custom_amount_centavos: number | null;
+  cc_repayment_percentage_bps: number | null;
+  sa_account_type?: "personal_savings" | "high_yield_savings" | "time_deposit" | null;
+};
+
+type CreditCardDetailsSyncRow = {
+  account_id: string;
+  user_id: string;
+  issuer: string | null;
+  credit_limit_centavos: number;
+  available_credit_centavos: number | null;
+  reconciled_available_credit_centavos: number | null;
+  pre_reconciliation_available_credit_centavos: number | null;
+  available_credit_reconciled_at: string | null;
+  cutoff_day: number;
+  statement_day: number | null;
+  notes: string | null;
+  billing_cycle_days: number | null;
+  alert_threshold_percent: number | null;
+  allows_extra_payments: number;
+  version: number;
+  deleted: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type IncomeSourceRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  frequency: string;
+  recurring_template_id: string | null;
+  destination_account_id: string | null;
+  subcategory_id: string | null;
+  expected_amount_centavos: number;
+  payday_day_of_month: number | null;
+  payday_second_day_of_month: number | null;
+  payday_day_of_week: number | null;
+  next_expected_date: string | null;
+  is_active: number;
+  notes: string | null;
+  metadata: string;
+  version: number;
+  deleted: number;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Domain types
+// ---------------------------------------------------------------------------
+
+export type FinancialAccountKind =
+  | "cash"
+  | "bank"
+  | "e_wallet"
+  | "savings"
+  | "credit_card"
+  | "other";
+
+export type FinancialAccountStatus = "active" | "archived";
+
+export type FinancialAccount = {
+  id: string;
+  name: string;
+  kind: FinancialAccountKind;
+  status: FinancialAccountStatus;
+  openingBalanceCentavos: number;
+  currentBalanceCentavos: number;
+  includeInDashboardBalance: boolean;
+  institutionName: string | null;
+  openedOn: string | null;
+  archivedAt: string | null;
+  sortOrder: number;
+  savingsAccountType?: "personal_savings" | "high_yield_savings" | "time_deposit" | null;
+  creditCardDetails: CreditCardDetails | null;
+};
+
+export type CreditCardDetails = {
+  creditLimitCentavos: number;
+  availableCreditCentavos: number | null;
+  reconciledAvailableCreditCentavos: number | null;
+  preReconciliationAvailableCreditCentavos: number | null;
+  availableCreditReconciledAt: string | null;
+  issuer: string | null;
+  notes: string | null;
+  billingCycleDays: number | null;
+  cutoffDay: number;
+  statementDay: number | null;
+  alertThresholdPercent: number | null;
+  allowsExtraPayments: boolean;
+  repaymentStrategy: CreditCardRepaymentStrategy | null;
+  repaymentCustomAmountCentavos: number | null;
+  repaymentPercentageBps: number | null;
+};
+
+export type CreditCardRepaymentStrategy = "pay_in_full" | "pay_minimum" | "percentage_of_statement" | "custom_payment";
+
+export type CreditCardDetailsInput = {
+  creditLimitCentavos: number;
+  billingCycleDays?: number | null;
+  cutoffDay: number;
+  statementDay?: number | null;
+  alertThresholdPercent: number;
+  allowsExtraPayments?: boolean;
+};
+
+export type IncomeFrequency = "daily" | "weekly" | "semi_monthly" | "monthly";
+
+export type IncomeSource = {
+  id: string;
+  name: string;
+  frequency: IncomeFrequency;
+  recurringTemplateId: string | null;
+  destinationAccountId: string | null;
+  subcategoryId: string | null;
+  expectedAmountCentavos: number;
+  paydayDayOfMonth: number | null;
+  paydaySecondDayOfMonth: number | null;
+  paydayDayOfWeek: number | null;
+  nextExpectedDate: string | null;
+  isActive: boolean;
+  notes: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Create / update inputs
+// ---------------------------------------------------------------------------
+
+export type CreateFinancialAccountInput = {
+  name: string;
+  kind: FinancialAccountKind;
+  openingBalanceCentavos?: number;
+  includeInDashboardBalance?: boolean;
+  institutionName?: string | null;
+  openedOn?: string | null;
+  sortOrder?: number;
+  creditCardDetails?: CreditCardDetailsInput;
+};
+
+export type UpdateFinancialAccountInput = {
+  name?: string;
+  kind?: FinancialAccountKind;
+  status?: FinancialAccountStatus;
+  openingBalanceCentavos?: number;
+  currentBalanceCentavos?: number;
+  includeInDashboardBalance?: boolean;
+  institutionName?: string | null;
+  openedOn?: string | null;
+  archivedAt?: string | null;
+  sortOrder?: number;
+  creditCardDetails?: CreditCardDetailsInput;
+};
+
+export type CreateIncomeSourceInput = {
+  name: string;
+  frequency: IncomeFrequency;
+  destinationAccountId: string;
+  subcategoryId: string;
+  expectedAmountCentavos: number;
+  paydayDayOfMonth?: number | null;
+  paydaySecondDayOfMonth?: number | null;
+  paydayDayOfWeek?: number | null;
+  nextExpectedDate?: string | null;
+  isActive?: boolean;
+  notes?: string | null;
+};
+
+export type UpdateIncomeSourceInput = {
+  name?: string;
+  frequency?: IncomeFrequency;
+  recurringTemplateId?: string | null;
+  destinationAccountId?: string | null;
+  subcategoryId?: string | null;
+  expectedAmountCentavos?: number;
+  paydayDayOfMonth?: number | null;
+  paydaySecondDayOfMonth?: number | null;
+  paydayDayOfWeek?: number | null;
+  nextExpectedDate?: string | null;
+  isActive?: boolean;
+  notes?: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Mappers
+// ---------------------------------------------------------------------------
+
+function mapAccount(row: FinancialAccountRow): FinancialAccount {
+  return {
+    id: row.id,
+    name: row.name,
+    kind: row.kind as FinancialAccountKind,
+    status: row.status as FinancialAccountStatus,
+    openingBalanceCentavos: row.opening_balance_centavos,
+    currentBalanceCentavos: row.current_balance_centavos,
+    includeInDashboardBalance: row.include_in_dashboard_balance === 1,
+    institutionName: row.institution_name,
+    openedOn: row.opened_on,
+    archivedAt: row.archived_at,
+    sortOrder: row.sort_order,
+    savingsAccountType: row.sa_account_type ?? null,
+    creditCardDetails:
+      row.kind === "credit_card" && row.cc_credit_limit_centavos != null
+        ? {
+            creditLimitCentavos: row.cc_credit_limit_centavos,
+            availableCreditCentavos: row.cc_available_credit_centavos,
+            reconciledAvailableCreditCentavos: row.cc_reconciled_available_credit_centavos,
+            preReconciliationAvailableCreditCentavos: row.cc_pre_reconciliation_available_credit_centavos,
+            availableCreditReconciledAt: row.cc_available_credit_reconciled_at,
+            issuer: row.cc_issuer,
+            notes: row.cc_notes,
+            billingCycleDays: row.cc_billing_cycle_days,
+            cutoffDay: row.cc_cutoff_day ?? 0,
+            statementDay: row.cc_statement_day,
+            alertThresholdPercent: row.cc_alert_threshold_percent,
+            allowsExtraPayments: row.cc_allows_extra_payments === 1,
+            repaymentStrategy: row.cc_repayment_strategy,
+            repaymentCustomAmountCentavos: row.cc_repayment_custom_amount_centavos,
+            repaymentPercentageBps: row.cc_repayment_percentage_bps,
+          }
+        : null,
+  };
+}
+
+function mapIncomeSource(row: IncomeSourceRow): IncomeSource {
+  return {
+    id: row.id,
+    name: row.name,
+    frequency: row.frequency as IncomeFrequency,
+    recurringTemplateId: row.recurring_template_id,
+    destinationAccountId: row.destination_account_id,
+    subcategoryId: row.subcategory_id,
+    expectedAmountCentavos: row.expected_amount_centavos,
+    paydayDayOfMonth: row.payday_day_of_month,
+    paydaySecondDayOfMonth: row.payday_second_day_of_month,
+    paydayDayOfWeek: row.payday_day_of_week,
+    nextExpectedDate: row.next_expected_date,
+    isActive: row.is_active === 1,
+    notes: row.notes,
+  };
+}
+
+
+export type IncomeSchedule = {
+  frequency: IncomeFrequency;
+  paydayDayOfMonth: number | null;
+  paydaySecondDayOfMonth: number | null;
+  paydayDayOfWeek: number | null;
+};
+
+function isDayOfWeek(value: number | null): value is number {
+  return value !== null && Number.isInteger(value) && value >= 0 && value <= 6;
+}
+
+// Days past a month's end fall back to its last day. Twice-a-month paydays must still differ in
+// February, when every day past the 28th becomes the 28th.
+export function incomeScheduleError(schedule: IncomeSchedule): string | null {
+  const { frequency, paydayDayOfMonth: day1, paydaySecondDayOfMonth: day2 } = schedule;
+  if (frequency === "monthly" && (day1 === null || !isDayOfMonth(day1))) return "Enter a payday from 1 to 31.";
+  if (frequency === "semi_monthly") {
+    if (day1 === null || day2 === null || !isDayOfMonth(day1) || !isDayOfMonth(day2)) return "Enter Date 1 and Date 2, each from 1 to 31.";
+    if (day1 >= day2) return "Date 1 must come before Date 2.";
+    if (day1 >= Math.min(day2, 28)) return "Date 1 must be the 27th or earlier when Date 2 is after the 28th, so February still has two paydays.";
+  }
+  if (frequency === "weekly" && !isDayOfWeek(schedule.paydayDayOfWeek)) return "Select the payday of the week.";
+  return null;
+}
+
+// Keeps only the payday fields the frequency uses.
+function normalizeIncomeSchedule(schedule: IncomeSchedule): IncomeSchedule {
+  const usesDayOfMonth = schedule.frequency === "monthly" || schedule.frequency === "semi_monthly";
+  return {
+    frequency: schedule.frequency,
+    paydayDayOfMonth: usesDayOfMonth ? schedule.paydayDayOfMonth : null,
+    paydaySecondDayOfMonth: schedule.frequency === "semi_monthly" ? schedule.paydaySecondDayOfMonth : null,
+    paydayDayOfWeek: schedule.frequency === "weekly" ? schedule.paydayDayOfWeek : null,
+  };
+}
+
+function assertIncomeSchedule(schedule: IncomeSchedule): void {
+  if (!VALID_INCOME_FREQUENCIES.includes(schedule.frequency)) {
+    throw new LocalDbError("VALIDATION_ERROR", `frequency must be one of: ${VALID_INCOME_FREQUENCIES.join(", ")}`);
+  }
+  const error = incomeScheduleError(schedule);
+  if (error) throw new LocalDbError("VALIDATION_ERROR", error);
+}
+
+function assertIncomeAmount(amount: number | undefined): void {
+  if (amount === undefined || !Number.isSafeInteger(amount) || amount <= 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "Enter an expected income greater than zero.");
+  }
+}
+
+async function assertAccessibleIncomeDestinationAndCategory(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  destinationAccountId: string,
+  subcategoryId: string,
+): Promise<void> {
+  const account = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM financial_accounts WHERE user_id = ? AND id = ? AND deleted = 0 AND status = 'active'",
+    userId,
+    destinationAccountId,
+  );
+  if (!account) {
+    throw new LocalDbError("VALIDATION_ERROR", "destinationAccountId does not reference an accessible active account");
+  }
+
+  const subcategory = await db.getFirstAsync<{ id: string }>(
+    "SELECT id FROM subcategories WHERE user_id = ? AND id = ? AND kind = 'income' AND deleted = 0 AND is_active = 1",
+    userId,
+    subcategoryId,
+  );
+  if (!subcategory) {
+    throw new LocalDbError("VALIDATION_ERROR", "subcategoryId does not reference an accessible active income subcategory");
+  }
+}
+
+async function syncIncomeSourceRecurringTemplate(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  source: {
+    id: string;
+    recurringTemplateId: string | null;
+    name: string;
+    frequency: IncomeFrequency;
+    destinationAccountId: string;
+    subcategoryId: string;
+    expectedAmountCentavos: number;
+    paydayDayOfMonth: number | null;
+    paydaySecondDayOfMonth: number | null;
+    paydayDayOfWeek: number | null;
+    nextExpectedDate: string | null;
+    notes: string | null;
+  },
+): Promise<string> {
+  const { createRecurringTemplate, updateRecurringTemplate } = await import("../ledger/recurringTransactions");
+
+  const recurringInput = {
+    transaction_type: "income" as const,
+    name: source.name,
+    amount_centavos: source.expectedAmountCentavos,
+    frequency: source.frequency,
+    day_of_month: source.paydayDayOfMonth ?? undefined,
+    second_day_of_month: source.paydaySecondDayOfMonth ?? undefined,
+    day_of_week: source.paydayDayOfWeek ?? undefined,
+    // Saving starts the schedule over from today (Asia/Manila), so an edit never back-posts missed paydays.
+    starts_on: source.nextExpectedDate ?? localToday(),
+    subcategory_id: source.subcategoryId,
+    destination_account_id: source.destinationAccountId,
+    notes: source.notes ?? undefined,
+  };
+
+  if (source.recurringTemplateId) {
+    await updateRecurringTemplate(userId, deviceId, source.recurringTemplateId, recurringInput, db);
+    return source.recurringTemplateId;
+  }
+
+  const { template } = await createRecurringTemplate(userId, deviceId, recurringInput, db);
+  return template.id;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+
+function isDayOfMonth(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 31;
+}
+
+function validateCreditCardDetails(details: Partial<CreditCardDetailsInput>, required: boolean): void {
+  if (required) {
+    for (const field of ["creditLimitCentavos", "cutoffDay", "alertThresholdPercent"] as const) {
+      const value = details[field];
+      if (value === undefined || value === null) {
+        throw new LocalDbError("VALIDATION_ERROR", `${field} is required for credit card accounts`);
+      }
+    }
+  }
+  const limit = details.creditLimitCentavos;
+  if (limit != null && (typeof limit !== "number" || !Number.isFinite(limit) || !Number.isInteger(limit) || limit <= 0)) {
+    throw new LocalDbError("VALIDATION_ERROR", "creditLimitCentavos must be a positive integer");
+  }
+  if (details.cutoffDay != null && !isDayOfMonth(details.cutoffDay)) {
+    throw new LocalDbError("VALIDATION_ERROR", "cutoffDay must be an integer between 1 and 31");
+  }
+  if (details.statementDay != null && !isDayOfMonth(details.statementDay)) {
+    throw new LocalDbError("VALIDATION_ERROR", "statementDay must be an integer between 1 and 31");
+  }
+  const threshold = details.alertThresholdPercent;
+  if (threshold != null && (threshold < 0 || threshold > 100)) {
+    throw new LocalDbError("VALIDATION_ERROR", "alertThresholdPercent must be between 0 and 100");
+  }
+}
+
+async function upsertCreditCardDetails(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  accountId: string,
+  details: CreditCardDetailsInput,
+  ts: string,
+): Promise<void> {
+  validateCreditCardDetails(details, true);
+  const usage = await db.getFirstAsync<{ outstanding_centavos: number | null }>(
+    `SELECT SUM(t.amount_centavos - cct.applied_credit_centavos) AS outstanding_centavos
+       FROM credit_card_transactions cct
+       JOIN transactions t ON t.id = cct.transaction_id AND t.user_id = cct.user_id
+      WHERE cct.user_id = ? AND cct.account_id = ? AND cct.deleted = 0 AND t.deleted = 0`,
+    userId,
+    accountId,
+  );
+  const availableCredit = details.creditLimitCentavos - (usage?.outstanding_centavos ?? 0);
+  await db.runAsync(
+    `INSERT INTO credit_card_details
+      (account_id, user_id, issuer, credit_limit_centavos, available_credit_centavos,
+       cutoff_day, statement_day, notes, billing_cycle_days,
+       alert_threshold_percent, allows_extra_payments, version, deleted, created_at, updated_at)
+     VALUES (?, ?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, 1, 0, ?, ?)
+      ON CONFLICT(account_id) DO UPDATE SET
+        credit_limit_centavos = excluded.credit_limit_centavos,
+        available_credit_centavos = excluded.available_credit_centavos,
+       cutoff_day = excluded.cutoff_day,
+       statement_day = excluded.statement_day,
+       billing_cycle_days = excluded.billing_cycle_days,
+       alert_threshold_percent = excluded.alert_threshold_percent,
+       allows_extra_payments = excluded.allows_extra_payments,
+       deleted = 0,
+       updated_at = excluded.updated_at,
+       version = credit_card_details.version + 1`,
+    accountId,
+    userId,
+    details.creditLimitCentavos,
+    availableCredit,
+    details.cutoffDay,
+    details.statementDay ?? null,
+    details.billingCycleDays ?? null,
+    details.alertThresholdPercent,
+    details.allowsExtraPayments ? 1 : 0,
+    ts,
+    ts,
+  );
+}
+
+async function enqueueCreditCardDetailsOperation(
+  db: SQLite.SQLiteDatabase,
+  userId: string,
+  deviceId: string,
+  accountId: string,
+  operationType: "create" | "update" | "delete",
+  baseVersion: number | null,
+): Promise<SyncOperation | null> {
+  const row = await db.getFirstAsync<CreditCardDetailsSyncRow>(
+    "SELECT * FROM credit_card_details WHERE account_id = ? AND user_id = ?",
+    accountId,
+    userId,
+  );
+  if (!row) return null;
+    const payload = operationType === "delete"
+      ? { account_id: accountId }
+      : {
+          account_id: accountId,
+          issuer: row.issuer,
+           credit_limit_centavos: row.credit_limit_centavos,
+           ...(operationType === "create" ? {} : {
+             available_credit_centavos: row.available_credit_centavos,
+             reconciled_available_credit_centavos: row.reconciled_available_credit_centavos,
+             pre_reconciliation_available_credit_centavos: row.pre_reconciliation_available_credit_centavos,
+             available_credit_reconciled_at: row.available_credit_reconciled_at,
+           }),
+           cutoff_day: row.cutoff_day,
+        statement_day: row.statement_day,
+        notes: row.notes,
+        billing_cycle_days: row.billing_cycle_days,
+        alert_threshold_percent: row.alert_threshold_percent,
+        allows_extra_payments: row.allows_extra_payments === 1,
+        };
+  return enqueueOperation(db, {
+    userId,
+    deviceId,
+    entity: "credit_card_details",
+    recordId: accountId,
+    operationType,
+    baseVersion,
+    changedFields: operationType === "delete" ? [] : Object.keys(payload),
+    payload,
+    failureMessage: "This credit-card information could not be synchronized.",
+  });
+}
+
+const VALID_ACCOUNT_KINDS: FinancialAccountKind[] = [
+  "cash",
+  "bank",
+  "e_wallet",
+  "savings",
+  "credit_card",
+  "other",
+];
+
+const VALID_ACCOUNT_STATUSES: FinancialAccountStatus[] = [
+  "active",
+  "archived",
+];
+
+const VALID_INCOME_FREQUENCIES: IncomeFrequency[] = ["daily", "weekly", "semi_monthly", "monthly"];
+
+// ---------------------------------------------------------------------------
+// Financial Accounts
+// ---------------------------------------------------------------------------
+
+export async function listFinancialAccounts(userId: string): Promise<FinancialAccount[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<FinancialAccountRow>(
+    `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
+              cc.available_credit_centavos AS cc_available_credit_centavos,
+              cc.reconciled_available_credit_centavos AS cc_reconciled_available_credit_centavos,
+              cc.pre_reconciliation_available_credit_centavos AS cc_pre_reconciliation_available_credit_centavos,
+              cc.available_credit_reconciled_at AS cc_available_credit_reconciled_at,
+             cc.issuer AS cc_issuer,
+             cc.notes AS cc_notes,
+             cc.billing_cycle_days AS cc_billing_cycle_days,
+             cc.cutoff_day AS cc_cutoff_day,
+             cc.statement_day AS cc_statement_day,
+             cc.alert_threshold_percent AS cc_alert_threshold_percent,
+             cc.allows_extra_payments AS cc_allows_extra_payments,
+              preference.strategy AS cc_repayment_strategy,
+               preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+                preference.percentage_bps AS cc_repayment_percentage_bps,
+               sa.account_type AS sa_account_type
+      FROM financial_accounts fa
+      LEFT JOIN credit_card_details cc
+        ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+       LEFT JOIN credit_card_repayment_preferences preference
+        ON preference.account_id = fa.id AND preference.user_id = fa.user_id AND preference.deleted = 0
+       LEFT JOIN savings_account_details sa
+        ON sa.account_id = fa.id AND sa.user_id = fa.user_id AND sa.deleted = 0
+     WHERE fa.user_id = ? AND fa.deleted = 0
+     ORDER BY fa.sort_order`,
+    userId,
+  );
+  return rows.map(mapAccount);
+}
+
+export async function getFinancialAccount(
+  userId: string,
+  id: string,
+): Promise<FinancialAccount | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<FinancialAccountRow>(
+    `SELECT fa.*, cc.credit_limit_centavos AS cc_credit_limit_centavos,
+              cc.available_credit_centavos AS cc_available_credit_centavos,
+              cc.reconciled_available_credit_centavos AS cc_reconciled_available_credit_centavos,
+              cc.pre_reconciliation_available_credit_centavos AS cc_pre_reconciliation_available_credit_centavos,
+              cc.available_credit_reconciled_at AS cc_available_credit_reconciled_at,
+             cc.issuer AS cc_issuer,
+             cc.notes AS cc_notes,
+             cc.billing_cycle_days AS cc_billing_cycle_days,
+             cc.cutoff_day AS cc_cutoff_day,
+             cc.statement_day AS cc_statement_day,
+             cc.alert_threshold_percent AS cc_alert_threshold_percent,
+             cc.allows_extra_payments AS cc_allows_extra_payments,
+              preference.strategy AS cc_repayment_strategy,
+               preference.custom_amount_centavos AS cc_repayment_custom_amount_centavos,
+                preference.percentage_bps AS cc_repayment_percentage_bps,
+               sa.account_type AS sa_account_type
+      FROM financial_accounts fa
+      LEFT JOIN credit_card_details cc
+        ON cc.account_id = fa.id AND cc.user_id = fa.user_id AND cc.deleted = 0
+       LEFT JOIN credit_card_repayment_preferences preference
+        ON preference.account_id = fa.id AND preference.user_id = fa.user_id AND preference.deleted = 0
+       LEFT JOIN savings_account_details sa
+        ON sa.account_id = fa.id AND sa.user_id = fa.user_id AND sa.deleted = 0
+     WHERE fa.user_id = ? AND fa.id = ? AND fa.deleted = 0`,
+    userId,
+    id,
+  );
+  return row ? mapAccount(row) : null;
+}
+
+export async function createFinancialAccount(
+  userId: string,
+  deviceId: string,
+  input: CreateFinancialAccountInput,
+): Promise<{ account: FinancialAccount; operation: SyncOperation }> {
+  if (!input.name || !input.kind) {
+    throw new LocalDbError("VALIDATION_ERROR", "name and kind are required");
+  }
+  if (!VALID_ACCOUNT_KINDS.includes(input.kind)) {
+    throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_ACCOUNT_KINDS.join(", ")}`);
+  }
+  if (input.kind === "credit_card") {
+    validateCreditCardDetails(input.creditCardDetails ?? {}, true);
+  }
+  if (input.openingBalanceCentavos != null && (typeof input.openingBalanceCentavos !== "number" || !Number.isFinite(input.openingBalanceCentavos) || !Number.isInteger(input.openingBalanceCentavos))) {
+    throw new LocalDbError("VALIDATION_ERROR", "openingBalanceCentavos must be a finite integer");
+  }
+
+  const db = await getDb();
+  const id = randomUUID();
+  const ts = now();
+  const payload: Record<string, unknown> = {
+    name: input.name,
+    kind: input.kind,
+    opening_balance_centavos: input.openingBalanceCentavos ?? 0,
+    include_in_dashboard_balance: input.includeInDashboardBalance ?? true,
+    institution_name: input.institutionName ?? null,
+    opened_on: input.openedOn ?? null,
+    sort_order: input.sortOrder ?? 0,
+  };
+
+  let result: { account: FinancialAccount; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO financial_accounts
+        (id, user_id, name, kind, status, opening_balance_centavos, current_balance_centavos,
+         include_in_dashboard_balance, institution_name, opened_on,
+         sort_order, metadata, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+      id,
+      userId,
+      input.name,
+      input.kind,
+      input.openingBalanceCentavos ?? 0,
+      input.openingBalanceCentavos ?? 0,
+      boolToInt(input.includeInDashboardBalance ?? true),
+      input.institutionName ?? null,
+      input.openedOn ?? null,
+      input.sortOrder ?? 0,
+      ts,
+      ts,
+    );
+
+    if (input.kind === "credit_card") {
+      await upsertCreditCardDetails(db, userId, id, input.creditCardDetails!, ts);
+    }
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "financial_accounts",
+      recordId: id,
+      operationType: "create",
+      baseVersion: null,
+      changedFields: Object.keys(payload),
+      payload,
+      failureMessage: `This financial account "${input.name}" could not be created.`,
+    });
+
+    if (input.kind === "credit_card") {
+      await enqueueCreditCardDetailsOperation(db, userId, deviceId, id, "create", null);
+    }
+
+    const row = await db.getFirstAsync<FinancialAccountRow>(
+      "SELECT * FROM financial_accounts WHERE id = ?",
+      id,
+    );
+    if (!row) throw new LocalDbError("INTERNAL_ERROR", "failed to read created account");
+    result = { account: mapAccount(row), operation };
+  });
+
+  return result!;
+}
+
+export async function updateFinancialAccount(
+  userId: string,
+  deviceId: string,
+  id: string,
+  input: UpdateFinancialAccountInput,
+): Promise<{ account: FinancialAccount; operation: SyncOperation }> {
+  if (input.status && !VALID_ACCOUNT_STATUSES.includes(input.status)) {
+    throw new LocalDbError("VALIDATION_ERROR", "status must be active or archived");
+  }
+  if (input.kind && !VALID_ACCOUNT_KINDS.includes(input.kind)) {
+    throw new LocalDbError("VALIDATION_ERROR", `kind must be one of: ${VALID_ACCOUNT_KINDS.join(", ")}`);
+  }
+  if (input.kind === "credit_card" && !input.creditCardDetails) {
+    throw new LocalDbError("VALIDATION_ERROR", "creditCardDetails is required when switching to a credit card account");
+  }
+  if (input.creditCardDetails) {
+    validateCreditCardDetails(input.creditCardDetails, true);
+  }
+
+  const db = await getDb();
+  const ts = now();
+  const changedFields: string[] = [];
+  const payload: Record<string, unknown> = {};
+
+  if (input.name !== undefined) { changedFields.push("name"); payload.name = input.name; }
+  if (input.kind !== undefined) { changedFields.push("kind"); payload.kind = input.kind; }
+  if (input.status !== undefined) { changedFields.push("status"); payload.status = input.status; }
+  if (input.openingBalanceCentavos !== undefined) { changedFields.push("opening_balance_centavos"); payload.opening_balance_centavos = input.openingBalanceCentavos; }
+  if (input.currentBalanceCentavos !== undefined) { changedFields.push("current_balance_centavos"); payload.current_balance_centavos = input.currentBalanceCentavos; }
+  if (input.includeInDashboardBalance !== undefined) { changedFields.push("include_in_dashboard_balance"); payload.include_in_dashboard_balance = input.includeInDashboardBalance; }
+  if (input.institutionName !== undefined) { changedFields.push("institution_name"); payload.institution_name = input.institutionName; }
+  if (input.openedOn !== undefined) { changedFields.push("opened_on"); payload.opened_on = input.openedOn; }
+  if (input.archivedAt !== undefined) { changedFields.push("archived_at"); payload.archived_at = input.archivedAt; }
+  if (input.sortOrder !== undefined) { changedFields.push("sort_order"); payload.sort_order = input.sortOrder; }
+
+    if (changedFields.length === 0 && !input.creditCardDetails) {
+    const existing = await getFinancialAccount(userId, id);
+    if (!existing) throw new LocalDbError("NOT_FOUND", "account not found");
+    return { account: existing, operation: null as unknown as SyncOperation };
+  }
+
+  let result: { account: FinancialAccount; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const existing = await db.getFirstAsync<FinancialAccountRow>(
+      "SELECT * FROM financial_accounts WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!existing) throw new LocalDbError("NOT_FOUND", "account not found");
+    if (input.kind === existing.kind) {
+      changedFields.splice(changedFields.indexOf("kind"), 1);
+      delete payload.kind;
+    }
+    if (changedFields.length === 0 && !input.creditCardDetails) {
+      result = { account: mapAccount(existing), operation: null as unknown as SyncOperation };
+      return;
+    }
+    const existingCardDetails = input.creditCardDetails
+      ? await db.getFirstAsync<{ version: number }>(
+          "SELECT version FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0",
+          id,
+          userId,
+        )
+      : null;
+
+    const setClauses: string[] = [];
+    const params: SQLite.SQLiteBindValue[] = [];
+
+    if (input.name !== undefined) { setClauses.push("name = ?"); params.push(input.name); }
+    if (input.kind !== undefined) { setClauses.push("kind = ?"); params.push(input.kind); }
+    if (input.status !== undefined) { setClauses.push("status = ?"); params.push(input.status); }
+    if (input.openingBalanceCentavos !== undefined) { setClauses.push("opening_balance_centavos = ?"); params.push(input.openingBalanceCentavos); }
+    if (input.currentBalanceCentavos !== undefined) { setClauses.push("current_balance_centavos = ?"); params.push(input.currentBalanceCentavos); }
+    if (input.includeInDashboardBalance !== undefined) { setClauses.push("include_in_dashboard_balance = ?"); params.push(boolToInt(input.includeInDashboardBalance)); }
+    if (input.institutionName !== undefined) { setClauses.push("institution_name = ?"); params.push(input.institutionName); }
+    if (input.openedOn !== undefined) { setClauses.push("opened_on = ?"); params.push(input.openedOn); }
+    if (input.archivedAt !== undefined) { setClauses.push("archived_at = ?"); params.push(input.archivedAt); }
+    if (input.sortOrder !== undefined) { setClauses.push("sort_order = ?"); params.push(input.sortOrder); }
+
+    setClauses.push("updated_at = ?"); params.push(ts);
+    setClauses.push("version = version + 1");
+    params.push(id, userId);
+
+    await db.runAsync(
+      `UPDATE financial_accounts SET ${setClauses.join(", ")} WHERE id = ? AND user_id = ?`,
+      ...params,
+    );
+
+    const effectiveKind = input.kind ?? existing.kind;
+    if (effectiveKind === "credit_card" && input.creditCardDetails) {
+      await upsertCreditCardDetails(db, userId, id, input.creditCardDetails, ts);
+      await enqueueCreditCardDetailsOperation(db, userId, deviceId, id, existingCardDetails ? "update" : "create", existingCardDetails?.version ?? null);
+    } else if (effectiveKind !== "credit_card") {
+      await db.runAsync(
+        "UPDATE credit_card_details SET deleted = 1, updated_at = ?, version = version + 1 WHERE account_id = ? AND user_id = ? AND deleted = 0",
+        ts,
+        id,
+        userId,
+      );
+    }
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "financial_accounts",
+      recordId: id,
+      operationType: "update",
+      baseVersion: existing.version,
+      changedFields,
+      payload,
+      failureMessage: `This financial account "${existing.name}" could not be updated.`,
+    });
+
+    const row = await db.getFirstAsync<FinancialAccountRow>(
+      "SELECT * FROM financial_accounts WHERE id = ?",
+      id,
+    );
+    if (!row) throw new LocalDbError("INTERNAL_ERROR", "failed to read updated account");
+    result = { account: mapAccount(row), operation };
+  });
+
+  return result!;
+}
+
+export async function reconcileCreditCardAvailableCredit(
+  userId: string,
+  deviceId: string,
+  accountId: string,
+  availableCreditCentavos: number,
+): Promise<void> {
+  if (!Number.isSafeInteger(availableCreditCentavos) || availableCreditCentavos < 0) {
+    throw new LocalDbError("VALIDATION_ERROR", "Enter a valid available credit amount.");
+  }
+
+  const db = await getDb();
+  const timestamp = now();
+  await db.withTransactionAsync(async () => {
+    const details = await db.getFirstAsync<{ credit_limit_centavos: number; available_credit_centavos: number | null; version: number }>(
+      "SELECT credit_limit_centavos, available_credit_centavos, version FROM credit_card_details WHERE account_id = ? AND user_id = ? AND deleted = 0",
+      accountId,
+      userId,
+    );
+    if (!details) throw new LocalDbError("NOT_FOUND", "Credit-card details not found.");
+    if (availableCreditCentavos > details.credit_limit_centavos) {
+      throw new LocalDbError("VALIDATION_ERROR", "Available credit cannot exceed the credit limit.");
+    }
+
+    await db.runAsync(
+      `UPDATE credit_card_details SET available_credit_centavos = ?, reconciled_available_credit_centavos = ?,
+         pre_reconciliation_available_credit_centavos = COALESCE(available_credit_centavos, credit_limit_centavos),
+         available_credit_reconciled_at = ?, version = version + 1, updated_at = ?
+       WHERE account_id = ? AND user_id = ? AND deleted = 0`,
+      availableCreditCentavos,
+      availableCreditCentavos,
+      timestamp,
+      timestamp,
+      accountId,
+      userId,
+    );
+    await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "credit_card_details",
+      recordId: accountId,
+      operationType: "update",
+      baseVersion: details.version,
+      changedFields: ["available_credit_centavos", "reconciled_available_credit_centavos", "pre_reconciliation_available_credit_centavos", "available_credit_reconciled_at"],
+      payload: { available_credit_centavos: availableCreditCentavos, reconciled_available_credit_centavos: availableCreditCentavos, pre_reconciliation_available_credit_centavos: details.available_credit_centavos ?? details.credit_limit_centavos, available_credit_reconciled_at: timestamp },
+      failureMessage: "Your issuer-reported available credit could not be reconciled.",
+    });
+  });
+}
+
+export async function deleteFinancialAccount(
+  userId: string,
+  deviceId: string,
+  id: string,
+): Promise<{ account: FinancialAccount; operation: SyncOperation }> {
+  const db = await getDb();
+  const ts = now();
+
+  let result: { account: FinancialAccount; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const existing = await db.getFirstAsync<FinancialAccountRow>(
+      "SELECT * FROM financial_accounts WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!existing) throw new LocalDbError("NOT_FOUND", "account not found");
+
+    await db.runAsync(
+      `UPDATE financial_accounts
+       SET deleted = 1, status = 'deleted', deleted_at = ?, updated_at = ?, version = version + 1
+       WHERE id = ? AND user_id = ?`,
+      ts,
+      ts,
+      id,
+      userId,
+    );
+
+    await db.runAsync(
+      "UPDATE credit_card_details SET deleted = 1, updated_at = ?, version = version + 1 WHERE account_id = ? AND user_id = ? AND deleted = 0",
+      ts,
+      id,
+      userId,
+    );
+    if (existing.kind === "credit_card") {
+      await enqueueCreditCardDetailsOperation(db, userId, deviceId, id, "delete", null);
+    }
+    if (existing.kind === "savings") {
+      const savingsDetails = await db.getFirstAsync<{ version: number }>(
+        "SELECT version FROM savings_account_details WHERE account_id = ? AND user_id = ? AND deleted = 0",
+        id,
+        userId,
+      );
+      if (savingsDetails) {
+        await db.runAsync(
+          "UPDATE savings_account_details SET deleted = 1, updated_at = ?, version = version + 1 WHERE account_id = ? AND user_id = ?",
+          ts,
+          id,
+          userId,
+        );
+        await enqueueOperation(db, {
+          userId,
+          deviceId,
+          entity: "savings_account_details",
+          recordId: id,
+          operationType: "delete",
+          baseVersion: savingsDetails.version,
+          changedFields: [],
+          payload: {},
+          failureMessage: "This savings-account information could not be synchronized.",
+        });
+      }
+    }
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "financial_accounts",
+      recordId: id,
+      operationType: "delete",
+      baseVersion: existing.version,
+      changedFields: [],
+      payload: {},
+      failureMessage: `This financial account "${existing.name}" could not be deleted.`,
+    });
+
+    const row = await db.getFirstAsync<FinancialAccountRow>(
+      "SELECT * FROM financial_accounts WHERE id = ?",
+      id,
+    );
+    if (!row) throw new LocalDbError("INTERNAL_ERROR", "failed to read deleted account");
+    result = { account: mapAccount(row), operation };
+  });
+
+  return result!;
+}
+
+// ---------------------------------------------------------------------------
+// Income Sources
+// ---------------------------------------------------------------------------
+
+export async function listIncomeSources(userId: string): Promise<IncomeSource[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<IncomeSourceRow>(
+    "SELECT * FROM income_sources WHERE user_id = ? AND deleted = 0 ORDER BY name",
+    userId,
+  );
+  return rows.map(mapIncomeSource);
+}
+
+export async function getIncomeSource(
+  userId: string,
+  id: string,
+): Promise<IncomeSource | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<IncomeSourceRow>(
+    "SELECT * FROM income_sources WHERE user_id = ? AND id = ? AND deleted = 0",
+    userId,
+    id,
+  );
+  return row ? mapIncomeSource(row) : null;
+}
+
+export async function createIncomeSource(
+  userId: string,
+  deviceId: string,
+  input: CreateIncomeSourceInput,
+): Promise<{ source: IncomeSource; operation: SyncOperation }> {
+  if (!input.name || !input.frequency || !input.destinationAccountId || !input.subcategoryId) {
+    throw new LocalDbError("VALIDATION_ERROR", "name, frequency, destinationAccountId, and subcategoryId are required");
+  }
+  assertIncomeAmount(input.expectedAmountCentavos);
+  const schedule = normalizeIncomeSchedule({
+    frequency: input.frequency,
+    paydayDayOfMonth: input.paydayDayOfMonth ?? null,
+    paydaySecondDayOfMonth: input.paydaySecondDayOfMonth ?? null,
+    paydayDayOfWeek: input.paydayDayOfWeek ?? null,
+  });
+  assertIncomeSchedule(schedule);
+
+  const db = await getDb();
+  const id = randomUUID();
+  const ts = now();
+  await assertAccessibleIncomeDestinationAndCategory(db, userId, input.destinationAccountId, input.subcategoryId);
+  const payload: Record<string, unknown> = {
+    name: input.name,
+    frequency: input.frequency,
+    destination_account_id: input.destinationAccountId,
+    subcategory_id: input.subcategoryId,
+    expected_amount_centavos: input.expectedAmountCentavos,
+    payday_day_of_month: schedule.paydayDayOfMonth,
+    payday_second_day_of_month: schedule.paydaySecondDayOfMonth,
+    payday_day_of_week: schedule.paydayDayOfWeek,
+    next_expected_date: input.nextExpectedDate ?? null,
+    is_active: input.isActive ?? true,
+    notes: input.notes ?? null,
+  };
+
+  let result: { source: IncomeSource; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const recurringTemplateId = await syncIncomeSourceRecurringTemplate(db, userId, deviceId, {
+      id,
+      recurringTemplateId: null,
+      name: input.name,
+      ...schedule,
+      destinationAccountId: input.destinationAccountId,
+      subcategoryId: input.subcategoryId,
+      expectedAmountCentavos: input.expectedAmountCentavos,
+      nextExpectedDate: input.nextExpectedDate ?? null,
+      notes: input.notes ?? null,
+    });
+
+    payload.recurring_template_id = recurringTemplateId;
+    await db.runAsync(
+      `INSERT INTO income_sources
+        (id, user_id, recurring_template_id, destination_account_id, subcategory_id, name, frequency, expected_amount_centavos,
+          payday_day_of_month, payday_second_day_of_month, payday_day_of_week,
+          next_expected_date, is_active, notes, metadata, version, deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1, 0, ?, ?)`,
+      id,
+      userId,
+      recurringTemplateId,
+      input.destinationAccountId,
+      input.subcategoryId,
+      input.name,
+      input.frequency,
+      input.expectedAmountCentavos,
+      schedule.paydayDayOfMonth,
+      schedule.paydaySecondDayOfMonth,
+      schedule.paydayDayOfWeek,
+      input.nextExpectedDate ?? null,
+      boolToInt(input.isActive ?? true),
+      input.notes ?? null,
+      ts,
+      ts,
+    );
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "income_sources",
+      recordId: id,
+      operationType: "create",
+      baseVersion: null,
+      changedFields: Object.keys(payload),
+      payload,
+      failureMessage: `This income source "${input.name}" could not be created.`,
+    });
+
+    const row = await db.getFirstAsync<IncomeSourceRow>(
+      "SELECT * FROM income_sources WHERE id = ?",
+      id,
+    );
+    if (!row) throw new LocalDbError("INTERNAL_ERROR", "failed to read created income source");
+    result = { source: mapIncomeSource(row), operation };
+  });
+
+  return result!;
+}
+
+export async function updateIncomeSource(
+  userId: string,
+  deviceId: string,
+  id: string,
+  input: UpdateIncomeSourceInput,
+): Promise<{ source: IncomeSource; operation: SyncOperation }> {
+  if (input.expectedAmountCentavos !== undefined) assertIncomeAmount(input.expectedAmountCentavos);
+
+  const db = await getDb();
+  const ts = now();
+  const changedFields: string[] = [];
+  const payload: Record<string, unknown> = {};
+
+  if (input.name !== undefined) { changedFields.push("name"); payload.name = input.name; }
+  if (input.frequency !== undefined) { changedFields.push("frequency"); payload.frequency = input.frequency; }
+  if (input.recurringTemplateId !== undefined) { changedFields.push("recurring_template_id"); payload.recurring_template_id = input.recurringTemplateId; }
+  if (input.destinationAccountId !== undefined) { changedFields.push("destination_account_id"); payload.destination_account_id = input.destinationAccountId; }
+  if (input.subcategoryId !== undefined) { changedFields.push("subcategory_id"); payload.subcategory_id = input.subcategoryId; }
+  if (input.expectedAmountCentavos !== undefined) { changedFields.push("expected_amount_centavos"); payload.expected_amount_centavos = input.expectedAmountCentavos; }
+  // The payday fields are written together once the existing schedule is known.
+  const scheduleChanged = input.frequency !== undefined || input.paydayDayOfMonth !== undefined || input.paydaySecondDayOfMonth !== undefined || input.paydayDayOfWeek !== undefined;
+  if (scheduleChanged) changedFields.push("payday_day_of_month", "payday_second_day_of_month", "payday_day_of_week");
+  if (input.nextExpectedDate !== undefined) { changedFields.push("next_expected_date"); payload.next_expected_date = input.nextExpectedDate; }
+  if (input.isActive !== undefined) { changedFields.push("is_active"); payload.is_active = input.isActive; }
+  if (input.notes !== undefined) { changedFields.push("notes"); payload.notes = input.notes; }
+
+  if (changedFields.length === 0) {
+    const existing = await getIncomeSource(userId, id);
+    if (!existing) throw new LocalDbError("NOT_FOUND", "income source not found");
+    // ponytail: returning without operation when nothing changed, caller treats operation as potentially null
+    return { source: existing, operation: null as unknown as SyncOperation };
+  }
+
+  let result: { source: IncomeSource; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const existing = await db.getFirstAsync<IncomeSourceRow>(
+      "SELECT * FROM income_sources WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!existing) throw new LocalDbError("NOT_FOUND", "income source not found");
+
+    const schedule = normalizeIncomeSchedule({
+      frequency: (input.frequency ?? existing.frequency) as IncomeFrequency,
+      paydayDayOfMonth: input.paydayDayOfMonth !== undefined ? input.paydayDayOfMonth : existing.payday_day_of_month,
+      paydaySecondDayOfMonth: input.paydaySecondDayOfMonth !== undefined ? input.paydaySecondDayOfMonth : existing.payday_second_day_of_month,
+      paydayDayOfWeek: input.paydayDayOfWeek !== undefined ? input.paydayDayOfWeek : existing.payday_day_of_week,
+    });
+    assertIncomeSchedule(schedule);
+    if (scheduleChanged) {
+      payload.payday_day_of_month = schedule.paydayDayOfMonth;
+      payload.payday_second_day_of_month = schedule.paydaySecondDayOfMonth;
+      payload.payday_day_of_week = schedule.paydayDayOfWeek;
+    }
+    const effectiveDestinationAccountId = input.destinationAccountId !== undefined ? input.destinationAccountId : existing.destination_account_id;
+    const effectiveSubcategoryId = input.subcategoryId !== undefined ? input.subcategoryId : existing.subcategory_id;
+    if (!effectiveDestinationAccountId || !effectiveSubcategoryId) {
+      throw new LocalDbError("VALIDATION_ERROR", "destinationAccountId and subcategoryId are required");
+    }
+    await assertAccessibleIncomeDestinationAndCategory(db, userId, effectiveDestinationAccountId, effectiveSubcategoryId);
+
+    const recurringTemplateId = await syncIncomeSourceRecurringTemplate(db, userId, deviceId, {
+      id,
+      recurringTemplateId: existing.recurring_template_id,
+      name: input.name ?? existing.name,
+      ...schedule,
+      destinationAccountId: effectiveDestinationAccountId,
+      subcategoryId: effectiveSubcategoryId,
+      expectedAmountCentavos: input.expectedAmountCentavos ?? existing.expected_amount_centavos,
+      nextExpectedDate: input.nextExpectedDate !== undefined ? input.nextExpectedDate : existing.next_expected_date,
+      notes: input.notes !== undefined ? input.notes : existing.notes,
+    });
+    if (existing.recurring_template_id !== recurringTemplateId) {
+      changedFields.push("recurring_template_id");
+      payload.recurring_template_id = recurringTemplateId;
+    }
+
+    const setClauses: string[] = [];
+    const params: SQLite.SQLiteBindValue[] = [];
+
+    if (input.name !== undefined) { setClauses.push("name = ?"); params.push(input.name); }
+    if (input.frequency !== undefined) { setClauses.push("frequency = ?"); params.push(input.frequency); }
+    if (input.destinationAccountId !== undefined) { setClauses.push("destination_account_id = ?"); params.push(input.destinationAccountId); }
+    if (input.subcategoryId !== undefined) { setClauses.push("subcategory_id = ?"); params.push(input.subcategoryId); }
+    if (input.expectedAmountCentavos !== undefined) { setClauses.push("expected_amount_centavos = ?"); params.push(input.expectedAmountCentavos); }
+    if (scheduleChanged) {
+      setClauses.push("payday_day_of_month = ?", "payday_second_day_of_month = ?", "payday_day_of_week = ?");
+      params.push(schedule.paydayDayOfMonth, schedule.paydaySecondDayOfMonth, schedule.paydayDayOfWeek);
+    }
+    if (input.nextExpectedDate !== undefined) { setClauses.push("next_expected_date = ?"); params.push(input.nextExpectedDate); }
+    if (input.isActive !== undefined) { setClauses.push("is_active = ?"); params.push(boolToInt(input.isActive)); }
+    if (input.notes !== undefined) { setClauses.push("notes = ?"); params.push(input.notes); }
+    setClauses.push("recurring_template_id = ?"); params.push(recurringTemplateId);
+
+    setClauses.push("updated_at = ?"); params.push(ts);
+    setClauses.push("version = version + 1");
+    params.push(id, userId);
+
+    await db.runAsync(
+      `UPDATE income_sources SET ${setClauses.join(", ")} WHERE id = ? AND user_id = ?`,
+      ...params,
+    );
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "income_sources",
+      recordId: id,
+      operationType: "update",
+      baseVersion: existing.version,
+      changedFields,
+      payload,
+      failureMessage: `This income source "${existing.name}" could not be updated.`,
+    });
+
+    const row = await db.getFirstAsync<IncomeSourceRow>(
+      "SELECT * FROM income_sources WHERE id = ?",
+      id,
+    );
+    if (!row) throw new LocalDbError("INTERNAL_ERROR", "failed to read updated income source");
+    result = { source: mapIncomeSource(row), operation };
+  });
+
+  return result!;
+}
+
+export async function deleteIncomeSource(
+  userId: string,
+  deviceId: string,
+  id: string,
+): Promise<{ source: IncomeSource; operation: SyncOperation }> {
+  const db = await getDb();
+  const ts = now();
+
+  let result: { source: IncomeSource; operation: SyncOperation };
+
+  await db.withTransactionAsync(async () => {
+    const existing = await db.getFirstAsync<IncomeSourceRow>(
+      "SELECT * FROM income_sources WHERE user_id = ? AND id = ? AND deleted = 0",
+      userId,
+      id,
+    );
+    if (!existing) throw new LocalDbError("NOT_FOUND", "income source not found");
+
+    if (existing.recurring_template_id) {
+      const { deleteRecurringTemplate } = await import("../ledger/recurringTransactions");
+      await deleteRecurringTemplate(userId, deviceId, existing.recurring_template_id, db);
+    }
+
+    await db.runAsync(
+      `UPDATE income_sources
+       SET deleted = 1, is_active = 0, updated_at = ?, version = version + 1
+       WHERE id = ? AND user_id = ?`,
+      ts,
+      id,
+      userId,
+    );
+
+    const operation = await enqueueOperation(db, {
+      userId,
+      deviceId,
+      entity: "income_sources",
+      recordId: id,
+      operationType: "delete",
+      baseVersion: existing.version,
+      changedFields: [],
+      payload: {},
+      failureMessage: `This income source "${existing.name}" could not be deleted.`,
+    });
+
+    const row = await db.getFirstAsync<IncomeSourceRow>(
+      "SELECT * FROM income_sources WHERE id = ?",
+      id,
+    );
+    if (!row) throw new LocalDbError("INTERNAL_ERROR", "failed to read deleted income source");
+    result = { source: mapIncomeSource(row), operation };
+  });
+
+  return result!;
+}

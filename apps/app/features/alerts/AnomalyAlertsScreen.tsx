@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ArrowLeft, BellRinging, Check } from "phosphor-react-native";
-import { answerUnusualSpending, listPersistedUnusualSpendings, type SpendingRecurrence, type UnusualSpendingInsight } from "../../local-db/repositories/unusualSpending";
+import { answerUnusualSpending, listPersistedUnusualSpendings, type SpendingRecurrence, type UnusualSpendingInsight } from "../../local-db/repositories/alerts/unusualSpending";
 import RecurrenceQuestion from "./RecurrenceQuestion";
 import { recurrenceAnswer } from "./recurrenceOptions";
 import { formatPhp } from "../../lib/format/money";

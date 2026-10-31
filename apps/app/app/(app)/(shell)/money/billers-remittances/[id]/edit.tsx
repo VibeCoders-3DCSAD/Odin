@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { BillerFormPage, closeBillerForm } from "../../../../../../features/money/components/BillerFormPage";
 import { OwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { FullScreenPage } from "../../../../../../features/shell/components/FullScreenPage";
-import { getScheduledPayment } from "../../../../../../local-db/repositories/scheduledPayments";
+import { getScheduledPayment } from "../../../../../../local-db/repositories/scheduled-payments/scheduledPayments";
 
 // Edit a biller or remittance. Link here only with billerEditHref() from features/money/moneyRoutes.
 export default function EditBillerRoute() {

@@ -16,7 +16,7 @@ jest.mock("../hooks/useDashboardReminders", () => ({
     },
   }),
 }));
-jest.mock("../../../local-db/repositories/safeToSpend", () => ({
+jest.mock("../../../local-db/repositories/dashboard/safeToSpend", () => ({
   getSafeToSpend: jest.fn(async () => ({
     periodEnd: "2026-10-31", daysLeft: 13, plannedCentavos: 850000, spentCentavos: 580000,
     leftCentavos: 270000, dailyCentavos: 20769,

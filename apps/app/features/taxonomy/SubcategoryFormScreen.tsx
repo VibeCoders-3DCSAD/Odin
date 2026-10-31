@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { ArrowLeft } from "phosphor-react-native";
-import { createSubcategory, updateSubcategory } from "../../local-db/repositories/taxonomy";
+import { createSubcategory, updateSubcategory } from "../../local-db/repositories/ledger/taxonomy";
 import { DEFAULT_TAXONOMY_COLOR, TAXONOMY_COLORS, TaxonomyIcon, type TaxonomyIconKey } from "./taxonomyVisuals";
 import { subcategoryIconOptions, subcategoryIconKey } from "../../lib/taxonomyIconOptions";
 import { generateSlug } from "./helpers/slug";

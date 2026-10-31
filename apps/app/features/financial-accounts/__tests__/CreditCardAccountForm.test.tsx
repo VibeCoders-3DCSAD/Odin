@@ -15,19 +15,19 @@ const mockDeleteFinancialAccount = jest.fn();
 const mockGetSavingsDetails = jest.fn();
 const mockUpsertSavingsDetails = jest.fn();
 
-jest.mock("../../../local-db/repositories/savingsAccountDetails", () => ({
-  ...jest.requireActual("../../../local-db/repositories/savingsAccountDetails"),
+jest.mock("../../../local-db/repositories/savings/savingsAccountDetails", () => ({
+  ...jest.requireActual("../../../local-db/repositories/savings/savingsAccountDetails"),
   getSavingsAccountDetails: (...args: unknown[]) => mockGetSavingsDetails(...args),
   upsertSavingsAccountDetails: (...args: unknown[]) => mockUpsertSavingsDetails(...args),
 }));
-jest.mock("../../../local-db/repositories/savingsGoalAccounts", () => ({
+jest.mock("../../../local-db/repositories/savings/savingsGoalAccounts", () => ({
   getSavingsGoalAccount: jest.fn().mockResolvedValue({ id: "savings-new", name: "Rainy day", kind: "savings", status: "active" }),
   listActiveSavingsGoalAccounts: jest.fn().mockResolvedValue([]),
 }));
 
 const mockDatePickerRef: { props: MockDatePickerProps | null } = { props: null };
 
-jest.mock("../../../local-db/repositories/financialFoundations", () => ({
+jest.mock("../../../local-db/repositories/foundations/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
   createFinancialAccount: (...args: unknown[]) => mockCreateFinancialAccount(...args),
   updateFinancialAccount: (...args: unknown[]) => mockUpdateFinancialAccount(...args),

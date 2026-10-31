@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, CaretLeft, CaretRight, Check } from "phosphor-react-native";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { styles as ui, v4, v4Font } from "./BudgieForm";
-import { listCategories, listSubcategories, type Category, type Subcategory } from "../local-db/repositories/taxonomy";
+import { listCategories, listSubcategories, type Category, type Subcategory } from "../local-db/repositories/ledger/taxonomy";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../features/taxonomy/taxonomyVisuals";
 
 export type CategorySelection = {

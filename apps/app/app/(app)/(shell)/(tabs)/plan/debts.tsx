@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useSession } from "../../../../../features/auth/components/AccessProvider";
-import DebtManagerOverview from "../../../../../features/debt-manager/DebtManagerOverview";
+import DebtManagerOverview from "../../../../../features/debt-manager/components/DebtManagerOverview";
 import { ROUTES } from "../../../../../routes";
 
 export default function DebtsRoute() {

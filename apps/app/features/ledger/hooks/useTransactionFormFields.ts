@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Transaction } from "../../../local-db/repositories/ledger";
-import type { StatementPaymentContext } from "../../../local-db/repositories/creditCardPayments";
+import type { Transaction } from "../../../local-db/repositories/ledger/ledger";
+import type { StatementPaymentContext } from "../../../local-db/repositories/credit-cards/creditCardPayments";
 import type { TransactionType } from "../components/TransactionTypeSelector";
 import type { TransactionFormProps } from "../services/loadTransactionForm";
 import { fromDateKey } from "../helpers/transactionFormat";
