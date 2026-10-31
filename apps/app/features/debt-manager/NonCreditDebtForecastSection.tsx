@@ -8,13 +8,9 @@ import { DebtForecastChart } from "./DebtForecastChart";
 import { DebtForecastTable } from "./DebtForecastTable";
 import { groupMissedPaymentPoints } from "./debtForecastPresentation";
 import { filterDebtTrendPoints, getPhilippineToday, type DebtTrendRange } from "./debtTrendRange";
-import { ChartLegend, InfoRow, Pill, RangeChips, formatPeso, type Tone } from "./debtUi";
+import { ChartLegend, InfoRow, Pill, RangeChips, formatMilestoneDate, formatPeso, type Tone } from "./debtUi";
 
 const CHART_HEIGHT = 220;
-
-function formatMilestoneDate(date: string): string {
-  return new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00.000Z`));
-}
 
 function statusLabel(status: DebtForecastStatus): string {
   if (status === "ahead") return "Advanced";

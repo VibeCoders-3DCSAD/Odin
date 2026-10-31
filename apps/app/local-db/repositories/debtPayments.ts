@@ -1,8 +1,7 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
 import { createExpenseInTransaction, deleteTransaction, updateTransaction, type CreateExpenseInput } from "./ledger";
+import { getDb } from "./helpers/db";
 
 export type DebtPayment = {
   id: string; debt_account_id: string; transaction_id: string; payment_date: string;
@@ -10,8 +9,6 @@ export type DebtPayment = {
 };
 
 export type DebtPaymentContext = { paymentId: string; debtAccountId: string };
-
-function getDb() { return initDatabase(); }
 
 export async function listDebtPayments(userId: string, debtAccountId: string): Promise<DebtPayment[]> {
   const db = await getDb();

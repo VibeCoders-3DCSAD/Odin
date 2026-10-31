@@ -1,8 +1,7 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
 import type { SyncOperation } from "../types";
+import { getDb, now } from "./helpers/db";
 import {
   calculateCurrentCreditCardCycle,
   calculateSuccessorCreditCardCycle,
@@ -43,14 +42,6 @@ export type CreditCardCycleDefaults = {
   billing_cycle_days: number | null;
 };
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
 
 function mapCycle(row: CycleRow): CreditCardCycle {
   return { ...row, deleted: row.deleted === 1 };

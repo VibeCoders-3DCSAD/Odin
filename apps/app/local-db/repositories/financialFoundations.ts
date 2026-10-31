@@ -1,9 +1,9 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
 import { localToday } from "../../features/billers/schedule";
 import type { SyncOperation } from "../types";
+import { getDb, now, boolToInt } from "./helpers/db";
 
 // ---------------------------------------------------------------------------
 // Row types — raw SQLite columns
@@ -410,18 +410,6 @@ async function syncIncomeSourceRecurringTemplate(
 // Helpers
 // ---------------------------------------------------------------------------
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
-
-function boolToInt(v: boolean | undefined | null): number {
-  return v ? 1 : 0;
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
 
 function isDayOfMonth(value: number): boolean {
   return Number.isInteger(value) && value >= 1 && value <= 31;

@@ -1,11 +1,10 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import type { ForecastTransaction } from "../../features/forecast/types";
 import { listRecurringPayments, listSavedAnswers, listUnusualSpendings } from "./unusualSpending";
 import { SCHEDULED_PAYMENTS_CATEGORY } from "../../features/forecast/scheduledForecast";
 import { localToday } from "../../features/billers/schedule";
 import { historyWindow, isFullYear, seasonalMonthSpend } from "@odin/spending-insights/seasonalMonth";
 import { recurringMonthSpend, resolveRecurringPayments, type RecurringPayment, type ResolvedRecurringPayment } from "@odin/spending-insights/recurringMonths";
+import { getDb } from "./helpers/db";
 
 // Room for a full year of history, which the seasonal forecast compares against.
 const MAX_FORECAST_TRANSACTIONS = 2_000;
@@ -22,10 +21,6 @@ type ForecastTransactionRow = {
   category_slug: string | null;
 };
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
 
 function description(row: ForecastTransactionRow): string | undefined {
   const value = [row.merchant_name, row.counterparty_name, row.notes]

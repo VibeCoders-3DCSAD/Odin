@@ -1,9 +1,9 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
 import type { SyncOperation } from "../types";
 import { TAXONOMY_ICON_KEYS as taxonomyIconKeys } from "../../lib/taxonomyIconOptions";
+import { getDb, now, boolToInt } from "./helpers/db";
 
 type CategoryRow = {
   id: string;
@@ -200,18 +200,6 @@ function mapSubcategory(row: SubcategoryRow): Subcategory {
 const DATABASE_LOCK_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
 const TAXONOMY_ICON_KEYS: ReadonlySet<string> = new Set(taxonomyIconKeys);
 const COLOR_HEX_PATTERN = /^#[0-9A-Fa-f]{6}$/;
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
-
-function boolToInt(v: boolean | undefined | null): number {
-  return v ? 1 : 0;
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
 
 async function retryDatabaseRead<T>(read: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {

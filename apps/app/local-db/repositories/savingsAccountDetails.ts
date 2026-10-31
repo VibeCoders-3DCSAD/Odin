@@ -1,9 +1,8 @@
 import { normalizeSavingsInterestReference, validateScheduledInterest, type SavingsInterestReference } from "@odin/savings-interest";
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { validateContributionSchedule, type GoalContributionFrequency } from "../../features/savings-goals/contributionSchedule";
+import { getDb, now } from "./helpers/db";
 
 // Goal Savings is persisted in savings_goals because it owns its balance directly,
 // rather than wrapping a financial_accounts record.
@@ -92,9 +91,6 @@ type Row = {
   contribution_second_day_of_month: number | null; contribution_day_of_week: number | null;
   custom_interval_days: number | null; next_contribution_date: string | null;
 };
-
-function getDb() { return initDatabase(); }
-function now() { return new Date().toISOString(); }
 
 function map(row: Row): SavingsAccountDetails {
   return {

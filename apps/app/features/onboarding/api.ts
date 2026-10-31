@@ -1,31 +1,6 @@
-import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../../lib/api";
 import type { Classification } from "../dashboard/components/FinancialHealthCard";
 import type { OnboardingSession, ProfileAssignment } from "./types";
-import { authorizedFetch } from "../../lib/localAccess";
-
-function apiFetch<T>(
-  accessToken: string,
-  path: string,
-  options?: { method?: string; body?: unknown },
-) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  return authorizedFetch(`${API_BASE_URL}${path}`, {
-    method: options?.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: options?.body ? JSON.stringify(options.body) : undefined,
-    signal: controller.signal,
-  })
-    .then(async (res) => {
-      let body = {};
-      try { body = await res.json(); } catch {}
-      return { response: res, body } as { response: Response; body: T };
-    })
-    .finally(() => clearTimeout(timeoutId));
-}
+import { apiFetch } from "../../lib/helpers/apiFetch";
 
 export function getCurrentSession(accessToken: string) {
   return apiFetch<{ payload?: { session: OnboardingSession | null }; error?: string; message?: string }>(

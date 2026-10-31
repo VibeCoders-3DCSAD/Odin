@@ -7,6 +7,7 @@ import type { DebtAccount } from "../../local-db/repositories/debtAccounts";
 import type { DebtPayment } from "../../local-db/repositories/debtPayments";
 import type { FinancialAccount } from "../../local-db/repositories/financialFoundations";
 import { addPaymentPeriod } from "./debtForecast";
+import { isIsoDate } from "../../lib/dates";
 
 export type RequiredDebtObligationKind = "credit_card_statement" | "non_credit_card";
 
@@ -37,12 +38,6 @@ export type RequiredDebtTotalInput = {
   creditCardPayments: CreditCardPayment[];
   debtPayments: DebtPayment[];
 };
-
-function isIsoDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
 
 function validatePeriod(periodStart: string, periodEnd: string) {
   if (!isIsoDate(periodStart) || !isIsoDate(periodEnd)) {

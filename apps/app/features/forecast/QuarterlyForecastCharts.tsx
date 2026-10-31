@@ -8,6 +8,7 @@ import { v4, v4Font } from "../../components/BudgieForm";
 import { ForecastCategoryPicker } from "./ForecastCategoryPicker";
 import { localToday } from "../billers/schedule";
 import { LEGACY_SEASON_LABELS, SEASON_PRESETS, normalizeCustomEvents, type SeasonalPreferences } from "@odin/spending-insights/seasons";
+import { formatMoney } from "../../lib/format/money";
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", over: "#D9001F" };
 
@@ -25,7 +26,7 @@ type Slot = { key: string; actual: Period | null; forecast: Period | null };
 type Labels = { full: (key: string) => string; short: (key: string) => string; dates: (key: string) => string };
 
 function formatPeso(centavos: number): string {
-  return `PHP ${(centavos / 100).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+  return formatMoney(centavos, { fractionDigits: 0 });
 }
 
 function compactPeso(centavos: number): string {

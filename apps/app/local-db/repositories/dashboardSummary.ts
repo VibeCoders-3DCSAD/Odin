@@ -1,5 +1,4 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
+import { getDb } from "./helpers/db";
 
 type CategorySpending = {
   category_id: string | null;
@@ -49,10 +48,6 @@ const TAXONOMY_JOINS = `
   LEFT JOIN categories c ON c.id = COALESCE(t.category_id, s.category_id) AND c.user_id = t.user_id
 `;
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
 
 function pad(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;

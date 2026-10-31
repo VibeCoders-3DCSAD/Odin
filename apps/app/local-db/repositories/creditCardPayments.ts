@@ -1,10 +1,10 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
 import { createExpenseInTransaction, deleteTransaction, updateTransaction, type CreateExpenseInput, type Transaction } from "./ledger";
 import { validateIsoDate } from "./creditCardCycleDates";
+import { getDb } from "./helpers/db";
 
 export type CreditCardPaymentStatus = "fully_paid" | "minimum_satisfied" | "partially_paid";
 
@@ -35,10 +35,6 @@ export type CreateStatementPaymentInput = StatementPaymentContext & Pick<CreateE
   "savings_goal_withdrawals" | "amount_centavos" | "source_account_id" | "subcategory_id" | "transaction_date" | "merchant_name"
 > & { notes?: string | null };
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
 
 function mapPayment(row: PaymentRow): CreditCardPayment {
   return { ...row, issuer_recognized: row.issuer_recognized === 1, deleted: row.deleted === 1 };

@@ -1,5 +1,4 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { validateSavingsGoalContribution, writeSavingsGoalContribution, type SavingsGoalContribution } from "./savingsGoalContributions";
 import { readSavingsExpenseFunding, validateSavingsExpenseWithdrawals, replaceExpenseSavingsWithdrawals, type SavingsExpenseWithdrawal } from "./savingsExpenseFunding";
 import { enqueueOperation, LocalDbError } from "../helpers";
@@ -10,6 +9,7 @@ import { createCreditCardInstallmentInTransaction, type CreateCreditCardInstallm
 import { validateIsoDate } from "./creditCardCycleDates";
 import { createSavingsGoalActivityInTransaction, deleteSavingsGoalActivityForTransactionInTransaction, updateSavingsGoalActivityForTransactionInTransaction } from "./savingsGoalActivities";
 import { deleteScheduledPaymentRecordForTransactionInTransaction } from "./scheduledPaymentRecords";
+import { getDb, now } from "./helpers/db";
 
 const VALID_TYPES = ["income", "expense", "transfer"] as const;
 const VALID_SORT_BY = ["transaction_date", "amount_centavos", "created_at"] as const;
@@ -151,14 +151,6 @@ export type TransactionFilters = {
   after?: Pick<TransactionListItem, "transaction_date" | "amount_centavos" | "created_at" | "row_id">;
 };
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
 
 function mapTransaction(row: TransactionRow): Transaction {
   return {

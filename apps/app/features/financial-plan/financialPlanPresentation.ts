@@ -1,6 +1,7 @@
 import type { PlanCommitmentStatus } from "./pastPlanTypes";
 import { planSpendableFundsCentavos } from "./helpers/planSpendableFunds";
 import type { FinancialPlanAllocation, FinancialPlanReservation, FinancialPlanSurplusRecommendation } from "./types";
+import { formatMoney } from "../../lib/format/money";
 
 export type FinancialPlanLabels = {
   categories: Record<string, string>;
@@ -14,7 +15,7 @@ export type FinancialPlanLabels = {
 };
 
 export function formatPeso(centavos: number): string {
-  return `${centavos < 0 ? "-" : ""}₱${(Math.abs(centavos) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return formatMoney(centavos, { prefix: "₱", signBeforePrefix: true });
 }
 
 export function formatForecastPeso(centavos: number): string {

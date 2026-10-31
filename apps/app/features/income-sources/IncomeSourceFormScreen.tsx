@@ -12,7 +12,8 @@ import {
   type IncomeFrequency,
 } from "../../local-db/repositories/financialFoundations";
 import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
-import { FREQUENCIES, FREQUENCY_LABELS, formatIncomeAmount } from "./presentation";
+import { FREQUENCIES, FREQUENCY_LABELS } from "./presentation";
+import { formatPhp, parseLenientCentavos } from "../../lib/format/money";
 
 type Props = { userId: string; deviceId: string; incomeSourceId?: string; onClose: () => void; onSaved: (message: string) => void };
 type Field = "name" | "account" | "category" | "schedule" | "amount";
@@ -21,15 +22,6 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const ACCOUNT_KIND_LABELS: Record<string, string> = {
   cash: "Cash", bank: "Bank", e_wallet: "E-Wallet", savings: "Savings", credit_card: "Credit Card", other: "Other",
 };
-
-function formatPhp(centavos: number): string {
-  return `PHP ${formatIncomeAmount(centavos)}`;
-}
-
-function parseCentavos(value: string): number | null {
-  const amount = Number(value.replace(/,/g, ""));
-  return value.trim() && Number.isFinite(amount) ? Math.round(amount * 100) : null;
-}
 
 function parseDayOfMonth(value: string): number | null {
   const day = Number(value);
@@ -97,7 +89,7 @@ export default function IncomeSourceFormScreen({ userId, deviceId, incomeSourceI
   }
 
   async function handleSave() {
-    const amountCentavos = parseCentavos(amount);
+    const amountCentavos = parseLenientCentavos(amount);
     const next: Partial<Record<Field, string>> = {};
     if (!name.trim()) next.name = "Name is required.";
     if (!destinationAccountId) next.account = "Destination account is required.";

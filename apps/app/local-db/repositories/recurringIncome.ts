@@ -1,9 +1,9 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation } from "../helpers";
 import { uuidV5 } from "../uuid";
 import { dueDatesBetween, localToday, type ScheduledPaymentFrequency } from "../../features/billers/schedule";
 import { createIncomeInTransaction } from "./ledger";
+import { getDb } from "./helpers/db";
 
 // Offline fallback for the server's income job (private.post_due_recurring_income): posts each payday of an
 // active income source, due by today, that has not been posted. It shares the billers' schedule engine.
@@ -28,8 +28,6 @@ type DueTemplate = {
   starts_on: string;
   ends_on: string | null;
 };
-
-function getDb() { return initDatabase(); }
 
 // The ids a post writes for one payday. The server job derives the same ids, so whichever of the server or a
 // device posts first wins and every later post of that payday is a no-op.

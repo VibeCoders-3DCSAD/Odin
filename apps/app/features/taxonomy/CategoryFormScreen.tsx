@@ -13,6 +13,7 @@ import {
 import { createCategory, updateCategory } from "../../local-db/repositories/taxonomy";
 import { ArrowLeft, Info } from "phosphor-react-native";
 import { DEFAULT_TAXONOMY_COLOR, TAXONOMY_COLORS, TAXONOMY_ICON_KEYS, TaxonomyIcon, taxonomyIconKey, type TaxonomyIconKey } from "./taxonomyVisuals";
+import { generateSlug } from "./helpers/slug";
 
 type CategoryFormScreenProps = {
   mode: "create" | "edit";
@@ -40,10 +41,6 @@ const palette = {
   aqua600: "#08B16A",
   card: "#F1F0EB",
 };
-
-function generateSlug(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-}
 
 export default function CategoryFormScreen({
   mode, category, userId, deviceId,

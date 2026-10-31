@@ -12,6 +12,7 @@ import { Check, ShieldCheck } from "phosphor-react-native";
 import { submitConsent } from "./api";
 import { CURRENT_TERMS_VERSION, ERRORS, TERMS_CONSENT_KIND } from "./constants";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
+import { getErrorMessage } from "./helpers";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -33,12 +34,7 @@ type PrivacyConsentScreenProps = {
   consentVersion?: string;
 };
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.name === "AbortError") {
-    return "The request timed out. Check your connection and try again.";
-  }
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
+const CONSENT_TIMEOUT_MESSAGE = "The request timed out. Check your connection and try again.";
 
 export default function PrivacyConsentScreen({
   visible,
@@ -91,7 +87,7 @@ export default function PrivacyConsentScreen({
       setConsented(true);
       setTimeout(() => close(onComplete), 600);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(getErrorMessage(err, CONSENT_TIMEOUT_MESSAGE));
       setSubmitting(false);
     }
   }

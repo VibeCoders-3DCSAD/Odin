@@ -1,6 +1,7 @@
 import type { SavingsAccountDetails } from "../../local-db/repositories/savingsAccountDetails";
 import type { SavingsActivity } from "../savings-goals/types";
 import { advanceContributionSchedule, type SavingsContributionSchedule, validateContributionSchedule } from "../savings-goals/contributionSchedule";
+import { addMonths } from "../../lib/dates";
 
 export type SavingsForecastStatus = "ahead" | "on_track" | "behind" | "projected" | "not_scheduled";
 export type SavingsForecastEvent = "recorded_contribution" | "recorded_withdrawal" | "scheduled_contribution" | "interest_credit" | "current_balance";
@@ -29,16 +30,6 @@ export type SavingsForecastInput = {
   details?: SavingsAccountDetails | null;
   asOf: string;
 };
-
-function addMonths(date: string, months: number): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  const day = value.getUTCDate();
-  value.setUTCDate(1);
-  value.setUTCMonth(value.getUTCMonth() + months);
-  const lastDay = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0)).getUTCDate();
-  value.setUTCDate(Math.min(day, lastDay));
-  return value.toISOString().slice(0, 10);
-}
 
 function nextCreditDate(date: string, details?: SavingsAccountDetails | null): string {
   if (details?.interestCreditFrequency === "quarterly") return addMonths(date, 3);

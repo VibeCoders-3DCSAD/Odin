@@ -1,8 +1,8 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
+import { getDb, now } from "./helpers/db";
 
 export const DEBT_TYPES = ["personal_loan", "salary_loan", "multipurpose_loan", "business_loan", "auto_loan", "custom_debt"] as const;
 export const DEBT_STATUSES = ["active", "archived", "deleted", "paid_off"] as const;
@@ -68,9 +68,6 @@ type DebtAccountRow = {
   paid_off_at: string | null; archived_at: string | null; version: number; deleted: number;
   has_payment_history?: number;
 };
-
-function getDb() { return initDatabase(); }
-function now() { return new Date().toISOString(); }
 
 function parsePresetData(raw: string | null): DebtPresetData {
   const fallback: DebtPresetData = { startDate: null, feesCentavos: 0, penaltyInfo: null, termMonths: null };

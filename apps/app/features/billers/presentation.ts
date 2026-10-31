@@ -22,9 +22,7 @@ export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "
 // Days ahead that count as "due soon", matching the list filter's copy.
 export const DUE_SOON_DAYS = 3;
 
-export function formatPhp(centavos: number): string {
-  return `PHP ${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+export { formatPhp } from "../../lib/format/money";
 
 export function ordinal(day: number): string {
   const teen = day % 100 >= 11 && day % 100 <= 13;

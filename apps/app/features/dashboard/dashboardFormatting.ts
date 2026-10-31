@@ -1,6 +1,7 @@
+import { formatMoney } from "../../lib/format/money";
+
 export function formatPeso(centavos: number, fractionDigits = 0): string {
-  const pesos = Math.abs(centavos) / 100;
-  return `${centavos < 0 ? "-" : ""}₱${pesos.toLocaleString("en-PH", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits })}`;
+  return formatMoney(centavos, { prefix: "₱", fractionDigits, signBeforePrefix: true });
 }
 
 export function formatPesoCompact(centavos: number): string {

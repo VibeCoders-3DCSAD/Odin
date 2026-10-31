@@ -6,15 +6,21 @@ import type { DebtTypePreset } from "../../local-db/repositories/debtAccounts";
 import type { CreditCardStrategy } from "../../local-db/repositories/creditCardRepaymentPlans";
 import type { DebtForecastStatus } from "./debtForecast";
 import type { DebtTrendRange } from "./debtTrendRange";
+import { formatPhpOr } from "../../lib/format/money";
 
 // Debt Manager building blocks on top of the Budgie V4 form kit (screens v5: Debts, Debt detail, Card detail).
 
 export function formatPeso(centavos: number | null | undefined): string {
-  return centavos == null ? "Not available" : `PHP ${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return formatPhpOr(centavos, "Not available");
 }
 
 export function formatShortDate(date: string): string {
   return new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date.slice(0, 10)}T00:00:00Z`));
+}
+
+// "Mar 2027", for debt-free milestones.
+export function formatMilestoneDate(date: string): string {
+  return new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00.000Z`));
 }
 
 export function SectionHeader({ title, actionLabel, onAction, accessibilityLabel }: { title: string; actionLabel?: string; onAction?: () => void; accessibilityLabel?: string }) {

@@ -1,9 +1,8 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation } from "../helpers";
 import { randomUUID } from "../uuid";
 import { detectRecurringPayments, detectUnusualSpendings, UNUSUAL_SPENDING_MODEL_VERSION as MODEL_VERSION, type SpendingRecurrence, type SpendingTransaction, type UnusualSpendingInsight } from "@odin/spending-insights";
 import { normalizeRecurrenceMonths } from "@odin/spending-insights/recurringMonths";
+import { getDb } from "./helpers/db";
 export { detectUnusualSpendings, type SpendingRecurrence, type UnusualSpendingInsight } from "@odin/spending-insights";
 
 const MAX_TRANSACTIONS = 5_000;
@@ -17,10 +16,6 @@ type SpendingTransactionRow = {
   account_name: string | null;
 };
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
 
 export function unusualSpendingStartDate(now = new Date()): string {
   const start = new Date(now);

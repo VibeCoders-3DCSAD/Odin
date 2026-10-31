@@ -1,11 +1,9 @@
-import * as SQLite from "expo-sqlite";
 import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
+import { now } from "./helpers/db";
 
 export const SAVINGS_ALLOCATION_STRATEGIES = ["avalanche", "snowball"] as const;
 export type SavingsAllocationStrategy = typeof SAVINGS_ALLOCATION_STRATEGIES[number];
-
-function now() { return new Date().toISOString(); }
 
 export async function getSavingsAllocationStrategy(userId: string): Promise<SavingsAllocationStrategy> {
   const db = await initDatabase();

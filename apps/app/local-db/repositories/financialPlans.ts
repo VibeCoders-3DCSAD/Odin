@@ -1,5 +1,4 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
@@ -9,6 +8,7 @@ import type { FinancialPlanSurplusRecommendation } from "../../features/financia
 import { getPlanSpendingReview } from "./financialPlanSpendingReview";
 import { getPhilippineToday } from "../../features/debt-manager/debtTrendRange";
 import { planSpendableFundsCentavos } from "../../features/financial-plan/helpers/planSpendableFunds";
+import { getDb, now } from "./helpers/db";
 
 export type AllocationRule = "FIXED" | "MINIMUM" | "FLEXIBLE";
 
@@ -84,9 +84,6 @@ type FinancialPlanRow = {
   savings_surplus_centavos: number;
   version: number;
 };
-
-function getDb() { return initDatabase(); }
-function now() { return new Date().toISOString(); }
 
 function assertCentavos(value: number, field: string): void {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) throw new LocalDbError("VALIDATION_ERROR", `${field} must be a finite non-negative amount`);

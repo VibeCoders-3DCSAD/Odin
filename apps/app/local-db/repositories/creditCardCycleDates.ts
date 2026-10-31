@@ -1,3 +1,4 @@
+import { addDays } from "../../lib/dates";
 type DateParts = { year: number; month: number; day: number };
 
 function parseIsoDate(value: string, field: string): DateParts {
@@ -27,12 +28,6 @@ function daysInMonth(year: number, month: number): number {
 
 function effectiveDay(year: number, month: number, day: number): string {
   return formatDate(new Date(Date.UTC(year, month - 1, Math.min(day, daysInMonth(year, month)))));
-}
-
-function addDays(value: string, days: number): string {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return formatDate(date);
 }
 
 function previousMonth(year: number, month: number): DateParts {

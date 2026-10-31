@@ -12,6 +12,7 @@ import { DateField } from "../../components/DateField";
 import { AccountPickerSheet } from "./components/BillerSheets";
 import { FREQUENCY_LABELS, FREQUENCY_OPTIONS, MONTHS, WEEKDAYS, formatDueDate } from "./presentation";
 import { localToday, nextDueDate, type ScheduledPaymentFrequency } from "./schedule";
+import { parseLenientCentavos } from "../../lib/format/money";
 
 type Props = { userId: string; deviceId: string; scheduledPaymentId?: string; onClose: () => void; onSaved: (message: string) => void };
 type Field = "name" | "amount" | "account" | "dayOfWeek" | "dayOfMonth" | "secondDayOfMonth" | "month" | "startsOn" | "endsOn";
@@ -21,11 +22,6 @@ const INVALID = "Some obligation details are not valid. Correct the marked field
 function parseDay(value: string): number | null {
   const day = Number(value);
   return value.trim() && Number.isInteger(day) ? day : null;
-}
-
-function parseCentavos(value: string): number | null {
-  const amount = Number(value.replace(/,/g, ""));
-  return value.trim() && Number.isFinite(amount) ? Math.round(amount * 100) : null;
 }
 
 export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId, onClose, onSaved }: Props) {
@@ -77,7 +73,7 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
   }, [userId, scheduledPaymentId]);
 
   const input: ScheduledPaymentInput = useMemo(() => ({
-    name, subcategoryId, sourceAccountId: sourceAccountId ?? "", amountCentavos: parseCentavos(amount) ?? 0, frequency,
+    name, subcategoryId, sourceAccountId: sourceAccountId ?? "", amountCentavos: parseLenientCentavos(amount) ?? 0, frequency,
     dueDayOfWeek: dayOfWeek, dueDayOfMonth: parseDay(dayOfMonth), dueSecondDayOfMonth: parseDay(secondDayOfMonth), dueMonth: month,
     startsOn, endsOn: frequency === "once" ? null : endsOn, autoPost, isFamilySupport, isDependentSupport, protectedByDefault, notes,
   }), [name, subcategoryId, sourceAccountId, amount, frequency, dayOfWeek, dayOfMonth, secondDayOfMonth, month, startsOn, endsOn, autoPost, isFamilySupport, isDependentSupport, protectedByDefault, notes]);
@@ -91,7 +87,7 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
     const inMonth = (day: number | null) => day != null && day >= 1 && day <= 31;
     if (!name.trim()) next.name = "Name is required.";
     if (!amount.trim()) next.amount = "Amount is required.";
-    else if ((parseCentavos(amount) ?? 0) <= 0) next.amount = "Enter a positive amount.";
+    else if ((parseLenientCentavos(amount) ?? 0) <= 0) next.amount = "Enter a positive amount.";
     if (!sourceAccountId) next.account = "Select the account this is paid from.";
     if ((frequency === "weekly" || frequency === "biweekly") && dayOfWeek == null) next.dayOfWeek = "Select the day of the week.";
     if (frequency !== "daily" && frequency !== "weekly" && frequency !== "biweekly" && frequency !== "once" && !inMonth(input.dueDayOfMonth)) next.dayOfMonth = "Due day must be 1-31.";

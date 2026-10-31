@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
+import { parsePlainCentavos } from "../../lib/format/money";
 
 export type PlanCategoryRule = "FLEXIBLE" | "MINIMUM" | "FIXED";
 
@@ -29,11 +30,6 @@ function amountFor(category: Props["category"], rule: PlanCategoryRule): string 
   return amount == null ? "" : (amount / 100).toFixed(2);
 }
 
-function parseCentavos(value: string): number | null {
-  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return null;
-  return Math.round(Number(value) * 100);
-}
-
 export function PlanCategoryRuleEditor({ visible = true, category, onSave, onClose }: Props) {
   const [rule, setRule] = useState<PlanCategoryRule>(() => currentRule(category));
   const [amount, setAmount] = useState(() => amountFor(category, currentRule(category)));
@@ -54,7 +50,7 @@ export function PlanCategoryRuleEditor({ visible = true, category, onSave, onClo
   };
 
   const save = async () => {
-    const parsedAmount = rule === "FLEXIBLE" ? null : parseCentavos(amount);
+    const parsedAmount = rule === "FLEXIBLE" ? null : parsePlainCentavos(amount);
     if (rule !== "FLEXIBLE" && parsedAmount === null) {
       setError("Enter a valid peso amount.");
       return;

@@ -1,33 +1,12 @@
 import type { DebtAccount, DebtPaymentSchedule, DebtRepaymentForecast, PaymentFrequency } from "../../local-db/repositories/debtAccounts";
 import { getPhilippineToday } from "./debtTrendRange";
+import { addDays, addMonths, dateAtDay } from "../../lib/dates";
 
 export const PAYMENT_INTERVAL_DAYS: Partial<Record<PaymentFrequency, number>> = {
   daily: 1,
   weekly: 7,
   biweekly: 14,
 };
-
-function addDays(date: string, days: number) {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + days);
-  return value.toISOString().slice(0, 10);
-}
-
-// With a chosen day, months return to it after a short month instead of drifting to the clamped date.
-function addMonths(date: string, months: number, dayOfMonth?: number) {
-  const value = new Date(`${date}T00:00:00Z`);
-  const day = dayOfMonth ?? value.getUTCDate();
-  value.setUTCDate(1);
-  value.setUTCMonth(value.getUTCMonth() + months);
-  const lastDay = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0)).getUTCDate();
-  value.setUTCDate(Math.min(day, lastDay));
-  return value.toISOString().slice(0, 10);
-}
-
-function dateAtDay(year: number, month: number, day: number) {
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
-}
 
 export function addPaymentPeriod(date: string, frequency: PaymentFrequency, schedule: DebtPaymentSchedule = {}) {
   if (frequency === "monthly") return addMonths(date, 1, schedule.dayOfMonth);

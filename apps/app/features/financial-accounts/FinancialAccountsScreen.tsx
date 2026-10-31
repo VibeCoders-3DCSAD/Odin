@@ -42,6 +42,7 @@ import SavingsInterestFields from "./SavingsInterestFields";
 import type { SavingsInterestReference } from "@odin/savings-interest";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
+import { formatMoney } from "../../lib/format/money";
 
 const P = {
   shell: "#fcf8f0",
@@ -80,10 +81,7 @@ function kindIcon(kind: FinancialAccountKind, size: number, color: string) {
 }
 
 function formatPeso(centavos: number): string {
-  const pesos = centavos / 100;
-  const sign = pesos < 0 ? "-" : "";
-  const formatted = `${sign}₱${Math.abs(pesos).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return formatted.length > 23 ? formatted.slice(0, 20) + "..." : formatted;
+  return formatMoney(centavos, { prefix: "₱", signBeforePrefix: true, truncateAfter: 23 });
 }
 
 function formatAccountAmount(centavos: number): string {

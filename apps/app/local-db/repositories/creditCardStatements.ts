@@ -1,9 +1,9 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
 import type { SyncOperation } from "../types";
 import { validateIsoDate } from "./creditCardCycleDates";
+import { getDb, now } from "./helpers/db";
+import { deviceToday } from "../../lib/dates";
 
 export type CreditCardStatement = {
   id: string;
@@ -28,21 +28,8 @@ export type CreateCreditCardStatementInput = Pick<CreditCardStatement,
 > & { finance_charge_centavos?: number };
 
 
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
-
 function mapStatement(row: StatementRow): CreditCardStatement {
   return { ...row, authoritative: row.authoritative === 1, deleted: row.deleted === 1 };
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
-
-function localToday(): string {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function payload(statement: CreateCreditCardStatementInput): Record<string, unknown> {
@@ -130,7 +117,7 @@ export async function createCreditCardStatement(
       throw new LocalDbError("VALIDATION_ERROR", "Statements can only be recorded after the billing cycle has closed.");
     }
     if (cycle.statement_date) throw new LocalDbError("VALIDATION_ERROR", "A statement has already been recorded for this billing cycle.");
-    const today = localToday();
+    const today = deviceToday();
     if (input.statement_date < cycle.cutoff_date || input.statement_date > today) {
       throw new LocalDbError("VALIDATION_ERROR", "Statement date must be on or after the billing-cycle cutoff and no later than today.");
     }

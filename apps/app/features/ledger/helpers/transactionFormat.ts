@@ -1,4 +1,6 @@
 import type { FinancialAccount } from "../../../local-db/repositories/financialFoundations";
+import { formatMoney, formatPhp } from "../../../lib/format/money";
+import { formatDeviceDate } from "../../../lib/dates";
 
 export function parseMoney(value: string): number {
   const cleaned = value.replace(/,/g, "").trim();
@@ -13,14 +15,14 @@ export function formatCentavosForInput(centavos: number): string {
 }
 
 export function formatCurrency(amountCentavos: number): string {
-  return `₱${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return formatMoney(amountCentavos, { prefix: "₱" });
 }
 
 export function formatAccountAmount(account: FinancialAccount): string {
   const amount = account.kind === "credit_card" && account.creditCardDetails
     ? account.creditCardDetails.availableCreditCentavos ?? account.creditCardDetails.creditLimitCentavos
     : account.currentBalanceCentavos;
-  return `PHP ${(amount / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return formatPhp(amount);
 }
 
 export function formatDate(value: Date): string {
@@ -31,7 +33,7 @@ export function formatDate(value: Date): string {
 
 // YYYY-MM-DD in local time, the shape stored for transaction and posting dates.
 export function toDateKey(value: Date): string {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  return formatDeviceDate(value);
 }
 
 export function fromDateKey(key: string): Date {

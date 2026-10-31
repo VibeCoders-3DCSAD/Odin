@@ -27,6 +27,7 @@ import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
 import { dashboardColors as P } from "../dashboard/dashboardAppearance";
+import { formatPhp } from "../../lib/format/money";
 
 const budgieThink = require("../../assets/budgie-think.png");
 
@@ -505,10 +506,6 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
     onUnusualSpendingDismissed();
   }
 
-  function formatCurrency(amountCentavos: number): string {
-    return `PHP ${(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  }
-
   const filtered = activeFilterCount > 0 || loadedSearch.length > 0;
 
   // The list stays mounted, hidden, while a transaction is edited: remounting every loaded row on return
@@ -822,7 +819,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
             <Image source={budgieThink} accessibilityIgnoresInvertColors style={{ width: "100%", height: undefined, aspectRatio: 3 / 2 }} resizeMode="contain" />
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink, marginTop: 12, textAlign: "center" }}>Budgie wants to learn about you</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.secondary, marginTop: 10, textAlign: "center" }}>
-              You spent {formatCurrency(unusualSpending?.amountCentavos ?? 0)} on {unusualSpending?.subcategoryLabel ?? "this subcategory"}, more than your usual {formatCurrency(unusualSpending?.usualSpendingCentavos ?? 0)}. Will you be making this expense again?
+              You spent {formatPhp(unusualSpending?.amountCentavos ?? 0)} on {unusualSpending?.subcategoryLabel ?? "this subcategory"}, more than your usual {formatPhp(unusualSpending?.usualSpendingCentavos ?? 0)}. Will you be making this expense again?
             </Text>
             <View style={{ marginTop: 18 }}>
               {unusualSpending ? <RecurrenceQuestion key={unusualSpending.transactionId} transactionDate={unusualSpending.transactionDate} onAnswer={answerUnusualSpendingRecurrence} /> : null}

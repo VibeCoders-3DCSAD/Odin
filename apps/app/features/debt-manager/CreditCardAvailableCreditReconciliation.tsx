@@ -4,14 +4,7 @@ import { Banner, TextField } from "../../components/BudgieForm";
 import { useToast } from "../../components/Toast";
 import { reconcileCreditCardAvailableCredit } from "../../local-db/repositories/financialFoundations";
 import { Button, LinkButton } from "./debtUi";
-
-function parseCentavos(value: string): number | null {
-  const normalized = value.trim().replace(/,/g, "");
-  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
-  const [whole, fraction = ""] = normalized.split(".");
-  const amount = Number(whole) * 100 + Number((fraction + "00").slice(0, 2));
-  return Number.isSafeInteger(amount) ? amount : null;
-}
+import { parseExactCentavos } from "../../lib/format/money";
 
 type Props = { userId: string; deviceId: string; accountId: string; creditLimitCentavos: number; onSaved: () => Promise<void> };
 
@@ -22,7 +15,7 @@ export default function CreditCardAvailableCreditReconciliation({ userId, device
   const [availableCredit, setAvailableCredit] = useState("");
 
   async function reconcile() {
-    const amount = parseCentavos(availableCredit);
+    const amount = parseExactCentavos(availableCredit);
     if (amount === null) {
       showToast("Enter a valid available credit amount.", "danger");
       return;

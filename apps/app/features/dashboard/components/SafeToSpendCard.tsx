@@ -4,6 +4,7 @@ import { getSafeToSpend, type SafeToSpend } from "../../../local-db/repositories
 import { formatPeso, formatPesoCompact } from "../dashboardFormatting";
 
 import { dashboardColors as P, dashboardStyles } from "../dashboardAppearance";
+import { deviceToday } from "../../../lib/dates";
 
 type Props = {
   userId: string;
@@ -11,11 +12,6 @@ type Props = {
   reloadKey: unknown;
   onNavigate: (page: string) => void;
 };
-
-function localToday(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
 
 function shortDate(date: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-PH", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -35,7 +31,7 @@ export function SafeToSpendCard({ userId, reloadKey, onNavigate }: Props) {
 
   useEffect(() => {
     let current = true;
-    void getSafeToSpend(userId, localToday())
+    void getSafeToSpend(userId, deviceToday())
       .then((data) => { if (current) setState({ status: "ready", data }); })
       .catch(() => { if (current) setState({ status: "error" }); });
     return () => { current = false; };

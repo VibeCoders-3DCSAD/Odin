@@ -4,6 +4,8 @@ import { Platform, Pressable, Text, TextInput, View } from "react-native";
 import { createCreditCardStatement } from "../../local-db/repositories/creditCardStatements";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
+import { parseExactCentavos } from "../../lib/format/money";
+import { formatDeviceDate } from "../../lib/dates";
 
 const P = {
   shell: "#fcf8f0",
@@ -26,21 +28,9 @@ type Props = {
   onCancel: () => void;
 };
 
-function isoDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function dateFromIso(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(year!, month! - 1, day!);
-}
-
-function parseCentavos(value: string): number | null {
-  const normalized = value.trim().replace(/,/g, "");
-  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
-  const [whole, fraction = ""] = normalized.split(".");
-  const amount = Number(whole) * 100 + Number((fraction + "00").slice(0, 2));
-  return Number.isSafeInteger(amount) ? amount : null;
 }
 
 export default function CreditCardStatementForm({ userId, deviceId, cycleId, cycleCutoffDate, today, onSaved, onCancel }: Props) {
@@ -59,11 +49,11 @@ export default function CreditCardStatementForm({ userId, deviceId, cycleId, cyc
   const selectDate = (kind: "statement" | "due") => (_event: DateTimePickerEvent, date?: Date) => {
     if (!date) return;
     if (kind === "statement") {
-      const value = isoDate(date);
+      const value = formatDeviceDate(date);
       if (value < cycleCutoffDate || value > today) return;
       setStatementDate(value);
     }
-    else setDueDate(isoDate(date));
+    else setDueDate(formatDeviceDate(date));
     setInvalidFields((fields) => fields.filter((field) => field !== kind));
     setError(null);
     if (Platform.OS !== "ios") setPicker(null);
@@ -72,9 +62,9 @@ export default function CreditCardStatementForm({ userId, deviceId, cycleId, cyc
   const selectedDate = picker === "statement" ? statementDate : dueDate;
 
   async function submit() {
-    const statementBalance = parseCentavos(balance);
-    const minimum = parseCentavos(minimumDue);
-    const finance = financeCharge.trim() === "" ? 0 : parseCentavos(financeCharge);
+    const statementBalance = parseExactCentavos(balance);
+    const minimum = parseExactCentavos(minimumDue);
+    const finance = financeCharge.trim() === "" ? 0 : parseExactCentavos(financeCharge);
     const invalid = [
       !statementDate || statementDate < cycleCutoffDate || statementDate > today ? "statement" : null,
       !dueDate ? "due" : null,

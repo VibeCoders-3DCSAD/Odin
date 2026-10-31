@@ -3,14 +3,11 @@ import { Pressable, Text, View } from "react-native";
 import { styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import type { ForecastChartPoint } from "./DebtForecastChart";
 import { FLUSH_LIST } from "./debtUi";
+import { formatPhp } from "../../lib/format/money";
 
 const COMPACT_ROW_LIMIT = 6;
 const INITIAL_FORECAST_ROWS = 3;
 const FORECAST_ROW_CHUNK = 8;
-
-function formatPeso(amount: number): string {
-  return `PHP ${(amount / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function compactRows(points: ForecastChartPoint[], forecastRowCount: number, milestoneDate?: string): ForecastChartPoint[] {
   if (points.length <= COMPACT_ROW_LIMIT) return points;
@@ -36,10 +33,10 @@ export function DebtForecastTable({ points, milestoneDate, dateGranularity = "da
       const dateLabel = dateGranularity === "month"
         ? new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${point.date}T00:00:00.000Z`))
         : point.date;
-      return <View key={point.id} accessibilityLabel={`${point.date}, ${point.isForecast ? "forecast" : "actual"} balance ${formatPeso(point.balanceCentavos)}${milestone ? ", debt-free milestone" : ""}`} style={[{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: milestone ? "#E9F6EF" : undefined }, index > 0 ? ui.listRowDivider : null]}>
+      return <View key={point.id} accessibilityLabel={`${point.date}, ${point.isForecast ? "forecast" : "actual"} balance ${formatPhp(point.balanceCentavos)}${milestone ? ", debt-free milestone" : ""}`} style={[{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: milestone ? "#E9F6EF" : undefined }, index > 0 ? ui.listRowDivider : null]}>
         <View style={{ minWidth: 60, alignItems: "center", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: point.isForecast ? "#E6EFFC" : "#EFEBE3" }}><Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 10, color: point.isForecast ? "#1D4ED8" : v4.ink2 }}>{point.isForecast ? "Forecast" : "Actual"}</Text></View>
         <Text style={{ flex: 1, fontFamily: v4Font, fontSize: 12, color: milestone ? "#004D1B" : v4.ink2, fontWeight: milestone ? "700" : "400" }}>{milestone ? `Debt-free milestone · ${dateLabel}` : dateLabel}</Text>
-        <Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 12.5, color: v4.ink, fontVariant: ["tabular-nums"] }}>{formatPeso(point.balanceCentavos)}</Text>
+        <Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 12.5, color: v4.ink, fontVariant: ["tabular-nums"] }}>{formatPhp(point.balanceCentavos)}</Text>
       </View>;
     })}</View>
     {nextForecastRowCount > 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`Show ${nextForecastRowCount} more forecast balance${nextForecastRowCount === 1 ? "" : "s"}`} onPress={() => setVisibleForecastRows((count) => count + FORECAST_ROW_CHUNK)} hitSlop={8} style={{ alignSelf: "flex-start" }}><Text style={{ fontFamily: v4Font, fontWeight: "700", fontSize: 12.5, color: v4.brand }}>{`Show ${nextForecastRowCount} more`}</Text></Pressable> : null}

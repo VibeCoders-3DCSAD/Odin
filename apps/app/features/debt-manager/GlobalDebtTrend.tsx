@@ -4,7 +4,7 @@ import { Banner, FormCard, Note } from "../../components/BudgieForm";
 import { filterDebtTrendPoints, getPhilippineToday, type DebtTrendRange } from "./debtTrendRange";
 import { DebtForecastChart, type ForecastChartPoint } from "./DebtForecastChart";
 import { DebtForecastTable } from "./DebtForecastTable";
-import { ChartLegend, RangeChips } from "./debtUi";
+import { ChartLegend, RangeChips, formatMilestoneDate } from "./debtUi";
 
 const CHART_HEIGHT = 220;
 
@@ -22,10 +22,6 @@ function monthlyBalancePoints(points: GlobalDebtPoint[], today: string): Forecas
     }
   }
   return [...monthly.values()].sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function formatMilestoneDate(date: string): string {
-  return new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00.000Z`));
 }
 
 export default function GlobalDebtTrend({ points }: { points: GlobalDebtPoint[] }) {

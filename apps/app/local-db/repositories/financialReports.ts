@@ -1,5 +1,4 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
+import { getDb } from "./helpers/db";
 
 export type ReportRange = { startDate: string; endDate: string };
 
@@ -11,10 +10,6 @@ export type DebtSummary = { openingCentavos: number; paidCentavos: number; remai
 export type CategoryBreakdown = { label: string; amountCentavos: number };
 export type AllocationSummary = { categoryCentavos: number; debtCentavos: number; savingsCentavos: number; spentCentavos: number } | null;
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
 
 function periodPredicate(range: ReportRange): [string, string] {
   return [range.startDate, range.endDate];

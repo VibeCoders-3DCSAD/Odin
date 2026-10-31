@@ -1,7 +1,6 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import type { PrivacySettings } from "../../features/governance/types";
 import type { ProfileAssignment } from "../../features/onboarding/types";
+import { getDb, now } from "./helpers/db";
 
 type PrivacySettingsRow = {
   id: string;
@@ -29,16 +28,8 @@ function mapRow(row: PrivacySettingsRow): PrivacySettings {
 }
 
 
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
-
 function settingsId(userId: string): string {
   return `${userId}:privacy`;
-}
-
-function now(): string {
-  return new Date().toISOString();
 }
 
 export async function getLocalPrivacySettings(

@@ -1,6 +1,5 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { getPlanSpendingReview } from "./financialPlanSpendingReview";
+import { getDb } from "./helpers/db";
 
 export type SafeToSpendCategory = { allocationId: string; label: string; plannedCentavos: number; spentCentavos: number };
 
@@ -16,8 +15,6 @@ export type SafeToSpend = {
 
 const CATEGORY_LIMIT = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-function getDb() { return initDatabase(); }
 
 function daysBetween(start: string, end: string): number {
   return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS);

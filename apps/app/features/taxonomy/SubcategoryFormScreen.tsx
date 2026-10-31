@@ -14,6 +14,7 @@ import { ArrowLeft } from "phosphor-react-native";
 import { createSubcategory, updateSubcategory } from "../../local-db/repositories/taxonomy";
 import { DEFAULT_TAXONOMY_COLOR, TAXONOMY_COLORS, TaxonomyIcon, type TaxonomyIconKey } from "./taxonomyVisuals";
 import { subcategoryIconOptions, subcategoryIconKey } from "../../lib/taxonomyIconOptions";
+import { generateSlug } from "./helpers/slug";
 
 type SubcategoryFormScreenProps = {
   mode: "create" | "edit";
@@ -47,10 +48,6 @@ const palette = {
   aqua600: "#08B16A",
   card: "#F1F0EB",
 };
-
-function generateSlug(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-}
 
 export default function SubcategoryFormScreen({
   mode, subcategory, categoryId, categoryLabel, categorySlug, categoryColor,

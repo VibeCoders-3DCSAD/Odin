@@ -1,12 +1,12 @@
 import type { SavingsExpenseWithdrawal } from "./savingsExpenseFunding";
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID, uuidV5 } from "../uuid";
 import { currentOccurrence, dueDatesBetween, localToday, type Occurrence, type PaymentSchedule, type ScheduledPaymentFrequency } from "../../features/billers/schedule";
 import { ensureCurrentCreditCardCycles } from "./creditCardCycles";
 import { BILLER_PAYMENT_MUTATION_PREFIX, createExpenseInTransaction, deleteTransaction } from "./ledger";
 import { insertScheduledPaymentRecordInTransaction, listPaidByOccurrence } from "./scheduledPaymentRecords";
+import { getDb } from "./helpers/db";
 
 export type ScheduledPaymentStatus = "active" | "archived";
 
@@ -47,8 +47,6 @@ const COLUMNS = {
 type Column = keyof typeof COLUMNS;
 const BOOLEAN_COLUMNS = new Set<Column>(["auto_post", "is_family_support", "is_dependent_support", "protected_by_default"]);
 const FREQUENCIES: ScheduledPaymentFrequency[] = ["daily", "weekly", "biweekly", "semi_monthly", "monthly", "quarterly", "yearly", "once"];
-
-function getDb() { return initDatabase(); }
 
 function map(row: Row): ScheduledPayment {
   return {

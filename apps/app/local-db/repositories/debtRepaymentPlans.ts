@@ -1,13 +1,9 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import { randomUUID } from "../uuid";
+import { getDb, now } from "./helpers/db";
 
 export type DebtStrategy = "snowball" | "avalanche";
 export type DebtPriority = { debtAccountId: string; priorityRank: number };
-
-async function getDb() { return initDatabase(); }
-function now() { return new Date().toISOString(); }
 
 export async function getDebtStrategy(userId: string): Promise<DebtStrategy> {
   const db = await getDb();

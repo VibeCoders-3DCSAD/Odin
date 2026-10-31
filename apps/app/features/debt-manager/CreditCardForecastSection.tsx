@@ -5,7 +5,7 @@ import type { CreditCardForecastPoint, CreditCardScheduleStatus } from "./credit
 import { DebtForecastChart } from "./DebtForecastChart";
 import { DebtForecastTable } from "./DebtForecastTable";
 import { filterDebtTrendPoints, getPhilippineToday, type DebtTrendRange } from "./debtTrendRange";
-import { ChartLegend, Pill, RangeChips } from "./debtUi";
+import { ChartLegend, Pill, RangeChips, formatMilestoneDate } from "./debtUi";
 
 const CHART_HEIGHT = 220;
 
@@ -15,10 +15,6 @@ function collapseSameDayActuals<T extends { date: string; isForecast: boolean }>
     if (!point.isForecast) lastActualIndexByDate.set(point.date, index);
   });
   return points.filter((point, index) => point.isForecast || lastActualIndexByDate.get(point.date) === index);
-}
-
-function formatMilestoneDate(date: string): string {
-  return new Intl.DateTimeFormat("en-PH", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00.000Z`));
 }
 
 type Props = {

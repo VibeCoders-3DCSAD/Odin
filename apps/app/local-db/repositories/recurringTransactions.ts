@@ -1,9 +1,9 @@
 import { readSavingsExpenseFunding, validateSavingsExpenseWithdrawals } from "./savingsExpenseFunding";
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
 import type { SyncOperation } from "../types";
 import { randomUUID } from "../uuid";
+import { getDb, now } from "./helpers/db";
 
 type RecurringTemplateRow = {
   id: string;
@@ -123,14 +123,6 @@ const VALID_FREQUENCIES = ["daily", "weekly", "biweekly", "semi_monthly", "month
 const VALID_RECURRING_STATUSES = ["active", "paused", "completed", "deleted"] as const;
 const VALID_OCCURRENCE_STATUSES = ["scheduled", "posted", "skipped", "failed"] as const;
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
 
 function mapRecurringTemplate(row: RecurringTemplateRow): RecurringTemplate {
   return {

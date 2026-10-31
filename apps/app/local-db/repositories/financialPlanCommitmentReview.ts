@@ -1,5 +1,3 @@
-import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import type {
   PlanCommitmentReview,
   PlanCommitmentStatus,
@@ -7,6 +5,7 @@ import type {
   PlanSavingsCommitmentRow,
 } from "../../features/financial-plan/pastPlanTypes";
 import type { PlanCommitmentPayments } from "../../features/financial-plan/helpers/commitmentPayments";
+import { getDb } from "./helpers/db";
 
 type PlanPeriodRow = { id: string; period_start: string; period_end: string };
 type ReservationRow = { target_id: string; reserved_centavos: number; due_date: string | null };
@@ -23,8 +22,6 @@ type CommitmentCore = {
   status: PlanCommitmentStatus;
   dueDate: string | null;
 };
-
-function getDb() { return initDatabase(); }
 
 // Reservation tables carry no user_id, so they are scoped through the owning plan.
 const SAVINGS_RESERVATIONS_SQL = `

@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
+import { getDb } from "./helpers/db";
 import type {
   Alert,
   AlertCachePageOptions,
@@ -17,10 +17,6 @@ type AlertRow = Omit<AlertCacheRecord, "route_params" | "related_entities" | "me
   allowed_actions_json: string;
 };
 
-
-function getDb(): Promise<SQLite.SQLiteDatabase> {
-  return initDatabase();
-}
 
 function parseJson<T>(value: string, fallback: T): T {
   try {

@@ -1,4 +1,5 @@
 import type { SavingsActivity } from "./types";
+import { addDays, addMonths, dateAtDay, isIsoDate } from "../../lib/dates";
 
 export const GOAL_CONTRIBUTION_FREQUENCIES = [
   "weekly",
@@ -50,33 +51,6 @@ export type RequiredSavingsContributionTotal = {
 export type ScheduledSavingsAccount = SavingsContributionSchedule & {
   id: string;
 };
-
-function isIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
-
-function addDays(date: string, days: number): string {
-  const next = new Date(`${date}T00:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next.toISOString().slice(0, 10);
-}
-
-function addMonths(date: string, months: number): string {
-  const next = new Date(`${date}T00:00:00Z`);
-  const day = next.getUTCDate();
-  next.setUTCDate(1);
-  next.setUTCMonth(next.getUTCMonth() + months);
-  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-  next.setUTCDate(Math.min(day, lastDay));
-  return next.toISOString().slice(0, 10);
-}
-
-function dateAtDay(year: number, month: number, day: number): string {
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
-}
 
 function validDay(value: number | null): value is number {
   return value !== null && Number.isInteger(value) && value >= 1 && value <= 31;

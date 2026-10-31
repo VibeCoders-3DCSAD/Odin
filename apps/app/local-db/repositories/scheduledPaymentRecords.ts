@@ -1,6 +1,6 @@
 import * as SQLite from "expo-sqlite";
-import { initDatabase } from "../client";
 import { enqueueOperation, LocalDbError } from "../helpers";
+import { getDb } from "./helpers/db";
 
 // Kept apart from scheduledPayments.ts so the ledger can cascade transaction deletes here without an import cycle.
 
@@ -20,8 +20,6 @@ export type ScheduledPaymentRecord = {
 type Row = { id: string; scheduled_payment_id: string; transaction_id: string; occurrence_date: string; payment_date: string; amount_centavos: number; source: "manual" | "auto"; notes: string | null; settles_occurrence: number; version: number };
 
 const SELECT = "SELECT id, scheduled_payment_id, transaction_id, occurrence_date, payment_date, amount_centavos, source, notes, settles_occurrence, version FROM scheduled_payment_records";
-
-function getDb() { return initDatabase(); }
 
 function map(row: Row): ScheduledPaymentRecord {
   return { id: row.id, scheduledPaymentId: row.scheduled_payment_id, transactionId: row.transaction_id, occurrenceDate: row.occurrence_date, paymentDate: row.payment_date, amountCentavos: row.amount_centavos, source: row.source, notes: row.notes, settlesOccurrence: row.settles_occurrence === 1, version: row.version };
