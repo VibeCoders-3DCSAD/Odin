@@ -25,7 +25,7 @@ export function SavingsInterestFields({ type, draft, errors, update }: Props) {
       {draft.boosted ? <>
         <SavingsInput label="Total annual rate while boosted" value={draft.boostedRate} onChange={(boostedRate) => update({ boostedRate })} numeric suffix="% p.a." placeholder="e.g. 15" error={errors.boostedRate} />
         <Note>This is your total rate, including the base rate.</Note>
-        <SavingsInput label="Balance eligible for higher rate" value={draft.eligibleBalance} onChange={(eligibleBalance) => update({ eligibleBalance })} numeric suffix="PHP" placeholder="e.g. 100,000" error={errors.eligibleBalance} />
+        <SavingsInput label="Balance eligible for higher rate" value={draft.eligibleBalance} onChange={(eligibleBalance) => update({ eligibleBalance })} numeric suffix="₱" placeholder="e.g. 100,000" error={errors.eligibleBalance} />
         <SavingsDate label="Higher rate starts" value={draft.boostStart} onChange={(boostStart) => update({ boostStart })} error={errors.boostStart} />
         <SavingsDate label="Higher rate ends" value={draft.boostEnd} onChange={(boostEnd) => update({ boostEnd })} error={errors.boostEnd} />
         <Note>The base rate applies above the eligible balance and after the higher rate ends.</Note>
@@ -40,7 +40,7 @@ export function SavingsContributionFields({ draft, errors, update }: Omit<Props,
     <SectionLabel>Contribution frequency</SectionLabel>
     <View style={styles.chips}>{CONTRIBUTION_CHOICES.map((choice) => <Chip key={choice.key} label={choice.label} selected={draft.frequency === choice.key} onPress={() => update({ frequency: choice.key })} />)}</View>
     {frequency ? <>
-      <SavingsInput label="Planned contribution amount" value={draft.contribution} onChange={(contribution) => update({ contribution })} numeric suffix="PHP" placeholder="0.00" error={errors.contribution} />
+      <SavingsInput label="Planned contribution amount" value={draft.contribution} onChange={(contribution) => update({ contribution })} numeric suffix="₱" placeholder="0.00" error={errors.contribution} />
       <RecurringScheduleFields showFrequencySelector={false} frequencies={[]} weekdayLabels={WEEKDAY_NAMES} value={{ frequency, intervalCount: "1", dayOfMonth: draft.firstDay, secondDayOfMonth: draft.secondDay, dayOfWeek: draft.weekday, monthOfYear: null }} onChange={(next) => update({ firstDay: next.dayOfMonth, secondDay: next.secondDayOfMonth, weekday: next.dayOfWeek })} />
       {errors.schedule ? <FieldError>{errors.schedule}</FieldError> : null}
       {draft.frequency === "monthly" || draft.frequency === "semi_monthly" ? <MonthEndNote days={[draft.firstDay, draft.frequency === "semi_monthly" ? draft.secondDay : null]} /> : null}
@@ -53,7 +53,7 @@ export function SavingsTargetFields({ draft, errors, update }: Omit<Props, "type
   return <FormCard>
     <SavingsToggle label="Set a savings goal" description="Optional. Add a target amount and date to work toward." value={draft.hasGoal} onToggle={() => update({ hasGoal: !draft.hasGoal })} />
     {draft.hasGoal ? <>
-      <SavingsInput label="Target amount" value={draft.target} onChange={(target) => update({ target })} numeric suffix="PHP" placeholder="0.00" error={errors.target} />
+      <SavingsInput label="Target amount" value={draft.target} onChange={(target) => update({ target })} numeric suffix="₱" placeholder="0.00" error={errors.target} />
       <SavingsDate label="Target date" value={draft.targetDate} onChange={(targetDate) => update({ targetDate })} error={errors.targetDate} />
     </> : null}
   </FormCard>;

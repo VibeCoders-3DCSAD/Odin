@@ -11,6 +11,7 @@ import { recommendGoalContribution } from "../helpers/contributionRecommendation
 import EmergencyFundTargetSuggestion from "./EmergencyFundTargetSuggestion";
 import SavingsGoalAccountSelector from "./SavingsGoalAccountSelector";
 import { SavingsDate } from "./SavingsFormControls";
+import { formatPeso } from "../../../lib/format/money";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF" } as const;
 
@@ -114,7 +115,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
   return <View style={{ gap: 14 }}>
     <View><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 20, fontWeight: "800" }}>{goal ? "Edit savings goal" : "Add savings goal"}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12, marginTop: 3 }}>Set a target and track the amount you have already saved.</Text></View>
     <View style={{ backgroundColor: P.card, borderColor: P.line, borderRadius: 14, borderWidth: 1, gap: 14, padding: 14 }}>
-      {goalType === "emergency_fund" && baseline !== null ? <View style={{ backgroundColor: "#F8EFDC", borderRadius: 10, padding: 11 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Suggested monthly baseline: PHP {fromCentavos(baseline)}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 3 }}>Based on posted expenses from the six completed calendar months before today. Saving keeps this baseline without recalculating it later.</Text></View> : null}
+      {goalType === "emergency_fund" && baseline !== null ? <View style={{ backgroundColor: "#F8EFDC", borderRadius: 10, padding: 11 }}><Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Suggested monthly baseline: {formatPeso(baseline)}</Text><Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 11, lineHeight: 16, marginTop: 3 }}>Based on posted expenses from the six completed calendar months before today. Saving keeps this baseline without recalculating it later.</Text></View> : null}
       <Field label="Goal name" value={name} onChangeText={(value) => { setName(value); if (duplicateName) { setDuplicateName(false); setMessage(null); } }} placeholder={SAVINGS_GOAL_PLACEHOLDERS.name} invalid={duplicateName || (invalid && !name.trim())} />
       <SavingsGoalAccountSelector userId={userId} value={linkedAccountId} onChange={(id) => { setLinkedAccountId(id); setAccountInvalid(false); setMessage(null); }} invalid={accountInvalid} />
       <Field label="Target amount" value={target} onChangeText={setTarget} placeholder={SAVINGS_GOAL_PLACEHOLDERS.targetAmount} numeric currency invalid={invalid && (!Number.isSafeInteger(toCentavos(target)) || toCentavos(target) <= 0)} />
@@ -130,7 +131,7 @@ export default function SavingsGoalForm({ userId, deviceId, goal, initialLinkedA
         {contributionFrequency === "custom" ? <Field label="Custom interval days" value={customIntervalDays} onChangeText={setCustomIntervalDays} placeholder="e.g. 45" numeric invalid={invalid && (!Number.isSafeInteger(Number(customIntervalDays)) || Number(customIntervalDays) <= 0)} /> : null}
         <Field label="Planned contribution amount" value={plannedContribution} onChangeText={setPlannedContribution} placeholder="0.00" numeric invalid={invalid && (!Number.isSafeInteger(toCentavos(plannedContribution)) || toCentavos(plannedContribution) < 0)} />
         {suggestedContribution !== null ? <View style={{ gap: 7 }}>
-          <Text accessibilityLiveRegion="polite" style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Suggested: PHP {(suggestedContribution / 100).toFixed(2)} per contribution to reach your target by {targetDate}. Based on your remaining balance; excludes interest.</Text>
+          <Text accessibilityLiveRegion="polite" style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>Suggested: {formatPeso(suggestedContribution)} per contribution to reach your target by {targetDate}. Based on your remaining balance; excludes interest.</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Use suggested amount" onPress={() => setPlannedContribution(fromCentavos(suggestedContribution))} style={{ alignSelf: "flex-start", paddingVertical: 8 }}>
             <Text style={{ color: P.brand, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>Use suggested amount</Text>
           </Pressable>

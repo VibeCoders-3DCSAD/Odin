@@ -220,7 +220,7 @@ it("lists credit cards with their available credit", async () => {
 
   await waitFor(() => {
     expect(view.getByText("Visa Platinum")).toBeTruthy();
-    expect(view.getByText("PHP 25,000.00")).toBeTruthy();
+    expect(view.getByText("₱25,000.00")).toBeTruthy();
   });
   expect(view.getByText("Available credit")).toBeTruthy();
 

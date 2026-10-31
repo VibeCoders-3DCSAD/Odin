@@ -66,7 +66,7 @@ export const STEPS: StepConfig[] = [
     kind: "input",
     questionKey: "monthly_income",
     inputLabel: "Average Monthly Income After Deductions",
-    inputSuffix: "PHP",
+    inputSuffix: "₱",
   },
   {
     key: "emergency_savings_runway",
@@ -89,7 +89,7 @@ export const STEPS: StepConfig[] = [
     kind: "input",
     questionKey: "monthly_essential_living_costs",
     inputLabel: "Estimated Monthly Essential Costs",
-    inputSuffix: "PHP",
+    inputSuffix: "₱",
     allowUnknown: true,
   },
   {

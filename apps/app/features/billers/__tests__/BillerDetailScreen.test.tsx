@@ -42,7 +42,7 @@ describe("BillerDetailScreen", () => {
     const view = render(<BillerDetailScreen {...props} />);
 
     expect(await view.findByText("This obligation occurrence is overdue and remains unpaid. Record a payment or review its schedule.")).toBeTruthy();
-    expect(view.getByText("PHP 2,000.00")).toBeTruthy();
+    expect(view.getByText("₱2,000.00")).toBeTruthy();
     fireEvent.press(view.getByText("Record payment"));
     expect(props.onRecordPayment).toHaveBeenCalled();
   });
@@ -98,7 +98,7 @@ describe("RecordBillerPaymentScreen", () => {
     fireEvent.press(view.getByText("Record payment"));
 
     await waitFor(() => expect(mockRecord).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ scheduledPaymentId: "meralco", occurrenceDate: lastDue, amountCentavos: 248_000, paymentDate: today, sourceAccountId: "acct-bpi" })));
-    expect(props.onRecorded).toHaveBeenCalledWith("PHP 2,480.00 recorded for Meralco.");
+    expect(props.onRecorded).toHaveBeenCalledWith("₱2,480.00 recorded for Meralco.");
   });
 
   it("requires a positive amount", async () => {

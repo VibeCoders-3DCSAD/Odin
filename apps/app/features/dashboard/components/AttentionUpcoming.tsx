@@ -28,7 +28,7 @@ export function ReminderSection({ title, section, loading, empty, onRetry, onOpe
         const days = Math.round((Date.parse(`${item.date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
         const date = new Date(`${item.date}T00:00:00+08:00`).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric" });
         return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Review ${item.title}`} onPress={() => onOpen(item.target)} style={[styles.row, index > 0 && { borderTopWidth: 1, borderTopColor: P.divider }]}>
-          <View style={styles.rowHeading}><Text style={styles.name}>{item.title}</Text><Text style={[styles.amount, upcoming && item.target.kind === "income" ? styles.income : null]}>{formatPeso(item.amountCentavos, 2)}</Text></View>
+          <View style={styles.rowHeading}><Text style={styles.name}>{item.title}</Text><Text style={[styles.amount, upcoming && item.target.kind === "income" ? styles.income : null]}>{formatPeso(item.amountCentavos)}</Text></View>
           <Text style={styles.detail}>{item.detail}</Text>
           <Text style={styles.date}>{date}{upcoming ? ` · ${days === 0 ? "Today" : days === 1 ? "In 1 day" : `In ${days} days`}` : ""}</Text>
           <Text style={styles.action}>{item.target.kind === "observation" ? "Review spending" : "View details"} →</Text>

@@ -1,5 +1,6 @@
 import type { GoalContributionFrequency } from "./contributionSchedule";
 import { deriveGoalContributionDate } from "./contributionSchedule";
+import { formatPeso } from "../../../lib/format/money";
 
 export type SavingsFormType = "hysa" | "traditional" | "time_deposit";
 export const SAVINGS_FORM_TYPES: { key: SavingsFormType; label: string; description: string }[] = [
@@ -92,7 +93,7 @@ export function contributionDescription(draft: SavingsFormDraft): string {
 }
 
 export function formatDraftMoney(value: string): string {
-  return `PHP ${amount(value).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return formatPeso(Math.round(amount(value) * 100));
 }
 
 export function formatDraftRate(value: string): string {

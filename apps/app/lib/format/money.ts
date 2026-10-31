@@ -1,32 +1,21 @@
-export type MoneyFormatOptions = {
-  // Text before the digits, e.g. "PHP " or "₱".
-  prefix?: string;
-  // Minimum and maximum fraction digits.
-  fractionDigits?: number;
-  // true: "-₱1.00" (sign before the prefix); false: "PHP -1.00" (sign inside the number).
-  signBeforePrefix?: boolean;
-  // Strings longer than this are cut to (truncateAfter - 3) characters plus "...".
-  truncateAfter?: number;
-};
+const PESO_DIGITS = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
 
-// The one en-PH money formatter. Callers pick options that reproduce the text their screen shows.
-export function formatMoney(centavos: number, options: MoneyFormatOptions = {}): string {
-  const { prefix = "PHP ", fractionDigits = 2, signBeforePrefix = false, truncateAfter } = options;
-  const localeOptions = { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits };
-  const formatted = signBeforePrefix
-    ? `${centavos < 0 ? "-" : ""}${prefix}${(Math.abs(centavos) / 100).toLocaleString("en-PH", localeOptions)}`
-    : `${prefix}${(centavos / 100).toLocaleString("en-PH", localeOptions)}`;
+// The amount without the symbol, e.g. "1,234.50", for screens that style the "₱" separately.
+export function formatPesoAmount(centavos: number): string {
+  return (Math.abs(centavos) / 100).toLocaleString("en-PH", PESO_DIGITS);
+}
+
+// Every amount the app shows: "₱1,234.50", negatives "-₱1,234.50". Strings longer than
+// `truncateAfter` are cut to (truncateAfter - 3) characters plus "...".
+export function formatPeso(centavos: number, options: { truncateAfter?: number } = {}): string {
+  const formatted = `${centavos < 0 ? "-" : ""}₱${formatPesoAmount(centavos)}`;
+  const { truncateAfter } = options;
   return truncateAfter !== undefined && formatted.length > truncateAfter ? formatted.slice(0, truncateAfter - 3) + "..." : formatted;
 }
 
-// "PHP 1,234.50"; negatives read "PHP -1,234.50".
-export function formatPhp(centavos: number): string {
-  return formatMoney(centavos);
-}
-
-// formatPhp, or `fallback` when the amount is unknown.
-export function formatPhpOr(centavos: number | null | undefined, fallback: string): string {
-  return centavos == null ? fallback : formatPhp(centavos);
+// formatPeso, or `fallback` when the amount is unknown.
+export function formatPesoOr(centavos: number | null | undefined, fallback: string): string {
+  return centavos == null ? fallback : formatPeso(centavos);
 }
 
 // Amount parsers. The forms disagree on what they accept, so each rule keeps its own name.

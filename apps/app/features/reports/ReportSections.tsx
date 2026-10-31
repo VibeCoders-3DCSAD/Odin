@@ -14,13 +14,12 @@ import { getLatestForecastSnapshot } from "../../local-db/repositories/forecast/
 import { listMonthlySpending, recentMonths } from "../../local-db/repositories/forecast/forecastTransactions";
 import { fetchSpendingForecast } from "../forecast/fetchSpendingForecast";
 import { categoryLabel } from "../forecast/QuarterlyForecastCharts";
+import { formatPeso } from "../../lib/format/money";
 
 const P = { brand: "#013220", ink: "#1B1C1A", muted: "#6B7A6F", line: "#D9E5DD", shell: "#F6FAF7", positive: "#087A4A", negative: "#B42318" };
 const PIE_COLORS = ["#087A4A", "#4C956C", "#D4A373", "#5B8E7D", "#BC6C25", "#8A5A44"];
 
-function money(value: number): string {
-  return `PHP ${(value / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+const money = formatPeso;
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return <View style={{ backgroundColor: P.shell, borderColor: P.line, borderRadius: 16, borderWidth: 1, padding: 16 }}>

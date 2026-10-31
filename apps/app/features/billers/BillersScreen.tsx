@@ -11,7 +11,7 @@ import {
 } from "../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { listCategories, listSubcategories } from "../../local-db/repositories/ledger/taxonomy";
 import { AutoPostSheet, DeleteConfirmDialog, RowMenuSheet } from "./components/ScheduledPaymentActions";
-import { dueThisMonthCentavos, formatPhp, isDueSoon, rowSubtitle } from "./presentation";
+import { dueThisMonthCentavos, formatPeso, isDueSoon, rowSubtitle } from "./presentation";
 import { localToday } from "./schedule";
 
 type Filter = "all" | "due_soon" | "auto_post" | "archived";
@@ -101,7 +101,7 @@ export default function BillersScreen({ userId, deviceId, syncVersion, onAdd, on
     setMenuFor(null);
     const current = payment.current;
     if (!current) return;
-    run(() => recordScheduledPayment(userId, deviceId, { scheduledPaymentId: payment.id, occurrenceDate: current.dueDate, amountCentavos: current.remainingCentavos, paymentDate: today, sourceAccountId: payment.sourceAccountId, notes: null }), `${formatPhp(current.remainingCentavos)} recorded for ${payment.name}.`);
+    run(() => recordScheduledPayment(userId, deviceId, { scheduledPaymentId: payment.id, occurrenceDate: current.dueDate, amountCentavos: current.remainingCentavos, paymentDate: today, sourceAccountId: payment.sourceAccountId, notes: null }), `${formatPeso(current.remainingCentavos)} recorded for ${payment.name}.`);
   }
 
   function toggleAutoPost(payment: ScheduledPaymentSummary) {
@@ -177,7 +177,7 @@ export default function BillersScreen({ userId, deviceId, syncVersion, onAdd, on
                     <Text numberOfLines={1} style={ui.listTitle}>{payment.name}</Text>
                     <Text numberOfLines={1} style={[ui.listSubtitle, overdue ? { color: v4.error } : null]}>{payment.status === "archived" ? `${category.label} · Archived` : rowSubtitle(category.label, payment, payment.current, today)}</Text>
                   </View>
-                  <Text style={{ fontFamily: v4Font, fontSize: 12.5, fontWeight: "700", color: overdue ? v4.error : v4.ink, fontVariant: ["tabular-nums"] }}>{formatPhp(payment.amountCentavos)}</Text>
+                  <Text style={{ fontFamily: v4Font, fontSize: 12.5, fontWeight: "700", color: overdue ? v4.error : v4.ink, fontVariant: ["tabular-nums"] }}>{formatPeso(payment.amountCentavos)}</Text>
                 </View>
                 <View style={[ui.listCaret, { width: 32 }]}><CaretRight color={v4.mut} size={15} weight="bold" /></View>
               </Pressable>

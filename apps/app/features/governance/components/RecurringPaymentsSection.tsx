@@ -5,7 +5,7 @@ import MonthPicker from "../../alerts/MonthPicker";
 import { monthList } from "../../alerts/recurrenceOptions";
 import { listPersistedUnusualSpendings, reviseRecurringPaymentGroup } from "../../../local-db/repositories/alerts/unusualSpending";
 import { groupRecurringPayments, type RecurringPaymentGroup } from "../helpers/recurringPaymentGroups";
-import { formatPhp } from "../../../lib/format/money";
+import { formatPeso } from "../../../lib/format/money";
 
 const C = { ink: "#1B1C1A", muted: "#6B7A6F", line: "#EAEAE6", brand: "#0B8A55", danger: "#B3261E" };
 
@@ -66,7 +66,7 @@ function RecurringPaymentRow({ group, first, expanded, onToggle, onSave, onRemov
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const date = new Date(`${payment.transactionDate}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
-  const label = `${payment.subcategoryLabel}, ${formatPhp(payment.amountCentavos)}`;
+  const label = `${payment.subcategoryLabel}, ${formatPeso(payment.amountCentavos)}`;
 
   useEffect(() => { if (!expanded) { setMonths(group.months); setError(null); } }, [expanded, group]);
 
@@ -97,7 +97,7 @@ function RecurringPaymentRow({ group, first, expanded, onToggle, onSave, onRemov
       <Pressable accessibilityRole="button" accessibilityLabel={`Edit months for ${label}`} accessibilityState={{ expanded }} onPress={onToggle} disabled={saving}
         style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 16 }}>
         <View style={{ flex: 1, gap: 4 }}>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: C.ink }}>{payment.subcategoryLabel} · {formatPhp(payment.amountCentavos)}</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 14, color: C.ink }}>{payment.subcategoryLabel} · {formatPeso(payment.amountCentavos)}</Text>
           <Text style={{ fontFamily: "Manrope", fontSize: 12, color: C.muted }}>{transactionIds.length > 1 ? `${transactionIds.length} payments · Last paid ${date}` : `Paid ${date}`} · Yearly, every {monthList(group.months)}</Text>
         </View>
         <Caret size={16} color={C.muted} weight="bold" />

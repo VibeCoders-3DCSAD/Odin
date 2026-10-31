@@ -8,7 +8,7 @@ import { listScheduledPaymentRecords, settleScheduledPaymentOccurrence, type Sch
 import { deleteScheduledPayment, deleteScheduledPaymentRecord, getScheduledPayment, setScheduledPaymentArchived, type ScheduledPayment } from "../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { listSubcategories } from "../../local-db/repositories/ledger/taxonomy";
 import { DeleteConfirmDialog } from "./components/ScheduledPaymentActions";
-import { formatDueDate, formatPhp, repeatsLabel } from "./presentation";
+import { formatDueDate, formatPeso, repeatsLabel } from "./presentation";
 import { addDays, currentOccurrence, dueDatesBetween, localToday, type OccurrenceStatus } from "./schedule";
 
 const HISTORY_PAGE_SIZE = 5;
@@ -94,9 +94,9 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
         <FormCard title={`${status.label} · ${formatDueDate(current.dueDate)}`}>
           <Banner tone={status.tone}>{status.message}</Banner>
           <View style={{ flexDirection: "row", gap: 12 }}>
-            <Stat label="Scheduled" value={formatPhp(current.scheduledCentavos)} />
-            <Stat label="Paid" value={formatPhp(current.paidCentavos)} />
-            <Stat label="Remaining" value={formatPhp(current.remainingCentavos)} />
+            <Stat label="Scheduled" value={formatPeso(current.scheduledCentavos)} />
+            <Stat label="Paid" value={formatPeso(current.paidCentavos)} />
+            <Stat label="Remaining" value={formatPeso(current.remainingCentavos)} />
           </View>
           {current.remainingCentavos > 0 ? <Pressable onPress={onRecordPayment} accessibilityRole="button" style={ui.button}><Text style={ui.buttonText}>Record payment</Text></Pressable> : null}
           {current.remainingCentavos > 0 && current.paidCentavos > 0 ? <Pressable onPress={() => setConfirm("settle")} accessibilityRole="button" style={[ui.button, ui.buttonGhost]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Mark as paid</Text></Pressable> : null}
@@ -104,7 +104,7 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
       ) : null}
 
       <FormCard>
-        <View style={{ flexDirection: "row", gap: 12 }}><Stat label="Amount" value={formatPhp(payment.amountCentavos)} /><Stat label="Paid from" value={accountName} /></View>
+        <View style={{ flexDirection: "row", gap: 12 }}><Stat label="Amount" value={formatPeso(payment.amountCentavos)} /><Stat label="Paid from" value={accountName} /></View>
         <View style={{ flexDirection: "row", gap: 12 }}><Stat label="Category" value={categoryName} /><Stat label="Starts" value={formatDueDate(payment.startsOn)} /></View>
         {[payment.isFamilySupport ? "Family support" : null, payment.isDependentSupport ? "Dependent support" : null, payment.protectedByDefault ? "Protected" : null].filter(Boolean).length ? (
           <Note>{[payment.isFamilySupport ? "Family support" : null, payment.isDependentSupport ? "Dependent support" : null, payment.protectedByDefault ? "Protected" : null].filter(Boolean).join(" · ")}</Note>
@@ -114,18 +114,18 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
 
       {comingUp.length ? (
         <FormCard title="Coming up">
-          {comingUp.map((date) => <View key={date} style={{ flexDirection: "row", justifyContent: "space-between" }}><Text style={ui.listTitle}>{formatDueDate(date)}</Text><Text style={ui.listTitle}>{formatPhp(payment.amountCentavos)}</Text></View>)}
+          {comingUp.map((date) => <View key={date} style={{ flexDirection: "row", justifyContent: "space-between" }}><Text style={ui.listTitle}>{formatDueDate(date)}</Text><Text style={ui.listTitle}>{formatPeso(payment.amountCentavos)}</Text></View>)}
         </FormCard>
       ) : null}
 
       <FormCard title="Payment history">
         {records.length === 0 ? <Note>This obligation has no recorded payments. Record a payment when one is made.</Note> : records.slice(0, historyShown).map((record) => (
-          <Pressable key={record.id} onLongPress={() => setRemovingRecord(record)} accessibilityRole="button" accessibilityLabel={`${formatPhp(record.amountCentavos)} paid ${formatDueDate(record.paymentDate)}`} accessibilityHint="Long press to delete this payment" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Pressable key={record.id} onLongPress={() => setRemovingRecord(record)} accessibilityRole="button" accessibilityLabel={`${formatPeso(record.amountCentavos)} paid ${formatDueDate(record.paymentDate)}`} accessibilityHint="Long press to delete this payment" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
               <Text style={ui.listTitle}>{formatDueDate(record.paymentDate)}</Text>
               <Text style={ui.listSubtitle}>For {formatDueDate(record.occurrenceDate)}{record.source === "auto" ? " · Auto-posted" : ""}{record.settlesOccurrence ? " · Settled in full" : ""}</Text>
             </View>
-            <Text style={[ui.listTitle, { fontVariant: ["tabular-nums"] }]}>{formatPhp(record.amountCentavos)}</Text>
+            <Text style={[ui.listTitle, { fontVariant: ["tabular-nums"] }]}>{formatPeso(record.amountCentavos)}</Text>
           </Pressable>
         ))}
         {records.length > historyShown ? (
@@ -157,7 +157,7 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
         <View style={{ flex: 1, backgroundColor: "rgba(27,28,26,0.4)", justifyContent: "center", padding: 28 }}>
           <View accessibilityRole="alert" style={{ backgroundColor: v4.surface, borderRadius: 20, padding: 20, gap: 10 }}>
             <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 16, color: v4.ink }}>Mark {current ? formatDueDate(current.dueDate) : ""} as paid?</Text>
-            <Text style={ui.note}>{current ? `The ${formatPhp(current.paidCentavos)} already paid settles this occurrence, and the remaining ${formatPhp(current.remainingCentavos)} is no longer owed. Delete that payment to undo this.` : ""}</Text>
+            <Text style={ui.note}>{current ? `The ${formatPeso(current.paidCentavos)} already paid settles this occurrence, and the remaining ${formatPeso(current.remainingCentavos)} is no longer owed. Delete that payment to undo this.` : ""}</Text>
             <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
               <Pressable onPress={() => setConfirm(null)} accessibilityRole="button" style={[ui.button, ui.buttonGhost, { flex: 1 }]}><Text style={[ui.buttonText, ui.buttonGhostText]}>Cancel</Text></Pressable>
               <Pressable onPress={() => { setConfirm(null); if (current) run(() => settleScheduledPaymentOccurrence(userId, deviceId, payment.id, current.dueDate), `${payment.name} for ${formatDueDate(current.dueDate)} is marked as paid.`); }} accessibilityRole="button" style={[ui.button, { flex: 1 }]}><Text style={ui.buttonText}>Mark as paid</Text></Pressable>
@@ -166,7 +166,7 @@ export default function BillerDetailScreen({ userId, deviceId, scheduledPaymentI
         </View>
       </Modal>
       <DeleteConfirmDialog name={confirm === "delete" ? payment.name : null} onCancel={() => setConfirm(null)} onConfirm={() => { setConfirm(null); run(() => deleteScheduledPayment(userId, deviceId, payment.id), `${payment.name} was deleted. Past transactions stay.`, onDeleted); }} />
-      <DeleteConfirmDialog name={removingRecord ? `the ${formatPhp(removingRecord.amountCentavos)} payment` : null} message="Its expense transaction is deleted too, and the amount goes back to the account it was paid from." onCancel={() => setRemovingRecord(null)} onConfirm={() => { const record = removingRecord; setRemovingRecord(null); if (record) run(() => deleteScheduledPaymentRecord(userId, deviceId, record.transactionId), "The payment and its transaction were deleted."); }} />
+      <DeleteConfirmDialog name={removingRecord ? `the ${formatPeso(removingRecord.amountCentavos)} payment` : null} message="Its expense transaction is deleted too, and the amount goes back to the account it was paid from." onCancel={() => setRemovingRecord(null)} onConfirm={() => { const record = removingRecord; setRemovingRecord(null); if (record) run(() => deleteScheduledPaymentRecord(userId, deviceId, record.transactionId), "The payment and its transaction were deleted."); }} />
     </View>
   );
 }

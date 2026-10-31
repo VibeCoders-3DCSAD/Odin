@@ -13,7 +13,7 @@ import {
 } from "../../local-db/repositories/foundations/financialFoundations";
 import { listSubcategories, type Subcategory } from "../../local-db/repositories/ledger/taxonomy";
 import { FREQUENCIES, FREQUENCY_LABELS } from "./presentation";
-import { formatPhp, parseLenientCentavos } from "../../lib/format/money";
+import { formatPeso, parseLenientCentavos } from "../../lib/format/money";
 
 type Props = { userId: string; deviceId: string; incomeSourceId?: string; onClose: () => void; onSaved: (message: string) => void };
 type Field = "name" | "account" | "category" | "schedule" | "amount";
@@ -171,7 +171,7 @@ export default function IncomeSourceFormScreen({ userId, deviceId, incomeSourceI
 
           <FormCard>
             <View>
-              <TextField label="Expected amount *" value={amount} onChangeText={(value) => { setAmount(value); clearError("amount"); }} placeholder="0.00" suffix={errors.amount ? undefined : "PHP"} keyboardType="decimal-pad" error={Boolean(errors.amount)} accessibilityLabel="Expected amount" />
+              <TextField label="Expected amount *" value={amount} onChangeText={(value) => { setAmount(value); clearError("amount"); }} placeholder="0.00" suffix={errors.amount ? undefined : "₱"} keyboardType="decimal-pad" error={Boolean(errors.amount)} accessibilityLabel="Expected amount" />
               {errors.amount ? <FieldError>{errors.amount}</FieldError> : null}
             </View>
             <View>
@@ -196,7 +196,7 @@ export default function IncomeSourceFormScreen({ userId, deviceId, incomeSourceI
 
       <BottomSheet visible={picker === "account"} onClose={() => setPicker(null)} title="Select destination account">
         {accounts.map((account) => (
-          <OptionRow key={account.id} title={account.name} subtitle={`${ACCOUNT_KIND_LABELS[account.kind] ?? account.kind} · ${formatPhp(account.currentBalanceCentavos)}`} selected={account.id === destinationAccountId} onPress={() => { setDestinationAccountId(account.id); clearError("account"); setPicker(null); }} />
+          <OptionRow key={account.id} title={account.name} subtitle={`${ACCOUNT_KIND_LABELS[account.kind] ?? account.kind} · ${formatPeso(account.currentBalanceCentavos)}`} selected={account.id === destinationAccountId} onPress={() => { setDestinationAccountId(account.id); clearError("account"); setPicker(null); }} />
         ))}
       </BottomSheet>
 

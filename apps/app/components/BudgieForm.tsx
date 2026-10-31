@@ -4,6 +4,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { CaretRight, Check, Info, Warning, WarningCircle } from "phosphor-react-native";
 import { BottomSheetSurface } from "./BottomSheetSurface";
 import { ActionSheet } from "./ActionSheet";
+import { formatPesoAmount } from "../lib/format/money";
 
 // Budgie V4 form tokens (screens v4, "v3" overrides).
 export const v4 = {
@@ -150,8 +151,8 @@ export function AmountHero({ children, label = "AMOUNT", amountCentavos, detail 
       <Text style={styles.heroLabel}>{label}</Text>
       {amountCentavos !== undefined ? (
         <Text style={styles.heroAmount}>
-          <Text style={styles.heroCurrency}>PHP </Text>
-          {(amountCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {amountCentavos < 0 ? "-" : ""}<Text style={styles.heroCurrency}>₱</Text>
+          {formatPesoAmount(amountCentavos)}
         </Text>
       ) : null}
       {detail ? <Text style={styles.heroDetail}>{detail}</Text> : null}

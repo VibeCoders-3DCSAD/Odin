@@ -30,7 +30,7 @@ export function AmountListStep({
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: LINE, borderRadius: 14, backgroundColor: CARD }}>
             <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 12, color: MUTED, paddingLeft: 16 }}>
-              PHP
+              ₱
             </Text>
             <TextInput
               value={values[option.key] ? Number(values[option.key]).toLocaleString() : ""}

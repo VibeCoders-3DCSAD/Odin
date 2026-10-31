@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { getSafeToSpend, type SafeToSpend } from "../../../local-db/repositories/dashboard/safeToSpend";
-import { formatPeso, formatPesoCompact } from "../dashboardFormatting";
+import { formatPeso } from "../dashboardFormatting";
 
 import { dashboardColors as P, dashboardStyles } from "../dashboardAppearance";
 import { deviceToday } from "../../../lib/dates";
@@ -62,7 +62,7 @@ function SafeToSpendDetails({ data, onNavigate }: { data: SafeToSpend; onNavigat
       return <View key={category.allocationId}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
           <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12.5, color: P.secondary }}>{category.label}</Text>
-          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.secondary }}>{formatPesoCompact(category.spentCentavos)} / {formatPesoCompact(category.plannedCentavos)}</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: "600", fontSize: 12, color: P.secondary }}>{formatPeso(category.spentCentavos)} / {formatPeso(category.plannedCentavos)}</Text>
         </View>
         <View style={{ height: 8, borderRadius: 8, backgroundColor: P.track, overflow: "hidden" }}>
           <View style={{ width: `${pct}%`, height: "100%", borderRadius: 6, backgroundColor: barColor }} />

@@ -37,7 +37,7 @@ export function InputStep({
           backgroundColor: CARD,
         }}
       >
-        {step.inputSuffix === "PHP" || step.inputSuffix === "%" ? (
+        {step.inputSuffix === "₱" || step.inputSuffix === "%" ? (
           <>
             <Text
               style={{

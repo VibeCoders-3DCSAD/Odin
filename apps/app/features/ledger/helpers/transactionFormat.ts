@@ -1,5 +1,5 @@
 import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
-import { formatMoney, formatPhp } from "../../../lib/format/money";
+import { formatPeso } from "../../../lib/format/money";
 import { formatDeviceDate } from "../../../lib/dates";
 
 export function parseMoney(value: string): number {
@@ -14,15 +14,13 @@ export function formatCentavosForInput(centavos: number): string {
   return (centavos / 100).toFixed(2);
 }
 
-export function formatCurrency(amountCentavos: number): string {
-  return formatMoney(amountCentavos, { prefix: "₱" });
-}
+export { formatPeso as formatCurrency };
 
 export function formatAccountAmount(account: FinancialAccount): string {
   const amount = account.kind === "credit_card" && account.creditCardDetails
     ? account.creditCardDetails.availableCreditCentavos ?? account.creditCardDetails.creditLimitCentavos
     : account.currentBalanceCentavos;
-  return formatPhp(amount);
+  return formatPeso(amount);
 }
 
 export function formatDate(value: Date): string {

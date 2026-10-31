@@ -148,7 +148,7 @@ export default function BillerFormScreen({ userId, deviceId, scheduledPaymentId,
               {subcategoryId ? <Pressable onPress={() => setSubcategoryId(null)} accessibilityRole="button" hitSlop={6}><Text style={[ui.note, { color: v4.brandMid, fontWeight: "700", marginTop: 4 }]}>Remove category</Text></Pressable> : null}
             </View>
             <View>
-              <TextField label="Amount *" value={amount} onChangeText={(value) => { setAmount(value); clearError("amount"); }} placeholder="0.00" suffix="PHP" keyboardType="decimal-pad" error={Boolean(errors.amount)} accessibilityLabel="Amount" />
+              <TextField label="Amount *" value={amount} onChangeText={(value) => { setAmount(value); clearError("amount"); }} placeholder="0.00" suffix="₱" keyboardType="decimal-pad" error={Boolean(errors.amount)} accessibilityLabel="Amount" />
               {errors.amount ? <FieldError>{errors.amount}</FieldError> : null}
             </View>
             <View>

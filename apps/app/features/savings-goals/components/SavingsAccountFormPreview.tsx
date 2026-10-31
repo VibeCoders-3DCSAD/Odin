@@ -63,7 +63,7 @@ export default function SavingsAccountFormPreview({ onCancel }: { onCancel: () =
       <FormCard title="Account details">
         <SavingsInput label="Savings name" value={shared.name} onChange={(name) => updateShared({ name })} placeholder={type === "hysa" ? "e.g. Maya Savings" : type === "traditional" ? "e.g. BPI Savings" : "e.g. 6-month deposit"} error={errors.name} />
         <SavingsInput label="Institution (optional)" value={shared.institution} onChange={(institution) => updateShared({ institution })} placeholder="Bank or provider" />
-        <SavingsInput label={type === "time_deposit" ? "Principal amount" : "Current balance"} value={shared.balance} onChange={(balance) => updateShared({ balance })} numeric suffix="PHP" placeholder="0.00" error={errors.balance} />
+        <SavingsInput label={type === "time_deposit" ? "Principal amount" : "Current balance"} value={shared.balance} onChange={(balance) => updateShared({ balance })} numeric suffix="₱" placeholder="0.00" error={errors.balance} />
       </FormCard>
       <SavingsInterestFields type={type} draft={draft} errors={errors} update={update} />
       {type !== "time_deposit" ? <>

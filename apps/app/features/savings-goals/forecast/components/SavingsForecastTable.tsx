@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { SavingsForecastPoint } from "../helpers/savingsForecast";
+import { formatPeso } from "../../../../lib/format/money";
 
 const P = { ink: "#1B1C1A", muted: "#6B7A6F", card: "#F1F0EB" } as const;
 const LIMIT = 6;
 const INITIAL_FORECAST_ROWS = 3;
 const FORECAST_ROW_CHUNK = 8;
-const money = (amount: number) => `PHP ${(amount / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = formatPeso;
 
 export function SavingsForecastTable({ points, milestoneDate }: { points: SavingsForecastPoint[]; milestoneDate?: string | null }) {
   const [visibleForecastRows, setVisibleForecastRows] = useState(INITIAL_FORECAST_ROWS);

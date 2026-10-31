@@ -165,7 +165,7 @@ describe("FinancialPlanScreen", () => {
       { id: "groceries", category_id: null, label: "Groceries", kind: "expense", minimum_amount_centavos: null, fixed_amount_centavos: null },
       { id: "coffee", category_id: null, label: "Coffee", kind: "expense", minimum_amount_centavos: null, fixed_amount_centavos: null },
     ]);
-    // Commitments ₱170 (debt ₱100, savings ₱50, bill ₱20) + rent minimum ₱200 + groceries ₱122.50; coffee is not selected.
+    // Commitments ₱170.00 (debt ₱100.00, savings ₱50.00, bill ₱20.00) + rent minimum ₱200.00 + groceries ₱122.50; coffee is not selected.
     expect(view.getByText("Recommended Minimum: ₱492.50")).toBeTruthy();
     expect(view.getByText("₱170.00 commitments + ₱322.50 expected spending")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Use the recommended minimum planning amount"));
@@ -644,7 +644,7 @@ describe("FinancialPlanScreen", () => {
 
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
 
-    await waitFor(() => expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy());
+    await waitFor(() => expect(view.getByText("Available money: ₱1,000.00")).toBeTruthy());
     expect(mockListFinancialAccounts).toHaveBeenCalledWith("user-1");
   });
 

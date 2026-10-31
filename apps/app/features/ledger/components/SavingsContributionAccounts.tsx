@@ -5,10 +5,11 @@ import { Banner, FieldLabel, Note, PickerField, styles as ui, v4Font, v4 } from 
 import { getSavingsGoal } from "../../../local-db/repositories/savings/savingsGoals";
 import { getSavingsExpenseFunding } from "../../../local-db/repositories/savings/savingsExpenseFunding";
 import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
+import { formatPeso } from "../../../lib/format/money";
 
 type Props = { userId: string; goalId: string; accounts: FinancialAccount[]; sourceAccountId: string; onSourceChange: (id: string) => void; transactionId?: string };
 type LinkedAccount = { id: string; name: string; unallocatedCentavos: number };
-function money(value: number) { return `₱${(value / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+const money = formatPeso;
 
 export default function SavingsContributionAccounts({ userId, goalId, accounts, sourceAccountId, onSourceChange, transactionId }: Props) {
   const [linked, setLinked] = useState<LinkedAccount | null>(null);

@@ -11,7 +11,7 @@ import { listPaidByOccurrence } from "../../local-db/repositories/scheduled-paym
 import { getScheduledPayment, recordScheduledPayment, type ScheduledPayment } from "../../local-db/repositories/scheduled-payments/scheduledPayments";
 import { DateField } from "../../components/DateField";
 import { AccountPickerSheet } from "./components/BillerSheets";
-import { formatDueDate, formatPhp } from "./presentation";
+import { formatDueDate, formatPeso } from "./presentation";
 import { currentOccurrence, localToday, occurrenceChoices } from "./schedule";
 
 type Props = { userId: string; deviceId: string; scheduledPaymentId: string; onClose: () => void; onRecorded: (message: string) => void };
@@ -85,7 +85,7 @@ export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledP
         }
       }
       await recordScheduledPayment(userId, deviceId, { savingsGoalWithdrawals, id: recordId.current, scheduledPaymentId: payment.id, occurrenceDate: occurrence!, amountCentavos: centavos, paymentDate: paymentDate!, sourceAccountId: sourceAccountId!, notes });
-      onRecorded(`${formatPhp(centavos)} recorded for ${payment.name}.`);
+      onRecorded(`${formatPeso(centavos)} recorded for ${payment.name}.`);
     } catch (error) {
       setFormError(error instanceof LocalDbError ? error.message : "Your obligation data could not be loaded or saved. Try again.");
       setSaving(false);
@@ -113,12 +113,12 @@ export default function RecordBillerPaymentScreen({ userId, deviceId, scheduledP
                 ))}
               </View>
             )}
-            {occurrence ? <Note>{formatPhp(remainingFor(occurrence))} of {formatPhp(payment.amountCentavos)} remaining for this period.</Note> : null}
+            {occurrence ? <Note>{formatPeso(remainingFor(occurrence))} of {formatPeso(payment.amountCentavos)} remaining for this period.</Note> : null}
             {errors.occurrence ? <FieldError>{errors.occurrence}</FieldError> : null}
           </FormCard>
           <FormCard>
             <View>
-              <TextField label="Payment amount *" value={amount} onChangeText={(value) => { setAmount(value); clearError("amount"); }} placeholder="Enter payment amount" suffix="PHP" keyboardType="decimal-pad" error={Boolean(errors.amount)} accessibilityLabel="Payment amount" />
+              <TextField label="Payment amount *" value={amount} onChangeText={(value) => { setAmount(value); clearError("amount"); }} placeholder="Enter payment amount" suffix="₱" keyboardType="decimal-pad" error={Boolean(errors.amount)} accessibilityLabel="Payment amount" />
               {errors.amount ? <FieldError>{errors.amount}</FieldError> : null}
             </View>
             <View>

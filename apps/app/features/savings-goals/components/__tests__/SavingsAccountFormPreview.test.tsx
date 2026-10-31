@@ -39,7 +39,7 @@ describe("Savings account form preview", () => {
     fireEvent.changeText(view.getByLabelText("Base annual interest rate"), "3");
     fireEvent.press(view.getByLabelText("Review details"));
     expect(view.getByText("Review savings")).toBeTruthy();
-    expect(view.getByText("PHP 150,000.00")).toBeTruthy();
+    expect(view.getByText("₱150,000.00")).toBeTruthy();
     expect(view.getByText("Manual contributions")).toBeTruthy();
     expect(view.queryByLabelText("Save savings")).toBeNull();
     fireEvent.press(view.getByLabelText("Back to edit"));

@@ -2,7 +2,7 @@ import { Pressable, Text, View } from "react-native";
 import { Bank, Check, CreditCard, Money, Wallet } from "phosphor-react-native";
 import { BottomSheet, styles as ui, tileTints, v4, v4Font } from "../../../components/BudgieForm";
 import type { FinancialAccount } from "../../../local-db/repositories/foundations/financialFoundations";
-import { formatPhp } from "../presentation";
+import { formatPeso } from "../presentation";
 
 function AccountIcon({ kind, color }: { kind: FinancialAccount["kind"]; color: string }) {
   const Icon = kind === "credit_card" ? CreditCard : kind === "cash" ? Money : kind === "e_wallet" ? Wallet : Bank;
@@ -27,7 +27,7 @@ export function AccountPickerSheet({ visible, accounts, selectedId, onSelect, on
                   <View style={[ui.listTile, { backgroundColor: tint.bg }]}><AccountIcon kind={account.kind} color={tint.fg} /></View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text numberOfLines={1} style={ui.listTitle}>{account.name}</Text>
-                    <Text numberOfLines={1} style={ui.listSubtitle}>{formatPhp(account.currentBalanceCentavos)}</Text>
+                    <Text numberOfLines={1} style={ui.listSubtitle}>{formatPeso(account.currentBalanceCentavos)}</Text>
                   </View>
                   {selected ? <Check color={v4.brandMid} size={16} weight="bold" /> : null}
                 </View>

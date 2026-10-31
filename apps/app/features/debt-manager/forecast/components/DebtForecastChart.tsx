@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { View } from "react-native";
 import Svg, { Circle, G, Line, Polyline, Rect, Text as SvgText } from "react-native-svg";
-import { formatPhp } from "../../../../lib/format/money";
+import { formatPeso } from "../../../../lib/format/money";
 
 const CHART_HEIGHT = 220;
 const PADDING = { top: 20, right: 12, bottom: 30, left: 58 };
 
 function formatAxisValue(value: number): string {
-  return `PHP ${value.toLocaleString("en-PH", { notation: "compact", maximumFractionDigits: 1 })}`;
+  return `₱${value.toLocaleString("en-PH", { notation: "compact", maximumFractionDigits: 1 })}`;
 }
 
 function formatDate(date: string): string {
@@ -76,15 +76,15 @@ export function DebtForecastChart({ points, status, today, width, colorMode, tar
       <Line x1={x(markerIndex)} x2={x(markerIndex)} y1={PADDING.top} y2={CHART_HEIGHT - PADDING.bottom} stroke="#6B7A6F" strokeWidth={1} strokeDasharray="3 3" />
       <SvgText x={Math.min(width - PADDING.right, x(markerIndex) + 5)} y={PADDING.top + 11} fill="#6B7A6F" fontSize={10}>Today</SvgText>
       {targetMarkerX !== null ? <><Line x1={targetMarkerX} x2={targetMarkerX} y1={PADDING.top} y2={CHART_HEIGHT - PADDING.bottom} stroke={color} strokeWidth={1} strokeDasharray="5 3" /><SvgText x={Math.min(width - PADDING.right, targetMarkerX + 5)} y={PADDING.top + 23} fill={color} fontSize={10}>Target</SvgText></> : null}
-      {points.map((point, index) => <G key={point.id} accessible accessibilityRole="button" accessibilityLabel={`${point.date}, ${point.isForecast ? "forecast" : "actual"} balance ${formatPhp(point.balanceCentavos)}`} onLongPress={() => setSelectedPointId(point.id)} onPressOut={() => setSelectedPointId(null)}>
+      {points.map((point, index) => <G key={point.id} accessible accessibilityRole="button" accessibilityLabel={`${point.date}, ${point.isForecast ? "forecast" : "actual"} balance ${formatPeso(point.balanceCentavos)}`} onLongPress={() => setSelectedPointId(point.id)} onPressOut={() => setSelectedPointId(null)}>
         <Circle cx={x(index)} cy={y(balances[index]!)} r={18} fill="transparent" />
         <Circle cx={x(index)} cy={y(balances[index]!)} r={forecastStartIndex === -1 || index < forecastStartIndex ? 3 : 2.5} fill={color} />
       </G>)}
       {labels.map((index) => <SvgText key={index} x={x(index)} y={CHART_HEIGHT - 8} fill="#6B7A6F" fontSize={10} textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}>{formatDate(points[index]!.date)}</SvgText>)}
-      {selectedPoint ? <G accessible accessibilityLabel={`Selected ${selectedPoint.isForecast ? "forecast" : "actual"} balance on ${selectedPoint.date}: ${formatPhp(selectedPoint.balanceCentavos)}`}>
+      {selectedPoint ? <G accessible accessibilityLabel={`Selected ${selectedPoint.isForecast ? "forecast" : "actual"} balance on ${selectedPoint.date}: ${formatPeso(selectedPoint.balanceCentavos)}`}>
         <Rect x={tooltipX} y={tooltipY} width={132} height={46} rx={8} fill="#1B1C1A" />
         <SvgText x={tooltipX + 8} y={tooltipY + 16} fill="#FFFFFF" fontSize={10}>{selectedPoint.date} - {selectedPoint.isForecast ? "Forecast" : "Actual"}</SvgText>
-        <SvgText x={tooltipX + 8} y={tooltipY + 34} fill="#FFFFFF" fontSize={12} fontWeight="700">{formatPhp(selectedPoint.balanceCentavos)}</SvgText>
+        <SvgText x={tooltipX + 8} y={tooltipY + 34} fill="#FFFFFF" fontSize={12} fontWeight="700">{formatPeso(selectedPoint.balanceCentavos)}</SvgText>
       </G> : null}
     </Svg>
   </View>;

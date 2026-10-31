@@ -46,8 +46,8 @@ export default function DebtPaymentCard({ debt }: Props) {
               })}
             </View>
           )}
-          <TextField label="Principal" suffix="PHP" accessibilityLabel="Principal amount" value={debt.debtPrincipal} onChangeText={debt.setDebtPrincipal} placeholder="Enter principal amount" keyboardType="decimal-pad" />
-          <TextField label="Interest or fee" suffix="PHP" accessibilityLabel="Interest or fee amount" value={debt.debtInterestOrFees} onChangeText={debt.setDebtInterestOrFees} placeholder="Enter interest or fee amount" keyboardType="decimal-pad" />
+          <TextField label="Principal" suffix="₱" accessibilityLabel="Principal amount" value={debt.debtPrincipal} onChangeText={debt.setDebtPrincipal} placeholder="Enter principal amount" keyboardType="decimal-pad" />
+          <TextField label="Interest or fee" suffix="₱" accessibilityLabel="Interest or fee amount" value={debt.debtInterestOrFees} onChangeText={debt.setDebtInterestOrFees} placeholder="Enter interest or fee amount" keyboardType="decimal-pad" />
           <Note>Principal reduces the debt balance. Principal plus interest or fees cannot exceed the payment amount.</Note>
         </>
       ) : null}

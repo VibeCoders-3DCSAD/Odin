@@ -22,8 +22,8 @@ describe("surplusGuidanceMessage", () => {
   });
 
   it("explains a reward and a tight month", () => {
-    expect(surplusGuidanceMessage(guidance({ reasonCode: "REWARD_YOURSELF" }), { ...values, margin: 8_000 })).toContain("money left over (PHP 8,000 a month)");
-    expect(surplusGuidanceMessage(guidance({ reasonCode: "NEGATIVE_FINANCIAL_MARGIN" }), values)).toBe("Your monthly budget is falling short by PHP 3,000. We suggest keeping this money aside for now.");
+    expect(surplusGuidanceMessage(guidance({ reasonCode: "REWARD_YOURSELF" }), { ...values, margin: 8_000 })).toContain("money left over (₱8,000.00 a month)");
+    expect(surplusGuidanceMessage(guidance({ reasonCode: "NEGATIVE_FINANCIAL_MARGIN" }), values)).toBe("Your monthly budget is falling short by ₱3,000.00. We suggest keeping this money aside for now.");
   });
 
   it("leaves the choice to the user when the profile can't guide it", () => {

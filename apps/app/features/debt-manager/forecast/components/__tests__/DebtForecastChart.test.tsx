@@ -30,14 +30,14 @@ describe("DebtForecastChart", () => {
       colorMode="blue"
     />);
 
-    const node = getByLabelText("2026-09-13, actual balance PHP 123.45");
+    const node = getByLabelText("2026-09-13, actual balance ₱123.45");
     fireEvent(node, "longPress");
 
-    expect(getByLabelText("Selected actual balance on 2026-09-13: PHP 123.45")).toBeTruthy();
+    expect(getByLabelText("Selected actual balance on 2026-09-13: ₱123.45")).toBeTruthy();
 
     fireEvent(node, "pressOut");
 
-    expect(queryByLabelText("Selected actual balance on 2026-09-13: PHP 123.45")).toBeNull();
+    expect(queryByLabelText("Selected actual balance on 2026-09-13: ₱123.45")).toBeNull();
   });
 
 });

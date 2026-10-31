@@ -285,7 +285,7 @@ it("shows current-cycle credit-card transactions", async () => {
   await waitFor(() => {
     expect(view.getByText("Grocery Store")).toBeTruthy();
     expect(view.getByText("Estimated balance")).toBeTruthy();
-    expect(view.getAllByText("PHP 1,250.00")).toHaveLength(2);
+    expect(view.getAllByText("₱1,250.00")).toHaveLength(2);
     expect(view.getByText("2024-02-01 · Regular purchase")).toBeTruthy();
   });
 });

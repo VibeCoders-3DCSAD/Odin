@@ -3,6 +3,7 @@ import { PencilSimple } from "phosphor-react-native";
 import { AQUA50, AQUA600, INK, LINE, MUTED } from "../colors";
 import { STEPS } from "../types";
 import { availableOnboardingStep } from "../helpers/seasonalAnswers";
+import { formatPeso } from "../../../lib/format/money";
 
 export function ReviewStep({
   answers,
@@ -41,7 +42,7 @@ export function ReviewStep({
     for (const [key, amount] of Object.entries(values as Record<string, unknown>)) {
       const option = step.amountOptions?.find((item) => item.key === key);
       if (option && typeof amount === "string") {
-        rows.push({ label: `${option.label} Monthly Amount`, value: `PHP ${Number(amount).toLocaleString()}`, stepIndex: STEPS.indexOf(step) });
+        rows.push({ label: `${option.label} Monthly Amount`, value: formatPeso(Math.round(Number(amount) * 100)), stepIndex: STEPS.indexOf(step) });
       }
     }
   };
@@ -52,16 +53,16 @@ export function ReviewStep({
   if (incomeText)
     rows.push({
       label: "Monthly Income After Deductions",
-      value: `PHP ${Number(incomeText).toLocaleString()}`,
+      value: formatPeso(Math.round(Number(incomeText) * 100)),
       stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_income"),
     });
   addMultiOptionRow("Monthly Deductions", "monthly_deductions");
   addAmountMapRows("monthly_deduction_amounts");
   addOptionRow("Savings Runway", "emergency_savings_runway");
   const emergencySavings = answers.liquid_emergency_savings;
-  if (typeof emergencySavings === "string") rows.push({ label: "Emergency Savings", value: `PHP ${Number(emergencySavings).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "liquid_emergency_savings") });
+  if (typeof emergencySavings === "string") rows.push({ label: "Emergency Savings", value: formatPeso(Math.round(Number(emergencySavings) * 100)), stepIndex: STEPS.findIndex((step) => step.questionKey === "liquid_emergency_savings") });
   const essentialCosts = answers.monthly_essential_living_costs;
-  if (typeof essentialCosts === "string") rows.push({ label: "Monthly Essential Costs", value: essentialCosts === "not_sure" ? "Not sure" : `PHP ${Number(essentialCosts).toLocaleString()}`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_essential_living_costs") });
+  if (typeof essentialCosts === "string") rows.push({ label: "Monthly Essential Costs", value: essentialCosts === "not_sure" ? "Not sure" : formatPeso(Math.round(Number(essentialCosts) * 100)), stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_essential_living_costs") });
   addOptionRow("Currently Paying Off Debt", "paying_off_debt");
   const debtPercentage = answers.monthly_debt_payment_percentage;
   if (answers.paying_off_debt === "true" && typeof debtPercentage === "string") rows.push({ label: "Debt Payment Percentage", value: debtPercentage === "not_sure" ? "Not sure" : `${debtPercentage}%`, stepIndex: STEPS.findIndex((step) => step.questionKey === "monthly_debt_payment_percentage") });

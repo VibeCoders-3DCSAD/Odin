@@ -80,13 +80,13 @@ beforeEach(() => {
 
   await waitFor(() => {
     expect(view.getByText("Debt paid")).toBeTruthy();
-    expect(view.getByText("PHP 8.00")).toBeTruthy();
+    expect(view.getByText("₱8.00")).toBeTruthy();
     expect(view.getByText("REMAINING DEBT")).toBeTruthy();
-    expect(within(view.getByLabelText("Debt overview summary")).getByText("PHP 30.00")).toBeTruthy();
+    expect(within(view.getByLabelText("Debt overview summary")).getByText("₱30.00")).toBeTruthy();
     expect(view.getByText("Recent payments")).toBeTruthy();
     expect(view.getAllByText("Loan").length).toBeGreaterThan(0);
     expect(view.getAllByText("Visa").length).toBeGreaterThan(0);
-    expect(view.getByLabelText("2026-09-10, Loan, payment made PHP 3.00")).toBeTruthy();
+    expect(view.getByLabelText("2026-09-10, Loan, payment made ₱3.00")).toBeTruthy();
     expect(view.getByText("Total debt trend")).toBeTruthy();
     });
   });
@@ -100,7 +100,7 @@ beforeEach(() => {
     expect(view.getByText("Loans and other debts")).toBeTruthy();
     fireEvent.press(view.getByLabelText(/^Open Visa, /));
     expect(onOpenCard).toHaveBeenCalledWith("card-1");
-    fireEvent.press(view.getByLabelText(/^Open Loan, PHP 20.00 remaining/));
+    fireEvent.press(view.getByLabelText(/^Open Loan, ₱20.00 remaining/));
     expect(onOpenDebt).toHaveBeenCalledWith("debt-1");
   });
 
@@ -121,8 +121,8 @@ beforeEach(() => {
     try {
       const view = render(<DebtManagerOverview userId="user-1" onOpenCreditCards={jest.fn()} onOpenNonCreditDebts={jest.fn()} />);
       await waitFor(() => expect(view.getByText("Upcoming Payments")).toBeTruthy());
-      expect(view.getByLabelText("Loan, due 2026-10-01, PHP 3.00 unpaid, overdue")).toBeTruthy();
-      expect(view.getByText("PHP 3.00 remaining this month")).toBeTruthy();
+      expect(view.getByLabelText("Loan, due 2026-10-01, ₱3.00 unpaid, overdue")).toBeTruthy();
+      expect(view.getByText("₱3.00 remaining this month")).toBeTruthy();
       expect(mockListAllDebtPayments).toHaveBeenCalledWith("user-1");
     } finally {
       jest.useRealTimers();

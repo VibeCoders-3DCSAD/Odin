@@ -80,7 +80,7 @@ describe("BillersScreen", () => {
     fireEvent.press(view.getByLabelText("Post now"));
 
     await waitFor(() => expect(mockRecord).toHaveBeenCalledWith("user-1", "device-1", expect.objectContaining({ scheduledPaymentId: "sss", occurrenceDate: addDays(today, 3), amountCentavos: 100_000, paymentDate: today, sourceAccountId: "acct-bpi" })));
-    expect(mockShowToast).toHaveBeenCalledWith("PHP 1,000.00 recorded for SSS contribution.", "success");
+    expect(mockShowToast).toHaveBeenCalledWith("₱1,000.00 recorded for SSS contribution.", "success");
   });
 
   it("asks for sync after auto-posting due payments", async () => {

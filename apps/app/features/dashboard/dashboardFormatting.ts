@@ -1,14 +1,10 @@
-import { formatMoney } from "../../lib/format/money";
-
-export function formatPeso(centavos: number, fractionDigits = 0): string {
-  return formatMoney(centavos, { prefix: "₱", fractionDigits, signBeforePrefix: true });
-}
+export { formatPeso } from "../../lib/format/money";
 
 export function formatPesoCompact(centavos: number): string {
   const pesos = Math.abs(centavos) / 100;
-  if (pesos < 1000) return pesos.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  if (pesos < 1000) return `₱${pesos.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   const thousands = pesos / 1000;
-  return `${thousands % 1 === 0 ? thousands.toFixed(0) : thousands.toFixed(1)}k`;
+  return `₱${thousands % 1 === 0 ? thousands.toFixed(0) : thousands.toFixed(1)}k`;
 }
 
 export function deltaPercent(current: number, previous: number): string | null {

@@ -56,7 +56,7 @@ function pesos(value: string) {
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : Number.NaN;
 }
 
-const php = <Text style={ui.fieldSuffix}>PHP</Text>;
+const php = <Text style={ui.fieldSuffix}>₱</Text>;
 
 function Field({ label, placeholder, value, onChangeText, numeric = false, prefix, suffix, error }: {
   label: string;

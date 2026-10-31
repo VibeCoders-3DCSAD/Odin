@@ -15,6 +15,7 @@ import { AttentionUpcoming } from "./components/AttentionUpcoming";
 import type { DashboardItemTarget } from "./types";
 import { SafeToSpendCard } from "./components/SafeToSpendCard";
 import { getSnapshotCentavos, getSnapshotCount, getSnapshotText } from "./dashboardSnapshotContent";
+import { formatPesoAmount } from "../../lib/format/money";
 import { deltaPercent, formatPeso, formatPesoCompact, formatTransactionTime, getGreeting, getPreviousMonthName } from "./dashboardFormatting";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { groupSpendingCategories } from "./helpers/spendingGroups";
@@ -111,9 +112,9 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
             </View>
           </View>
           <View style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", marginTop: 8 }}>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: P.secondary, marginRight: 3 }}>PHP</Text>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: P.secondary, marginRight: 3 }}>₱</Text>
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 19, flexShrink: 1, color: P.ink }}>
-              {Math.abs(s.currentMonthIncomeCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              {formatPesoAmount(s.currentMonthIncomeCentavos)}
             </Text>
           </View>
           {incomeDelta && (
@@ -129,9 +130,9 @@ function DashboardContent({ userId, deviceId, accessToken, onNavigate, syncVersi
             </View>
           </View>
           <View style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", marginTop: 8 }}>
-            <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: P.secondary, marginRight: 3 }}>PHP</Text>
+            <Text style={{ fontFamily: "Manrope", fontWeight: "500", fontSize: 11, color: P.secondary, marginRight: 3 }}>₱</Text>
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 19, flexShrink: 1, color: P.ink }}>
-              {Math.abs(s.currentMonthExpenseCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              {formatPesoAmount(s.currentMonthExpenseCentavos)}
             </Text>
           </View>
           {expenseDelta && (

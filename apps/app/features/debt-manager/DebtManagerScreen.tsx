@@ -163,7 +163,6 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
   const currentDebtCentavos = Math.max(0, creditLimitCentavos - availableCreditCentavos);
   const usedRatio = creditLimitCentavos > 0 ? currentDebtCentavos / creditLimitCentavos : 0;
   const alertRatio = (selectedAccount.creditCardDetails?.alertThresholdPercent ?? 80) / 100;
-  const shortPeso = (centavos: number) => `PHP ${Math.round(centavos / 100).toLocaleString("en-PH")}`;
 
   return (
     <View style={{ gap: 14 }}>
@@ -177,7 +176,7 @@ export default function DebtManagerScreen({ userId, deviceId, accountId, onBack,
           <LinkButton label="Refresh" accessibilityLabel="Refresh credit-card information" onPress={() => { load().catch(() => {}); }} />
         </View>
         <Note>Billing cycles and statement activity</Note>
-        <ProgressBar label="Credit used" valueLabel={`${shortPeso(currentDebtCentavos)} of ${shortPeso(creditLimitCentavos)}`} ratio={usedRatio} tone={usedRatio >= alertRatio ? "err" : "ok"} />
+        <ProgressBar label="Credit used" valueLabel={`${formatPeso(currentDebtCentavos)} of ${formatPeso(creditLimitCentavos)}`} ratio={usedRatio} tone={usedRatio >= alertRatio ? "err" : "ok"} />
         <InfoRow label="Available credit" value={formatPeso(availableCreditCentavos)} tone="ok" />
         <InfoRow label="Current card debt" value={formatPeso(currentDebtCentavos)} />
         <InfoRow label="Credit limit" value={formatPeso(creditLimitCentavos)} />

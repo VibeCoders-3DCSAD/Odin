@@ -31,9 +31,9 @@ beforeEach(() => {
 it("shows the source count, schedule and separate amount, and opens Add", async () => {
   const view = render(<IncomeSourcesScreen {...props} />);
   expect(await view.findByText("Twice a month · 15 and 30")).toBeTruthy();
-  expect(view.getByText("PHP 20,000.00")).toBeTruthy();
+  expect(view.getByText("₱20,000.00")).toBeTruthy();
   expect(view.getByText("1 income source")).toBeTruthy();
-  expect(view.getByText("PHP 40,000.00")).toBeTruthy();
+  expect(view.getByText("₱40,000.00")).toBeTruthy();
   fireEvent.press(view.getByLabelText("Add income source"));
   expect(props.onAdd).toHaveBeenCalled();
 });

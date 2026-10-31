@@ -202,7 +202,7 @@ export function PlanCategorySelection({ topLevelCategories, subcategories, inclu
         <Text style={{ color: "#1B1C1A", fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>How much should we plan?</Text>
         <TextInput accessibilityLabel="How much should we plan in pesos" value={plannedAmount} onChangeText={onPlannedAmountChange} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#8A938C" style={{ backgroundColor: "#FCF8F0", borderColor: planningAmountError ? "#D9001F" : "#D7DDD8", borderRadius: 12, borderWidth: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 18, fontWeight: "700", marginTop: 8, paddingHorizontal: 13, paddingVertical: 11 }} />
         {planningAmountError ? <Text accessibilityRole="alert" style={{ color: "#D9001F", fontFamily: "Manrope", fontSize: 11, marginTop: 5 }}>{planningAmountError}</Text> : null}
-        <Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11, marginTop: 6 }}>Available money: PHP {(availableMoneyCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+        <Text style={{ color: "#416153", fontFamily: "Manrope", fontSize: 11, marginTop: 6 }}>Available money: {formatPeso(availableMoneyCentavos)}</Text>
         {recommendation && recommendation.totalCentavos > 0 ? <View style={{ marginTop: 10, borderRadius: 11, backgroundColor: "#F0F7F3", paddingVertical: 9, paddingLeft: 11, paddingRight: 4 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Text style={{ flex: 1, color: "#1B1C1A", fontFamily: "Manrope", fontSize: 12, fontWeight: "800" }}>Recommended Minimum: {formatPeso(recommendedCentavos)}</Text>

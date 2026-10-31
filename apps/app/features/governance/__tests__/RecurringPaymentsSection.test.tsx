@@ -46,10 +46,10 @@ it("consolidates matching answers across dates and saves months for the whole gr
 
   expect(await view.findByText("2 payments · Last paid Jun 20, 2026 · Yearly, every June and November")).toBeTruthy();
   expect(view.getAllByRole("button")).toHaveLength(4);
-  fireEvent.press(view.getAllByLabelText("Edit months for Tuition, PHP 50,000.00")[0]);
+  fireEvent.press(view.getAllByLabelText("Edit months for Tuition, ₱50,000.00")[0]);
   expect(view.getByText("Changes apply to all 2 payments in this group.")).toBeTruthy();
   fireEvent.press(view.getByLabelText("November"));
-  fireEvent.press(view.getByLabelText("Save months for Tuition, PHP 50,000.00"));
+  fireEvent.press(view.getByLabelText("Save months for Tuition, ₱50,000.00"));
   await waitFor(() => expect(mockReviseRecurringPaymentGroup).toHaveBeenCalledWith("user-1", "device-1", ["june", "may"], [6]));
 });
 
@@ -59,8 +59,8 @@ it("confirms removing every payment in a consolidated group", async () => {
   ]);
   const alert = jest.spyOn(Alert, "alert");
   const view = render(<RecurringPaymentsSection userId="user-1" deviceId="device-1" />);
-  fireEvent.press(await view.findByLabelText("Edit months for Tuition, PHP 50,000.00"));
-  fireEvent.press(view.getByLabelText("Remove Tuition, PHP 50,000.00"));
+  fireEvent.press(await view.findByLabelText("Edit months for Tuition, ₱50,000.00"));
+  fireEvent.press(view.getByLabelText("Remove Tuition, ₱50,000.00"));
   expect(alert.mock.calls[0]![1]).toContain("All 2 payments");
   expect(mockReviseRecurringPaymentGroup).not.toHaveBeenCalled();
   await act(async () => { alert.mock.calls[0]![2]!.find((button) => button.text === "Remove")!.onPress!(); });
@@ -70,10 +70,10 @@ it("confirms removing every payment in a consolidated group", async () => {
 it("saves edited months", async () => {
   const view = render(<RecurringPaymentsSection userId="user-1" deviceId="device-1" />);
 
-  fireEvent.press(await view.findByLabelText("Edit months for Tuition, PHP 50,000.00"));
+  fireEvent.press(await view.findByLabelText("Edit months for Tuition, ₱50,000.00"));
   fireEvent.press(view.getByLabelText("November"));
   fireEvent.press(view.getByLabelText("August"));
-  fireEvent.press(view.getByLabelText("Save months for Tuition, PHP 50,000.00"));
+  fireEvent.press(view.getByLabelText("Save months for Tuition, ₱50,000.00"));
 
   await waitFor(() => expect(mockReviseRecurringPaymentGroup).toHaveBeenCalledWith("user-1", "device-1", ["tuition"], [6, 8]));
   expect(mockListPersistedUnusualSpendings).toHaveBeenCalledTimes(2);
@@ -82,9 +82,9 @@ it("saves edited months", async () => {
 it("needs at least one month to save", async () => {
   const view = render(<RecurringPaymentsSection userId="user-1" deviceId="device-1" />);
 
-  fireEvent.press(await view.findByLabelText("Edit months for School fees, PHP 50,000.00"));
+  fireEvent.press(await view.findByLabelText("Edit months for School fees, ₱50,000.00"));
   fireEvent.press(view.getByLabelText("June"));
-  fireEvent.press(view.getByLabelText("Save months for School fees, PHP 50,000.00"));
+  fireEvent.press(view.getByLabelText("Save months for School fees, ₱50,000.00"));
 
   expect(view.getByText("Choose at least one month")).toBeTruthy();
   expect(mockReviseRecurringPaymentGroup).not.toHaveBeenCalled();
@@ -94,8 +94,8 @@ it("removes a payment only after confirmation", async () => {
   const alert = jest.spyOn(Alert, "alert");
   const view = render(<RecurringPaymentsSection userId="user-1" deviceId="device-1" />);
 
-  fireEvent.press(await view.findByLabelText("Edit months for Tuition, PHP 50,000.00"));
-  fireEvent.press(view.getByLabelText("Remove Tuition, PHP 50,000.00"));
+  fireEvent.press(await view.findByLabelText("Edit months for Tuition, ₱50,000.00"));
+  fireEvent.press(view.getByLabelText("Remove Tuition, ₱50,000.00"));
   expect(mockReviseRecurringPaymentGroup).not.toHaveBeenCalled();
   const buttons = alert.mock.calls[0]![2]!;
   buttons.find((button) => button.text === "Remove")!.onPress!();
@@ -107,8 +107,8 @@ it("shows an error when a change cannot be saved", async () => {
   mockReviseRecurringPaymentGroup.mockRejectedValue(new Error("locked"));
   const view = render(<RecurringPaymentsSection userId="user-1" deviceId="device-1" />);
 
-  fireEvent.press(await view.findByLabelText("Edit months for Tuition, PHP 50,000.00"));
-  fireEvent.press(view.getByLabelText("Save months for Tuition, PHP 50,000.00"));
+  fireEvent.press(await view.findByLabelText("Edit months for Tuition, ₱50,000.00"));
+  fireEvent.press(view.getByLabelText("Save months for Tuition, ₱50,000.00"));
 
   expect(await view.findByText("Your change could not be saved. Try again.")).toBeTruthy();
 });

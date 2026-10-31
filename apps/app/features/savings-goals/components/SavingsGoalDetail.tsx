@@ -7,9 +7,10 @@ import { SAVINGS_GOAL_PRIORITY_LABELS, SAVINGS_GOAL_TYPE_LABELS } from "../const
 import { getMinimumContributionPerOccurrence, type ScheduledSavingsGoal } from "../helpers/contributionSchedule";
 import type { SavingsActivity } from "../types";
 import { SavingsForecastSection } from "../forecast/components/SavingsForecastSection";
+import { formatPeso } from "../../../lib/format/money";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF", track: "#DCDAD2", soft: "#E8F3EC", warn: "#8A4B00" } as const;
-const money = (amount: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount / 100);
+const money = formatPeso;
 const formatDate = (isoDate: string) => new Date(`${isoDate.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const RECENT_ACTIVITY_LIMIT = 5;
 

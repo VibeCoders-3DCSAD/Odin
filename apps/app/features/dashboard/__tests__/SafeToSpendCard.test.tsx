@@ -25,10 +25,10 @@ describe("SafeToSpendCard", () => {
     const onNavigate = jest.fn();
     const view = render(<SafeToSpendCard userId="user-1" reloadKey={0} onNavigate={onNavigate} />);
 
-    await waitFor(() => expect(view.getByText("₱2,700 left until Oct 31")).toBeTruthy());
-    expect(view.getByText("About ₱208 a day for 13 days.")).toBeTruthy();
+    await waitFor(() => expect(view.getByText("₱2,700.00 left until Oct 31")).toBeTruthy());
+    expect(view.getByText("About ₱207.69 a day for 13 days.")).toBeTruthy();
     expect(view.getByText("Food and groceries")).toBeTruthy();
-    expect(view.getByText("3.8k / 4k")).toBeTruthy();
+    expect(view.getByText("₱3,800.00 / ₱4,000.00")).toBeTruthy();
     fireEvent.press(view.getByText("View all budgets"));
     expect(onNavigate).toHaveBeenCalledWith("financial-plan");
   });
@@ -37,7 +37,7 @@ describe("SafeToSpendCard", () => {
     mockGetSafeToSpend.mockResolvedValue({ ...data, leftCentavos: -50_000, dailyCentavos: 0, daysLeft: 1 });
     const view = render(<SafeToSpendCard userId="user-1" reloadKey={0} onNavigate={jest.fn()} />);
 
-    await waitFor(() => expect(view.getByText("₱500 over budget")).toBeTruthy());
+    await waitFor(() => expect(view.getByText("₱500.00 over budget")).toBeTruthy());
   });
 
   it("invites the user to create a plan when none covers today", async () => {

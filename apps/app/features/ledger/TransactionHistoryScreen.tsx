@@ -27,7 +27,7 @@ import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
 import { DEFAULT_TAXONOMY_COLOR, TaxonomyIcon } from "../taxonomy/taxonomyVisuals";
 import { dashboardColors as P } from "../dashboard/dashboardAppearance";
-import { formatPhp } from "../../lib/format/money";
+import { formatPeso } from "../../lib/format/money";
 
 const budgieThink = require("../../assets/budgie-think.png");
 
@@ -127,7 +127,7 @@ const TransactionRow = memo(function TransactionRow({ tx, last, onEdit, onDelete
         </Text>
       </View>
       <Text style={{ fontFamily: "Manrope", fontWeight: "700", fontSize: 12.5, color: AMOUNT_COLORS[tx.transaction_type] ?? P.ink, fontVariant: ["tabular-nums"] }}>
-        {prefix}PHP {formatAmount(tx.amount_centavos)}
+        {prefix}₱{formatAmount(tx.amount_centavos)}
       </Text>
       <KebabTooltip onEdit={() => onEdit(tx.id)} onDelete={() => onDelete(tx.id)} />
     </View>
@@ -145,7 +145,7 @@ function StatCard({ kind, centavos }: { kind: "income" | "expense"; centavos: nu
         <Text style={sectionLabel}>{income ? "INCOME" : "EXPENSES"}</Text>
       </View>
       <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 19, letterSpacing: -0.2, color: P.ink, fontVariant: ["tabular-nums"] }} numberOfLines={1} adjustsFontSizeToFit>
-        <Text style={{ fontWeight: "600", fontSize: 11, color: P.secondary }}>PHP </Text>
+        <Text style={{ fontWeight: "600", fontSize: 11, color: P.secondary }}>₱</Text>
         {formatAmount(centavos)}
       </Text>
     </View>
@@ -819,7 +819,7 @@ export default function TransactionHistoryScreen({ userId, deviceId, accessToken
             <Image source={budgieThink} accessibilityIgnoresInvertColors style={{ width: "100%", height: undefined, aspectRatio: 3 / 2 }} resizeMode="contain" />
             <Text style={{ fontFamily: "Manrope", fontWeight: "800", fontSize: 20, color: P.ink, marginTop: 12, textAlign: "center" }}>Budgie wants to learn about you</Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: P.secondary, marginTop: 10, textAlign: "center" }}>
-              You spent {formatPhp(unusualSpending?.amountCentavos ?? 0)} on {unusualSpending?.subcategoryLabel ?? "this subcategory"}, more than your usual {formatPhp(unusualSpending?.usualSpendingCentavos ?? 0)}. Will you be making this expense again?
+              You spent {formatPeso(unusualSpending?.amountCentavos ?? 0)} on {unusualSpending?.subcategoryLabel ?? "this subcategory"}, more than your usual {formatPeso(unusualSpending?.usualSpendingCentavos ?? 0)}. Will you be making this expense again?
             </Text>
             <View style={{ marginTop: 18 }}>
               {unusualSpending ? <RecurrenceQuestion key={unusualSpending.transactionId} transactionDate={unusualSpending.transactionDate} onAnswer={answerUnusualSpendingRecurrence} /> : null}

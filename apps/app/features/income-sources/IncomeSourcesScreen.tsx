@@ -8,7 +8,8 @@ import { getIncomeSummary } from "../../local-db/repositories/foundations/income
 import { Banner, styles as ui, v4, v4Font } from "../../components/BudgieForm";
 import { AmountHero } from "../../components/BudgieForm";
 import IncomeSourceActions from "./IncomeSourceActions";
-import { incomeScheduleLabel, formatIncomeAmount } from "./presentation";
+import { incomeScheduleLabel } from "./presentation";
+import { formatPeso } from "../../lib/format/money";
 
 type Props = { userId: string; deviceId: string; onBack: () => void; onAdd: () => void; onEdit: (id: string) => void; onSyncRequested?: () => void };
 
@@ -59,7 +60,7 @@ export default function IncomeSourcesScreen({ userId, deviceId, onAdd, onEdit, o
   return (
     <View style={{ gap: 11 }}>
       <AmountHero label="ESTIMATED MONTHLY INCOME AFTER DEBT DEDUCTIONS" amountCentavos={loading ? undefined : summary.netMonthlyCentavos} detail={loading ? "Loading income sources…" : sourceCount} />
-      {!loading && sources.length > 0 ? <Text style={s.detail}>{`PHP ${formatIncomeAmount(summary.grossMonthlyCentavos)} after taxes, before PHP ${formatIncomeAmount(summary.salaryLoanDeductionsCentavos)} in salary-loan deductions`}</Text> : null}
+      {!loading && sources.length > 0 ? <Text style={s.detail}>{`${formatPeso(summary.grossMonthlyCentavos)} after taxes, before ${formatPeso(summary.salaryLoanDeductionsCentavos)} in salary-loan deductions`}</Text> : null}
       {loading || sources.length > 0 ? (
         <View style={s.sectionHead}>
           <Text style={s.sectionTitle}>Income sources</Text>
@@ -86,7 +87,7 @@ export default function IncomeSourcesScreen({ userId, deviceId, onAdd, onEdit, o
                 <Text numberOfLines={1} style={ui.listTitle}>{source.name}</Text>
                 <Text numberOfLines={1} style={s.subtitle}>{incomeScheduleLabel(source)}</Text>
               </View>
-              <Text style={s.amount}>{`PHP ${formatIncomeAmount(source.expectedAmountCentavos)}`}</Text>
+              <Text style={s.amount}>{formatPeso(source.expectedAmountCentavos)}</Text>
               <CaretRight size={15} color={v4.ink2} />
             </Pressable>
           ))}

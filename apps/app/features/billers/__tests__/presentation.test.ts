@@ -1,11 +1,11 @@
-import { dueLabel, dueThisMonthCentavos, formatDueDate, formatPhp, isDueSoon, ordinal, rowSubtitle, scheduleLabel } from "../presentation";
+import { dueLabel, dueThisMonthCentavos, formatDueDate, formatPeso, isDueSoon, ordinal, rowSubtitle, scheduleLabel } from "../presentation";
 import type { Occurrence, PaymentSchedule } from "../schedule";
 
 const monthly: PaymentSchedule = { frequency: "monthly", dueDayOfMonth: 1, dueSecondDayOfMonth: null, dueDayOfWeek: null, dueMonth: null, startsOn: "2026-09-01", endsOn: null };
 const occurrence = (dueDate: string, status: Occurrence["status"] = "upcoming"): Occurrence => ({ dueDate, status, scheduledCentavos: 100, paidCentavos: 0, remainingCentavos: 100 });
 
 it("formats pesos, ordinals and due dates as the V4 screens print them", () => {
-  expect(formatPhp(1_758_900)).toBe("PHP 17,589.00");
+  expect(formatPeso(1_758_900)).toBe("₱17,589.00");
   expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 30].map(ordinal)).toEqual(["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "30th"]);
   expect(formatDueDate("2026-09-05")).toBe("Sep 5 2026");
 });

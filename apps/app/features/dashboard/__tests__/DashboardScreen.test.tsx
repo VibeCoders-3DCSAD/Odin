@@ -54,12 +54,12 @@ it("keeps every populated dashboard section, amounts and navigation", async () =
   const onNavigate = jest.fn();
   const onOpenReminder = jest.fn();
   const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={onNavigate} onOpenReminder={onOpenReminder} />);
-  await waitFor(() => expect(view.getByText("₱2,700 left until Oct 31")).toBeTruthy());
+  await waitFor(() => expect(view.getByText("₱2,700.00 left until Oct 31")).toBeTruthy());
 
   for (const title of ["Dashboard", "AVAILABLE BALANCE", "Income", "Expenses", "Net monthly cash flow", "Savings goals", "Needs Attention", "Upcoming", "Savings & Debt Profile", "Trends", "Spending", "Recent", "Safe to spend"]) {
     expect(view.getAllByText(title).length).toBeGreaterThan(0);
   }
-  for (const text of ["PHP 62,480.00", "+32.4%", "52,000", "36,700", "₱15,300", "2 savings goals in progress · ₱82,500 saved.", "Electric bill", "Expected salary", "Emergency fund", "Debt burden", "Financial margin", "Credit card", "Lunch", "-₱320", "100%", "About ₱208 a day for 13 days.", "3.8k / 4k"]) {
+  for (const text of ["₱62,480.00", "+32.4%", "52,000.00", "36,700.00", "₱15,300.00", "2 savings goals in progress · ₱82,500.00 saved.", "Electric bill", "Expected salary", "Emergency fund", "Debt burden", "Financial margin", "Credit card", "Lunch", "-₱320.00", "100%", "About ₱207.69 a day for 13 days.", "₱3,800.00 / ₱4,000.00"]) {
     expect(view.getAllByText(text).length).toBeGreaterThan(0);
   }
   expect(view.queryByText("Spending forecast")).toBeNull();
@@ -99,7 +99,7 @@ it("asks for an account in the balance card when none exists", () => {
   mockUseDashboardData.mockReturnValue({ ...data, summary: { ...data.summary, accountCount: 0, currentBalanceCentavos: 0 } });
   const view = render(<DashboardScreen userId="user" deviceId="device" accessToken="token" onNavigate={jest.fn()} onOpenReminder={jest.fn()} />);
   expect(view.getByText("Add an account to see your balance")).toBeTruthy();
-  expect(view.getByText("PHP 0.00")).toBeTruthy();
+  expect(view.getByText("₱0.00")).toBeTruthy();
 });
 
 

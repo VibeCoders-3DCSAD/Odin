@@ -1,13 +1,8 @@
 import type { IncomeFrequency, IncomeSource } from "../../local-db/repositories/foundations/financialFoundations";
-import { formatMoney } from "../../lib/format/money";
 
 export const FREQUENCIES: readonly IncomeFrequency[] = ["monthly", "semi_monthly", "weekly", "daily"];
 
 export const FREQUENCY_LABELS: Record<IncomeFrequency, string> = { monthly: "Monthly", semi_monthly: "Twice a month", weekly: "Every week", daily: "Every day" };
-
-export function formatIncomeAmount(centavos: number): string {
-  return formatMoney(centavos, { prefix: "" });
-}
 
 export function incomeScheduleLabel(source: IncomeSource): string {
   const { frequency, paydayDayOfMonth: first, paydaySecondDayOfMonth: second, paydayDayOfWeek: weekday } = source;

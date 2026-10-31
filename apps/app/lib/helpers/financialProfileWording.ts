@@ -1,3 +1,5 @@
+import { formatPeso } from "../format/money";
+
 // Status words shared by the Savings & Debt Profile and the Financial Plan's leftover-money guidance,
 // so both screens describe the same classification the same way.
 export const PROFILE_STATUS = {
@@ -26,5 +28,5 @@ export function formatIncomeShare(ratio: number): string {
 }
 
 export function formatProfilePeso(amount: number): string {
-  return `PHP ${Math.abs(amount).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+  return formatPeso(Math.round(Math.abs(amount) * 100));
 }

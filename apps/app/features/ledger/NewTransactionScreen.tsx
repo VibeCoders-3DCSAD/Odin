@@ -134,7 +134,7 @@ export default function NewTransactionScreen({ userId, deviceId, accessToken, on
 
             <AmountHero>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 5 }}>
-                <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 30, letterSpacing: -0.6, color: "#FFFFFF" }}>PHP</Text>
+                <Text style={{ fontFamily: v4Font, fontWeight: "800", fontSize: 30, letterSpacing: -0.6, color: "#FFFFFF" }}>₱</Text>
                 <TextInput
                   accessibilityLabel="Payment amount"
                   value={amount}

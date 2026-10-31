@@ -20,5 +20,5 @@ it("shows five recent payments and reveals five more when requested", () => {
 
   expect(view.getByText("Debt 1")).toBeTruthy();
   expect(view.queryByRole("button", { name: "Show 5 more payments" })).toBeNull();
-  expect(view.getByLabelText("2026-09-06, A debt name that is intentionally too long for a narrow row, payment made PHP 6.00")).toBeTruthy();
+  expect(view.getByLabelText("2026-09-06, A debt name that is intentionally too long for a narrow row, payment made ₱6.00")).toBeTruthy();
 });

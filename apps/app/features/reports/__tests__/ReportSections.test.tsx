@@ -62,11 +62,11 @@ describe("ForecastActualSection", () => {
     // The chart's forecast, made as of September 1 from the full year before it so last September's seasonal spending counts.
     expect(mockRequestQuarterlyForecast).toHaveBeenCalledWith("token", expect.objectContaining({ asOf: "2026-09-01" }), undefined);
     expect(mockListForecastTransactions).toHaveBeenCalledWith("user-1", expect.objectContaining({ fromDate: "2025-09-01" }));
-    // PHP 1,000 forecast plus the PHP 500 biller due on September 15.
-    expect(view.getByText("PHP 1,500.00")).toBeTruthy();
-    expect(view.getByText("PHP 1,700.00")).toBeTruthy();
+    // ₱1,000.00 forecast plus the ₱500.00 biller due on September 15.
+    expect(view.getByText("₱1,500.00")).toBeTruthy();
+    expect(view.getByText("₱1,700.00")).toBeTruthy();
     expect(view.getByText("Over forecast")).toBeTruthy();
-    expect(view.getByText("PHP 200.00 over")).toBeTruthy();
+    expect(view.getByText("₱200.00 over")).toBeTruthy();
     // Transport and the biller landed on their forecast, so only food is a difference.
     expect(view.queryByText("Transportation")).toBeNull();
   });
@@ -88,6 +88,6 @@ describe("ForecastActualSection", () => {
     await waitFor(() => expect(view.getByText("September 2026 · forecast saved Sep 28")).toBeTruthy());
     expect(mockGetLatestForecastSnapshot).toHaveBeenCalledWith("user-1", "2026-09");
     expect(mockRequestQuarterlyForecast).not.toHaveBeenCalled();
-    expect(view.getByText("PHP 200.00 under")).toBeTruthy();
+    expect(view.getByText("₱200.00 under")).toBeTruthy();
   });
 });

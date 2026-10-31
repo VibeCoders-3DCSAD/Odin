@@ -42,7 +42,7 @@ import SavingsInterestFields from "./SavingsInterestFields";
 import type { SavingsInterestReference } from "@odin/savings-interest";
 import { BottomSheetSurface } from "../../components/BottomSheetSurface";
 import { ActionSheet } from "../../components/ActionSheet";
-import { formatMoney } from "../../lib/format/money";
+import { formatPeso as formatPesoBase } from "../../lib/format/money";
 
 const P = {
   shell: "#fcf8f0",
@@ -81,11 +81,7 @@ function kindIcon(kind: FinancialAccountKind, size: number, color: string) {
 }
 
 function formatPeso(centavos: number): string {
-  return formatMoney(centavos, { prefix: "₱", signBeforePrefix: true, truncateAfter: 23 });
-}
-
-function formatAccountAmount(centavos: number): string {
-  return formatPeso(centavos).replace("-₱", "-PHP ").replace("₱", "PHP ");
+  return formatPesoBase(centavos, { truncateAfter: 23 });
 }
 
 function isNegativeAccount(account: FinancialAccount): boolean {
@@ -299,7 +295,7 @@ function AccountTile({ account, negative, amountColor, isLast, onPress }: { acco
         </Text>
       </View>
       <View style={{ alignItems: "flex-end", marginLeft: 8 }}>
-        <Text style={{ fontSize: 12.5, fontFamily: "Manrope", fontWeight: "700", fontVariant: ["tabular-nums"], color: amountColor }}>{formatAccountAmount(amount)}</Text>
+        <Text style={{ fontSize: 12.5, fontFamily: "Manrope", fontWeight: "700", fontVariant: ["tabular-nums"], color: amountColor }}>{formatPeso(amount)}</Text>
       </View>
       <CaretRight size={15} color={P.muted} style={{ marginLeft: 10 }} />
     </Pressable>

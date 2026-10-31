@@ -1,7 +1,7 @@
 import { Modal, Pressable, Text, View } from "react-native";
 import { BottomSheet, FieldLabel, Note, Switch, styles as ui, v4, v4Font } from "../../../components/BudgieForm";
 import type { ScheduledPaymentSummary } from "../../../local-db/repositories/scheduled-payments/scheduledPayments";
-import { formatDueDate, formatPhp } from "../presentation";
+import { formatDueDate, formatPeso } from "../presentation";
 import { localToday, nextDueDate } from "../schedule";
 
 function MenuRow({ label, onPress, danger = false, divider }: { label: string; onPress: () => void; danger?: boolean; divider: boolean }) {
@@ -50,7 +50,7 @@ export function AutoPostSheet({ payment, accountName, busy, onToggle, onClose }:
     <BottomSheet visible={payment !== null} onClose={onClose} title={payment?.name}>
       {payment ? (
         <>
-          <Text style={[ui.listTitle, { fontSize: 15 }]}>{formatPhp(payment.amountCentavos)}</Text>
+          <Text style={[ui.listTitle, { fontSize: 15 }]}>{formatPeso(payment.amountCentavos)}</Text>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <Text style={ui.listTitle}>Post automatically on the due date</Text>
             <Switch value={payment.autoPost} onToggle={onToggle} disabled={busy} accessibilityLabel="Post automatically on the due date" />

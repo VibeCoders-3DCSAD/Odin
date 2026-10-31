@@ -56,7 +56,7 @@ describe("SavingsGoalForm contribution frequency", () => {
     fireEvent.changeText(view.getByLabelText("Target amount"), "1000");
     expect(getEmergencyFundBaseline).not.toHaveBeenCalled();
     fireEvent.press(view.getByLabelText("This is my emergency fund"));
-    await waitFor(() => expect(view.getByText("Suggested target: PHP 7407.36")).toBeTruthy());
+    await waitFor(() => expect(view.getByText("Suggested target: ₱7,407.36")).toBeTruthy());
     expect(getEmergencyFundBaseline).toHaveBeenCalledWith("user-1", new Date("2026-10-18T00:00:00Z"));
     expect(view.getByLabelText("Target amount").props.value).toBe("1000");
     fireEvent.press(view.getByLabelText("Use suggested target amount"));
@@ -167,13 +167,13 @@ describe("SavingsGoalForm contribution frequency", () => {
 
   it("updates suggestions for frequency and date changes without replacing a manual amount", async () => {
     const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={goal} onCancel={jest.fn()} onSaved={jest.fn()} />);
-    expect(view.getByText(/Suggested: PHP 500.00 per contribution/)).toBeTruthy();
+    expect(view.getByText(/Suggested: ₱500.00 per contribution/)).toBeTruthy();
     fireEvent.changeText(view.getByLabelText("Planned contribution amount"), "75");
     fireEvent.press(view.getByLabelText("Daily"));
-    expect(view.getByText(/Suggested: PHP 13.34 per contribution/)).toBeTruthy();
+    expect(view.getByText(/Suggested: ₱13.34 per contribution/)).toBeTruthy();
     expect(view.getByLabelText("Planned contribution amount").props.value).toBe("75");
     selectTargetDate(view, new Date(2026, 9, 19));
-    expect(view.getByText(/Suggested: PHP 500.00 per contribution/)).toBeTruthy();
+    expect(view.getByText(/Suggested: ₱500.00 per contribution/)).toBeTruthy();
     fireEvent.press(view.getByLabelText("Use suggested amount"));
     expect(view.getByLabelText("Planned contribution amount").props.value).toBe("500");
     fireEvent.press(view.getByLabelText("Save savings goal changes"));
@@ -182,11 +182,11 @@ describe("SavingsGoalForm contribution frequency", () => {
 
   it("accounts for recorded activity and changes to the starting amount", () => {
     const view = render(<SavingsGoalForm userId="user-1" deviceId="device-1" goal={{ ...goal, currentAmountCentavos: 40_000 }} onCancel={jest.fn()} onSaved={jest.fn()} />);
-    expect(view.getByText(/Suggested: PHP 300.00 per contribution/)).toBeTruthy();
+    expect(view.getByText(/Suggested: ₱300.00 per contribution/)).toBeTruthy();
     fireEvent.changeText(view.getByLabelText("Starting amount"), "200");
-    expect(view.getByText(/Suggested: PHP 200.00 per contribution/)).toBeTruthy();
+    expect(view.getByText(/Suggested: ₱200.00 per contribution/)).toBeTruthy();
     fireEvent.changeText(view.getByLabelText("Target amount"), "1200");
-    expect(view.getByText(/Suggested: PHP 300.00 per contribution/)).toBeTruthy();
+    expect(view.getByText(/Suggested: ₱300.00 per contribution/)).toBeTruthy();
     fireEvent.press(view.getByLabelText("Weekly"));
     expect(view.queryByLabelText("Use suggested amount")).toBeNull();
     fireEvent.press(view.getByLabelText("Sunday"));

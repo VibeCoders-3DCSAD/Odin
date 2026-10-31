@@ -140,7 +140,7 @@ describe("PlanCategorySelection", () => {
       onContinue={jest.fn()}
     />);
 
-    expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy();
+    expect(view.getByText("Available money: ₱1,000.00")).toBeTruthy();
     expect(view.getByText("Your planning amount cannot exceed available money.")).toBeTruthy();
     expect(view.getByLabelText("Continue to Plan").props.accessibilityState?.disabled).toBe(true);
   });

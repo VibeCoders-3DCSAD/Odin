@@ -81,7 +81,7 @@ describe("SpendingForecastScreen", () => {
     mockRequestQuarterlyForecast.mockReturnValue(new Promise(() => {}));
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
 
-    await waitFor(() => expect(view.getByText("PHP 15,000")).toBeTruthy());
+    await waitFor(() => expect(view.getByText("₱15,000.00")).toBeTruthy());
     expect(view.getByText("Updating forecast…")).toBeTruthy();
     expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1);
     view.unmount();
@@ -97,7 +97,7 @@ describe("SpendingForecastScreen", () => {
     expect(view.getByLabelText("Loading spending forecast")).toBeTruthy();
     expect(view.queryByText("Record posted transactions to unlock a spending forecast.")).toBeNull();
     await act(async () => { resolveForecast({ response: { ok: true }, body: { payload: forecast } }); });
-    expect(view.getByText("PHP 15,000")).toBeTruthy();
+    expect(view.getByText("₱15,000.00")).toBeTruthy();
     expect(view.queryByLabelText("Loading spending forecast")).toBeNull();
   });
 
@@ -108,10 +108,10 @@ describe("SpendingForecastScreen", () => {
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
     await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1));
     fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
-    expect(view.getByText("PHP 16,500")).toBeTruthy();
+    expect(view.getByText("₱16,500.00")).toBeTruthy();
 
     await act(async () => { resolveForecast({ response: { ok: true }, body: { payload: updated } }); });
-    expect(view.getByText("PHP 20,000")).toBeTruthy();
+    expect(view.getByText("₱20,000.00")).toBeTruthy();
     expect(view.getByText("Q1 2027 · Forecast")).toBeTruthy();
     expect(view.queryByText("Updating forecast…")).toBeNull();
   });
@@ -122,7 +122,7 @@ describe("SpendingForecastScreen", () => {
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
 
     await waitFor(() => expect(view.getByText("Forecast update failed. Your last forecast is still available.")).toBeTruthy());
-    expect(view.getByText("PHP 15,000")).toBeTruthy();
+    expect(view.getByText("₱15,000.00")).toBeTruthy();
     expect(view.getByText("This forecast hasn't been updated recently.")).toBeTruthy();
     expect(view.queryByText("Updating forecast…")).toBeNull();
   });
@@ -133,7 +133,7 @@ describe("SpendingForecastScreen", () => {
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
 
     await waitFor(() => expect(view.getByText("You're offline. Showing your last saved forecast.")).toBeTruthy());
-    expect(view.getByText("PHP 15,000")).toBeTruthy();
+    expect(view.getByText("₱15,000.00")).toBeTruthy();
     expect(view.queryByText("Updating forecast…")).toBeNull();
     expect(mockRequestQuarterlyForecast).not.toHaveBeenCalled();
   });
@@ -162,11 +162,11 @@ describe("SpendingForecastScreen", () => {
 
   it("clears the previous account's forecast immediately when the account changes", async () => {
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
-    await waitFor(() => expect(view.getByText("PHP 15,000")).toBeTruthy());
+    await waitFor(() => expect(view.getByText("₱15,000.00")).toBeTruthy());
     mockGetSnapshot.mockReturnValue(new Promise(() => {}));
 
     view.rerender(<SpendingForecastScreen userId="user-2" accessToken="other-token" embedded />);
-    expect(view.queryByText("PHP 15,000")).toBeNull();
+    expect(view.queryByText("₱15,000.00")).toBeNull();
     expect(view.getByLabelText("Loading spending forecast")).toBeTruthy();
     view.unmount();
   });
@@ -175,7 +175,7 @@ describe("SpendingForecastScreen", () => {
     mockGetSnapshot.mockRejectedValue(new Error("cache unavailable"));
     const view = render(<SpendingForecastScreen userId="user-1" accessToken="token" embedded />);
 
-    await waitFor(() => expect(view.getByText("PHP 15,000")).toBeTruthy());
+    await waitFor(() => expect(view.getByText("₱15,000.00")).toBeTruthy());
     expect(view.queryByText("Forecast information is unavailable.")).toBeNull();
     expect(mockRequestQuarterlyForecast).toHaveBeenCalledTimes(1);
   });
@@ -214,7 +214,7 @@ describe("SpendingForecastScreen", () => {
     await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalled());
     expect(mockListForecastTransactions).toHaveBeenCalledWith("user-1", { fromDate: "2025-10-01", excludeScheduledPayments: true, excludeUnusualSpending: true });
     const saved = mockUpsertSnapshot.mock.calls[0]![2] as QuarterlyForecastPayload;
-    // Six due dates a quarter at PHP 18,000, the same in every quarter.
+    // Six due dates a quarter at ₱18,000.00, the same in every quarter.
     for (const quarter of saved.quarters) expect(quarter.categories).toContainEqual({ category: "billers_remittances", amountCentavos: 10_800_000 });
     expect(saved.quarters[0]!.totalCentavos).toBe(1_500_000 + 10_800_000);
     expect(categorySeries(saved).find((line) => line.key === "billers_remittances")?.label).toBe("Billers & Remittances");
@@ -272,15 +272,15 @@ describe("SpendingForecastScreen", () => {
     await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenCalledWith("user-1", "forecast_quarterly", forecast));
     expect(view.getByText("Spending forecast")).toBeTruthy();
     expect(view.getByText("October 1 to December 31, 2026")).toBeTruthy();
-    expect(view.getByText("PHP 15,000")).toBeTruthy();
+    expect(view.getByText("₱15,000.00")).toBeTruthy();
     expect(view.getByLabelText("Choose spending category: Total")).toBeTruthy();
 
     fireEvent.press(view.getByLabelText("Show Q1 2027 forecast"));
     expect(view.getByText("January 1 to March 31, 2027")).toBeTruthy();
-    expect(view.getByText("PHP 16,500")).toBeTruthy();
+    expect(view.getByText("₱16,500.00")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Choose spending category: Total"));
     fireEvent.press(view.getByRole("radio", { name: "Food and groceries" }));
-    expect(view.getByText("PHP 11,000")).toBeTruthy();
+    expect(view.getByText("₱11,000.00")).toBeTruthy();
   });
 
   it("shows the unavailable reason instead of charts", async () => {
@@ -311,7 +311,7 @@ describe("SpendingForecastScreen", () => {
     view.rerender(<SpendingForecastScreen userId="user-1" accessToken="token" refreshKey={1} embedded />);
     await waitFor(() => expect(mockRequestQuarterlyForecast).toHaveBeenLastCalledWith("token", { historicalTransactions: regularSpending }, expect.any(AbortSignal)));
     await waitFor(() => expect(mockUpsertSnapshot).toHaveBeenLastCalledWith("user-1", "forecast_quarterly", corrected));
-    expect(view.getByText("PHP 2,196")).toBeTruthy();
+    expect(view.getByText("₱2,196.00")).toBeTruthy();
   });
 
   it("opens on the total and preserves the quarter when switching categories", async () => {
@@ -328,8 +328,8 @@ describe("SpendingForecastScreen", () => {
     fireEvent.press(view.getByRole("radio", { name: "Transportation" }));
     expect(view.getByLabelText("Transportation spending over 2 quarters")).toBeTruthy();
     expect(view.queryByLabelText("Food and groceries spending over 2 quarters")).toBeNull();
-    expect(view.getByText("PHP 5,500")).toBeTruthy();
-    expect(view.queryByText("PHP 11,000")).toBeNull();
+    expect(view.getByText("₱5,500.00")).toBeTruthy();
+    expect(view.queryByText("₱11,000.00")).toBeNull();
     expect(view.getByLabelText("Choose spending category: Transportation").props.accessibilityState.expanded).toBe(false);
     // The category sheet unmounts once its 220ms closing slide finishes.
     const sheetClosed = () => act(() => new Promise((resolve) => setTimeout(resolve, 250)));
@@ -366,7 +366,7 @@ describe("SpendingForecastScreen", () => {
     fireEvent.press(view.getByLabelText("Choose spending category: Total"));
     fireEvent.press(view.getByRole("radio", { name: "Billers & Remittances" }));
     expect(view.getByLabelText("Billers & Remittances spending over 2 quarters")).toBeTruthy();
-    expect(view.getByText("PHP 3,000")).toBeTruthy();
+    expect(view.getByText("₱3,000.00")).toBeTruthy();
     expect(view.getByText("Based on your scheduled bills and remittances.")).toBeTruthy();
   });
 });
@@ -427,10 +427,10 @@ describe("forecastInterpretation", () => {
         { quarter: "2027Q1", totalCentavos: 1_650_000, categories: [{ category: "food", amountCentavos: 1_200_000 }, { category: "transport", amountCentavos: 450_000 }] },
       ],
     })).toEqual([
-      "Your most expensive stretch will likely be Jan–Mar 2027, at about PHP 16,500. Try to save a little extra before then.",
+      "Your most expensive stretch will likely be Jan–Mar 2027, at about ₱16,500.00. Try to save a little extra before then.",
       "Food and groceries is your biggest expense, about 7 of every 10 pesos you spend.",
-      "By Jan–Mar 2027, you will likely spend about PHP 2,000 more on food and groceries every 3 months.",
-      "You will likely spend about PHP 500 less on transportation every 3 months by Jan–Mar 2027.",
+      "By Jan–Mar 2027, you will likely spend about ₱2,000.00 more on food and groceries every 3 months.",
+      "You will likely spend about ₱500.00 less on transportation every 3 months by Jan–Mar 2027.",
     ]);
   });
 
@@ -441,10 +441,10 @@ describe("forecastInterpretation", () => {
       baselineMethod: "same_period_last_year",
       months: [month("2026-09", 900_000, 100_000), month("2026-10", 400_000, 100_000), month("2026-11", 450_000, 100_000), month("2026-12", 700_000, 100_000), month("2027-01", 500_000, 80_000)],
     }, new Date("2026-10-26T04:00:00.000Z"))).toEqual([
-      "Your most expensive month will likely be December 2026, at about PHP 8,000, or PHP 2,350 more than usual. To get ready, set aside about PHP 1,175 a month from October 2026, or spend less on food and groceries that month.",
+      "Your most expensive month will likely be December 2026, at about ₱8,000.00, or ₱2,350.00 more than usual. To get ready, set aside about ₱1,175.00 a month from October 2026, or spend less on food and groceries that month.",
       "Food and groceries is your biggest expense, about 8 of every 10 pesos you spend.",
-      "By January 2027, you will likely spend about PHP 1,000 more on food and groceries a month.",
-      "You will likely spend about PHP 200 less on transportation a month by January 2027.",
+      "By January 2027, you will likely spend about ₱1,000.00 more on food and groceries a month.",
+      "You will likely spend about ₱200.00 less on transportation a month by January 2027.",
     ]);
   });
 
@@ -453,7 +453,7 @@ describe("forecastInterpretation", () => {
     const monthly = { ...forecast, baselineMethod: "same_period_last_year" as const };
     const now = new Date("2026-10-26T04:00:00.000Z");
     expect(forecastInterpretation({ ...monthly, months: [month("2026-10", 800_000), month("2026-11", 500_000), month("2026-12", 500_000)] }, now)).toContain(
-      "This month, October 2026, will likely be your most expensive, at about PHP 8,000, or PHP 3,000 more than usual. Try to spend less on food and groceries this month.",
+      "This month, October 2026, will likely be your most expensive, at about ₱8,000.00, or ₱3,000.00 more than usual. Try to spend less on food and groceries this month.",
     );
     expect(forecastInterpretation({ ...monthly, months: [month("2026-10", 500_000), month("2026-11", 510_000), month("2026-12", 500_000)] }, now).join(" ")).not.toContain("most expensive");
   });
@@ -467,7 +467,7 @@ describe("forecastInterpretation", () => {
     }, new Date("2026-10-26T04:00:00.000Z"));
     expect(notes).toContain("Billers & Remittances is your biggest expense, about 8 of every 10 pesos you spend.");
     expect(notes.find((note) => note.startsWith("Your most expensive month"))).toMatch(/spend less on food and groceries that month\.$/);
-    expect(notes).toContain("You will likely spend about PHP 200 less on food and groceries a month by January 2027.");
+    expect(notes).toContain("You will likely spend about ₱200.00 less on food and groceries a month by January 2027.");
     expect(notes.filter((note) => /billers|Billers/.test(note))).toHaveLength(1);
   });
 

@@ -46,7 +46,7 @@ describe("monthly spending forecast", () => {
 
     expect(view.queryByRole("tab")).toBeNull();
     expect(view.getByText("October 2026")).toBeTruthy();
-    expect(view.getByText("PHP 1,000")).toBeTruthy();
+    expect(view.getByText("₱1,000.00")).toBeTruthy();
     expect(view.getByText("All forecast categories, per month")).toBeTruthy();
     expect(view.getByLabelText("Total projected spending for 3 months")).toBeTruthy();
   });
@@ -113,10 +113,10 @@ describe("monthly spending forecast", () => {
 
     expect(view.getByText("Forecast vs Actual")).toBeTruthy();
     expect(view.getByText("October 2026 so far, against this month's forecast")).toBeTruthy();
-    expect(view.getByLabelText("Total: PHP 400 spent of PHP 1,000 forecast, 40% of forecast")).toBeTruthy();
+    expect(view.getByLabelText("Total: ₱400.00 spent of ₱1,000.00 forecast, 40% of forecast")).toBeTruthy();
 
     const over = render(<QuarterlyForecastCharts forecast={forecast} monthHistory={[{ month: "2026-10", ...food(150_000) }]} now={NOW} />);
-    expect(over.getByText("PHP 500 over")).toBeTruthy();
+    expect(over.getByText("₱500.00 over")).toBeTruthy();
   });
 
   it("compares this quarter's forecast with its months so far once the view is quarterly", () => {
@@ -127,7 +127,7 @@ describe("monthly spending forecast", () => {
     fireEvent.press(view.getByLabelText("Show spending: Quarterly"));
     expect(view.getByText("Q4 2026 so far, against this quarter's forecast")).toBeTruthy();
     // October and November count toward Q4; September belongs to Q3.
-    expect(view.getByLabelText("Total: PHP 1,500 spent of PHP 5,000 forecast, 30% of forecast")).toBeTruthy();
+    expect(view.getByLabelText("Total: ₱1,500.00 spent of ₱5,000.00 forecast, 30% of forecast")).toBeTruthy();
   });
 
   it("compares the total, then the chosen category when the dropdown changes", () => {
@@ -138,13 +138,13 @@ describe("monthly spending forecast", () => {
       now={NOW}
     />);
 
-    expect(view.getByLabelText("Total: PHP 700 spent of PHP 1,000 forecast, 70% of forecast")).toBeTruthy();
+    expect(view.getByLabelText("Total: ₱700.00 spent of ₱1,000.00 forecast, 70% of forecast")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Choose spending category: Total"));
     fireEvent.press(view.getByLabelText("Food and groceries"));
-    expect(view.getByLabelText("Food and groceries: PHP 250 spent of PHP 700 forecast, 36% of forecast")).toBeTruthy();
+    expect(view.getByLabelText("Food and groceries: ₱250.00 spent of ₱700.00 forecast, 36% of forecast")).toBeTruthy();
     fireEvent.press(view.getByLabelText("Choose spending category: Food and groceries"));
     fireEvent.press(view.getByLabelText("Transportation"));
-    expect(view.getByLabelText("Transportation: PHP 450 spent of PHP 300 forecast, PHP 150 over")).toBeTruthy();
+    expect(view.getByLabelText("Transportation: ₱450.00 spent of ₱300.00 forecast, ₱150.00 over")).toBeTruthy();
     expect(view.queryByLabelText(/^Total: /)).toBeNull();
   });
 

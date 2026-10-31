@@ -43,7 +43,6 @@ function interestLabel(debt: DebtAccount): string {
   const period = INTEREST_PERIOD_OPTIONS.find((option) => option.value === debt.interestPeriod)?.label.toLowerCase();
   return `${(debt.annualInterestRateBps / 100).toLocaleString("en-PH", { maximumFractionDigits: 2 })}%${period && period !== "none" ? ` ${period}` : ""}`;
 }
-const shortPeso = (centavos: number) => `PHP ${Math.round(centavos / 100).toLocaleString("en-PH")}`;
 
 export default function NonCreditDebtCard({ userId, deviceId, debt, onEdit, onRecordPayment, onEditPayment, onChanged }: Props) {
   const [payments, setPayments] = useState<DebtPayment[] | null>(null);
@@ -90,7 +89,7 @@ export default function NonCreditDebtCard({ userId, deviceId, debt, onEdit, onRe
         <View style={{ flex: 1 }}><Pills><Pill label={status.label} tone={status.tone} />{progress ? <Pill label={progress.label} tone={progress.tone} /> : null}</Pills></View>
         {actions.length ? <KebabMenu actions={actions} /> : null}
       </View>
-      {debt.originalBalanceCentavos > 0 ? <ProgressBar label="Paid off" valueLabel={`${shortPeso(paidCentavos)} of ${shortPeso(debt.originalBalanceCentavos)}`} ratio={paidCentavos / debt.originalBalanceCentavos} /> : null}
+      {debt.originalBalanceCentavos > 0 ? <ProgressBar label="Paid off" valueLabel={`${money(paidCentavos)} of ${money(debt.originalBalanceCentavos)}`} ratio={paidCentavos / debt.originalBalanceCentavos} /> : null}
       <InfoRow label="Next payment" value={debt.nextDueDate && !finished ? `${money(debt.minimumPaymentCentavos)} on ${formatShortDate(debt.nextDueDate)}` : "Not scheduled"} />
       <InfoRow label="Repayment forecast" value={repaymentLabel(forecast.status)} tone={forecast.status === "underpaid" ? "warn" : undefined} />
       <InfoRow label="Estimated payoff" value={forecast.estimatedPayoffDate ? formatShortDate(forecast.estimatedPayoffDate) : "Not scheduled"} />

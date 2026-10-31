@@ -8,12 +8,13 @@ import { listSavingsGoalActivities } from "../../local-db/repositories/savings/s
 import type { SavingsActivity } from "./types";
 import SavingsAllocationReview from "./components/SavingsAllocationReview";
 import type { SavingsAllocationProposal } from "./helpers/savingsEnvelopeAllocation";
+import { formatPeso } from "../../lib/format/money";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF", soft: "#E8F3EC", warn: "#8A4B00" } as const;
 type Props = { userId: string; deviceId: string; syncVersion?: number; initialGoalId?: string; onRecordActivity?: (goalId: string, kind: "contribution" | "withdrawal", amountCentavos?: number) => void; onOpenTransaction?: (transactionId: string) => void };
 type Page = "list" | "create" | "detail" | "edit";
 type GoalListView = "active" | "archived";
-const money = (amount: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount / 100);
+const money = formatPeso;
 const monthYear = (isoDate: string) => new Date(`${isoDate.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-PH", { month: "short", year: "numeric", timeZone: "UTC" });
 
 export default function SavingsGoalsScreen({ userId, deviceId, syncVersion = 0, initialGoalId, onRecordActivity, onOpenTransaction }: Props) {

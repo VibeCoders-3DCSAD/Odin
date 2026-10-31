@@ -5,9 +5,10 @@ import { getSavingsAllocationStrategy, saveSavingsAllocationStrategy, type Savin
 import { getCurrentSavingsEnvelopeAllocation } from "../queries/savingsEnvelopeAllocationQueries";
 import type { SavingsAllocationProposal, SavingsCycleAllocation, SavingsCycleContribution } from "../helpers/savingsEnvelopeAllocation";
 import { getPhilippineToday } from "../../debt-manager/forecast/helpers/debtTrendRange";
+import { formatPeso } from "../../../lib/format/money";
 
 const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF", soft: "#E8F3EC" } as const;
-const money = (amount: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount / 100);
+const money = formatPeso;
 const dueDateLabel = (date: string | null) => date ? `Due ${new Date(`${date}T00:00:00Z`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}` : "No due date";
 const STRATEGY_COPY: Record<SavingsAllocationStrategy, { label: string; description: string }> = {
   avalanche: { label: "Biggest need first", description: "Avalanche: goals with the largest required contribution get extra savings first." },

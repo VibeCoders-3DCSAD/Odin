@@ -36,7 +36,7 @@ describe("GlobalDebtTrend monthly balances", () => {
       "2026-09-30", "2026-10-21", "2026-10-30", "2026-11-20", "2026-12-20",
     ]);
     expect(view.getByText("Nov 2026")).toBeTruthy();
-    expect(view.getByText("PHP 150.00")).toBeTruthy();
+    expect(view.getByText("₱150.00")).toBeTruthy();
     expect(view.getByText("Debt-free milestone · Dec 2026")).toBeTruthy();
     expect(view.queryByText("2026-11-05")).toBeNull();
     expect(view.queryByRole("button", { name: /more forecast balance/ })).toBeNull();

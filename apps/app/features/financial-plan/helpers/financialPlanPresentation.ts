@@ -1,7 +1,7 @@
 import type { PlanCommitmentStatus } from "../past-plans/pastPlanTypes";
 import { planSpendableFundsCentavos } from "./planSpendableFunds";
 import type { FinancialPlanAllocation, FinancialPlanReservation, FinancialPlanSurplusRecommendation } from "../types";
-import { formatMoney } from "../../../lib/format/money";
+import { formatPeso } from "../../../lib/format/money";
 
 export type FinancialPlanLabels = {
   categories: Record<string, string>;
@@ -14,14 +14,10 @@ export type FinancialPlanLabels = {
   removedIds?: string[];
 };
 
-export function formatPeso(centavos: number): string {
-  return formatMoney(centavos, { prefix: "₱", signBeforePrefix: true });
-}
+export { formatPeso };
 
-export function formatForecastPeso(centavos: number): string {
-  const fractionDigits = centavos % 100 === 0 ? 0 : 2;
-  return `₱${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: fractionDigits, maximumFractionDigits: 2 })}`;
-}
+// Kept as a name for the plan screens; forecasts use the same ₱ two-decimal format.
+export const formatForecastPeso = formatPeso;
 
 export function remainingUnallocatedCentavos(availableFundsCentavos: number, allocations: FinancialPlanAllocation[], debtSurplusCentavos = 0, savingsSurplusCentavos = 0): number {
   return planSpendableFundsCentavos(availableFundsCentavos, debtSurplusCentavos, savingsSurplusCentavos) - allocations.reduce((total, allocation) => total + allocation.allocatedAmountCentavos, 0);

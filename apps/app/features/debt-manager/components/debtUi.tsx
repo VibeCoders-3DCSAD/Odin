@@ -6,12 +6,12 @@ import type { DebtTypePreset } from "../../../local-db/repositories/debts/debtAc
 import type { CreditCardStrategy } from "../../../local-db/repositories/credit-cards/creditCardRepaymentPlans";
 import type { DebtForecastStatus } from "../forecast/helpers/debtForecast";
 import type { DebtTrendRange } from "../forecast/helpers/debtTrendRange";
-import { formatPhpOr } from "../../../lib/format/money";
+import { formatPesoOr } from "../../../lib/format/money";
 
 // Debt Manager building blocks on top of the Budgie V4 form kit (screens v5: Debts, Debt detail, Card detail).
 
 export function formatPeso(centavos: number | null | undefined): string {
-  return formatPhpOr(centavos, "Not available");
+  return formatPesoOr(centavos, "Not available");
 }
 
 export function formatShortDate(date: string): string {
