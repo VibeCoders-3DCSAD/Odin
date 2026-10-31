@@ -1,4 +1,5 @@
 import { SEASON_PRESETS } from "@odin/spending-insights/seasons";
+import type { Classification } from "../dashboard/components/FinancialHealthCard";
 
 export type OnboardingSession = {
   id: string;
@@ -158,3 +159,8 @@ export const STEPS: StepConfig[] = [
     questionKey: "_review",
   },
 ];
+
+export type SubmitResult = {
+  classification_available: boolean;
+  assessment?: { output_snapshot?: Classification } | null;
+};
