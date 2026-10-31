@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { ArrowLeft, MagnifyingGlass, Tag } from "phosphor-react-native";
 import { Banner, BottomSheet, Chip, FieldError, FieldLabel, FormCard, MonthEndNote, Note, OptionRow, PickerField, SectionLabel, TextField, styles as ui, v4, v4Font } from "../../components/BudgieForm";
-import { listFinancialAccounts, type FinancialAccount } from "../../local-db/repositories/financialAccounts";
 import {
   createIncomeSource,
   getIncomeSource,
   incomeScheduleError,
+  listFinancialAccounts,
   updateIncomeSource,
+  type FinancialAccount,
   type IncomeFrequency,
 } from "../../local-db/repositories/financialFoundations";
 import { listSubcategories, type Subcategory } from "../../local-db/repositories/taxonomy";
@@ -59,12 +60,12 @@ export default function IncomeSourceFormScreen({ userId, deviceId, incomeSourceI
     let cancelled = false;
     (async () => {
       const [accountRows, subcategoryRows, existing] = await Promise.all([
-        listFinancialAccounts(userId, "active"),
+        listFinancialAccounts(userId),
         listSubcategories(userId, undefined, "income"),
         incomeSourceId ? getIncomeSource(userId, incomeSourceId) : Promise.resolve(null),
       ]);
       if (cancelled) return;
-      setAccounts(accountRows);
+      setAccounts(accountRows.filter((account) => account.status === "active"));
       setSubcategories(subcategoryRows);
       if (existing) {
         setName(existing.name);
@@ -203,7 +204,7 @@ export default function IncomeSourceFormScreen({ userId, deviceId, incomeSourceI
 
       <BottomSheet visible={picker === "account"} onClose={() => setPicker(null)} title="Select destination account">
         {accounts.map((account) => (
-          <OptionRow key={account.id} title={account.name} subtitle={`${ACCOUNT_KIND_LABELS[account.kind] ?? account.kind} · ${formatPhp(account.current_balance_centavos)}`} selected={account.id === destinationAccountId} onPress={() => { setDestinationAccountId(account.id); clearError("account"); setPicker(null); }} />
+          <OptionRow key={account.id} title={account.name} subtitle={`${ACCOUNT_KIND_LABELS[account.kind] ?? account.kind} · ${formatPhp(account.currentBalanceCentavos)}`} selected={account.id === destinationAccountId} onPress={() => { setDestinationAccountId(account.id); clearError("account"); setPicker(null); }} />
         ))}
       </BottomSheet>
 

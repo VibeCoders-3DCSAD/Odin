@@ -5,7 +5,7 @@ import { createFinancialPlan, deleteFinancialPlan, getAcceptedFinancialPlanForPe
 import { getPlanCommitmentPayments } from "../../local-db/repositories/financialPlanCommitmentReview";
 import { listPlanRecommendations, type PlanRecommendations } from "../../local-db/repositories/forecastTransactions";
 import { listCategories, listSubcategories, updateCategory, updateSubcategory, type Category, type Subcategory } from "../../local-db/repositories/taxonomy";
-import { listFinancialAccounts } from "../../local-db/repositories/financialAccounts";
+import { listFinancialAccounts } from "../../local-db/repositories/financialFoundations";
 import { runSync } from "../../local-db/sync/runSync";
 import { getPhilippineToday } from "../debt-manager/debtTrendRange";
 import { requestFinancialPlanCommitments, requestFinancialPlanExplanations, requestFinancialPlanForecast, requestFinancialPlanRecommendation, type ManualPlanAllocation, type ReservationSkips } from "./api";
@@ -174,7 +174,7 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
 
   useEffect(() => {
     let active = true;
-    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listPlanRecommendations(userId, selectedMonth), getCurrentPeriodPlan(userId, selectedMonth), listFinancialAccounts(userId, "active")]).then(async ([topLevelResult, result, recommendations, savedPlan, accounts]) => {
+    void Promise.all([listCategories(userId), listSubcategories(userId, undefined, "expense"), listPlanRecommendations(userId, selectedMonth), getCurrentPeriodPlan(userId, selectedMonth), listFinancialAccounts(userId)]).then(async ([topLevelResult, result, recommendations, savedPlan, accounts]) => {
       if (!active) return;
       if (savedPlan) {
         const view = await loadSavedPlanView(userId, savedPlan);
@@ -218,8 +218,8 @@ export default function FinancialPlanScreen({ userId, deviceId, accessToken, syn
       setManualCommitments({ debtRepayments: false, savingsContributions: false, scheduledPayments: false });
       setCommitmentsEdited(false);
       const available = accounts
-        .filter((account) => account.kind !== "savings" && account.kind !== "credit_card")
-        .reduce((sum, account) => sum + account.current_balance_centavos, 0);
+        .filter((account) => account.status === "active" && account.kind !== "savings" && account.kind !== "credit_card")
+        .reduce((sum, account) => sum + account.currentBalanceCentavos, 0);
       setAvailableMoneyCentavos(available);
       // Starts at what the month needs, never more than the money available.
       const recommended = recommendPlanAmount({ commitments: labeled, topLevelCategories: topLevelResult, subcategories: result, includedCategoryIds: initialCategoryIds, includedIds: initialIds, expectedSpend: recommendations.expectedSpend, forecast }).totalCentavos;

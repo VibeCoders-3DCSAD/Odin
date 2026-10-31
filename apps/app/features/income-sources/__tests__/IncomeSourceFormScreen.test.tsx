@@ -13,11 +13,12 @@ jest.mock("../../../local-db/repositories/financialFoundations", () => {
     createIncomeSource: (...args: unknown[]) => mockCreate(...args),
     updateIncomeSource: (...args: unknown[]) => mockUpdate(...args),
     getIncomeSource: (...args: unknown[]) => mockGet(...args),
+    listFinancialAccounts: async () => [
+      { id: "acct-bpi", name: "BPI Savings", kind: "savings", status: "active", currentBalanceCentavos: 4_218_000 },
+      { id: "acct-old", name: "Old Wallet", kind: "e_wallet", status: "archived", currentBalanceCentavos: 0 },
+    ],
   };
 });
-jest.mock("../../../local-db/repositories/financialAccounts", () => ({
-  listFinancialAccounts: async () => [{ id: "acct-bpi", name: "BPI Savings", kind: "savings", current_balance_centavos: 4_218_000 }],
-}));
 jest.mock("../../../local-db/repositories/taxonomy", () => ({
   listSubcategories: async () => [{ id: "sub-salary", label: "Salary and Wages" }, { id: "sub-business", label: "Business Income" }],
 }));
@@ -101,6 +102,8 @@ describe("IncomeSourceFormScreen", () => {
     const view = render(<IncomeSourceFormScreen {...props} />);
     fireEvent.changeText(await view.findByLabelText("Name"), "Salary");
     fireEvent.press(view.getByLabelText("Destination account *: Select account"));
+    expect(await view.findByText("BPI Savings")).toBeTruthy();
+    expect(view.queryByText("Old Wallet")).toBeNull();
     fireEvent.press(await view.findByText("BPI Savings"));
     fireEvent.press(view.getByLabelText("Income category *: Select category"));
     fireEvent.changeText(view.getByLabelText("Search categories"), "salary");

@@ -42,7 +42,7 @@ jest.mock("../../../local-db/repositories/taxonomy", () => ({
   updateSubcategory: jest.fn(),
 }));
 
-jest.mock("../../../local-db/repositories/financialAccounts", () => ({
+jest.mock("../../../local-db/repositories/financialFoundations", () => ({
   listFinancialAccounts: (...args: unknown[]) => mockListFinancialAccounts(...args),
 }));
 
@@ -124,7 +124,7 @@ describe("FinancialPlanScreen", () => {
 
   async function openRecommendationForAcceptance(explanationRequest?: unknown) {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 60_000, fixed_amount_centavos: null, always_in_budget: true }]);
     mockGetFinancialPlanLabels.mockResolvedValue({ categories: {}, subcategories: { rent: "Rent" }, debtAccounts: {}, savingsGoals: {}, creditCardStatements: {} });
     mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
@@ -140,7 +140,7 @@ describe("FinancialPlanScreen", () => {
 
   async function openCommitmentSetup(subcategories: unknown[] = [{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]) {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue(subcategories);
     mockRequestFinancialPlanCommitments.mockResolvedValue({
       period: { start: "2026-10-01", end: "2026-10-31" },
@@ -175,7 +175,7 @@ describe("FinancialPlanScreen", () => {
   });
 
   it("starts the planning amount at the recommendation and flags a month that needs more than is available", async () => {
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 30_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 30_000 }]);
     mockListPlanRecommendations.mockResolvedValue({ ...noRecommendations, expectedSpend: { subcategories: {}, categories: {} } });
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
@@ -499,7 +499,7 @@ describe("FinancialPlanScreen", () => {
 
   it("recognizes a parent's subcategory spending without asking for a manual baseline", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListCategories.mockResolvedValue([{ id: "housing", label: "Housing", minimum_amount_centavos: null, fixed_amount_centavos: null }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: "housing", label: "Rent", kind: "expense", minimum_amount_centavos: null, fixed_amount_centavos: null }]);
     mockListPlanRecommendations.mockResolvedValue({ ...noRecommendations, subcategoryIds: ["rent"], historySubcategoryIds: ["rent"], historyCategoryIds: ["housing"] });
@@ -513,7 +513,7 @@ describe("FinancialPlanScreen", () => {
 
   it("recommends categories for the plan month from last year's seasons", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListCategories.mockResolvedValue([{ id: "misc", label: "Miscellaneous", minimum_amount_centavos: null, fixed_amount_centavos: null }]);
     mockListSubcategories.mockResolvedValue(["gifts", "tuition"].map((id) => ({ id, category_id: "misc", label: id === "gifts" ? "Gifts" : "Tuition", kind: "expense", minimum_amount_centavos: null, fixed_amount_centavos: null })));
     mockListPlanRecommendations.mockResolvedValue({ subcategoryIds: ["gifts"], categoryIds: [], historySubcategoryIds: ["gifts", "tuition"], historyCategoryIds: ["misc"], seasonal: true, expectedSpend: { subcategories: {}, categories: {} } });
@@ -532,7 +532,7 @@ describe("FinancialPlanScreen", () => {
   it("allows a November preview before acceptance and hides advanced settings when returning to a saved plan", async () => {
     const savedOctoberPlan = await mockGetAcceptedFinancialPlanForPeriod();
     mockGetAcceptedFinancialPlanForPeriod.mockImplementation(async (_userId: string, start: string) => start === "2026-10-01" ? savedOctoberPlan : null).mockResolvedValueOnce(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 50_000, fixed_amount_centavos: null, always_in_budget: true }]);
     mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
       status: "RECOMMENDATION_READY", period: { start: "2026-11-01", end: "2026-11-30" }, inputSnapshot: {}, explanations: [],
@@ -635,21 +635,22 @@ describe("FinancialPlanScreen", () => {
   it("uses active non-savings, non-credit-card account balances as available money", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
     mockListFinancialAccounts.mockResolvedValue([
-      { kind: "cash", current_balance_centavos: 25_000 },
-      { kind: "bank", current_balance_centavos: 75_000 },
-      { kind: "savings", current_balance_centavos: 50_000 },
-      { kind: "credit_card", current_balance_centavos: 10_000 },
+      { kind: "cash", status: "active", currentBalanceCentavos: 25_000 },
+      { kind: "bank", status: "active", currentBalanceCentavos: 75_000 },
+      { kind: "savings", status: "active", currentBalanceCentavos: 50_000 },
+      { kind: "credit_card", status: "active", currentBalanceCentavos: 10_000 },
+      { kind: "cash", status: "archived", currentBalanceCentavos: 40_000 },
     ]);
 
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
 
     await waitFor(() => expect(view.getByText("Available money: PHP 1,000.00")).toBeTruthy());
-    expect(mockListFinancialAccounts).toHaveBeenCalledWith("user-1", "active");
+    expect(mockListFinancialAccounts).toHaveBeenCalledWith("user-1");
   });
 
   it("lets the user enter a different planning amount and refresh an infeasible plan", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
     mockRequestFinancialPlanRecommendation
       .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
@@ -676,7 +677,7 @@ describe("FinancialPlanScreen", () => {
 
   it("shows the plan with its built-in explanations, then swaps in the AI explanations", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
     const explanationRequest = { evidence: { planPeriodLabel: "November 2026" }, leading: [] };
     mockRequestFinancialPlanRecommendation.mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
@@ -699,7 +700,7 @@ describe("FinancialPlanScreen", () => {
 
   it("leaves the loading state with an error when the recommendation request times out", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
     const timeout = new Error("Aborted");
     timeout.name = "AbortError";
@@ -716,7 +717,7 @@ describe("FinancialPlanScreen", () => {
   it("requires confirmation before skipping debt repayments and shows the warning", async () => {
     const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
     mockRequestFinancialPlanRecommendation
       .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
@@ -747,7 +748,7 @@ describe("FinancialPlanScreen", () => {
 
   it("shows commitment due dates and lets the user budget each amount", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null, always_in_budget: true }]);
     mockRequestFinancialPlanRecommendation
       .mockResolvedValueOnce({ response: { ok: true }, body: { payload: {
@@ -776,7 +777,7 @@ describe("FinancialPlanScreen", () => {
 
   it("defers generation until commitment amounts are reviewed and submits the user's budgets", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
     mockRequestFinancialPlanCommitments.mockResolvedValue({ period: { start: "2026-10-01", end: "2026-10-31" }, debtReservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-10-20" }], savingsReservations: [{ savingsGoalId: "goal-1", amountCentavos: 5_000, dueDate: "2026-10-25" }] });
     const view = render(<FinancialPlanScreen userId="user-1" deviceId="device-1" accessToken="token" syncVersion={0} />);
@@ -808,7 +809,7 @@ describe("FinancialPlanScreen", () => {
 
   it("recalculates remaining funds and prevents saving an increased commitment above the budget", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
     mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
       status: "RECOMMENDATION_READY", period: { start: "2026-10-01", end: "2026-10-31" }, inputSnapshot: { debtRequirements: { reservations: [{ debtAccountId: "debt-1", amountCentavos: 10_000, dueDate: "2026-10-20" }] } }, explanations: [],
@@ -830,7 +831,7 @@ describe("FinancialPlanScreen", () => {
 
   it("blocks acceptance while a category amount draft is invalid", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListCategories.mockResolvedValue([{ id: "food", label: "Food", slug: "food", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
     mockListSubcategories.mockResolvedValue([]);
     mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
@@ -851,7 +852,7 @@ describe("FinancialPlanScreen", () => {
 
   it("lets the user edit a biller after allocation and warns before accepting an underfunded bill", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 20_000, fixed_amount_centavos: null }]);
     const bill = { scheduledPaymentId: "bill-1", label: "Electricity", amountCentavos: 2_000, dueDate: "2026-10-22" };
     mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: {
@@ -886,7 +887,7 @@ describe("FinancialPlanScreen", () => {
 
   it("lets the user reduce a commitment to resolve an infeasible plan", async () => {
     mockGetAcceptedFinancialPlanForPeriod.mockResolvedValue(null);
-    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", current_balance_centavos: 100_000 }]);
+    mockListFinancialAccounts.mockResolvedValue([{ kind: "cash", status: "active", currentBalanceCentavos: 100_000 }]);
     mockListSubcategories.mockResolvedValue([{ id: "rent", category_id: null, label: "Rent", kind: "expense", minimum_amount_centavos: 75_000, fixed_amount_centavos: null }]);
     const due = { debtAccountId: "loan", amountCentavos: 50_000, dueDate: "2026-10-20" };
     mockRequestFinancialPlanRecommendation.mockResolvedValue({ response: { ok: true }, body: { payload: { status: "INFEASIBLE", period: { start: "2026-10-01", end: "2026-10-31" }, inputSnapshot: { debtRequirements: { reservations: [due] } }, explanations: [], recommendation: { availableFundsCentavos: 50_000, requiredFundsCentavos: 125_000, shortfallCentavos: 25_000, allocations: [{ subcategoryId: "rent", allocationRule: "MINIMUM", floorAmountCentavos: 75_000, allocatedAmountCentavos: 75_000 }], debtReservations: [due], savingsReservations: [] } } } });

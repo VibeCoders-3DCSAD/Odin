@@ -18,7 +18,7 @@ jest.mock("../../auth/components/AccessProvider", () => ({ useSession: () => ({ 
 jest.mock("../../sync/SyncProvider", () => ({
   useSync: () => ({ syncing: false, queueCount: 0, syncVersion: 0, syncMessage: null, handleSync: jest.fn() }),
 }));
-jest.mock("../../../local-db/repositories/financialAccounts", () => ({ getFinancialAccount: jest.fn() }));
+jest.mock("../../../local-db/repositories/financialFoundations", () => ({ getFinancialAccount: jest.fn() }));
 jest.mock("../../../local-db/repositories/debtAccounts", () => ({ listDebtAccounts: jest.fn() }));
 jest.mock("../../../local-db/repositories/financialPlans", () => ({ getFinancialPlan: jest.fn() }));
 // Screens are stubs that render their name; tests drive them through the props the route passes.
@@ -56,7 +56,7 @@ import PastFinancialPlansScreen from "../../financial-plan/PastFinancialPlansScr
 import PastFinancialPlanDetailScreen from "../../financial-plan/PastFinancialPlanDetailScreen";
 import SavingsGoalsScreen from "../../savings-goals/SavingsGoalsScreen";
 import { transactionFormHref } from "../../ledger/transactionFormRoute";
-import { getFinancialAccount } from "../../../local-db/repositories/financialAccounts";
+import { getFinancialAccount } from "../../../local-db/repositories/financialFoundations";
 import { listDebtAccounts } from "../../../local-db/repositories/debtAccounts";
 import { getFinancialPlan } from "../../../local-db/repositories/financialPlans";
 import { ROUTES } from "../../../routes";

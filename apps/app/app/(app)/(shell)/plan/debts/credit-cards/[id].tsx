@@ -4,7 +4,7 @@ import DebtManagerScreen from "../../../../../../features/debt-manager/DebtManag
 import { transactionFormHref } from "../../../../../../features/ledger/transactionFormRoute";
 import { OwnedRecordPage, type LoadOwnedRecord } from "../../../../../../features/shell/components/OwnedRecord";
 import { useShellPage } from "../../../../../../features/shell/components/PageScroll";
-import { getFinancialAccount } from "../../../../../../local-db/repositories/financialAccounts";
+import { getFinancialAccount } from "../../../../../../local-db/repositories/financialFoundations";
 import { ROUTES } from "../../../../../../routes";
 
 const ownsCreditCard: LoadOwnedRecord = async (userId, id) => (await getFinancialAccount(userId, id))?.kind === "credit_card";
