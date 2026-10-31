@@ -19,7 +19,7 @@ export function CustomSeasonalEventForm({ addLabel = "Add custom event", events,
     setName(""); setMonths([]); setError(null); setOpen(false);
   }
   if (!open) return (
-    <Pressable accessibilityRole="button" disabled={events.length >= MAX_CUSTOM_EVENTS} onPress={() => { setOpen(true); onEditingChange?.(true); }} style={{ paddingVertical: 16 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={events.length >= MAX_CUSTOM_EVENTS ? "Custom event limit reached" : addLabel} accessibilityState={{ disabled: events.length >= MAX_CUSTOM_EVENTS }} disabled={events.length >= MAX_CUSTOM_EVENTS} onPress={() => { setOpen(true); onEditingChange?.(true); }} style={{ paddingVertical: 16 }}>
       <Text style={{ color: "#08B16A", fontWeight: "700" }}>{events.length >= MAX_CUSTOM_EVENTS ? "Custom event limit reached" : addLabel}</Text>
     </Pressable>
   );
@@ -41,8 +41,8 @@ export function CustomSeasonalEventForm({ addLabel = "Add custom event", events,
       </View>
       {error ? <Text accessibilityRole="alert" style={{ color: "#D9001F" }}>{error}</Text> : null}
       <View style={{ flexDirection: "row", gap: 24 }}>
-        <Pressable accessibilityRole="button" onPress={addEvent} style={{ paddingVertical: 12 }}><Text style={{ color: "#08B16A", fontWeight: "700" }}>{existingEvent ? "Save event" : "Add event"}</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => { setOpen(false); setError(null); onEditingChange?.(false); onCancel?.(); }} style={{ paddingVertical: 12 }}><Text>Cancel</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={existingEvent ? "Save event" : "Add event"} onPress={addEvent} style={{ paddingVertical: 12 }}><Text style={{ color: "#08B16A", fontWeight: "700" }}>{existingEvent ? "Save event" : "Add event"}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={() => { setOpen(false); setError(null); onEditingChange?.(false); onCancel?.(); }} style={{ paddingVertical: 12 }}><Text>Cancel</Text></Pressable>
       </View>
     </View>
   );

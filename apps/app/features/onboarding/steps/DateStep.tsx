@@ -42,6 +42,8 @@ export function DateStep({
       ) : null}
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${step.inputLabel ?? "Date"}: ${value ? display : "Select date"}`}
         style={{
           borderWidth: 1.5,
           borderColor: LINE,

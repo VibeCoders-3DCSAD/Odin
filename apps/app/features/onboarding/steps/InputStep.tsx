@@ -53,6 +53,7 @@ export function InputStep({
             <TextInput
               value={value !== "not_sure" && value ? Number(value).toLocaleString() : ""}
               onChangeText={(t) => onChangeText(t.replace(/[^0-9]/g, ""))}
+              accessibilityLabel={step.inputLabel ?? step.title}
               keyboardType="numeric"
               placeholder="0"
               placeholderTextColor={MUTED}
@@ -70,6 +71,7 @@ export function InputStep({
           <TextInput
             value={value as string}
             onChangeText={(t) => onChangeText(t)}
+            accessibilityLabel={step.inputLabel ?? step.title}
             keyboardType="default"
             placeholder={step.inputPlaceholder ?? ""}
             placeholderTextColor={MUTED}

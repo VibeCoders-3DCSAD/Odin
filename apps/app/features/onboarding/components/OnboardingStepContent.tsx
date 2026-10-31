@@ -5,7 +5,6 @@ import { availableOnboardingStep, SEASONAL_QUESTION_KEYS } from "../helpers/seas
 import { CustomSeasonalEventForm } from "./CustomSeasonalEventForm";
 import { CardSelectStep } from "../steps/CardSelectStep";
 import { CardMultiSelectStep } from "../steps/CardMultiSelectStep";
-import { DropdownStep } from "../steps/DropdownStep";
 import { DateStep } from "../steps/DateStep";
 import { InputStep } from "../steps/InputStep";
 import { AmountListStep } from "../steps/AmountListStep";
@@ -37,11 +36,12 @@ export function OnboardingStepContent({
 
   return (
     <>
-      {step.kind === "card_select" && (
+      {(step.kind === "card_select" || step.kind === "dropdown") && (
         <CardSelectStep
           step={step}
           selected={answers[step.questionKey] as string | undefined}
           onSelect={(val) => saveAnswer(step.questionKey, val)}
+          variant={step.kind === "dropdown" ? "dropdown" : "card"}
         />
       )}
 
@@ -62,14 +62,6 @@ export function OnboardingStepContent({
               : [...withoutNone, val];
             saveAnswer(step.questionKey, next);
           }}
-        />
-      )}
-
-      {step.kind === "dropdown" && (
-        <DropdownStep
-          step={step}
-          selected={answers[step.questionKey] as string | undefined}
-          onSelect={(val) => saveAnswer(step.questionKey, val)}
         />
       )}
 

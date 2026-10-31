@@ -151,7 +151,9 @@ async function evaluateUnusualSpending(userId: string, deviceId: string, expense
     if (insight) await saveUnusualSpending(userId, deviceId, insight);
     return insight;
   } catch (error) {
-    console.error("[UNUSUAL-SPENDING] evaluation failed", error);
+    console.error("[UNUSUAL-SPENDING] evaluation failed", {
+      error_class: error instanceof Error ? error.constructor.name : "UnknownError",
+    });
     return null;
   }
 }

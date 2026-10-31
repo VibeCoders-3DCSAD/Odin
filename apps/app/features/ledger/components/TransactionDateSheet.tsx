@@ -31,7 +31,8 @@ export default function TransactionDateSheet({ visible, title, value, onClose, o
 
   return (
     <ActionSheet visible onClose={onClose} backdropColor="rgba(27,28,26,0.4)">
-      <Pressable onPress={() => {}}>
+      {/* Swallows taps so they do not reach the backdrop; hidden from screen readers. */}
+      <Pressable onPress={() => {}} accessible={false} importantForAccessibility="no">
         <BottomSheetSurface bottomSpacing={30} style={{ backgroundColor: v4.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
           <View style={{ width: 38, height: 4, borderRadius: 4, backgroundColor: "#DBD7CD", alignSelf: "center", marginTop: 10 }} />
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 10 }}>

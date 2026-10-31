@@ -35,6 +35,7 @@ export function AmountListStep({
             <TextInput
               value={values[option.key] ? Number(values[option.key]).toLocaleString() : ""}
               onChangeText={(text) => onChange(option.key, text)}
+              accessibilityLabel={`${option.label} Monthly Amount`}
               keyboardType="numeric"
               placeholder="0"
               placeholderTextColor={MUTED}
