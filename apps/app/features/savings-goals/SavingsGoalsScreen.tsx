@@ -3,7 +3,8 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { CaretRight, CheckCircle, ShieldCheck, Target } from "phosphor-react-native";
 import { archiveSavingsGoal, deleteSavingsGoal, getSavingsGoal, listSavingsGoals, restoreSavingsGoal, type SavingsGoal } from "../../local-db/repositories/savings/savingsGoals";
 import SavingsGoalForm from "./components/SavingsGoalForm";
-import SavingsGoalDetail, { ProgressBar } from "./components/SavingsGoalDetail";
+import SavingsGoalDetail from "./components/SavingsGoalDetail";
+import { GoalProgressBar } from "./components/GoalProgressBar";
 import { listSavingsGoalActivities } from "../../local-db/repositories/savings/savingsGoalActivities";
 import type { SavingsActivity } from "./types";
 import SavingsAllocationReview from "./components/SavingsAllocationReview";
@@ -115,7 +116,7 @@ function GoalRow({ goal, plannedCentavos, divider, onPress }: { goal: SavingsGoa
         <Text numberOfLines={1} style={{ color: P.ink, flex: 1, fontFamily: "Manrope", fontSize: 14, fontWeight: "700" }}>{goal.name}</Text>
         <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 13, fontWeight: "800" }}>{goal.progressPercent}%</Text>
       </View>
-      <ProgressBar percent={goal.progressPercent} />
+      <GoalProgressBar percent={goal.progressPercent} />
       <View style={{ flexDirection: "row", gap: 8, justifyContent: "space-between" }}>
         <Text numberOfLines={1} style={{ color: P.muted, flex: 1, fontFamily: "Manrope", fontSize: 11 }}>{money(goal.currentAmountCentavos)} of {money(goal.targetAmountCentavos)}</Text>
         {status ? <Text style={{ color: status.tone, fontFamily: "Manrope", fontSize: 11, fontWeight: "700" }}>{status.label}</Text> : null}

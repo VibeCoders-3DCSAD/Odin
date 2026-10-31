@@ -8,8 +8,9 @@ import { getMinimumContributionPerOccurrence, type ScheduledSavingsGoal } from "
 import type { SavingsActivity } from "../types";
 import { SavingsForecastSection } from "../forecast/components/SavingsForecastSection";
 import { formatPeso } from "../../../lib/format/money";
+import { GoalProgressBar } from "./GoalProgressBar";
 
-const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF", track: "#DCDAD2", soft: "#E8F3EC", warn: "#8A4B00" } as const;
+const P = { card: "#F1F0EB", ink: "#1B1C1A", muted: "#6B7A6F", brand: "#013220", line: "#EAEAE6", error: "#D9001F", white: "#FFFFFF", soft: "#E8F3EC", warn: "#8A4B00" } as const;
 const money = formatPeso;
 const formatDate = (isoDate: string) => new Date(`${isoDate.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 const RECENT_ACTIVITY_LIMIT = 5;
@@ -62,7 +63,7 @@ export default function SavingsGoalDetail({ goal, activities, plannedContributio
         <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 28, fontWeight: "800" }}>{money(goal.currentAmountCentavos)}</Text>
         <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>of {money(goal.targetAmountCentavos)} target{goal.targetDate ? ` by ${formatDate(goal.targetDate)}` : ""}</Text>
       </View>
-      <ProgressBar percent={goal.progressPercent} />
+      <GoalProgressBar percent={goal.progressPercent} />
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <Text style={{ color: P.ink, fontFamily: "Manrope", fontSize: 12, fontWeight: "700" }}>{goal.progressPercent}% saved</Text>
         <Text style={{ color: P.muted, fontFamily: "Manrope", fontSize: 12 }}>{reached ? "Target reached" : `${money(goal.remainingAmountCentavos)} to go`}</Text>
@@ -113,11 +114,6 @@ function StatusPill({ goal, reached }: { goal: SavingsGoal; reached: boolean }) 
   return <View style={{ alignSelf: "flex-start", backgroundColor: behind ? "#F8EFDC" : goal.status === "archived" ? P.line : P.soft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 }}>
     <Text style={{ color: behind ? P.warn : goal.status === "archived" ? P.muted : P.brand, fontFamily: "Manrope", fontSize: 11, fontWeight: "700" }}>{label}</Text>
   </View>;
-}
-
-export function ProgressBar({ percent }: { percent: number }) {
-  const width = Math.max(0, Math.min(100, percent));
-  return <View style={{ backgroundColor: P.track, borderRadius: 999, height: 6, overflow: "hidden" }}><View style={{ backgroundColor: P.brand, borderRadius: 999, height: 6, width: `${width}%` }} /></View>;
 }
 
 function Section({ title, trailing, children }: { title: string; trailing?: string; children: React.ReactNode }) {
