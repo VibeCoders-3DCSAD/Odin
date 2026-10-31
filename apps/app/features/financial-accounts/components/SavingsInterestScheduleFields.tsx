@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import type { SavingsInterestConfiguration } from "@odin/savings-interest";
 import { InterestChoices, InterestDateInput, InterestNumberInput, interestText } from "./InterestFormControls";
-import { interestToday } from "./helpers/savingsInterestConfiguration";
+import { interestToday } from "../helpers/savingsInterestConfiguration";
 
 type Props = { configuration: SavingsInterestConfiguration; isAdb: boolean; onChange: (changes: Partial<SavingsInterestConfiguration>) => void };
 export default function SavingsInterestScheduleFields({ configuration: c, isAdb, onChange }: Props) {

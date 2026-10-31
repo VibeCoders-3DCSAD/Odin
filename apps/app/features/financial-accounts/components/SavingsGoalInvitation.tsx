@@ -1,5 +1,5 @@
 import { Modal, Pressable, Text, View } from "react-native";
-import { v4, v4Font } from "../../components/BudgieForm";
+import { v4, v4Font } from "../../../components/BudgieForm";
 
 type Props = { onAddGoal: () => void; onDismiss: () => void };
 

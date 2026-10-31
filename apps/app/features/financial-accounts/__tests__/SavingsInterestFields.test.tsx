@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { fireEvent, render } from "@testing-library/react-native";
 import type { SavingsInterestReference } from "@odin/savings-interest";
-import SavingsInterestFields from "../SavingsInterestFields";
+import SavingsInterestFields from "../components/SavingsInterestFields";
 
 function Form() {
   const [reference, setReference] = useState<SavingsInterestReference | null>(null);

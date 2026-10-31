@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { interestToday } from "./helpers/savingsInterestConfiguration";
+import { interestToday } from "../helpers/savingsInterestConfiguration";
 import type { SavingsInterestConfiguration } from "@odin/savings-interest";
 import { InterestDateInput, InterestNumberInput, interestText } from "./InterestFormControls";
 

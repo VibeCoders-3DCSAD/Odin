@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import type { SavingsInterestConfiguration, SavingsInterestReference } from "@odin/savings-interest";
-import { v4 } from "../../components/BudgieForm";
+import { v4 } from "../../../components/BudgieForm";
 import { InterestChoices, interestInput, interestText } from "./InterestFormControls";
-import { editableInterestReference } from "./helpers/savingsInterestConfiguration";
+import { editableInterestReference } from "../helpers/savingsInterestConfiguration";
 import SavingsInterestScheduleFields from "./SavingsInterestScheduleFields";
 import SavingsInterestRulesFields from "./SavingsInterestRulesFields";
 import SavingsInterestRateHistoryFields from "./SavingsInterestRateHistoryFields";

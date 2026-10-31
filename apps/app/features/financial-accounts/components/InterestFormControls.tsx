@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { v4, v4Font } from "../../components/BudgieForm";
+import { v4, v4Font } from "../../../components/BudgieForm";
 
 export const interestText = { fontFamily: v4Font, fontSize: 12, color: v4.ink2 };
 export const interestInput = { fontFamily: v4Font, color: v4.ink, minHeight: 46, borderWidth: 1, borderColor: v4.hairline, borderRadius: 10, padding: 10 };
